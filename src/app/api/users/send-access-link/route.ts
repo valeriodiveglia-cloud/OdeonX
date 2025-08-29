@@ -1,7 +1,7 @@
 // src/app/api/users/send-access-link/route.ts
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { supabaseAnonServer } from '@/lib/supabaseAdmin' // se hai un file dedicato, cambia import
+import { supabaseAnonServer } from '@/lib/supabaseAnonServer' // se hai un file dedicato, cambia import
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
