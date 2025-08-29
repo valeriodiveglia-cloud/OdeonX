@@ -1288,7 +1288,7 @@ ${t('Skipped', language)}: ${skipped}`)
           header: true,
           skipEmptyLines: 'greedy',
           dynamicTyping: false,
-          transformHeader: h => headerMap[normKey(h)] ?? normKey(h),
+          transformHeader: (h: string) => headerMap[normKey(h)] ?? normKey(h),
           complete: res => resolve(res),
           error: reject,
         })

@@ -75,7 +75,7 @@ export async function importMaterialsCsv(
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h) => headerMap[normKey(h)] ?? normKey(h),
+      transformHeader: (h: string) => headerMap[normKey(h)] ?? normKey(h),
       complete: res => resolve(res),
       error: reject,
     });
