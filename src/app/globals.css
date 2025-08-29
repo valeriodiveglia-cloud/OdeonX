@@ -1,0 +1,137 @@
+/* src/app/globals.css */
+
+/* Tailwind */
+@import "tailwindcss";
+
+/* -------------------------------------------------------
+   CSS variables
+-------------------------------------------------------- */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+/* -------------------------------------------------------
+   Base
+-------------------------------------------------------- */
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+}
+
+/* -------------------------------------------------------
+   NO TOOLTIP ANYWHERE
+   Kill totale, indipendente dalla sidebar
+   Copre:
+   - DaisyUI (.tooltip + ::before/::after, [data-tip], [data-tooltip])
+   - Tippy.js (.tippy-box)
+   - Radix, MUI, Chakra, Mantine ([role="tooltip"], popper wrapper)
+   - Qualsiasi tooltip che usa ::before/::after su [title] o [aria-label]
+-------------------------------------------------------- */
+[title]::before,
+[title]::after,
+[aria-label]::before,
+[aria-label]::after,
+[data-tip]::before,
+[data-tip]::after,
+[data-tooltip]::before,
+[data-tooltip]::after,
+.tooltip,
+.tippy-box,
+[role="tooltip"],
+.MuiTooltip-popper,
+[data-radix-popper-content-wrapper],
+.chakra-tooltip,
+.mantine-Tooltip-tooltip {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Quando il body ha .no-tooltips spegni anche eventuali portali residui */
+body.no-tooltips [title]::before,
+body.no-tooltips [title]::after,
+body.no-tooltips [aria-label]::before,
+body.no-tooltips [aria-label]::after,
+body.no-tooltips [data-tip]::before,
+body.no-tooltips [data-tip]::after,
+body.no-tooltips [data-tooltip]::before,
+body.no-tooltips [data-tooltip]::after,
+body.no-tooltips .tooltip,
+body.no-tooltips .tippy-box,
+body.no-tooltips [role="tooltip"],
+body.no-tooltips .MuiTooltip-popper,
+body.no-tooltips [data-radix-popper-content-wrapper],
+body.no-tooltips .chakra-tooltip,
+body.no-tooltips .mantine-Tooltip-tooltip {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* -------------------------------------------------------
+   Sidebar clipping aggressivo
+   Evita che testo o overlay restino visibili quando collassa
+-------------------------------------------------------- */
+.leftnav {
+  will-change: width;
+}
+
+.leftnav.collapsed {
+  /* Taglia tutto, anche assoluti con z-index alti */
+  overflow: hidden !important;
+  clip-path: inset(0 round 0);
+  contain: paint;
+}
+
+.leftnav .nav-text,
+.leftnav .nav-active-bg,
+.leftnav .footer-wrap {
+  transition: opacity .12s linear;
+}
+
+.leftnav.collapsed .nav-text,
+.leftnav.collapsed .nav-active-bg,
+.leftnav.collapsed .footer-wrap {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Evita che pseudo elementi decorativi sbordino */
+.leftnav,
+.leftnav *::before,
+.leftnav *::after {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ulteriore rete di sicurezza per Safari e per assoluti nel nav */
+.leftnav.collapsed a,
+.leftnav.collapsed nav,
+.leftnav.collapsed header,
+.leftnav.collapsed footer,
+.leftnav.collapsed .clip-scope {
+  overflow: hidden !important;
+}

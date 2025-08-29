@@ -1,0 +1,1045 @@
+// src/app/settings/settings-client.tsx
+'use client'
+
+import { useEffect, useState } from 'react'
+import { CheckCircleIcon, PlusIcon, Cog6ToothIcon, XMarkIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { t, type Lang } from '@/lib/i18n'
+import { useSettings } from '@/contexts/SettingsContext'
+import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
+import { toBool } from '@/lib/normalize'
+
+export type Currency = 'VND' | 'USD' | 'EUR' | 'GBP'
+
+export type AppSettingsUI = {
+  restaurant_name: string
+  company_name: string
+  address: string
+  tax_code: string
+  phone: string
+  email: string
+  website: string
+  logo_mime: string | null
+  logo_data: string | null
+  language_code: Lang
+  currency: Currency
+  vat_enabled: boolean
+  vat_rate: number | null
+  default_markup_equipment_pct: number | null
+  default_markup_recipes_pct: number | null
+  materials_review_months: number
+  csv_require_confirm_refs: boolean
+  materials_exclusive_default: boolean
+  equipment_review_months: number
+  equipment_csv_require_confirm_refs: boolean
+  recipes_review_months: number
+  recipes_split_mode: 'split' | 'single'
+  recipes_tab1_name: string
+  recipes_tab2_name: string | null
+}
+
+type AppSettingsRow = AppSettingsUI & { id: 'singleton'; updated_at?: string | null }
+const TBL_APP = 'app_settings'
+
+const TBL_ACCOUNTS = 'app_accounts'
+type AccountRole = 'owner' | 'admin' | 'staff'
+type AccountRow = {
+  id: string
+  user_id?: string | null
+  email: string
+  phone: string | null
+  name: string | null
+  position: string | null
+  role: AccountRole
+  is_active: boolean
+  created_at: string
+  first_login_at?: string | null
+}
+
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border p-4 bg-white shadow-sm">
+      <div className="text-sm font-semibold text-gray-800 mb-3">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function Toggle({ id, checked, onChange, label, disabled, hint }: {
+  id: string
+  checked: boolean | null | undefined
+  onChange: (v: boolean) => void
+  label: string
+  disabled?: boolean
+  hint?: string
+}) {
+  return (
+    <div className="py-1">
+      <label htmlFor={id} className="flex items-center justify-between gap-4">
+        <span className="text-gray-900">{label}</span>
+        <div className="flex items-center gap-3">
+          <input id={id} type="checkbox" className="sr-only peer" checked={!!checked} onChange={e => onChange(e.target.checked)} disabled={disabled}/>
+          <div className={`w-11 h-6 rounded-full relative transition-colors ${!!checked ? 'bg-blue-600' : 'bg-gray-200'} ${disabled ? 'opacity-50' : ''}`}>
+            <div className={`absolute top-0.5 left-0.5 h-5 w-5 bg-white border rounded-full transition-transform ${!!checked ? 'translate-x-full' : ''}`} />
+          </div>
+        </div>
+      </label>
+      {hint ? <div className="text-xs text-gray-600 mt-1">{hint}</div> : null}
+    </div>
+  )
+}
+
+function Modal({ open, title, children, onClose, width = 'max-w-xl' }: {
+  open: boolean; title: string; children: React.ReactNode; onClose: () => void; width?: string
+}) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className={`relative w-full ${width} bg-white rounded-2xl shadow-lg p-4`}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-base font-semibold text-gray-900">{title}</div>
+          <button onClick={onClose} className="w-9 h-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100">
+            <XMarkIcon className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function parseNumOrNull(v: string): number | null {
+  if (v === '' || v == null) return null
+  const n = parseFloat(v)
+  return Number.isFinite(n) ? n : null
+}
+function clampInt(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, Math.round(n)))
+}
+function isValidEmail(x: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) }
+
+async function sendAccessLink(email: string) {
+  const r = await fetch('/api/users/send-access-link', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
+    body: JSON.stringify({
+      email,
+      redirectToBase: typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL
+    }),
+  })
+  const ct = r.headers.get('content-type') || ''
+  const data = ct.includes('application/json') ? await r.json() : { error: await r.text() }
+  if (!r.ok) throw new Error(data?.error || 'Send link failed')
+  return data as { ok: true; mode: 'invite' | 'password_reset' }
+}
+
+async function authFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  const headers = new Headers(init.headers || {})
+  headers.set('Content-Type', headers.get('Content-Type') || 'application/json')
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  return fetch(input, { ...init, headers, cache: 'no-store' })
+}
+
+export default function SettingsClient({ initial }: { initial: AppSettingsUI }) {
+  const router = useRouter()
+  const { language: ctxLang, setVatEnabled, setVatRate, reloadSettings, revision } = useSettings()
+
+  const [s, setS] = useState<AppSettingsUI>(initial)
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const lang = ctxLang
+
+  const [authReady, setAuthReady] = useState(false)
+  const [currentUser, setCurrentUser] = useState<null | { id: string; email?: string | null }>(null)
+
+  // Funzione di refetch singolo record app_settings
+  async function refetchAppSettingsIntoState() {
+    const { data, error } = await supabase
+      .from<AppSettingsRow>('app_settings')
+      .select('*')
+      .eq('id', 'singleton')
+      .maybeSingle()
+    if (error) return
+    if (!data) return
+    const normalized: AppSettingsUI = {
+      ...data,
+      vat_enabled: toBool(data.vat_enabled, false),
+      csv_require_confirm_refs: toBool(data.csv_require_confirm_refs, true),
+      materials_exclusive_default: toBool(data.materials_exclusive_default, true),
+      equipment_csv_require_confirm_refs: toBool(data.equipment_csv_require_confirm_refs, true),
+      materials_review_months: Number.isFinite(data.materials_review_months) ? data.materials_review_months : 4,
+      equipment_review_months: Number.isFinite(data.equipment_review_months) ? data.equipment_review_months : 4,
+      recipes_review_months: Number.isFinite(data.recipes_review_months) ? data.recipes_review_months : 4,
+    }
+    setS(normalized)
+    setDirty(false)
+  }
+
+  // Auth wiring
+  useEffect(() => {
+    let unsub: (() => void) | null = null
+    supabase.auth.getSession().then(({ data }) => {
+      setCurrentUser(data.session?.user ?? null as any)
+      setAuthReady(true)
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user ?? null as any)
+      setAuthReady(true)
+    })
+    unsub = () => sub.subscription.unsubscribe()
+    return () => { unsub?.() }
+  }, [])
+
+  // Primo fetch dal DB quando auth è pronta
+  useEffect(() => {
+    if (!authReady) return
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from<AppSettingsRow>('app_settings')
+        .select('*')
+        .eq('id', 'singleton')
+        .maybeSingle()
+      if (!error && data && !cancelled) {
+        const normalized: AppSettingsUI = {
+          ...data,
+          vat_enabled: toBool(data.vat_enabled, false),
+          csv_require_confirm_refs: toBool(data.csv_require_confirm_refs, true),
+          materials_exclusive_default: toBool(data.materials_exclusive_default, true),
+          equipment_csv_require_confirm_refs: toBool(data.equipment_csv_require_confirm_refs, true),
+          materials_review_months: Number.isFinite(data.materials_review_months) ? data.materials_review_months : 4,
+          equipment_review_months: Number.isFinite(data.equipment_review_months) ? data.equipment_review_months : 4,
+          recipes_review_months: Number.isFinite(data.recipes_review_months) ? data.recipes_review_months : 4,
+        }
+        setS(prev => (dirty ? prev : normalized))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [authReady, currentUser?.id])
+
+  // Se il server non ha impostato recipes_review_months, garantisco default
+  useEffect(() => {
+    if (typeof initial.recipes_review_months !== 'number') {
+      setS(prev => ({ ...prev, recipes_review_months: 4 }))
+    }
+  }, [initial])
+
+  // Reagisco alla revisione del context per remount e refetch locale
+  useEffect(() => {
+    // quando revision cambia, rifaccio fetch per riallineare lo stato del form
+    ;(async () => { await refetchAppSettingsIntoState() })()
+  }, [revision])
+
+  // Broadcast locale per reset partiti altrove
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null
+    try {
+      bc = new BroadcastChannel('app-events')
+      bc.onmessage = (e) => {
+        if (e?.data === 'data-reset') {
+          ;(async () => {
+            await refetchAppSettingsIntoState()
+            router.refresh()
+          })()
+        }
+      }
+    } catch {}
+    return () => { try { bc?.close() } catch {} }
+  }, [router])
+
+  function patch<K extends keyof AppSettingsUI>(key: K, val: AppSettingsUI[K]) {
+    setS(prev => { const next = { ...prev, [key]: val }; setDirty(true); return next })
+  }
+
+  async function handleLogoUpload(file: File) {
+    if (!file) return
+    try {
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const fr = new FileReader()
+        fr.onerror = () => reject(new Error('Failed to read file'))
+        fr.onload = () => resolve(String(fr.result))
+        fr.readAsDataURL(file)
+      })
+      const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl)
+      if (!match) throw new Error('Invalid image data URL')
+      const mime = match[1]
+      const b64 = match[2]
+      patch('logo_mime', mime || file.type || 'image/png')
+      patch('logo_data', b64)
+    } catch (e) { console.error(e) }
+  }
+
+  async function onSave() {
+    setSaving(true)
+    try {
+      const payload: AppSettingsRow = {
+        id: 'singleton',
+        restaurant_name: (s.restaurant_name ?? '').trim(),
+        company_name: (s.company_name ?? '').trim(),
+        address: (s.address ?? '').trim(),
+        tax_code: (s.tax_code ?? '').trim(),
+        phone: (s.phone ?? '').trim(),
+        email: (s.email ?? '').trim(),
+        website: (s.website ?? '').trim(),
+        logo_mime: s.logo_mime ?? null,
+        logo_data: s.logo_data ?? null,
+        language_code: s.language_code,
+        currency: s.currency,
+        vat_enabled: !!s.vat_enabled,
+        vat_rate: clampInt(s.vat_rate ?? 0, 0, 100),
+        default_markup_equipment_pct: s.default_markup_equipment_pct ?? null,
+        default_markup_recipes_pct: s.default_markup_recipes_pct ?? null,
+        materials_review_months: clampInt(s.materials_review_months ?? 4, 0, 12),
+        csv_require_confirm_refs: !!s.csv_require_confirm_refs,
+        materials_exclusive_default: !!s.materials_exclusive_default,
+        equipment_review_months: clampInt(s.equipment_review_months ?? 4, 0, 12),
+        equipment_csv_require_confirm_refs: !!s.equipment_csv_require_confirm_refs,
+        recipes_review_months: clampInt(s.recipes_review_months ?? 4, 0, 12),
+        recipes_split_mode: s.recipes_split_mode,
+        recipes_tab1_name: s.recipes_tab1_name ?? 'Final',
+        recipes_tab2_name: s.recipes_split_mode === 'split' ? (s.recipes_tab2_name ?? 'Prep') : null,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { data: saved, error } = await supabase
+        .from<AppSettingsRow>(TBL_APP)
+        .upsert(payload, { onConflict: 'id' })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setS(saved)
+      setDirty(false)
+      setSaveMessage(t('SavedOk', s.language_code))
+      setTimeout(() => setSaveMessage(null), 2500)
+
+      try {
+        setVatEnabled(!!saved.vat_enabled)
+        setVatRate(saved.vat_rate ?? 0)
+      } catch {}
+
+      router.refresh()
+    } catch (err: any) {
+      setSaveMessage(`${t('SavedErr', lang)}: ${err?.message || String(err)}`)
+      setTimeout(() => setSaveMessage(null), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function onResetLocal() {
+    setS(prev => ({
+      ...prev,
+      restaurant_name: '',
+      company_name: '',
+      address: '',
+      tax_code: '',
+      phone: '',
+      email: '',
+      website: '',
+      language_code: 'en',
+      currency: 'VND',
+      vat_enabled: false,
+      vat_rate: 10,
+      default_markup_equipment_pct: 30,
+      default_markup_recipes_pct: 30,
+      materials_review_months: 4,
+      csv_require_confirm_refs: true,
+      materials_exclusive_default: true,
+      equipment_review_months: 4,
+      equipment_csv_require_confirm_refs: true,
+      recipes_review_months: 4,
+      recipes_split_mode: 'split',
+      recipes_tab1_name: 'Final',
+      recipes_tab2_name: 'Prep',
+    }))
+    setDirty(true)
+  }
+
+  const logoSrc =
+    s.logo_data
+      ? (s.logo_data.startsWith('data:')
+          ? s.logo_data
+          : (s.logo_mime ? `data:${s.logo_mime};base64,${s.logo_data}` : null))
+      : null
+
+  const handleMonthsChange = (key: 'materials_review_months' | 'equipment_review_months') =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const v = e.target.value
+      const n = clampInt(parseInt(v, 10) || 0, 0, 12)
+      patch(key as any, n as any)
+    }
+
+  const [manageOpen, setManageOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [accLoading, setAccLoading] = useState(false)
+  const [acc, setAcc] = useState<AccountRow[]>([])
+  const [accMsg, setAccMsg] = useState<string | null>(null)
+  const [accMsgKind, setAccMsgKind] = useState<'ok' | 'err'>('err')
+  const showAccOk = (msg: string) => { setAccMsg(msg); setAccMsgKind('ok'); }
+  const showAccErr = (msg: string) => { setAccMsg(msg); setAccMsgKind('err'); }
+
+  const [selected, setSelected] = useState<AccountRow | null>(null)
+  const [myRole, setMyRole] = useState<AccountRole | null>(null)
+
+  useEffect(() => {
+    if (!authReady || !currentUser?.id) return
+    ;(async () => {
+      const { data } = await supabase
+        .from('app_accounts')
+        .select('role')
+        .eq('user_id', currentUser.id)
+        .maybeSingle()
+      setMyRole((data?.role as AccountRole) ?? null)
+    })()
+  }, [authReady, currentUser?.id])
+
+  const canSeeAccounts = myRole === 'owner' || myRole === 'admin'
+
+  const [formAdd, setFormAdd] = useState<{ email: string; phone: string; name: string; position: string; role: AccountRole; is_active: boolean; }>(
+    { email: '', phone: '', name: '', position: '', role: 'staff', is_active: true }
+  )
+
+  const [formEdit, setFormEdit] = useState<{ id: string; email: string; phone: string; name: string; position: string; role: AccountRole; is_active: boolean } | null>(null)
+
+  function resetAddForm() {
+    setFormAdd({ email: '', phone: '', name: '', position: '', role: 'staff', is_active: true })
+    setAccMsg(null)
+  }
+
+  async function ensureCurrentUserAccount() {
+    if (!authReady) return
+    const user = currentUser
+    if (!user) { showAccErr('Not authenticated'); return }
+    let { data: existing, error: selErr } = await supabase
+      .from('app_accounts')
+      .select('id, user_id, email, role, first_login_at')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (selErr) { showAccErr(`Accounts select error: ${selErr.message}`); return }
+
+    if (!existing) {
+      const { data: byEmail } = await supabase
+        .from('app_accounts')
+        .select('id, role, first_login_at')
+        .is('user_id', null)
+        .eq('email', user.email ?? '')
+        .maybeSingle()
+
+      if (byEmail) {
+        const { error: linkErr } = await supabase
+          .from('app_accounts')
+          .update({
+            user_id: user.id,
+            name: (user as any)?.user_metadata?.full_name ?? null,
+            phone: (user as any)?.user_metadata?.phone ?? null,
+            is_active: true
+          })
+          .eq('id', byEmail.id)
+        if (linkErr) { showAccErr(`Accounts link error: ${linkErr.message}`); return }
+        existing = { ...byEmail, user_id: user.id, email: user.email ?? '' } as any
+      }
+    }
+
+    if (!existing) {
+      let defaultRole: AccountRole = 'staff'
+      const { count } = await supabase.from('app_accounts').select('id', { count: 'exact', head: true })
+      if ((count ?? 0) === 0) defaultRole = 'owner'
+      const { error: upErr } = await supabase.from('app_accounts').upsert({
+        user_id: user.id, email: user.email ?? '', role: defaultRole, is_active: true,
+        name: (user as any)?.user_metadata?.full_name ?? null,
+        phone: (user as any)?.user_metadata?.phone ?? null, position: null,
+      } as any, { onConflict: 'user_id' })
+      if (upErr) showAccErr(`Accounts upsert error: ${upErr.message}`)
+    }
+
+    try {
+      const { data: row } = await supabase
+        .from('app_accounts')
+        .select('id, first_login_at')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (row && !row.first_login_at) {
+        const { error: markErr } = await supabase
+          .from('app_accounts')
+          .update({ first_login_at: new Date().toISOString() })
+          .eq('id', row.id)
+        if (markErr) console.warn('first_login_at update failed:', markErr.message)
+      }
+    } catch {}
+  }
+
+  useEffect(() => { if (authReady) { (async () => { await ensureCurrentUserAccount() })() } }, [authReady, currentUser?.id])
+
+  async function fetchAccounts() {
+    setAccLoading(true)
+    const { data, error } = await supabase.from<AccountRow>(TBL_ACCOUNTS).select('*').order('created_at', { ascending: true })
+    if (error) showAccErr(`Accounts load error: ${error.message}`); else setAccMsg(null)
+    setAcc(data || [])
+    setAccLoading(false)
+  }
+
+  useEffect(() => { if (manageOpen) { (async () => { await ensureCurrentUserAccount(); await fetchAccounts() })() } }, [manageOpen])
+
+  async function addAccount(): Promise<AccountRow | null> {
+    const email = formAdd.email.trim().toLowerCase()
+    if (!isValidEmail(email)) { showAccErr(t('InvalidEmail', lang) || 'Invalid email'); return null }
+    const roleToSet: AccountRole = myRole === 'admin' ? 'staff' : formAdd.role
+    const res = await authFetch('/api/users/admin-upsert', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        phone: formAdd.phone || null,
+        name: formAdd.name || null,
+        position: formAdd.position || null,
+        role: roleToSet,
+        is_active: formAdd.is_active,
+      }),
+    })
+    const ct = res.headers.get('content-type') || ''
+    const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
+    if (!res.ok) { showAccErr(data?.error || 'Add failed'); return null }
+    const created = data.data as AccountRow
+    setAcc(a => [...a, created])
+    return created
+  }
+
+  function openEdit(u: AccountRow) {
+    setSelected(u)
+    setFormEdit({ id: u.id, email: u.email, phone: u.phone || '', name: u.name || '', position: u.position || '', role: u.role, is_active: u.is_active })
+    setEditOpen(true)
+  }
+
+  async function saveEdit() {
+    if (!formEdit) return
+    const intendedRole: AccountRole = myRole === 'admin' ? 'staff' : formEdit.role
+    const res = await authFetch('/api/users/admin-upsert', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: formEdit.id,
+        email: formEdit.email.trim().toLowerCase(),
+        phone: formEdit.phone || null,
+        name: formEdit.name || null,
+        position: formEdit.position || null,
+        role: intendedRole,
+        is_active: formEdit.is_active,
+      }),
+    })
+    const ct = res.headers.get('content-type') || ''
+    const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
+    if (!res.ok) { showAccErr(data?.error || 'Update failed'); return }
+    setAcc(list => list.map(x => (x.id === formEdit.id ? (data.data as AccountRow) : x)))
+    setEditOpen(false); setSelected(null); setFormEdit(null)
+  }
+
+  async function deleteAccount(id: string) {
+    const u = acc.find(x => x.id === id)
+    if (!u) return
+    const canDeleteRow = myRole === 'owner' ? true : myRole === 'admin' ? u.role === 'staff' : false
+    if (!canDeleteRow) { showAccErr(t('NotAllowed', lang) || 'Not allowed'); return }
+    const old = acc
+    setAcc(list => list.filter(x => x.id !== id))
+    try {
+      const res = await authFetch('/api/users/admin-delete', {
+        method: 'POST',
+        body: JSON.stringify({ accountId: u.id, userId: u.user_id || null, email: u.email || null }),
+      })
+      const ct = res.headers.get('content-type') || ''
+      const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
+      if (!res.ok) throw new Error(data?.error || 'Delete failed')
+    } catch (e: any) {
+      setAcc(old)
+      showAccErr(`${t('SavedErr', lang) || 'Error'}: ${e?.message || String(e)}`)
+    }
+  }
+
+  const [sendingLink, setSendingLink] = useState(false)
+  const [sendingRow, setSendingRow] = useState<Record<string, boolean>>({})
+
+  async function sendAuthLink(emailRaw?: string) {
+    const email = (emailRaw ?? formAdd.email).trim().toLowerCase()
+    if (!isValidEmail(email)) { showAccErr(t('InvalidEmail', lang) || 'Invalid email'); return }
+    try {
+      setSendingLink(true)
+      await sendAccessLink(email)
+      showAccOk(t('EmailSent', lang) || 'Email sent.')
+      setTimeout(() => setAccMsg(null), 4000)
+    } catch (e: any) {
+      showAccErr(`${t('SendLinkError', lang) || 'Send link error'}: ${e?.message || String(e)}`)
+    } finally {
+      setSendingLink(false)
+    }
+  }
+
+  async function sendAuthLinkForRow(u: AccountRow) {
+    const email = (u.email || '').trim().toLowerCase()
+    if (!isValidEmail(email)) { showAccErr(t('InvalidEmail', lang) || 'Invalid email'); return }
+    try {
+      setSendingRow(prev => ({ ...prev, [u.id]: true }))
+      await sendAccessLink(email)
+      showAccOk(t('EmailSent', lang) || 'Email sent.')
+      setTimeout(() => setAccMsg(null), 4000)
+    } catch (e: any) {
+      showAccErr(`${t('SendLinkError', lang) || 'Send link error'}: ${e?.message || String(e)}`)
+    } finally {
+      setSendingRow(prev => ({ ...prev, [u.id]: false }))
+    }
+  }
+
+  const [postInviteOpen, setPostInviteOpen] = useState(false)
+  const [postInviteEmail, setPostInviteEmail] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+
+  async function confirmSendInviteNow() {
+    if (!postInviteEmail) { setPostInviteOpen(false); return }
+    try {
+      setSendingLink(true)
+      await sendAccessLink(postInviteEmail)
+      showAccOk(t('EmailSent', lang) || 'Email sent.')
+    } catch (e: any) {
+      showAccErr(`${t('SendLinkError', lang) || 'Send link error'}: ${e?.message || String(e)}`)
+    } finally {
+      setSendingLink(false)
+      setPostInviteOpen(false)
+      setPostInviteEmail(null)
+    }
+  }
+  function skipInviteForNow() { setPostInviteOpen(false); setPostInviteEmail(null) }
+
+  const [pwModalOpen, setPwModalOpen] = useState(false)
+  const [oldPw, setOldPw] = useState('')
+  const [newPw1, setNewPw1] = useState('')
+  const [newPw2, setNewPw2] = useState('')
+  const [pwVisible, setPwVisible] = useState(false)
+  const [pwMsg, setPwMsg] = useState<string | null>(null)
+  const [pwKind, setPwKind] = useState<'ok' | 'err'>('ok')
+  const [pwBusy, setPwBusy] = useState(false)
+
+  function validatePassword(p: string) { return typeof p === 'string' && p.trim().length >= 8 }
+  function resetPwForm() { setOldPw(''); setNewPw1(''); setNewPw2(''); setPwVisible(false); setPwMsg(null) }
+
+  async function submitChangePassword() {
+    const email = currentUser?.email?.trim().toLowerCase()
+    if (!email) { setPwKind('err'); setPwMsg('Session not ready. Please re-login.'); return }
+    if (!oldPw.trim()) { setPwKind('err'); setPwMsg(t('EnterCurrentPassword', lang) || 'Enter your current password'); return }
+    if (!validatePassword(newPw1.trim())) { setPwKind('err'); setPwMsg(t('PasswordTooShort', lang) || 'Password too short (min 8 characters)'); return }
+    if (newPw1.trim() !== newPw2.trim()) { setPwKind('err'); setPwMsg(t('PasswordsDontMatch', lang) || 'Passwords do not match'); return }
+    if (oldPw.trim() === newPw1.trim()) { setPwKind('err'); setPwMsg(t('NewEqualsOld', lang) || 'New password must be different from the current one'); return }
+    try {
+      setPwBusy(true)
+      const re = await supabase.auth.signInWithPassword({ email, password: oldPw.trim() })
+      if (re.error) { setPwKind('err'); setPwMsg(t('CurrentPasswordWrong', lang) || 'Current password is incorrect'); setPwBusy(false); return }
+      const upd = await supabase.auth.updateUser({ password: newPw1.trim() })
+      if (upd.error) { setPwKind('err'); setPwMsg(`${t('SavedErr', lang) || 'Error'}: ${upd.error.message}`); setPwBusy(false); return }
+      setPwKind('ok'); setPwMsg(t('PasswordUpdated', lang) || 'Password updated')
+      setTimeout(() => { setPwModalOpen(false); resetPwForm() }, 1000)
+    } catch (e: any) {
+      setPwKind('err'); setPwMsg(`${t('SavedErr', lang) || 'Error'}: ${e?.message || String(e)}`)
+    } finally { setPwBusy(false) }
+  }
+
+  type Scope = 'materials' | 'suppliers' | 'categories' | 'recipes' | 'equipment' | 'all'
+  const scopeLabelKey: Record<Scope, string> = {
+    materials: 'ScopeMaterials', suppliers: 'ScopeSuppliers', categories: 'ScopeCategories',
+    recipes: 'ScopeRecipes', equipment: 'ScopeEquipment', all: 'ScopeAll'
+  }
+  const scopeDescKey: Record<Scope, string> = {
+    materials: 'ScopeDescMaterials', suppliers: 'ScopeDescSuppliers', categories: 'ScopeDescCategories',
+    recipes: 'ScopeDescRecipes', equipment: 'ScopeDescEquipment', all: 'ScopeDescAll'
+  }
+
+  const [dataModalOpen, setDataModalOpen] = useState(false)
+  const [dataScope, setDataScope] = useState<Scope>('materials')
+  const [confirmText, setConfirmText] = useState('')
+  const [confirmCheck, setConfirmCheck] = useState(false)
+  const [dataBusy, setDataBusy] = useState(false)
+  const [dataMsg, setDataMsg] = useState<string | null>(null)
+  const [dataMsgKind, setDataMsgKind] = useState<'ok' | 'err'>('ok')
+  const [dataDone, setDataDone] = useState(false)
+
+  function openDataModal(scope: Scope) {
+    setDataScope(scope); setConfirmText(''); setConfirmCheck(false); setDataMsg(null); setDataDone(false); setDataModalOpen(true)
+  }
+
+  async function callReset(scope: Scope) {
+    setDataBusy(true); setDataMsg(null)
+    try {
+      const res = await authFetch('/api/admin/data-reset', { method: 'POST', body: JSON.stringify({ scope }) })
+      const ct = res.headers.get('content-type') || ''
+      const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
+      if (!res.ok) throw new Error(data?.error || 'Reset failed')
+
+      // broadcast a tutte le tab
+      try { new BroadcastChannel('app-events').postMessage('data-reset') } catch {}
+
+      // ricarica dal context e rifai fetch locale per riallineare il form
+      await reloadSettings()
+      await refetchAppSettingsIntoState()
+
+      setDataMsg(t('ResetCompleted', lang) || 'Reset completed')
+      setDataMsgKind('ok')
+      setDataDone(true)
+
+      // invalida RSC se presenti
+      router.refresh()
+
+      setTimeout(() => setDataModalOpen(false), 900)
+    } catch (e: any) {
+      setDataMsg((t('SavedErr', lang) || 'Error') + ': ' + (e?.message || String(e)))
+      setDataMsgKind('err')
+    } finally {
+      setDataBusy(false)
+    }
+  }
+
+  const confirmPhrase = dataScope === 'all' ? 'RESET ALL' : 'RESET'
+  const canConfirmReset = confirmCheck && confirmText.trim().toUpperCase() === confirmPhrase
+
+  const [catModalOpen, setCatModalOpen] = useState(false)
+  function goToCategories(kind: 'dish' | 'prep' | 'equipment') {
+    setCatModalOpen(false); router.push(`/settings/categories/${encodeURIComponent(kind)}`)
+  }
+
+  return (
+    <div key={revision} className="max-w-5xl mx-auto p-4 text-gray-100">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-white">{t('Settings', lang)}</h1>
+          {saveMessage && <span className="text-sm text-green-400">{saveMessage}</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={onResetLocal} className="px-3 h-9 rounded-lg border border-blue-400/30 bg-blue-600/15 text-blue-200 hover:bg-blue-600/25">
+            {t('Reset', lang)}
+          </button>
+          <button onClick={onSave} disabled={saving || !dirty} className={`px-3 h-9 rounded-lg ${saving || !dirty ? 'opacity-60' : 'hover:opacity-90'} bg-blue-600 text-white inline-flex items-center gap-2`}>
+            <CheckCircleIcon className="w-5 h-5" />
+            {t('Save', lang)}
+          </button>
+        </div>
+      </div>
+
+      <SectionCard title={t('CompanyInfo', lang) || 'Company Info'}>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2 md:col-span-1">
+            <label className="text-sm text-gray-800">{t('RestaurantName', lang) || 'Restaurant name'}</label>
+            <input type="text" value={s.restaurant_name ?? ''} onChange={e => patch('restaurant_name', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+          </div>
+          <div className="col-span-2 md:col-span-1">
+            <label className="text-sm text-gray-800">{t('CompanyName', lang) || 'Company name'}</label>
+            <input type="text" value={s.company_name ?? ''} onChange={e => patch('company_name', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+          </div>
+          <div className="col-span-2">
+            <label className="text-sm text-gray-800">{t('Address', lang) || 'Address'}</label>
+            <input type="text" value={s.address ?? ''} onChange={e => patch('address', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+          </div>
+          <div className="col-span-2 md:col-span-1">
+            <label className="text-sm text-gray-800">{t('TaxCode', lang) || 'Tax code'}</label>
+            <input type="text" value={s.tax_code ?? ''} onChange={e => patch('tax_code', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+          </div>
+          <div className="col-span-2 md:col-span-1">
+            <label className="text-sm text-gray-800">{t('Phone', lang) || 'Phone'}</label>
+            <input type="text" value={s.phone ?? ''} onChange={e => patch('phone', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+          </div>
+          <div className="col-span-2 md:col-span-1">
+            <label className="text-sm text-gray-800">{t('Email', lang) || 'Email'}</label>
+            <input type="email" value={s.email ?? ''} onChange={e => patch('email', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+          </div>
+          <div className="col-span-2 md:col-span-1">
+            <label className="text-sm text-gray-800">{t('Website', lang) || 'Website'}</label>
+            <input type="text" value={s.website ?? ''} onChange={e => patch('website', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+          </div>
+
+          <div className="col-span-2 md:col-span-1">
+            <label className="text-sm text-gray-800">{t('Logo', lang) || 'Logo'}</label>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                id="logoInput"
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={e => {
+                  const f = e.target.files?.[0]
+                  if (f) handleLogoUpload(f)
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => document.getElementById('logoInput')?.click()}
+                className="px-3 h-9 rounded-lg border bg-white text-gray-800 hover:bg-gray-50"
+              >
+                {t('ChooseFile', lang) || 'Choose file'}
+              </button>
+              {logoSrc ? (
+                <img src={logoSrc} alt="logo" className="ml-2 h-10 w-10 rounded object-contain border bg-white" />
+              ) : null}
+              {s.logo_data ? (
+                <button
+                  type="button"
+                  className="ml-auto w-9 h-9 inline-flex items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50"
+                  onClick={() => { patch('logo_data', null); patch('logo_mime', null) }}
+                  title={t('Remove', lang) || 'Remove'}
+                  aria-label={t('Remove', lang) || 'Remove'}
+                >
+                  <TrashIcon className="w-5 h-5" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <div className="grid gap-4 md:grid-cols-2 mt-4">
+        <SectionCard title={t('General', lang)}>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-gray-800">{t('Language', lang)}</label>
+              <select value={s.language_code} onChange={e => { patch('language_code', e.target.value as Lang) }} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10">
+                <option value="en">English</option>
+                <option value="vi">Tiếng Việt</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-gray-800">{t('Currency', lang)}</label>
+              <select value={s.currency} onChange={e => { patch('currency', e.target.value as Currency) }} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10">
+                {(['VND', 'USD', 'EUR', 'GBP'] as const).map(c => (<option key={c} value={c}>{c}</option>))}
+              </select>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title={t('Profile', lang) || 'Profile'}>
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-700">{t('ChangePasswordDesc', lang) || 'Update your password from here'}</div>
+            <button type="button" onClick={() => { resetPwForm(); setPwModalOpen(true) }} className="px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
+              {t('ChangePassword', lang) || 'Change password'}
+            </button>
+          </div>
+        </SectionCard>
+
+        <SectionCard title={t('Materials', lang)}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                <label className="text-sm text-gray-800">{t('ReviewMonths', lang)}</label>
+                <input type="number" min={0} max={12} value={s.materials_review_months} onChange={handleMonthsChange('materials_review_months')} className="border rounded-lg px-2 py-1 text-gray-900 h-9 w-24" />
+              </div>
+            </div>
+            <div className="col-span-2 border-t pt-2">
+              <Toggle id="csv_confirm_materials" checked={!!s.csv_require_confirm_refs} onChange={v => patch('csv_require_confirm_refs', !!v)} label={t('AskCsvConfirm', lang)} />
+              <Toggle id="materials_exclusive_default" checked={!!s.materials_exclusive_default} onChange={v => patch('materials_exclusive_default', !!v)} label={t('MaterialsExclusiveDefault', lang)} />
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title={t('Equipment', lang)}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                <label className="text-sm text-gray-800">{t('ReviewMonths', lang)}</label>
+                <input type="number" min={0} max={12} value={s.equipment_review_months} onChange={handleMonthsChange('equipment_review_months')} className="border rounded-lg px-2 py-1 text-gray-900 h-9 w-24" />
+              </div>
+            </div>
+            <div className="col-span-2 border-t pt-2">
+              <Toggle id="csv_confirm_equipment" checked={!!s.equipment_csv_require_confirm_refs} onChange={v => patch('equipment_csv_require_confirm_refs', !!v)} label={t('AskCsvConfirm', lang)} />
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title={t('Vat', lang)}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Toggle id="vat_enabled" checked={!!s.vat_enabled} onChange={(v) => { patch('vat_enabled', !!v) }} label={t('VatEnable', lang)} />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="text-sm text-gray-800">{t('VatDefaultRate', lang)}</label>
+              <div className="relative mt-1 w-40">
+                <input
+                  type="number"
+                  step={1}
+                  min={0}
+                  max={100}
+                  value={s.vat_rate ?? ''}
+                  onChange={e => {
+                    const parsed = parseNumOrNull(e.target.value)
+                    const clamped = parsed == null ? null : clampInt(parsed, 0, 100)
+                    patch('vat_rate', clamped)
+                  }}
+                  className={`w-full border rounded-lg pr-7 pl-2 py-1 text-gray-900 h-9 ${!s.vat_enabled ? 'bg-gray-100' : ''}`}
+                  disabled={!s.vat_enabled}
+                />
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 text-sm">%</span>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+
+        {canSeeAccounts && (
+          <SectionCard title={t('Utilities', lang)}>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setCatModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+                {t('EditCategories', lang)}
+              </button>
+              <button type="button" onClick={() => router.push('/trash')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+                {t('Trash', lang)}
+              </button>
+              <button type="button" onClick={() => router.push('/archive')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+                {t('Archive', lang)}
+              </button>
+            </div>
+          </SectionCard>
+        )}
+
+        {canSeeAccounts && (
+          <SectionCard title={t('Accounts', lang) || 'Accounts'}>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => { resetAddForm(); setAddOpen(true) }} className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
+                <PlusIcon className="w-5 h-5" /> {t('NewAccount', lang) || 'New Account'}
+              </button>
+              <button type="button" onClick={() => setManageOpen(true)} className="inline-flex items-center gap-2 px-3 h-9 rounded-lg border text-gray-800 hover:bg-gray-50">
+                <Cog6ToothIcon className="w-5 h-5" /> {t('ManageAccounts', lang) || 'Manage Accounts'}
+              </button>
+            </div>
+          </SectionCard>
+        )}
+
+        {canSeeAccounts && (
+          <SectionCard title={t('Data', lang) || 'Data'}>
+            <div className="space-y-3">
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                {t('DataDangerNote', lang)}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {([
+                  { scope: 'materials', key: 'ResetMaterials' as const },
+                  { scope: 'suppliers', key: 'ResetSuppliers' as const },
+                  { scope: 'categories', key: 'ResetCategories' as const },
+                  { scope: 'recipes', key: 'ResetRecipes' as const },
+                  { scope: 'equipment', key: 'ResetEquipment' as const },
+                ]).map(btn => (
+                  <button key={btn.scope} type="button" onClick={() => openDataModal(btn.scope as any)}
+                          className="w-full inline-flex items-center justify-center px-3 py-2 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm whitespace-nowrap"
+                          title={t(btn.key, lang)}>
+                    {t(btn.key, lang)}
+                  </button>
+                ))}
+
+                <button type="button" onClick={() => { if (myRole !== 'owner') return; openDataModal('all') }}
+                        disabled={myRole !== 'owner'}
+                        className={`w-full inline-flex items-center justify-center px-3 py-2 h-10 rounded-lg text-sm whitespace-nowrap ${
+                          myRole !== 'owner' ? 'opacity-40 cursor-not-allowed border' : 'border hover:bg-red-50 text-red-600 border-red-300'
+                        }`}
+                        title={myRole !== 'owner' ? t('OnlyOwnerResetAll', lang) : t('ResetAll', lang)}>
+                  {t('ResetAll', lang)}
+                </button>
+              </div>
+            </div>
+          </SectionCard>
+        )}
+      </div>
+
+      <Modal open={dataModalOpen} title={`${t('Reset', lang)} ${t(scopeLabelKey[dataScope], lang)}`} onClose={() => setDataModalOpen(false)}>
+        {!dataDone ? (
+          <div className="space-y-3 text-gray-800">
+            <p className="font-medium">{t(scopeDescKey[dataScope], lang)}</p>
+
+            <div className="text-sm">
+              {t('TypeToConfirm', lang)} <span className="font-mono font-bold">{confirmPhrase}</span>
+            </div>
+            <input type="text" value={confirmText} onChange={e => setConfirmText(e.target.value)} className="w-full border rounded-lg px-2 py-1 h-9" />
+
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={confirmCheck} onChange={e => setConfirmCheck(e.target.checked)} />
+              {t('IrreversibleAck', lang)}
+            </label>
+
+            {dataMsg && (
+              <div className={`text-sm ${dataMsgKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+                {dataMsg}
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button type="button" onClick={() => setDataModalOpen(false)} className="px-3 h-9 rounded-lg border hover:bg-gray-50" disabled={dataBusy}>
+                {t('Cancel', lang) || 'Cancel'}
+              </button>
+              <button type="button" onClick={() => callReset(dataScope)} disabled={!canConfirmReset || dataBusy}
+                      className={`px-3 h-9 rounded-lg bg-red-600 text-white ${!canConfirmReset || dataBusy ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}>
+                {dataBusy ? (t('Loading', lang) || 'Loading…') : `${t('Reset', lang)} ${t(scopeLabelKey[dataScope], lang)}`}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3 text-gray-800">
+            <div className="flex items-center gap-2 text-green-700">
+              <CheckCircleIcon className="w-5 h-5" />
+              <span>{t('ResetCompleted', lang) || 'Reset completed'}</span>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end">
+              <button type="button" onClick={() => setDataModalOpen(false)} className="px-4 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
+                {t('OK', lang) || 'OK'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={catModalOpen} title={t('ChooseCategories', lang)} onClose={() => setCatModalOpen(false)} width="max-w-md">
+        <div className="space-y-3 text-gray-800">
+          <p className="text-sm">{t('ChooseCategoriesDesc', lang)}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button type="button" onClick={() => goToCategories('dish')} className="w-full inline-flex items-center justify-center px-3 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm">
+              {t('DishCategories', lang)}
+            </button>
+            <button type="button" onClick={() => goToCategories('prep')} className="w-full inline-flex items-center justify-center px-3 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm">
+              {t('PrepCategories', lang)}
+            </button>
+            <button type="button" onClick={() => goToCategories('equipment')} className="w-full inline-flex items-center justify-center px-3 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm sm:col-span-2">
+              {t('EquipmentCategories', lang)}
+            </button>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end">
+            <button type="button" onClick={() => setCatModalOpen(false)} className="px-4 h-9 rounded-lg border hover:bg-gray-50">
+              {t('Cancel', lang) || 'Cancel'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={pwModalOpen} title={t('ChangePassword', lang) || 'Change password'} onClose={() => setPwModalOpen(false)} width="max-w-md">
+        <div className="space-y-3 text-gray-800">
+          <div className="space-y-2">
+            <label className="text-sm text-gray-800">{t('CurrentPassword', lang) || 'Current password'}</label>
+            <input type="password" value={oldPw} onChange={e => setOldPw(e.target.value)} className="w-full border rounded-lg px-2 py-1 h-9" />
+            <label className="text-sm text-gray-800">{t('NewPassword', lang) || 'New password'}</label>
+            <input type="password" value={newPw1} onChange={e => setNewPw1(e.target.value)} className="w-full border rounded-lg px-2 py-1 h-9" />
+            <label className="text-sm text-gray-800">{t('RepeatNewPassword', lang) || 'Repeat new password'}</label>
+            <input type="password" value={newPw2} onChange={e => setNewPw2(e.target.value)} className="w-full border rounded-lg px-2 py-1 h-9" />
+          </div>
+
+          {pwMsg && (
+            <div className={`text-sm ${pwKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{pwMsg}</div>
+          )}
+
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setPwModalOpen(false)} className="px-3 h-9 rounded-lg border hover:bg-gray-50" disabled={pwBusy}>
+              {t('Cancel', lang) || 'Cancel'}
+            </button>
+            <button type="button" onClick={submitChangePassword} disabled={pwBusy} className={`px-3 h-9 rounded-lg bg-blue-600 text-white ${pwBusy ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}>
+              {pwBusy ? (t('Loading', lang) || 'Loading…') : (t('Save', lang) || 'Save')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}

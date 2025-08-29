@@ -1,0 +1,45 @@
+{
+  "name": "foodcost-webapp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@headlessui/react": "^2.2.7",
+    "@heroicons/react": "^2.2.0",
+    "@mui/material": "^7.3.1",
+    "@mui/x-date-pickers": "^8.10.0",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.53.0",
+    "dayjs": "^1.11.13",
+    "exceljs": "^4.4.0",
+    "flatpickr": "^4.6.13",
+    "lucide-react": "^0.539.0",
+    "next": "15.4.5",
+    "papaparse": "^5.5.3",
+    "react": "19.1.0",
+    "react-country-flag": "^3.1.0",
+    "react-dom": "19.1.0",
+    "react-flatpickr": "^4.0.11",
+    "recharts": "^3.1.2",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
