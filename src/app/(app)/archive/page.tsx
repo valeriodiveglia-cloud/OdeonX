@@ -76,27 +76,29 @@ export default function ArchivePage() {
   const kebabWrapperRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       setLoading(true)
       const [dishCat, prepCat] = await Promise.all([
-        supabase.from<Cat>(TBL_DISH_CATS).select('id,name').order('name'),
-        supabase.from<Cat>(TBL_RECIPE_CATS).select('id,name').order('name'),
+        supabase.from(TBL_DISH_CATS).select('id,name').order('name'),
+        supabase.from(TBL_RECIPE_CATS).select('id,name').order('name'),
       ])
-      if (dishCat.data) setDishCats(dishCat.data)
-      if (prepCat.data) setPrepCats(prepCat.data)
+      if (dishCat.data) setDishCats(dishCat.data as Cat[])
+      if (prepCat.data) setPrepCats(prepCat.data as Cat[])
 
       const [fin, prep] = await Promise.all([
-        supabase.from<DishRow>(TBL_FINAL)
+        supabase
+          .from(TBL_FINAL)
           .select('id,name,category_id,type,price_vnd,last_update,archived_at,deleted_at')
           .not('archived_at','is',null).is('deleted_at','null')
           .order('archived_at',{ ascending: false }),
-        supabase.from<PrepRow>(TBL_PREP)
+        supabase
+          .from(TBL_PREP)
           .select('id,name,category_id,type,yield_qty,cost_per_unit_vnd,last_update,archived_at,deleted_at')
           .not('archived_at','is',null).is('deleted_at','null')
           .order('archived_at',{ ascending: false }),
       ])
-      setDishes(fin.data || [])
-      setPreps(prep.data || [])
+      setDishes((fin.data as DishRow[]) || [])
+      setPreps((prep.data as PrepRow[]) || [])
       setSelected({})
       setLoading(false)
     })()
@@ -144,8 +146,8 @@ export default function ArchivePage() {
 
   function toggleSelectAllVisible() {
     const next = { ...selected }
-    if (allVisibleSelected) filtered.forEach(r => next[r.id]=false)
-    else filtered.forEach(r => next[r.id]=true)
+    if (allVisibleSelected) filtered.forEach(r => { next[r.id]=false })
+    else filtered.forEach(r => { next[r.id]=true })
     setSelected(next)
   }
   function selectedIds(): string[] { return Object.keys(selected).filter(id => selected[id]) }
