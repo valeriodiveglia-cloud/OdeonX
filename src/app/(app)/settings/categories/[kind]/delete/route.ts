@@ -13,11 +13,8 @@ type Kind = keyof typeof tableByKind
 const isKind = (v: string): v is Kind =>
   v === 'dish' || v === 'prep' || v === 'equipment'
 
-export async function POST(
-  req: Request,
-  { params }: { params: Record<string, string | string[]> } // <<< firma compatibile Next 15
-) {
-  const raw = params.kind
+export async function POST(req: Request, ctx: any) {
+  const raw = ctx?.params?.kind as string | string[] | undefined
   const kind = Array.isArray(raw) ? raw[0] : raw
   if (!kind || !isKind(kind)) {
     return NextResponse.json({ error: 'Invalid kind' }, { status: 400 })
