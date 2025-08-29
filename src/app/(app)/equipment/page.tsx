@@ -1284,7 +1284,7 @@ ${t('Skipped', language)}: ${skipped}`)
     setProgress(0)
     try {
       const parsed = await new Promise<any>((resolve, reject) => {
-        Papa.parse<Record<string, any>>(f, {
+        Papa.parse(f, {
           header: true,
           skipEmptyLines: 'greedy',
           dynamicTyping: false,

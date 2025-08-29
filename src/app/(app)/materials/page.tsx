@@ -1275,8 +1275,8 @@ export default function MaterialsPage() {
   setProgress(0)
 
   try {
-    const parsed = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
-      Papa.parse<Record<string, any>>(f, {
+    const parsed = await new Promise<any>((resolve, reject) => {
+      Papa.parse(f, {
         header: true,
         skipEmptyLines: true,
         dynamicTyping: true,

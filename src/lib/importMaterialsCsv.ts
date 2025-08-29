@@ -72,7 +72,7 @@ export async function importMaterialsCsv(
 
   // 1) Parse CSV con trasformazione header
   const parsed = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
-    Papa.parse<Record<string, any>>(file, {
+    Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       transformHeader: (h) => headerMap[normKey(h)] ?? normKey(h),
