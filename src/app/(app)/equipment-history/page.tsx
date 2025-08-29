@@ -1,4 +1,4 @@
-// src/app/equipment-history/page.tsx
+// src/app/(app)/equipment-history/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -102,16 +102,16 @@ export default function EquipmentHistoryPage() {
   async function fetchLookups() {
     setLoading(true)
     const [cRes, sRes, eRes] = await Promise.all([
-      supabase.from<Cat>('equipment_categories').select('*').order('name', { ascending: true }),
-      supabase.from<Sup>('suppliers').select('*').order('name', { ascending: true }),
-      supabase.from<Equip>('rental_equipment')
+      supabase.from('equipment_categories').select('*').order('name', { ascending: true }),
+      supabase.from('suppliers').select('*').order('name', { ascending: true }),
+      supabase.from('rental_equipment')
         .select('id,name,category_id,supplier_id,cost,final_price,created_at')
         .order('name', { ascending: true }),
     ])
-    if (cRes.data) setCats(cRes.data)
-    if (sRes.data) setSups(sRes.data)
-    if (eRes.data) setEquip(eRes.data)
-    if (!selEq && eRes.data && eRes.data.length) setSelEq(eRes.data[0].id)
+    if (cRes.data) setCats(cRes.data as Cat[])
+    if (sRes.data) setSups(sRes.data as Sup[])
+    if (eRes.data) setEquip(eRes.data as Equip[])
+    if (!selEq && eRes.data && eRes.data.length) setSelEq((eRes.data as Equip[])[0].id)
     setLoading(false)
   }
 
@@ -132,7 +132,7 @@ export default function EquipmentHistoryPage() {
     const toIsoExclusive = toStart.toISOString()
 
     const { data, error } = await supabase
-      .from<EqHistoryRow>('equipment_price_history')
+      .from('equipment_price_history')
       .select('*')
       .gte('changed_at', fromIso)
       .lt('changed_at', toIsoExclusive)
@@ -143,7 +143,7 @@ export default function EquipmentHistoryPage() {
       alert('Error loading history: ' + error.message)
       setRowsAll([])
     } else {
-      setRowsAll(data || [])
+      setRowsAll((data as EqHistoryRow[]) || [])
     }
     setLoadingRows(false)
   }
