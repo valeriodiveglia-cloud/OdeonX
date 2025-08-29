@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-
 export const runtime = 'nodejs'
 
 const tableByKind = {
@@ -23,7 +22,8 @@ export async function GET(_req: Request, ctx: any) {
   const table = tableByKind[kind]
   const { data, error } = await supabaseAdmin
     .from(table)
-    .select('id,name')
+    .select('id,name,description,sort_order,is_active')
+    .order('sort_order', { ascending: true, nullsFirst: true })
     .order('name', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

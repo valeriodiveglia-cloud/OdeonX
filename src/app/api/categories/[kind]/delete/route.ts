@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-
 export const runtime = 'nodejs'
 
 const tableByKind = {
@@ -16,7 +15,6 @@ const isKind = (v: string): v is Kind =>
 export async function POST(req: Request, ctx: any) {
   const raw = ctx?.params?.kind as string | string[] | undefined
   const kind = Array.isArray(raw) ? raw[0] : raw
-
   if (!kind || !isKind(kind)) {
     return NextResponse.json({ error: 'Invalid kind' }, { status: 400 })
   }
