@@ -9,11 +9,9 @@ const tableByKind = {
   equipment: 'equipment_categories',
 } as const
 
-type Kind = keyof typeof tableByKind // 'dish' | 'prep' | 'equipment'
-
-function isKind(v: string): v is Kind {
-  return v === 'dish' || v === 'prep' || v === 'equipment'
-}
+type Kind = keyof typeof tableByKind
+const isKind = (v: string): v is Kind =>
+  v === 'dish' || v === 'prep' || v === 'equipment'
 
 export async function POST(
   req: Request,
@@ -26,24 +24,14 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid kind' }, { status: 400 })
   }
 
-  const table = tableByKind[kind]
+  const { id } = await req.json()
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-  let id: unknown
-  try {
-    const body = await req.json()
-    id = body?.id
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-  }
+  const { error } = await supabaseAdmin
+    .from(tableByKind[kind])
+    .delete()
+    .eq('id', id)
 
-  if (!id || (typeof id !== 'string' && typeof id !== 'number')) {
-    return NextResponse.json({ error: 'Missing id' }, { status: 400 })
-  }
-
-  const { error } = await supabaseAdmin.from(table).delete().eq('id', id)
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
