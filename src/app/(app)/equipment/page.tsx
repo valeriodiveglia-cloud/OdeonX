@@ -1053,19 +1053,20 @@ export default function EquipmentPage() {
   useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
-    setLoading(true)
-    const [cRes, sRes, eRes] = await Promise.all([
-      supabase.from<Cat>(TBL_EQ_CATS).select('*').order('name', { ascending: true }),
-      supabase.from<Sup>(TBL_SUPS).select('*').order('name', { ascending: true }),
-      // include vat_rate_percent
-      supabase.from<Equip>(TBL_EQ).select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-    ])
-    if (cRes.data) setCats(cRes.data)
-    if (sRes.data) setSups(sRes.data)
-    setRows(eRes.data || [])
-    setLoading(false)
-    setSelected({})
-  }
+  setLoading(true)
+  const [cRes, sRes, eRes] = await Promise.all([
+    supabase.from(TBL_EQ_CATS).select('*').order('name', { ascending: true }),
+    supabase.from(TBL_SUPS).select('*').order('name', { ascending: true }),
+    // include vat_rate_percent
+    supabase.from(TBL_EQ).select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+  ])
+  if (cRes.data) setCats(cRes.data as Cat[])
+  if (sRes.data) setSups(sRes.data as Sup[])
+  setRows((eRes.data as Equip[]) || [])
+  setLoading(false)
+  setSelected({})
+}
+
 
   function toggleSort(col: SortKey) {
     if (sortCol === col) setSortAsc(!sortAsc)
@@ -1282,7 +1283,7 @@ ${t('Skipped', language)}: ${skipped}`)
     if (!f) return
     setProgress(0)
     try {
-      const parsed = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
+      const parsed = await new Promise<any>((resolve, reject) => {
         Papa.parse<Record<string, any>>(f, {
           header: true,
           skipEmptyLines: 'greedy',
@@ -1293,7 +1294,7 @@ ${t('Skipped', language)}: ${skipped}`)
         })
       })
 
-      const cleaned = (parsed.data || []).map(r => {
+      const cleaned = ((parsed.data as Record<string, any>[]) || []).map(r => {
         const out: Record<string, any> = {}
         Object.keys(r || {}).forEach(k => {
           if (k === '__ignore__') return
