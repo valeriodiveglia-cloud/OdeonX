@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+export const runtime = 'nodejs'
 
 const tableByKind = {
   dish: 'dish_categories',
@@ -7,12 +8,22 @@ const tableByKind = {
   equipment: 'equipment_categories',
 } as const
 
-export async function POST(
-  req: Request,
-  { params }: { params: { kind: 'dish'|'prep'|'equipment' } }
-) {
-  const table = tableByKind[params.kind]
-  const { row } = await req.json()
+type Kind = keyof typeof tableByKind
+const isKind = (v: string): v is Kind =>
+  v === 'dish' || v === 'prep' || v === 'equipment'
+
+export async function POST(req: Request, ctx: any) {
+  // Narrowing sicuro del param dinamico [kind]
+  const raw = ctx?.params?.kind as string | string[] | undefined
+  const kind = Array.isArray(raw) ? raw[0] : raw
+  if (!kind || !isKind(kind)) {
+    return NextResponse.json({ error: 'Invalid kind' }, { status: 400 })
+  }
+
+  const table = tableByKind[kind]
+
+  // Body minimale { row?: { id?, name } }
+  const { row } = (await req.json().catch(() => ({}))) as { row?: any }
   const name = String(row?.name ?? '').trim()
   if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
 
