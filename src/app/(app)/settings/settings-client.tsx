@@ -157,7 +157,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   const [authReady, setAuthReady] = useState(false)
   const [currentUser, setCurrentUser] = useState<null | { id: string; email?: string | null }>(null)
 
-  // Funzione di refetch singolo record app_settings
+  // refetch singolo record app_settings
   async function refetchAppSettingsIntoState() {
     const { data, error } = await supabase
       .from<AppSettingsRow>('app_settings')
@@ -195,7 +195,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     return () => { unsub?.() }
   }, [])
 
-  // Primo fetch dal DB quando auth è pronta
+  // primo fetch dal DB quando auth è pronta
   useEffect(() => {
     if (!authReady) return
     let cancelled = false
@@ -222,20 +222,19 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     return () => { cancelled = true }
   }, [authReady, currentUser?.id])
 
-  // Se il server non ha impostato recipes_review_months, garantisco default
+  // default recipes_review_months se mancante
   useEffect(() => {
     if (typeof initial.recipes_review_months !== 'number') {
       setS(prev => ({ ...prev, recipes_review_months: 4 }))
     }
   }, [initial])
 
-  // Reagisco alla revisione del context per remount e refetch locale
+  // reagisco alla revisione del context
   useEffect(() => {
-    // quando revision cambia, rifaccio fetch per riallineare lo stato del form
     ;(async () => { await refetchAppSettingsIntoState() })()
   }, [revision])
 
-  // Broadcast locale per reset partiti altrove
+  // broadcast per reset partiti altrove
   useEffect(() => {
     let bc: BroadcastChannel | null = null
     try {
@@ -676,10 +675,8 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
       if (!res.ok) throw new Error(data?.error || 'Reset failed')
 
-      // broadcast a tutte le tab
       try { new BroadcastChannel('app-events').postMessage('data-reset') } catch {}
 
-      // ricarica dal context e rifai fetch locale per riallineare il form
       await reloadSettings()
       await refetchAppSettingsIntoState()
 
@@ -687,9 +684,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       setDataMsgKind('ok')
       setDataDone(true)
 
-      // invalida RSC se presenti
       router.refresh()
-
       setTimeout(() => setDataModalOpen(false), 900)
     } catch (e: any) {
       setDataMsg((t('SavedErr', lang) || 'Error') + ': ' + (e?.message || String(e)))
@@ -945,6 +940,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         )}
       </div>
 
+      {/* Data reset modal */}
       <Modal open={dataModalOpen} title={`${t('Reset', lang)} ${t(scopeLabelKey[dataScope], lang)}`} onClose={() => setDataModalOpen(false)}>
         {!dataDone ? (
           <div className="space-y-3 text-gray-800">
@@ -992,6 +988,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         )}
       </Modal>
 
+      {/* Categories chooser modal */}
       <Modal open={catModalOpen} title={t('ChooseCategories', lang)} onClose={() => setCatModalOpen(false)} width="max-w-md">
         <div className="space-y-3 text-gray-800">
           <p className="text-sm">{t('ChooseCategoriesDesc', lang)}</p>
@@ -1015,6 +1012,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         </div>
       </Modal>
 
+      {/* Change password modal */}
       <Modal open={pwModalOpen} title={t('ChangePassword', lang) || 'Change password'} onClose={() => setPwModalOpen(false)} width="max-w-md">
         <div className="space-y-3 text-gray-800">
           <div className="space-y-2">
@@ -1036,6 +1034,229 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
             </button>
             <button type="button" onClick={submitChangePassword} disabled={pwBusy} className={`px-3 h-9 rounded-lg bg-blue-600 text-white ${pwBusy ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}>
               {pwBusy ? (t('Loading', lang) || 'Loading…') : (t('Save', lang) || 'Save')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Accounts: Add */}
+      <Modal open={addOpen} title={t('NewAccount', lang) || 'New account'} onClose={() => setAddOpen(false)} width="max-w-lg">
+        <div className="space-y-3 text-gray-800">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-sm">{t('Email', lang) || 'Email'}</label>
+              <input type="email" value={formAdd.email}
+                     onChange={e => setFormAdd(v => ({ ...v, email: e.target.value }))}
+                     className="w-full border rounded-lg px-2 py-1 h-9" />
+            </div>
+            <div>
+              <label className="text-sm">{t('Phone', lang) || 'Phone'}</label>
+              <input type="text" value={formAdd.phone}
+                     onChange={e => setFormAdd(v => ({ ...v, phone: e.target.value }))}
+                     className="w-full border rounded-lg px-2 py-1 h-9" />
+            </div>
+            <div>
+              <label className="text-sm">{t('Name', lang) || 'Name'}</label>
+              <input type="text" value={formAdd.name}
+                     onChange={e => setFormAdd(v => ({ ...v, name: e.target.value }))}
+                     className="w-full border rounded-lg px-2 py-1 h-9" />
+            </div>
+            <div>
+              <label className="text-sm">{t('Position', lang) || 'Position'}</label>
+              <input type="text" value={formAdd.position}
+                     onChange={e => setFormAdd(v => ({ ...v, position: e.target.value }))}
+                     className="w-full border rounded-lg px-2 py-1 h-9" />
+            </div>
+            <div>
+              <label className="text-sm">{t('Role', lang) || 'Role'}</label>
+              <select
+                value={formAdd.role}
+                onChange={e => setFormAdd(v => ({ ...v, role: e.target.value as AccountRole }))}
+                className="w-full border rounded-lg px-2 py-1 h-10 bg-white">
+                <option value="staff">staff</option>
+                <option value="admin" disabled={myRole === 'admin'}>admin</option>
+                <option value="owner" disabled={myRole !== 'owner'}>owner</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={formAdd.is_active}
+                       onChange={e => setFormAdd(v => ({ ...v, is_active: e.target.checked }))} />
+                {t('Active', lang) || 'Active'}
+              </label>
+            </div>
+          </div>
+
+          {accMsg && (
+            <div className={`text-sm ${accMsgKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{accMsg}</div>
+          )}
+
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setAddOpen(false)} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
+              {t('Cancel', lang) || 'Cancel'}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setCreating(true)
+                const created = await addAccount()
+                setCreating(false)
+                if (created) {
+                  setPostInviteEmail(created.email)
+                  setPostInviteOpen(true)
+                  setAddOpen(false)
+                }
+              }}
+              className={`px-3 h-9 rounded-lg bg-blue-600 text-white ${creating ? 'opacity-60' : 'hover:opacity-90'}`}
+              disabled={creating}
+            >
+              {creating ? (t('Loading', lang) || 'Loading…') : (t('Save', lang) || 'Save')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Accounts: Manage */}
+      <Modal open={manageOpen} title={t('ManageAccounts', lang) || 'Manage accounts'} onClose={() => setManageOpen(false)} width="max-w-3xl">
+        <div className="space-y-3 text-gray-800">
+          {accMsg && (
+            <div className={`text-sm ${accMsgKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{accMsg}</div>
+          )}
+          <div className="overflow-auto border rounded-xl">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-gray-700">
+                <tr>
+                  <th className="text-left p-2">Email</th>
+                  <th className="text-left p-2">{t('Name', lang) || 'Name'}</th>
+                  <th className="text-left p-2">{t('Role', lang) || 'Role'}</th>
+                  <th className="text-left p-2">{t('Active', lang) || 'Active'}</th>
+                  <th className="text-right p-2">{t('Actions', lang) || 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accLoading ? (
+                  <tr><td className="p-3" colSpan={5}>{t('Loading', lang) || 'Loading…'}</td></tr>
+                ) : acc.length === 0 ? (
+                  <tr><td className="p-3" colSpan={5}>{t('NoData', lang) || 'No data'}</td></tr>
+                ) : acc.map(u => (
+                  <tr key={u.id} className="border-t">
+                    <td className="p-2">{u.email}</td>
+                    <td className="p-2">{u.name || '—'}</td>
+                    <td className="p-2">{u.role}</td>
+                    <td className="p-2">{u.is_active ? '✓' : '✗'}</td>
+                    <td className="p-2">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => sendAuthLinkForRow(u)}
+                          className="px-2 h-8 rounded-lg border hover:bg-gray-50"
+                          disabled={!!sendingRow[u.id]}
+                          title={t('SendAccessLink', lang) || 'Send access link'}>
+                          {sendingRow[u.id] ? (t('Loading', lang) || 'Loading…') : (t('SendLink', lang) || 'Send link')}
+                        </button>
+                        <button
+                          onClick={() => openEdit(u)}
+                          className="px-2 h-8 rounded-lg border hover:bg-gray-50">
+                          {t('Edit', lang) || 'Edit'}
+                        </button>
+                        <button
+                          onClick={() => deleteAccount(u.id)}
+                          className="px-2 h-8 rounded-lg border border-red-300 text-red-600 hover:bg-red-50">
+                          {t('Delete', lang) || 'Delete'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end">
+            <button type="button" onClick={() => setManageOpen(false)} className="px-4 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
+              {t('Close', lang) || 'Close'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Accounts: Edit */}
+      <Modal open={editOpen && !!formEdit} title={t('EditAccount', lang) || 'Edit account'} onClose={() => { setEditOpen(false); setSelected(null); setFormEdit(null) }} width="max-w-lg">
+        {formEdit ? (
+          <div className="space-y-3 text-gray-800">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-sm">{t('Email', lang) || 'Email'}</label>
+                <input type="email" value={formEdit.email}
+                       onChange={e => setFormEdit(v => v ? ({ ...v, email: e.target.value }) : v)}
+                       className="w-full border rounded-lg px-2 py-1 h-9" />
+              </div>
+              <div>
+                <label className="text-sm">{t('Phone', lang) || 'Phone'}</label>
+                <input type="text" value={formEdit.phone}
+                       onChange={e => setFormEdit(v => v ? ({ ...v, phone: e.target.value }) : v)}
+                       className="w-full border rounded-lg px-2 py-1 h-9" />
+              </div>
+              <div>
+                <label className="text-sm">{t('Name', lang) || 'Name'}</label>
+                <input type="text" value={formEdit.name}
+                       onChange={e => setFormEdit(v => v ? ({ ...v, name: e.target.value }) : v)}
+                       className="w-full border rounded-lg px-2 py-1 h-9" />
+              </div>
+              <div>
+                <label className="text-sm">{t('Position', lang) || 'Position'}</label>
+                <input type="text" value={formEdit.position}
+                       onChange={e => setFormEdit(v => v ? ({ ...v, position: e.target.value }) : v)}
+                       className="w-full border rounded-lg px-2 py-1 h-9" />
+              </div>
+              <div>
+                <label className="text-sm">{t('Role', lang) || 'Role'}</label>
+                <select
+                  value={formEdit.role}
+                  onChange={e => setFormEdit(v => v ? ({ ...v, role: e.target.value as AccountRole }) : v)}
+                  className="w-full border rounded-lg px-2 py-1 h-10 bg-white">
+                  <option value="staff">staff</option>
+                  <option value="admin" disabled={myRole === 'admin'}>admin</option>
+                  <option value="owner" disabled={myRole !== 'owner'}>owner</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={formEdit.is_active}
+                         onChange={e => setFormEdit(v => v ? ({ ...v, is_active: e.target.checked }) : v)} />
+                  {t('Active', lang) || 'Active'}
+                </label>
+              </div>
+            </div>
+
+            {accMsg && (
+              <div className={`text-sm ${accMsgKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{accMsg}</div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button type="button" onClick={() => { setEditOpen(false); setSelected(null); setFormEdit(null) }} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
+                {t('Cancel', lang) || 'Cancel'}
+              </button>
+              <button type="button" onClick={saveEdit} className="px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
+                {t('Save', lang) || 'Save'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      {/* Accounts: Post invite confirm */}
+      <Modal open={postInviteOpen} title={t('SendInvite', lang) || 'Send invite'} onClose={() => { setPostInviteOpen(false); setPostInviteEmail(null) }} width="max-w-md">
+        <div className="space-y-3 text-gray-800">
+          <p className="text-sm">
+            {(t('SendInviteTo', lang) || 'Send an access link to') + ' '}
+            <span className="font-mono">{postInviteEmail}</span>?
+          </p>
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button type="button" onClick={skipInviteForNow} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
+              {t('Skip', lang) || 'Skip'}
+            </button>
+            <button type="button" onClick={confirmSendInviteNow} className="px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
+              {t('Send', lang) || 'Send'}
             </button>
           </div>
         </div>
