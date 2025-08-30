@@ -16,7 +16,7 @@ import ReactCountryFlag from 'react-country-flag'
 
 type Item = {
   href: string
-  i18nKey: keyof typeof import('@/lib/i18n').dict['en'] | null
+  i18nKey: string| null
   fallback: string
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
 }

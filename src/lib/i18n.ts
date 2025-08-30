@@ -445,7 +445,7 @@ const dict = {
 
     // ---------- Suppliers page (NEW) ----------
     Suppliers: 'Suppliers',
-    Supplier: 'Supplier',                 // reuse generic label as singular
+    SupplierLabel: 'Supplier',                 // reuse generic label as singular
     NewSupplier: 'New supplier',
     PointOfContact: 'Point of Contact',
     OrderMethod: 'Order Method',
@@ -897,7 +897,7 @@ const dict = {
 
     // ---------- Suppliers page (NEW) ----------
     Suppliers: 'Nhà cung cấp',
-    Supplier: 'Nhà cung cấp',           // singular
+    SupplierLabel: 'Nhà cung cấp',           // singular
     NewSupplier: 'Thêm nhà cung cấp',
     PointOfContact: 'Người liên hệ',
     OrderMethod: 'Phương thức đặt hàng',

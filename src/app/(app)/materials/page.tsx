@@ -1,3 +1,5 @@
+
+import type { ParseResult } from 'papaparse'
 // src/app/materials/page.tsx
 'use client'
 
@@ -1143,11 +1145,11 @@ export default function MaterialsPage() {
   async function fetchAll() {
     setLoading(true)
     const [cRes, uRes, sRes, mRes] = await Promise.all([
-      supabase.from<Cat>(TBL_CATS).select('*').order('name', { ascending: true }),
-      supabase.from<Uom>(TBL_UOM).select('*').order('name', { ascending: true }),
-      supabase.from<Sup>(TBL_SUPS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_CATS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_UOM).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_SUPS).select('*').order('name', { ascending: true }),
       // include vat_rate_percent
-      supabase.from<Mat>(TBL_MATERIALS).select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+      supabase.from(TBL_MATERIALS).select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     ])
     if (cRes.data) setCats(cRes.data)
     if (uRes.data) setUoms(uRes.data)
@@ -1175,18 +1177,18 @@ export default function MaterialsPage() {
 
   function applyFilters(list: Mat[]) {
     let rows = [...list]
-    if (filters.name.trim()) rows = rows.filter(r => r.name.toLowerCase().includes(filters.name.trim().toLowerCase()))
-    if (filters.brand.trim()) rows = rows.filter(r => (r.brand ?? '').toLowerCase().includes(filters.brand.trim().toLowerCase()))
-    if (filters.categoryId !== '') rows = rows.filter(r => r.category_id === Number(filters.categoryId))
-    if (filters.supplierId !== '') rows = rows.filter(r => r.supplier_id === String(filters.supplierId))
-    if (filters.uomId !== '') rows = rows.filter(r => r.uom_id === Number(filters.uomId))
+    if (filters.name.trim()) rows = rows.filter((r: any) => r.name.toLowerCase().includes(filters.name.trim().toLowerCase()))
+    if (filters.brand.trim()) rows = rows.filter((r: any) => (r.brand ?? '').toLowerCase().includes(filters.brand.trim().toLowerCase()))
+    if (filters.categoryId !== '') rows = rows.filter((r: any) => r.category_id === Number(filters.categoryId))
+    if (filters.supplierId !== '') rows = rows.filter((r: any) => r.supplier_id === String(filters.supplierId))
+    if (filters.uomId !== '') rows = rows.filter((r: any) => r.uom_id === Number(filters.uomId))
     if (filters.foodDrink) {
       const want = filters.foodDrink === 'yes'
-      rows = rows.filter(r => r.is_food_drink === want)
+      rows = rows.filter((r: any) => r.is_food_drink === want)
     }
     if (filters.isDefault) {
       const want = filters.isDefault === 'yes'
-      rows = rows.filter(r => r.is_default === want)
+      rows = rows.filter((r: any) => r.is_default === want)
     }
 
     // Ordinamento robusto anche per colonne derivate
@@ -1280,14 +1282,14 @@ export default function MaterialsPage() {
         header: true,
         skipEmptyLines: true,
         dynamicTyping: true,
-        transformHeader: h => headerMap[normKey(h)] ?? normKey(h),
-        complete: res => resolve(res),
-        error: reject,
+        transformHeader: (h: string, _i: number): string => headerMap[normKey(h)] ?? normKey(h),
+        complete: (res: ParseResult<CsvRow>): void => resolve(res),
+        error: (err: unknown): void => reject(err),
       })
     })
 
     const rows: CsvRow[] = (parsed.data || [])
-      .map(r => ({
+      .map((r: any) => ({
         name: String(r['name'] ?? '').trim(),
         category: String(r['category'] ?? '').trim(),
         brand: r['brand'] != null ? String(r['brand']).trim() : null,
@@ -1298,7 +1300,7 @@ export default function MaterialsPage() {
         unit_cost: r['unit_cost'] ?? null,
         notes: r['notes'] ?? null,
       }))
-      .filter(r => r.name || r.category || r.supplier)
+      .filter((r: any) => r.name || r.category || r.supplier)
 
     if (!rows.length) {
       alert(t('CSVEmptyOrBad', lang))
@@ -1371,8 +1373,8 @@ export default function MaterialsPage() {
     }
 
     // Nuovi nomi category/supplier che non esistono
-    const csvCats = uniqLower(rows.map(r => r.category || ''))
-    const csvSups = uniqLower(rows.map(r => r.supplier || ''))
+    const csvCats = uniqLower(rows.map((r: any) => r.category || ''))
+    const csvSups = uniqLower(rows.map((r: any) => r.supplier || ''))
     const existingCatNames = cats.map(c => c.name.toLowerCase())
     const existingSupNames = sups.map(s => s.name.toLowerCase())
     const newCats = csvCats.filter(n => n && !existingCatNames.includes(n))
@@ -1942,7 +1944,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
           </button>
 
           <button
-            onClick={() => setOpenEditor(true) && openCreate()}
+            onClick={() => { setOpenEditor(true); openCreate() }}
             className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
           >
             <PlusIcon className="w-5 h-5" /> {t('NewMaterial', lang)}
@@ -1985,7 +1987,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
           </select>
           <select
             value={filters.uomId}
-            onChange={e => setFilters(s => ({ ...s, uomId: e.target.value }))}
+            onChange={e => setFilters(s => ({ ...s, uomId: (e.target.value === "" ? "" : Number(e.target.value)) }))}
             className="border rounded-lg px-2 h-9 text-sm bg_white text-gray-900 w-[110px]"
           >
             <option value="">{t('AllUOM', lang)}</option>

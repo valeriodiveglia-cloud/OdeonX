@@ -283,7 +283,7 @@ export default function SuppliersPage() {
   useEffect(() => { fetchAll() }, [])
   async function fetchAll() {
     setLoading(true)
-    const { data } = await supabase.from<any>(TBL_SUPS).select('*').order('name', { ascending: true })
+    const { data } = await supabase.from(TBL_SUPS).select('*').order('name', { ascending: true })
     setRows((data as Supplier[]) || [])
     setLoading(false)
     setSelected({})

@@ -1,3 +1,5 @@
+
+import type { ParseResult } from 'papaparse'
 // src/app/equipment/page.tsx
 'use client'
 
@@ -1288,9 +1290,9 @@ ${t('Skipped', language)}: ${skipped}`)
           header: true,
           skipEmptyLines: 'greedy',
           dynamicTyping: false,
-          transformHeader: (h: string) => headerMap[normKey(h)] ?? normKey(h),
-          complete: res => resolve(res),
-          error: reject,
+          transformHeader: (h: string, _i: number): string => headerMap[normKey(h)] ?? normKey(h),
+          complete: (res: ParseResult<CsvRow>): void => resolve(res),
+          error: (err: unknown): void => reject(err),
         })
       })
 
@@ -1438,8 +1440,8 @@ if (!needConfirm) {
 
     // 2) ricarica mappe nome→id aggiornate in memoria locale
     const [cRes2, sRes2] = await Promise.all([
-      supabase.from<Cat>(TBL_EQ_CATS).select('*').order('name', { ascending: true }),
-      supabase.from<Sup>(TBL_SUPS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_EQ_CATS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_SUPS).select('*').order('name', { ascending: true }),
     ])
     if (cRes2.data) setCats(cRes2.data)
     if (sRes2.data) setSups(sRes2.data)

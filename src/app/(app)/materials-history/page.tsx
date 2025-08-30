@@ -104,10 +104,10 @@ export default function MaterialsHistoryPage() {
   async function fetchLookups() {
     setLoading(true)
     const [cRes, sRes, uRes, mRes] = await Promise.all([
-      supabase.from<Cat>('categories').select('*').order('name', { ascending: true }),
-      supabase.from<Sup>('suppliers').select('*').order('name', { ascending: true }),
-      supabase.from<Uom>('uom').select('*').order('name', { ascending: true }),
-      supabase.from<Mat>('materials')
+      supabase.from('categories').select('*').order('name', { ascending: true }),
+      supabase.from('suppliers').select('*').order('name', { ascending: true }),
+      supabase.from('uom').select('*').order('name', { ascending: true }),
+      supabase.from('materials')
         .select('id,name,brand,supplier_id,category_id,uom_id,packaging_size,package_price,unit_cost,created_at')
         .order('name', { ascending: true }),
     ])
@@ -137,7 +137,7 @@ export default function MaterialsHistoryPage() {
     const toIsoExclusive = toStart.toISOString()
 
     const { data, error } = await supabase
-      .from<HistoryRow>('material_price_history')
+      .from('material_price_history')
       .select('*')
       .gte('changed_at', fromIso)
       .lt('changed_at', toIsoExclusive)

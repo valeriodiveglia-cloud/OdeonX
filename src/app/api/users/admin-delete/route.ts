@@ -93,7 +93,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `Auth delete failed: ${delAuth.error.message}` }, { status: 400 })
       }
     } else if (email) {
-      const list = await db.auth.admin.listUsers({ page: 1, perPage: 1, email })
+      const list = await db.auth.admin.listUsers({ page: 1, perPage: 1 })
       const u = list.data?.users?.[0]
       if (u && u.email?.toLowerCase() === String(email).toLowerCase()) {
         const delAuth = await db.auth.admin.deleteUser(u.id)

@@ -1,6 +1,8 @@
+import Papa from 'papaparse';
+import type { ParseResult } from 'papaparse';
+
 'use client';
 
-import Papa from 'papaparse';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeUom } from '@/lib/normalizeUom';
 
@@ -71,18 +73,18 @@ export async function importMaterialsCsv(
   const { categories, suppliers, uoms } = await getExisting();
 
   // 1) Parse CSV con trasformazione header
-  const parsed = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
+  const parsed = await new Promise<ParseResult<CsvRow>>((resolve, reject) => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h: string) => headerMap[normKey(h)] ?? normKey(h),
-      complete: res => resolve(res),
-      error: reject,
+      transformHeader: (h: string, _i: number): string => headerMap[normKey(h)] ?? normKey(h),
+      complete: (res: ParseResult<CsvRow>) => { resolve(res) },
+      error: (err: unknown) => { reject(err) },
     });
   });
 
   // adatta le righe al nostro schema
-  const rows: CsvRow[] = (parsed.data || []).map(r => ({
+  const rows: CsvRow[] = (parsed.data || []).map((r: CsvRow) => ({
     name: String(r['name'] ?? '').trim(),
     category: String(r['category'] ?? '').trim(),
     brand: r['brand'] != null ? String(r['brand']).trim() : null,
@@ -92,7 +94,7 @@ export async function importMaterialsCsv(
     package_price: r['package_price'] ?? null,
     unit_cost: r['unit_cost'] ?? null,
     notes: r['notes'] ?? null,
-  })).filter(r => r.name || r.category || r.supplier);
+  })).filter((r: CsvRow) => r.name || r.category || r.supplier);
 
   if (!rows.length) {
     throw new Error('CSV appears empty or headers not recognized. Expected columns like: Ingredient, Category, Supplier, Brand, Package QTY, UOM, Package Cost');
@@ -100,8 +102,8 @@ export async function importMaterialsCsv(
 
   // 2) Nuovi category/supplier
   const uniqLower = (a: string[]) => [...new Set(a.filter(Boolean).map(s => s.trim().toLowerCase()))];
-  const csvCats = uniqLower(rows.map(r => r.category || ''));
-  const csvSups = uniqLower(rows.map(r => r.supplier || ''));
+  const csvCats = uniqLower(rows.map((r: CsvRow) => r.category || ''));
+  const csvSups = uniqLower(rows.map((r: CsvRow) => r.supplier || ''));
 
   const existingCatNames = categories.map(c => c.name.toLowerCase());
   const existingSupNames = suppliers.map(s => s.name.toLowerCase());
@@ -168,8 +170,7 @@ export async function importMaterialsCsv(
       is_default: true,
     };
 
-    const { data: existing, error: selErr } = await supabase
-      .from('materials')
+const { data: existing, error: selErr } = await supabase.from('materials')
       .select('id, name, brand, supplier_id')
       .eq('supplier_id', supplier_id)
       .ilike('name', name)

@@ -129,7 +129,7 @@ function pct(n?: number | null) {
 function uid() {
   return Math.random().toString(36).slice(2)
 }
-function tKey<K extends keyof typeof import('@/lib/i18n')['default']['en']>(key: K, lang: unknown) {
+function tKey<K extends string>(key: K, lang: unknown) {
   return t(key, lang)
 }
 
@@ -943,7 +943,7 @@ function FinalEditor(props: FinalEditorProps) {
   // Catalogo tag
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from<Tag>(TBL_TAGS).select('id,name').order('name')
+      const { data } = await supabase.from(TBL_TAGS).select('id,name').order('name')
       setAllTags(data || [])
     })()
   }, [])
@@ -1597,24 +1597,24 @@ export default function Page() {
   }, [])
 
   async function fetchPrepCats() {
-    const { data } = await supabase.from<Category>(TBL_CATS).select('*').order('name')
+    const { data } = await supabase.from(TBL_CATS).select('*').order('name')
     if (data) setPrepCats(data)
   }
   async function fetchDishCats() {
-    const { data } = await supabase.from<Category>(TBL_DISH_CATS).select('*').order('name')
+    const { data } = await supabase.from(TBL_DISH_CATS).select('*').order('name')
     if (data) setDishCats(data)
   }
 
   async function fetchUoms() {
-    const { data } = await supabase.from<Uom>(TBL_UOM).select('id,name').order('name')
+    const { data } = await supabase.from(TBL_UOM).select('id,name').order('name')
     if (data) setUoms(data)
   }
   async function fetchPrepList() {
-    const { data } = await supabase.from<PrepRow>(VW_PREP_LIST).select('*').order('last_update', { ascending: false })
+    const { data } = await supabase.from(VW_PREP_LIST).select('*').order('last_update', { ascending: false })
     if (data) setPreps(data)
   }
   async function fetchFinalList() {
-    const { data } = await supabase.from<FinalRow>(VW_FINAL_LIST).select('*').order('last_update', { ascending: false })
+    const { data } = await supabase.from(VW_FINAL_LIST).select('*').order('last_update', { ascending: false })
     if (data) {
       setFinals(data)
     }

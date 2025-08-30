@@ -160,7 +160,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   // refetch singolo record app_settings
   async function refetchAppSettingsIntoState() {
     const { data, error } = await supabase
-      .from<AppSettingsRow>('app_settings')
+      .from('app_settings')
       .select('*')
       .eq('id', 'singleton')
       .maybeSingle()
@@ -201,7 +201,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     let cancelled = false
     ;(async () => {
       const { data, error } = await supabase
-        .from<AppSettingsRow>('app_settings')
+        .from('app_settings')
         .select('*')
         .eq('id', 'singleton')
         .maybeSingle()
@@ -306,7 +306,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       }
 
       const { data: saved, error } = await supabase
-        .from<AppSettingsRow>(TBL_APP)
+        .from(TBL_APP)
         .upsert(payload, { onConflict: 'id' })
         .select()
         .single()
@@ -479,7 +479,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
   async function fetchAccounts() {
     setAccLoading(true)
-    const { data, error } = await supabase.from<AccountRow>(TBL_ACCOUNTS).select('*').order('created_at', { ascending: true })
+    const { data, error } = await supabase.from(TBL_ACCOUNTS).select('*').order('created_at', { ascending: true })
     if (error) showAccErr(`Accounts load error: ${error.message}`); else setAccMsg(null)
     setAcc(data || [])
     setAccLoading(false)

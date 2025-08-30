@@ -11,7 +11,7 @@ export const revalidate = 0
 const TBL_APP = 'app_settings'
 
 export default async function SettingsPage() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,11 +20,9 @@ export default async function SettingsPage() {
       cookies: {
         // API nuova
         get: (name: string) => cookieStore.get(name)?.value,
-        set: () => {},            // no-op in RSC
-        remove: () => {},         // no-op in RSC
+        set: (_name: string, _value: string, _options?: any) => {},            // no-op in RSC
+        remove: (_name: string, _options?: any) => {},         // no-op in RSC
         // API vecchia (per compat)
-        getAll: () => cookieStore.getAll().map(c => ({ name: c.name, value: c.value })),
-        setAll: () => {},         // no-op in RSC
       },
     }
   )
@@ -86,7 +84,7 @@ export default async function SettingsPage() {
   }
 
   const { data, error } = await supabase
-    .from<Row>(TBL_APP)
+    .from(TBL_APP)
     .select('*')
     .eq('id', 'singleton')
     .maybeSingle()

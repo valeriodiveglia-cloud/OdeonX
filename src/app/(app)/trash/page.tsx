@@ -174,17 +174,17 @@ export default function TrashPage() {
   async function fetchAll() {
     setLoading(true)
     const [uRes, sRes, mcRes, dcRes, pcRes, mRes, dRes, pRes] = await Promise.all([
-      supabase.from<Uom>(TBL_UOM).select('*').order('name', { ascending: true }),
-      supabase.from<Sup>(TBL_SUPS).select('*').order('name', { ascending: true }),
-      supabase.from<MatCat>(TBL_MAT_CATS).select('*').order('name', { ascending: true }),
-      supabase.from<DishCat>(TBL_DISH_CATS).select('*').order('name', { ascending: true }),
-      supabase.from<PrepCat>(TBL_PREP_CATS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_UOM).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_SUPS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_MAT_CATS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_DISH_CATS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_PREP_CATS).select('*').order('name', { ascending: true }),
 
-      supabase.from<Mat>(TBL_MATERIALS).select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
-      supabase.from<DishTrash>(TBL_FINAL).select('id,name,category_id,type,price_vnd,deleted_at,updated_at,last_update')
+      supabase.from(TBL_MATERIALS).select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+      supabase.from(TBL_FINAL).select('id,name,category_id,type,price_vnd,deleted_at,updated_at,last_update')
         .not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
       // FIX: niente 'updated_at' per i prep (la colonna non esiste su prep_recipes)
-      supabase.from<PrepTrash>(TBL_PREP).select('id,name,category_id,type,deleted_at,last_update')
+      supabase.from(TBL_PREP).select('id,name,category_id,type,deleted_at,last_update')
         .not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
     ])
 
