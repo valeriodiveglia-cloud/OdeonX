@@ -16,7 +16,7 @@ import ReactCountryFlag from 'react-country-flag'
 
 type Item = {
   href: string
-  i18nKey: string| null
+  i18nKey: string | null
   fallback: string
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
 }
@@ -27,7 +27,7 @@ const NAV: Item[] = [
   { href: '/recipes',            i18nKey: 'Recipes',           fallback: 'Recipes',            icon: ChefHat },
   { href: '/equipment',          i18nKey: 'Equipment',         fallback: 'Equipment',          icon: Utensils },
   { href: '/equipment-history',  i18nKey: 'EquipmentHistory',  fallback: 'Equipment History',  icon: LineChart },
-  { href: '/suppliers',          i18nKey: 'Suppliers',         fallback: 'Suppliers',          icon: Building2 }, // 👈 nuova voce
+  { href: '/suppliers',          i18nKey: 'Suppliers',         fallback: 'Suppliers',          icon: Building2 },
   { href: '/settings',           i18nKey: 'Settings',          fallback: 'Settings',           icon: Cog6ToothIcon },
 ]
 
@@ -54,17 +54,27 @@ const ICON_RAIL_W = 80
 const CLOSE_DELAY_MS = 120
 const FLAG_SHAPE: 'circle' | 'square' = 'circle'
 
-// 👇 qui leggiamo la versione dall'.env
+// versione da env
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v0.0'
 
 export default function LeftNav() {
   const pathname = usePathname()
   const { language, setLanguage } = useSettings()
 
-  // Stato apertura
+  // Stato apertura interno (solo per testi/colore; la larghezza la gestisce il CSS del parent aside)
   const [open, setOpen] = React.useState(false)
 
-  // Flag interni per decidere quando chiudere
+  // Rileva input touch: su touch non apriamo mai, le icone navigano direttamente
+  const [isTouch, setIsTouch] = React.useState(false)
+  React.useEffect(() => {
+    const mq = typeof window !== 'undefined' ? window.matchMedia('(pointer: coarse)') : null
+    const update = () => setIsTouch(!!mq?.matches)
+    update()
+    mq?.addEventListener?.('change', update)
+    return () => mq?.removeEventListener?.('change', update)
+  }, [])
+
+  // Flag interni per la chiusura
   const hoverInsideRef = React.useRef(false)
   const focusInsideRef = React.useRef(false)
 
@@ -88,23 +98,22 @@ export default function LeftNav() {
     }
   }, [clearCloseTimer])
 
-  React.useEffect(() => {
-    return () => clearCloseTimer()
-  }, [clearCloseTimer])
+  React.useEffect(() => () => clearCloseTimer(), [clearCloseTimer])
 
-  // Gestione hover container
-  const onMouseEnterContainer: React.MouseEventHandler<HTMLDivElement> = () => {
+  // Pointer events: su desktop aprono/chiudono il pannello testuale; su touch ignoriamo
+  const onPointerEnterContainer: React.PointerEventHandler<HTMLDivElement> = () => {
+    if (isTouch) return
     hoverInsideRef.current = true
     clearCloseTimer()
     setOpen(true)
   }
-  const onMouseLeaveContainer: React.MouseEventHandler<HTMLDivElement> = () => {
+  const onPointerLeaveContainer: React.PointerEventHandler<HTMLDivElement> = () => {
+    if (isTouch) return
     hoverInsideRef.current = false
     scheduleCloseIfNeeded()
   }
-
-  // Gestione click: forza apertura e cancella ogni chiusura
-  const onMouseDownContainer: React.MouseEventHandler<HTMLDivElement> = () => {
+  const onPointerDownContainer: React.PointerEventHandler<HTMLDivElement> = () => {
+    if (isTouch) return
     hoverInsideRef.current = true
     clearCloseTimer()
     setOpen(true)
@@ -122,24 +131,32 @@ export default function LeftNav() {
     if (!stillInside) scheduleCloseIfNeeded()
   }
 
-  // Overlay: apre SOLO quando chiusa e il mouse è davvero sulla colonna icone
+  // Overlay rail: solo desktop; su touch lo disattiviamo per non bloccare i tap
   const IconRailOverlay = () => (
     <div
       className="absolute left-0 top-0 h-full"
       style={{ width: ICON_RAIL_W, pointerEvents: 'auto' }}
-      onMouseEnter={() => {
+      onPointerEnter={() => {
+        if (isTouch) return
         hoverInsideRef.current = true
         clearCloseTimer()
         setOpen(true)
       }}
-      onMouseLeave={() => {
+      onPointerLeave={() => {
+        if (isTouch) return
         hoverInsideRef.current = false
         scheduleCloseIfNeeded()
+      }}
+      onPointerDown={() => {
+        if (isTouch) return
+        hoverInsideRef.current = true
+        clearCloseTimer()
+        setOpen(true)
       }}
     />
   )
 
-  // Tooltip kill switch sul body quando chiusa
+  // Tooltip kill switch quando chiusa
   React.useEffect(() => {
     const body = document.body
     if (!open) body.classList.add('no-tooltips')
@@ -162,25 +179,26 @@ export default function LeftNav() {
     <div
       className={`relative z-20 h-full flex flex-col text-white transition-[width] duration-150 ease-out ${open ? 'w-64' : 'w-14'} ${stateClass}`}
       aria-expanded={open}
-      onMouseEnter={onMouseEnterContainer}
-      onMouseLeave={onMouseLeaveContainer}
-      onMouseDown={onMouseDownContainer}
+      onPointerEnter={onPointerEnterContainer}
+      onPointerLeave={onPointerLeaveContainer}
+      onPointerDown={onPointerDownContainer}
       onFocus={handleFocusWithin}
       onBlur={handleBlurWithin}
     >
-      {/* Icon-rail: attivo solo da chiusa */}
-      {!open && <IconRailOverlay />}
+      {/* Rail overlay: attivo solo da chiusa e solo desktop */}
+      {!open && !isTouch && <IconRailOverlay />}
 
       {/* Header */}
       <div className="h-16 flex items-center px-3 border-b border-white/10 clip-scope">
         <Link
           href="/dashboard"
-          aria-label={open ? homeTitle : undefined}
-          className="p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0"
+          aria-label={homeTitle}
+          title={homeTitle}
+          className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`}
         >
           <DualIcon Icon={HomeIcon} active={pathname === '/'} open={open} />
         </Link>
-        <div className={`ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0 nav-text`}>
+        <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0 nav-text">
           {open ? appName : ''}
         </div>
       </div>
@@ -195,24 +213,44 @@ export default function LeftNav() {
             <Link
               key={href}
               href={href}
-              aria-label={open ? labelTxt : undefined}
+              aria-label={labelTxt}
+              title={labelTxt}
               aria-current={active ? 'page' : undefined}
-              className={`relative flex items-center gap-3 h-11 px-3 rounded-xl transition-colors hover:bg-white/10 ${open ? '' : 'pointer-events-none'}`}
-              tabIndex={open ? 0 : -1}
-              onMouseDown={() => {
-                hoverInsideRef.current = true
-                clearCloseTimer()
-                setOpen(true)
+              className={`relative flex items-center h-11 rounded-xl transition-colors hover:bg-white/10 ${
+                open ? 'gap-3 px-3' : 'justify-center px-0'
+              }`}
+              tabIndex={0}
+              onPointerDown={() => {
+                // su desktop apri per continuità visiva; su touch non aprire, lascia navigare
+                if (!isTouch) {
+                  hoverInsideRef.current = true
+                  clearCloseTimer()
+                  setOpen(true)
+                }
               }}
             >
+              {/* Indicatore attivo: barra se aperta, ring se chiusa */}
               {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r bg-blue-500" />
+                open ? (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r bg-blue-500" />
+                ) : (
+                  <span className="absolute inset-0 rounded-xl ring-1 ring-white/30" aria-hidden="true" />
+                )
               )}
+
               <DualIcon Icon={Icon} active={active} open={open} />
-              <span className={`whitespace-nowrap overflow-hidden text-ellipsis font-medium nav-text ${open ? (active ? 'text-slate-900' : 'text-slate-100') : ''}`}>
-                {open ? labelTxt : ''}
-              </span>
-              <span className={`pointer-events-none absolute inset-0 -z-10 rounded-xl bg-blue-100 nav-active-bg ${active && open ? '' : 'opacity-0'}`} />
+
+              {open && (
+                <span className={`whitespace-nowrap overflow-hidden text-ellipsis font-medium nav-text ${
+                  active ? 'text-slate-900' : 'text-slate-100'
+                }`}>
+                  {labelTxt}
+                </span>
+              )}
+
+              {open && (
+                <span className={`pointer-events-none absolute inset-0 -z-10 rounded-xl bg-blue-100 nav-active-bg ${active ? '' : 'opacity-0'}`} />
+              )}
             </Link>
           )
         })}
@@ -226,7 +264,8 @@ export default function LeftNav() {
           aria-label={open ? label : undefined}
           className={`w-8 h-8 flex items-center justify-center ${FLAG_SHAPE === 'circle' ? 'rounded-full' : 'rounded-none'} overflow-hidden border border-white/20 hover:bg-white/10`}
           tabIndex={open ? 0 : -1}
-          onMouseDown={() => {
+          onPointerDown={() => {
+            if (isTouch) return
             hoverInsideRef.current = true
             clearCloseTimer()
             setOpen(true)
