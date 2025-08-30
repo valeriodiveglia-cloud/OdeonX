@@ -9,6 +9,9 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Blu di app (fallback se serve) */
+  --app-bg: #0b1530;
 }
 
 @theme inline {
@@ -32,11 +35,18 @@ html, body, #__next {
   height: 100%;
 }
 
+/* Il vero sfondo è nel layer fisso in layout.tsx.
+   Qui lasciamo il body trasparente per non coprirlo. */
+html {
+  background-color: var(--app-bg); /* di supporto, coerente con layout */
+}
+
 body {
-  background: var(--background);
+  background: transparent;           /* <-- prima era var(--background) che risultava nero */
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: inherit;              /* lascia il font a next/font */
   margin: 0;
+  min-height: 100svh;                /* copre il viewport mobile */
 }
 
 /* -------------------------------------------------------

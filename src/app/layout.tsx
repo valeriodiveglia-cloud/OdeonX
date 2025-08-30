@@ -21,14 +21,20 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'OdeonX',
-  description: 'OdeonX — Food costing & operations',
+  description: 'OdeonX - Food costing & operations', // niente em dash
+}
+
+// layer fisso dietro a tutta l'app per coprire sempre il viewport
+function AppBackground() {
+  return <div className="fixed inset-0 -z-50 bg-[#0b1530]" />
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      {/* Applico direttamente il font sans a tutto il body */}
-      <body className={`${beVietnam.className} ${geistMono.variable} antialiased`}>
+    <html lang="en" className="h-full bg-[#0b1530]">
+      {/* bg trasparente: lasciamo lavorare il layer fisso */}
+      <body className={`${beVietnam.className} ${geistMono.variable} antialiased min-h-svh bg-transparent`}>
+        <AppBackground />
         <SettingsProvider>{children}</SettingsProvider>
       </body>
     </html>
