@@ -1,4 +1,4 @@
-// src/app/settings/settings-client.tsx
+// src/app/(app)/settings/settings-client.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -56,7 +56,6 @@ type AccountRow = {
   first_login_at?: string | null
 }
 
-/* ---------- Storage helpers (privato: app-assets) ---------- */
 async function uploadLogoToStorage(file: File) {
   const ext = file.name.includes('.') ? file.name.split('.').pop() : 'png'
   const path = `logos/company.${ext}`
@@ -162,7 +161,7 @@ async function authFetch(input: RequestInfo | URL, init: RequestInit = {}) {
 
 export default function SettingsClient({ initial }: { initial: AppSettingsUI }) {
   const router = useRouter()
-  const { language: ctxLang, setVatEnabled, setVatRate, reloadSettings, revision } = useSettings()
+  const { language: ctxLang, setVatEnabled, setVatRate, reloadSettings, revision, setLanguage } = useSettings()
 
   const [s, setS] = useState<AppSettingsUI>(initial)
   const [saving, setSaving] = useState(false)
@@ -173,10 +172,8 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   const [authReady, setAuthReady] = useState(false)
   const [currentUser, setCurrentUser] = useState<null | { id: string; email?: string | null }>(null)
 
-  // Signed URL del logo quando è su storage
   const [logoSignedUrl, setLogoSignedUrl] = useState<string | null>(null)
 
-  // refetch singolo record app_settings
   async function refetchAppSettingsIntoState() {
     const { data, error } = await supabase
       .from('app_settings')
@@ -199,7 +196,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     setDirty(false)
   }
 
-  // Auth wiring
   useEffect(() => {
     let unsub: (() => void) | null = null
     supabase.auth.getSession().then(({ data }) => {
@@ -214,7 +210,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     return () => { unsub?.() }
   }, [])
 
-  // primo fetch dal DB quando auth è pronta
   useEffect(() => {
     if (!authReady) return
     let cancelled = false
@@ -241,19 +236,16 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     return () => { cancelled = true }
   }, [authReady, currentUser?.id])
 
-  // default recipes_review_months se mancante
   useEffect(() => {
     if (typeof initial.recipes_review_months !== 'number') {
       setS(prev => ({ ...prev, recipes_review_months: 4 }))
     }
   }, [initial])
 
-  // reagisco alla revisione del context
   useEffect(() => {
     ;(async () => { await refetchAppSettingsIntoState() })()
   }, [revision])
 
-  // Broadcast per reset
   useEffect(() => {
     let bc: BroadcastChannel | null = null
     try {
@@ -274,14 +266,12 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     setS(prev => { const next = { ...prev, [key]: val }; setDirty(true); return next })
   }
 
-  // Caricamento logo: salva su Storage e memorizza "storage:<path>" nel DB
   async function handleLogoUpload(file: File) {
     if (!file) return
     try {
       const path = await uploadLogoToStorage(file)
       patch('logo_mime', file.type || 'image/png')
       patch('logo_data', `storage:${path}`)
-      // Refresh preview
       const url = await getLogoSignedUrl(path)
       setLogoSignedUrl(url)
     } catch (e) {
@@ -289,7 +279,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     }
   }
 
-  // Genera signed URL se il logo è su storage
   useEffect(() => {
     ;(async () => {
       const token = s.logo_data || ''
@@ -353,9 +342,11 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       setSaveMessage(t('SavedOk', s.language_code))
       setTimeout(() => setSaveMessage(null), 2500)
 
+      // cambia la lingua dell'UI DOPO il salvataggio
       try {
         setVatEnabled(!!saved.vat_enabled)
         setVatRate(saved.vat_rate ?? 0)
+        setLanguage(saved.language_code as Lang)
       } catch {}
 
       router.refresh()
@@ -396,9 +387,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     setDirty(true)
   }
 
-  // Sorgente visiva per il logo:
-  // 1) se logo_data è "storage:<path>", usa logoSignedUrl
-  // 2) se logo_data è base64, costruisci data URL legacy
   const legacyLogoDataUrl =
     s.logo_data && !s.logo_data.startsWith('storage:')
       ? (s.logo_data.startsWith('data:')
@@ -662,13 +650,12 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   const [oldPw, setOldPw] = useState('')
   const [newPw1, setNewPw1] = useState('')
   const [newPw2, setNewPw2] = useState('')
-  const [pwVisible, setPwVisible] = useState(false)
   const [pwMsg, setPwMsg] = useState<string | null>(null)
   const [pwKind, setPwKind] = useState<'ok' | 'err'>('ok')
   const [pwBusy, setPwBusy] = useState(false)
 
   function validatePassword(p: string) { return typeof p === 'string' && p.trim().length >= 8 }
-  function resetPwForm() { setOldPw(''); setNewPw1(''); setNewPw2(''); setPwVisible(false); setPwMsg(null) }
+  function resetPwForm() { setOldPw(''); setNewPw1(''); setNewPw2(''); setPwMsg(null) }
 
   async function submitChangePassword() {
     const email = currentUser?.email?.trim().toLowerCase()
@@ -841,7 +828,14 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm text-gray-800">{t('Language', lang)}</label>
-              <select value={s.language_code} onChange={e => { patch('language_code', e.target.value as Lang) }} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10">
+              <select
+                value={s.language_code}
+                onChange={e => {
+                  const newLang = e.target.value as Lang
+                  // ❗️non cambiamo il context qui: solo stato locale
+                  patch('language_code', newLang)
+                }}
+                className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10">
                 <option value="en">English</option>
                 <option value="vi">Tiếng Việt</option>
               </select>
@@ -1187,7 +1181,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                 ) : acc.map(u => (
                   <tr key={u.id} className="border-t">
                     <td className="p-2">{u.email}</td>
-                    <td className="p-2">{u.name || '—'}</td>
+                    <td className="p-2">{u.name || '-'}</td>
                     <td className="p-2">{u.role}</td>
                     <td className="p-2">{u.is_active ? '✓' : '✗'}</td>
                     <td className="p-2">

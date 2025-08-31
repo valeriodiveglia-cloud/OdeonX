@@ -129,6 +129,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     'app_materials_exclusive_default',
     'app_equipment_review_months',
     'app_equipment_csv_require_confirm_refs',
+    'app_lang',
   ] as const
 
   function clearLocalSettings() {
@@ -184,6 +185,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const lang = data?.language_code === 'vi' ? 'vi' : 'en'
     const curRaw = (data?.currency as Currency) ?? 'VND'
     const cur: Currency = (['VND', 'USD', 'EUR', 'GBP'] as const).includes(curRaw) ? curRaw : 'VND'
+
+    // Applica lingua subito a <html lang> e salva in LS
+    try {
+      document.documentElement.lang = lang
+      localStorage.setItem('app_lang', lang)
+    } catch {}
 
     setLanguageState(lang)
     setCurrencyState(cur)
@@ -266,14 +273,29 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true
     ;(async () => {
+      // Prima prova a leggere la lingua dal LS per evitare flicker SSR/CSR
+      try {
+        const lsLang = localStorage.getItem('app_lang') as Lang | null
+        if (lsLang === 'en' || lsLang === 'vi') {
+          setLanguageState(lsLang)
+          document.documentElement.lang = lsLang
+        }
+      } catch {}
       await hydrateFromSources()
       if (!mounted) return
       setHydrated(true)
       try { window.dispatchEvent(new CustomEvent('settings-hydrated')) } catch {}
     })()
 
-    // Storage sync tra tab
+    // Storage sync tra tab per settings locali
     const onStorage = (ev: StorageEvent) => {
+      if (ev.key === 'app_lang' && ev.newValue) {
+        const l = ev.newValue as Lang
+        if (l === 'en' || l === 'vi') {
+          setLanguageState(l)
+          try { document.documentElement.lang = l } catch {}
+        }
+      }
       if (ev.key === 'app_materials_review_months' && ev.newValue != null) {
         const n = parseInt(ev.newValue, 10)
         if (Number.isFinite(n)) setReviewMonthsState(clampMonths(n))
@@ -294,13 +316,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener('storage', onStorage)
 
-    // Opzionale: ascolta un broadcast "data-reset" e re-idrata
+    // BroadcastChannel: data-reset e sync lingua
     let bc: BroadcastChannel | null = null
     try {
       bc = new BroadcastChannel('app-events')
       bc.onmessage = (e) => {
         if (e?.data === 'data-reset') {
           void reloadSettings()
+        }
+        if (e?.data?.type === 'lang' && (e.data.value === 'en' || e.data.value === 'vi')) {
+          setLanguageState(e.data.value)
+          try { document.documentElement.lang = e.data.value } catch {}
+          try { localStorage.setItem('app_lang', e.data.value) } catch {}
         }
       }
     } catch {}
@@ -334,6 +361,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   // Setters DB-backed
   function setLanguage(l: Lang) {
     setLanguageState(l)
+    // Aggiorna subito HTML lang e LS
+    try {
+      document.documentElement.lang = l
+      localStorage.setItem('app_lang', l)
+      new BroadcastChannel('app-events').postMessage({ type: 'lang', value: l })
+    } catch {}
     void saveToDb({ language: l })
   }
   function setCurrency(c: Currency) {
