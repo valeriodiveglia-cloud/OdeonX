@@ -11,10 +11,9 @@ export default function UpdatePasswordPage() {
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
-  // quando arrivi da email di reset/invite, Supabase mette un "access_token" nella URL,
-  // supabase-js dovrebbe già gestire la sessione. In caso contrario, prova lo scambio
+  // When coming from email links, ensure session is set
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       try {
         const url = new URL(window.location.href)
         const code = url.searchParams.get('code') || url.hash.match(/code=([^&]+)/)?.[1]
@@ -29,31 +28,31 @@ export default function UpdatePasswordPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!pwd || pwd.length < 8) { setMsg('La password deve avere almeno 8 caratteri'); return }
-    if (pwd !== pwd2) { setMsg('Le password non coincidono'); return }
+    if (!pwd || pwd.length < 8) { setMsg('Password must be at least 8 characters'); return }
+    if (pwd !== pwd2) { setMsg('Passwords do not match'); return }
     setBusy(true)
     setMsg(null)
     try {
       const { error } = await supabase.auth.updateUser({ password: pwd })
       if (error) throw error
-      setMsg('Password aggiornata. Accesso completato.')
+      setMsg('Password updated. You are signed in.')
       setTimeout(() => router.replace('/'), 800)
     } catch (e: any) {
-      setMsg(e?.message || 'Errore nell’aggiornamento password')
+      setMsg(e?.message || 'Error updating password')
     } finally {
       setBusy(false)
     }
   }
 
-  if (!ready) return <div className="p-6">Preparazione…</div>
+  if (!ready) return <div className="p-6">Preparing…</div>
 
   return (
     <div className="min-h-[60vh] grid place-items-center p-4">
       <form onSubmit={onSubmit} className="w-full max-w-md border rounded-2xl p-6 bg-white">
-        <h1 className="text-xl font-semibold mb-4">Imposta password</h1>
+        <h1 className="text-xl font-semibold mb-4">Set password</h1>
         <div className="space-y-3">
           <div>
-            <label className="text-sm text-gray-700">Nuova password</label>
+            <label className="text-sm text-gray-700">New password</label>
             <input
               type="password"
               value={pwd}
@@ -64,7 +63,7 @@ export default function UpdatePasswordPage() {
             />
           </div>
           <div>
-            <label className="text-sm text-gray-700">Conferma password</label>
+            <label className="text-sm text-gray-700">Confirm password</label>
             <input
               type="password"
               value={pwd2}
@@ -81,7 +80,7 @@ export default function UpdatePasswordPage() {
           disabled={busy}
           className="mt-5 w-full rounded-lg bg-blue-600 text-white h-10 hover:opacity-90 disabled:opacity-60"
         >
-          Salva password
+          Save password
         </button>
       </form>
     </div>
