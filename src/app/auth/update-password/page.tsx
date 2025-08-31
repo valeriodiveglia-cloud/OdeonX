@@ -1,7 +1,7 @@
 'use client'
 import { FormEvent, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function UpdatePasswordPage() {
   const [ready, setReady] = useState(false)
@@ -9,9 +9,11 @@ export default function UpdatePasswordPage() {
   const [pwd2, setPwd2] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const params = useSearchParams()
+  const next = params.get('next') || '/login'   // default: login
   const router = useRouter()
 
-  // When coming from email links, ensure session is set
+  // In case the link includes ?code=..., ensure session
   useEffect(() => {
     (async () => {
       try {
@@ -30,13 +32,15 @@ export default function UpdatePasswordPage() {
     e.preventDefault()
     if (!pwd || pwd.length < 8) { setMsg('Password must be at least 8 characters'); return }
     if (pwd !== pwd2) { setMsg('Passwords do not match'); return }
-    setBusy(true)
-    setMsg(null)
+    setBusy(true); setMsg(null)
     try {
       const { error } = await supabase.auth.updateUser({ password: pwd })
       if (error) throw error
-      setMsg('Password updated. You are signed in.')
-      setTimeout(() => router.replace('/'), 800)
+      // Force re-login
+      await supabase.auth.signOut().catch(() => {})
+      // Optional message via query string
+      const target = next.includes('?') ? `${next}&updated=1` : `${next}?updated=1`
+      router.replace(target)
     } catch (e: any) {
       setMsg(e?.message || 'Error updating password')
     } finally {
@@ -53,33 +57,18 @@ export default function UpdatePasswordPage() {
         <div className="space-y-3">
           <div>
             <label className="text-sm text-gray-700">New password</label>
-            <input
-              type="password"
-              value={pwd}
-              onChange={e => setPwd(e.target.value)}
-              className="mt-1 w-full border rounded-lg px-3 py-2"
-              placeholder="********"
-              minLength={8}
-            />
+            <input type="password" value={pwd} onChange={e => setPwd(e.target.value)}
+                   className="mt-1 w-full border rounded-lg px-3 py-2" placeholder="********" minLength={8}/>
           </div>
           <div>
             <label className="text-sm text-gray-700">Confirm password</label>
-            <input
-              type="password"
-              value={pwd2}
-              onChange={e => setPwd2(e.target.value)}
-              className="mt-1 w-full border rounded-lg px-3 py-2"
-              placeholder="********"
-              minLength={8}
-            />
+            <input type="password" value={pwd2} onChange={e => setPwd2(e.target.value)}
+                   className="mt-1 w-full border rounded-lg px-3 py-2" placeholder="********" minLength={8}/>
           </div>
         </div>
         {msg && <div className="mt-3 text-sm text-gray-700">{msg}</div>}
-        <button
-          type="submit"
-          disabled={busy}
-          className="mt-5 w-full rounded-lg bg-blue-600 text-white h-10 hover:opacity-90 disabled:opacity-60"
-        >
+        <button type="submit" disabled={busy}
+                className="mt-5 w-full rounded-lg bg-blue-600 text-white h-10 hover:opacity-90 disabled:opacity-60">
           Save password
         </button>
       </form>
