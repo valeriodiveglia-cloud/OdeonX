@@ -56,6 +56,22 @@ type AccountRow = {
   first_login_at?: string | null
 }
 
+/* ---------- Storage helpers (privato: app-assets) ---------- */
+async function uploadLogoToStorage(file: File) {
+  const ext = file.name.includes('.') ? file.name.split('.').pop() : 'png'
+  const path = `logos/company.${ext}`
+  const { error } = await supabase.storage
+    .from('app-assets')
+    .upload(path, file, { upsert: true, contentType: file.type || 'image/png', cacheControl: '3600' })
+  if (error) throw error
+  return path
+}
+async function getLogoSignedUrl(path: string) {
+  const { data, error } = await supabase.storage.from('app-assets').createSignedUrl(path, 60 * 60)
+  if (error) throw error
+  return data.signedUrl
+}
+
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border p-4 bg-white shadow-sm">
@@ -157,6 +173,9 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   const [authReady, setAuthReady] = useState(false)
   const [currentUser, setCurrentUser] = useState<null | { id: string; email?: string | null }>(null)
 
+  // Signed URL del logo quando è su storage
+  const [logoSignedUrl, setLogoSignedUrl] = useState<string | null>(null)
+
   // refetch singolo record app_settings
   async function refetchAppSettingsIntoState() {
     const { data, error } = await supabase
@@ -234,7 +253,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     ;(async () => { await refetchAppSettingsIntoState() })()
   }, [revision])
 
-  // broadcast per reset partiti altrove
+  // Broadcast per reset
   useEffect(() => {
     let bc: BroadcastChannel | null = null
     try {
@@ -255,23 +274,39 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     setS(prev => { const next = { ...prev, [key]: val }; setDirty(true); return next })
   }
 
+  // Caricamento logo: salva su Storage e memorizza "storage:<path>" nel DB
   async function handleLogoUpload(file: File) {
     if (!file) return
     try {
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const fr = new FileReader()
-        fr.onerror = () => reject(new Error('Failed to read file'))
-        fr.onload = () => resolve(String(fr.result))
-        fr.readAsDataURL(file)
-      })
-      const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl)
-      if (!match) throw new Error('Invalid image data URL')
-      const mime = match[1]
-      const b64 = match[2]
-      patch('logo_mime', mime || file.type || 'image/png')
-      patch('logo_data', b64)
-    } catch (e) { console.error(e) }
+      const path = await uploadLogoToStorage(file)
+      patch('logo_mime', file.type || 'image/png')
+      patch('logo_data', `storage:${path}`)
+      // Refresh preview
+      const url = await getLogoSignedUrl(path)
+      setLogoSignedUrl(url)
+    } catch (e) {
+      console.error(e)
+    }
   }
+
+  // Genera signed URL se il logo è su storage
+  useEffect(() => {
+    ;(async () => {
+      const token = s.logo_data || ''
+      if (token?.startsWith('storage:')) {
+        const path = token.slice('storage:'.length)
+        try {
+          const url = await getLogoSignedUrl(path)
+          setLogoSignedUrl(url)
+        } catch (e) {
+          console.warn('Signed URL error:', (e as any)?.message || e)
+          setLogoSignedUrl(null)
+        }
+      } else {
+        setLogoSignedUrl(null)
+      }
+    })()
+  }, [s.logo_data])
 
   async function onSave() {
     setSaving(true)
@@ -361,12 +396,23 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     setDirty(true)
   }
 
-  const logoSrc =
-    s.logo_data
+  // Sorgente visiva per il logo:
+  // 1) se logo_data è "storage:<path>", usa logoSignedUrl
+  // 2) se logo_data è base64, costruisci data URL legacy
+  const legacyLogoDataUrl =
+    s.logo_data && !s.logo_data.startsWith('storage:')
       ? (s.logo_data.startsWith('data:')
           ? s.logo_data
           : (s.logo_mime ? `data:${s.logo_mime};base64,${s.logo_data}` : null))
       : null
+
+  const logoSrc = logoSignedUrl || legacyLogoDataUrl
+
+  function handleRemoveLogo() {
+    patch('logo_data', null)
+    patch('logo_mime', null)
+    setLogoSignedUrl(null)
+  }
 
   const handleMonthsChange = (key: 'materials_review_months' | 'equipment_review_months') =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -778,7 +824,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                 <button
                   type="button"
                   className="ml-auto w-9 h-9 inline-flex items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50"
-                  onClick={() => { patch('logo_data', null); patch('logo_mime', null) }}
+                  onClick={handleRemoveLogo}
                   title={t('Remove', lang) || 'Remove'}
                   aria-label={t('Remove', lang) || 'Remove'}
                 >
@@ -941,7 +987,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </div>
 
       {/* Data reset modal */}
-      <Modal open={dataModalOpen} title={`${t('Reset', lang)} ${t(scopeLabelKey[dataScope], lang)}`} onClose={() => setDataModalOpen(false)}>
+      <Modal open={dataModalOpen} title={t('Reset', lang) + ' ' + t(scopeLabelKey[dataScope], lang)} onClose={() => setDataModalOpen(false)}>
         {!dataDone ? (
           <div className="space-y-3 text-gray-800">
             <p className="font-medium">{t(scopeDescKey[dataScope], lang)}</p>
