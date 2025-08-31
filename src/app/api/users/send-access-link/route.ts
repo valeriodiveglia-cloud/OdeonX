@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing NEXT_PUBLIC_SITE_URL' }, { status: 500 })
     }
 
-    const redirectTo = `${site}/auth/update-password`
+    const redirectTo = `${site}/auth/callback?next=/login`
 
     // 1) invito (nuovo utente)
     const invite = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo })

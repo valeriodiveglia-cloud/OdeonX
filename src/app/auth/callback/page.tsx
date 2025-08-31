@@ -12,12 +12,10 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     (async () => {
       try {
-        // PKCE: ?code=...
         const code = params.get('code')
         if (code) {
           await supabase.auth.exchangeCodeForSession(code).catch(() => {})
         } else {
-          // Implicit: #access_token=...&refresh_token=...
           const hash = window.location.hash || ''
           if (hash.startsWith('#')) {
             const hp = new URLSearchParams(hash.slice(1))
@@ -29,15 +27,10 @@ export default function AuthCallbackPage() {
           }
         }
       } finally {
-        // porta alla pagina di set password e conserva "next"
         router.replace(`/auth/update-password?next=${encodeURIComponent(next)}`)
       }
     })()
   }, [params, router, next])
 
-  return (
-    <div className="min-h-[60vh] grid place-items-center p-6 text-white">
-      Signing you in…
-    </div>
-  )
+  return <div className="min-h-[60vh] grid place-items-center p-6 text-white">Signing you in…</div>
 }

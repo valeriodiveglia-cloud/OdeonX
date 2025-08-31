@@ -10,37 +10,31 @@ export default function UpdatePasswordPage() {
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const params = useSearchParams()
-  const next = params.get('next') || '/login'   // default: login
+  const next = params.get('next') || '/login'
   const router = useRouter()
 
-  // In case the link includes ?code=..., ensure session
   useEffect(() => {
     (async () => {
       try {
         const url = new URL(window.location.href)
         const code = url.searchParams.get('code') || url.hash.match(/code=([^&]+)/)?.[1]
-        if (code) {
-          await supabase.auth.exchangeCodeForSession(code).catch(() => {})
-        }
-      } finally {
-        setReady(true)
-      }
+        if (code) await supabase.auth.exchangeCodeForSession(code).catch(() => {})
+      } finally { setReady(true) }
     })()
   }, [])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!pwd || pwd.length < 8) { setMsg('Password must be at least 8 characters'); return }
-    if (pwd !== pwd2) { setMsg('Passwords do not match'); return }
+    if (pwd !== pwd2)          { setMsg('Passwords do not match'); return }
     setBusy(true); setMsg(null)
     try {
       const { error } = await supabase.auth.updateUser({ password: pwd })
       if (error) throw error
-      // Force re-login
-      await supabase.auth.signOut().catch(() => {})
-      // Optional message via query string
+      await supabase.auth.signOut().catch(() => {})         // <- logout forzato
       const target = next.includes('?') ? `${next}&updated=1` : `${next}?updated=1`
-      router.replace(target)
+      // usa una navigazione “hard” per evitare qualunque cache/404
+      window.location.assign(target)
     } catch (e: any) {
       setMsg(e?.message || 'Error updating password')
     } finally {
