@@ -25,18 +25,23 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Mostra il badge solo se siamo in dev o preview
+  const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV // 'development' | 'preview' | 'production'
+  const showEnvBadge = vercelEnv !== 'production'
+
   return (
     <html lang="en">
       {/* Applico direttamente il font sans a tutto il body */}
       <body className={`${beVietnam.className} ${geistMono.variable} antialiased`}>
         <SettingsProvider>{children}</SettingsProvider>
 
-        {/* Banner ambiente */}
-        <div className="fixed bottom-2 right-2 text-xs px-2 py-1 rounded bg-black/70 text-white z-50">
-          {process.env.NEXT_PUBLIC_SUPABASE_URL
-            ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
-            : 'env non settato'}
-        </div>
+        {showEnvBadge && (
+          <div className="fixed bottom-2 right-2 text-xs px-2 py-1 rounded bg-black/70 text-white z-50">
+            {process.env.NEXT_PUBLIC_SUPABASE_URL
+              ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
+              : 'env non settato'}
+          </div>
+        )}
       </body>
     </html>
   )
