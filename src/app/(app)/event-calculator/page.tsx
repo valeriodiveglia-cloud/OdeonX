@@ -10,7 +10,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { Dialog } from '@headlessui/react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase_shim'
 
 /* ---------- DB: view ---------- */
 const VW_FINAL_LIST = 'final_list_vw'
