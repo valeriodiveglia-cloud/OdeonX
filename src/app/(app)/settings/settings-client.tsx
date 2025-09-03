@@ -207,7 +207,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       setCurrentUser(data.session?.user ?? null as any)
       setAuthReady(true)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       setCurrentUser(session?.user ?? null as any)
       setAuthReady(true)
     })
