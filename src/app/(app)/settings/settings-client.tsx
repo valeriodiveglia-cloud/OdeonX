@@ -175,6 +175,24 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   const lang = ctxLang
 
   const [authReady, setAuthReady] = useState(false)
+
+useEffect(() => {
+  (async () => {
+    const { data: s } = await supabase.auth.getSession();
+    console.log('[DBG] session?', !!s?.session, s?.session?.user?.email);
+
+    const name = 'ZZ_DBG_' + Math.floor(Math.random() * 10000);
+    const { data, error } = await supabase
+      .from('dish_categories')
+      .insert({ name, sort_order: 0, is_active: true })
+      .select('id,name')
+      .single();
+
+    console.log('[DBG] insert result =>', { data, error });
+  })();
+}, []);
+
+  
   const [currentUser, setCurrentUser] = useState<null | { id: string; email?: string | null }>(null)
 
   const [logoSignedUrl, setLogoSignedUrl] = useState<string | null>(null)
