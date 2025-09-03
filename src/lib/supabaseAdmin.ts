@@ -11,3 +11,4 @@ if (!url || !serviceRoleKey) {
 export const supabaseAdmin = createClient(url, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false }
 })
+console.log('SUPABASE_SERVICE_ROLE_KEY loaded?', !!serviceRoleKey)

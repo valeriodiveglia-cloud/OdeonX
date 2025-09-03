@@ -135,13 +135,17 @@ function clampInt(n: number, min: number, max: number) {
 function isValidEmail(x: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) }
 
 async function sendAccessLink(email: string) {
-  const r = await fetch('/api/users/send-access-link', {
+  const r = await authFetch('/api/users/send-access-link', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     cache: 'no-store',
+    credentials: 'include',
     body: JSON.stringify({
       email,
-      redirectToBase: typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL
+      redirectToBase:
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_SITE_URL
     }),
   })
   const ct = r.headers.get('content-type') || ''
@@ -149,6 +153,7 @@ async function sendAccessLink(email: string) {
   if (!r.ok) throw new Error(data?.error || 'Send link failed')
   return data as { ok: true; mode: 'invite' | 'password_reset' }
 }
+
 
 async function authFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const { data } = await supabase.auth.getSession()

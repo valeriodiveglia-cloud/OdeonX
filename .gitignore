@@ -40,4 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
+# escludo la parte event-calculator
+src/app/event-calculator/*.sql

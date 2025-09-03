@@ -107,6 +107,17 @@ export async function POST(req: Request) {
     const { error: delDbErr } = await db.from('app_accounts').delete().eq('id', target.id)
     if (delDbErr) return NextResponse.json({ error: `DB delete failed: ${delDbErr.message}` }, { status: 400 })
 
+    // delete row from app_accounts (service role bypasses RLS)
+    {
+      const delDb = await db
+        .from("app_accounts")
+        .delete()
+        .eq("id", target.id)
+      if (delDb.error) {
+        return NextResponse.json({ error: delDb.error.message }, { status: 400 })
+      }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
