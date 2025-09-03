@@ -1345,9 +1345,9 @@ ${t('Skipped', language)}: ${skipped}`)
 
       // Mappe nomi → id attuali
       const catMap: Record<string, number> = {}
-      cats.forEach(c => { catMap[toKey(c.name)] = c.id })
+      cats.forEach((c: any) => { catMap[toKey(c.name)] = c.id })
       const supMap: Record<string, string> = {}
-      sups.forEach(s => { supMap[toKey(s.name)] = s.id })
+      sups.forEach((s: any) => { supMap[toKey(s.name)] = s.id })
 
       // Conflitti e nuovi valori (come Materials)
       const listByKey = new Map<string, Equip[]>()
@@ -1525,8 +1525,8 @@ if (insCatsErr || insSupsErr) throw (insCatsErr || insSupsErr)
       // Ricostruisci mappe nome→id aggiornate
       const catMap: Record<string, number> = {}
       const supMap: Record<string, string> = {}
-      cats.forEach(c => { catMap[c.name.toLowerCase()] = c.id })
-      sups.forEach(s => { supMap[s.name.toLowerCase()] = s.id })
+      cats.forEach((c: any) => { catMap[c.name.toLowerCase()] = c.id })
+      sups.forEach((s: any) => { supMap[s.name.toLowerCase()] = s.id })
       insCats?.forEach(c => { catMap[c.name.toLowerCase()] = c.id })
       insSups?.forEach(s => { supMap[s.name.toLowerCase()] = s.id })
 
