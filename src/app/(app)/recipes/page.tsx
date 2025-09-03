@@ -1085,7 +1085,7 @@ function FinalEditor(props: FinalEditorProps) {
       .select('tag_id')
       .eq('final_id', finalId)
 
-    const existingIds = new Set((existing || []).map(r => r.tag_id as number))
+    const existingIds = new Set((existing || []).map((r: any) => r.tag_id as number))
     const desiredIds = new Set(selectedTags.map(t => t.id))
 
     const toInsert = [...desiredIds].filter(id => !existingIds.has(id))
