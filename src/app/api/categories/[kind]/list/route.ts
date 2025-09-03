@@ -12,12 +12,12 @@ const tableByKind = {
 } as const
 
 type Kind = keyof typeof tableByKind
-const isKind = (v: string): v is Kind =>
-  v === 'dish' || v === 'prep' || v === 'equipment'
+const isKind = (v: string): v is Kind => v in tableByKind
 
-export async function GET(_req: Request, ctx: { params?: { kind?: string } }) {
-  const raw = ctx?.params?.kind
+export async function GET(_req: Request, { params }: { params: Promise<{ kind: string }> }) {
+  const { kind: raw } = await params
   const kind = Array.isArray(raw) ? raw[0] : raw
+
   if (!kind || !isKind(kind)) {
     return NextResponse.json({ error: 'Invalid kind' }, { status: 400 })
   }
@@ -34,8 +34,8 @@ export async function GET(_req: Request, ctx: { params?: { kind?: string } }) {
       .order('name', { ascending: true })
 
     if (error) {
-      // Se la sessione manca/scade, o RLS blocca, PostgREST può dare 401/403
-      return NextResponse.json({ error: error.message }, { status: 401 })
+      // Se sessione scaduta o RLS, supabase può restituire 401/403
+      return NextResponse.json({ error: error.message }, { status: 403 })
     }
 
     return NextResponse.json({ data: data ?? [] })
