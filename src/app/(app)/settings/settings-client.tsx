@@ -203,7 +203,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
   useEffect(() => {
     let unsub: (() => void) | null = null
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data }: any) => {
       setCurrentUser(data.session?.user ?? null as any)
       setAuthReady(true)
     })
