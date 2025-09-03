@@ -1701,7 +1701,7 @@ export default function Page() {
             id: String(m.id),
             label: m.name as string,
             unit_cost: grossUnit ?? netUnit ?? null,
-            uom_name: uomMap.get(String(m.uom_id)) ?? '',
+            uom_name: String(uomMap.get(String(m.uom_id)) ?? ''),
           }
         })
         setMatOptions(options)
@@ -1721,7 +1721,7 @@ export default function Page() {
         id: String(p.id),
         label: p.name,
         unit_cost: p.cost_unit_vnd ?? null,
-        uom_name: p.uom_name ?? null,
+        uom_name: String(p.uom_name ?? ''),
       })))
     }
   } catch (e) {
