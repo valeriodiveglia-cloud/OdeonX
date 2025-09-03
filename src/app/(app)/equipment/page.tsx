@@ -1448,8 +1448,8 @@ if (!needConfirm) {
 
     const catMap2: Record<string, number> = {}
     const supMap2: Record<string, string> = {}
-    ;(cRes2.data || cats).forEach(c => { catMap2[c.name.toLowerCase()] = c.id })
-    ;(sRes2.data || sups).forEach(s => { supMap2[s.name.toLowerCase()] = s.id })
+    ;(cRes2.data || cats).forEach((c: any) => { catMap2[c.name.toLowerCase()] = c.id })
+    ;(sRes2.data || sups).forEach((s: any) => { supMap2[s.name.toLowerCase()] = s.id })
 
     // 3) import diretto: runImport userà le mappe aggiornate per applicare i valori del CSV
     await runImport(data, catMap2, supMap2, null)
