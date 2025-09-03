@@ -1527,8 +1527,8 @@ if (insCatsErr || insSupsErr) throw (insCatsErr || insSupsErr)
       const supMap: Record<string, string> = {}
       cats.forEach((c: any) => { catMap[c.name.toLowerCase()] = c.id })
       sups.forEach((s: any) => { supMap[s.name.toLowerCase()] = s.id })
-      insCats?.forEach(c => { catMap[c.name.toLowerCase()] = c.id })
-      insSups?.forEach(s => { supMap[s.name.toLowerCase()] = s.id })
+      insCats?.forEach((c: any) => { catMap[c.name.toLowerCase()] = c.id })
+      insSups?.forEach((s: any) => { supMap[s.name.toLowerCase()] = s.id })
 
       // Risolvi override numerici
       const resolvedOverrides: UnifiedChoice = { categoryByKey: {}, supplierByKey: {} }
