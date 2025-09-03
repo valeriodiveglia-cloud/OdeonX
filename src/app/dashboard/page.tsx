@@ -30,7 +30,7 @@ export default function HomeDashboard() {
       setLoading(false)
     })()
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt: any, session: any) => {
       if (!session?.user) router.replace('/login')
       else setUser(session.user)
     })
