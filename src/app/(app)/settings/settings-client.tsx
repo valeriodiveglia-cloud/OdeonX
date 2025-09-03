@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircleIcon, PlusIcon, Cog6ToothIcon, XMarkIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { t, type Lang } from '@/lib/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase_shim'
 import { useRouter } from 'next/navigation'
 import { toBool } from '@/lib/normalize'
 

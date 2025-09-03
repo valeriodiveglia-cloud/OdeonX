@@ -1,6 +1,6 @@
 'use client'
 import { FormEvent, useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase_shim'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function UpdatePasswordPage() {

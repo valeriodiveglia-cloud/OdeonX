@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase_shim'
 import type { User } from '@supabase/supabase-js'
 import { t } from '@/lib/i18n'
 import { CalculatorIcon } from '@heroicons/react/24/outline'

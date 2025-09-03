@@ -4,7 +4,7 @@ import type { ParseResult } from 'papaparse'
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase_shim'
 import {
   ChevronUpIcon,
   ChevronDownIcon,

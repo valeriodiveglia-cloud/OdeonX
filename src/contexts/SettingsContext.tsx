@@ -2,7 +2,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase_shim'
 import type { Lang } from '@/lib/i18n'
 
 type Currency = 'VND' | 'USD' | 'EUR' | 'GBP'

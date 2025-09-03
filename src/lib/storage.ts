@@ -1,5 +1,5 @@
 // src/lib/storage.ts
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase_shim'
 
 export async function uploadLogo(file: File) {
   const path = `logos/company.${file.name.split('.').pop()}`
