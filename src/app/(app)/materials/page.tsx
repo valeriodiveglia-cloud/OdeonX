@@ -1475,8 +1475,8 @@ setUnifiedOpen({ conflicts, newValues: { categories: newCats, suppliers: newSups
       const supMap: Record<string, string> = {}
       cats.forEach(c => { catMap[c.name.toLowerCase()] = c.id })
       sups.forEach(s => { supMap[s.name.toLowerCase()] = s.id })
-      insCats?.forEach(c => { catMap[c.name.toLowerCase()] = c.id })
-      insSups?.forEach(s => { supMap[s.name.toLowerCase()] = s.id })
+      insCats?.forEach((c: any) => { catMap[c.name.toLowerCase()] = c.id })
+      insSups?.forEach((s: any) => { supMap[s.name.toLowerCase()] = s.id })
 
       const resolvedOverrides = {
         categoryByKey: {} as Record<string, number | null | undefined>,
