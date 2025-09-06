@@ -1,80 +1,76 @@
 // src/app/api/categories/[kind]/delete/route.ts
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { authOr401 } from '@/lib/routeAuth'
 
 export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
 
 const tableByKind = {
   dish: 'dish_categories',
   prep: 'recipe_categories',
   equipment: 'equipment_categories',
 } as const
-
 type Kind = keyof typeof tableByKind
 const isKind = (v: string): v is Kind => v in tableByKind
 
-type DeleteBody = { id?: number | string }
+function parseIdFrom(anything: unknown): number | null {
+  const n = Number(anything)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
 
-// Blocca metodi diversi da POST
-export async function GET() {
-  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
-}
-export async function PUT() {
-  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
-}
-export async function DELETE() {
-  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+export async function GET()   { return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 }) }
+export async function PUT()   { return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 }) }
+
+export async function DELETE(req: Request, ctx: { params: Promise<{ kind: string }> }) {
+  // proxy su POST per avere una sola logica
+  return POST(req, ctx)
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ kind: string }> }) {
+  const gate = await authOr401()
+  if (!gate.ok) return gate.response
+  const { supabase } = gate
+
+  const { kind: raw } = await params
+  const kind = Array.isArray(raw) ? raw[0] : raw
+  if (!kind || !isKind(kind)) {
+    return NextResponse.json({ error: 'Invalid kind' }, { status: 400 })
+  }
+  const table = tableByKind[kind]
+
+  let id: number | null = null
   try {
-    const { kind: raw } = await params
-    const kind = Array.isArray(raw) ? raw[0] : raw
-    if (!kind || !isKind(kind)) {
-      return NextResponse.json({ error: 'Invalid kind' }, { status: 400 })
+    // prova dal body { id }
+    const body = await req.clone().json().catch(() => null) as any
+    if (body && (body.id ?? body?.row?.id) != null) {
+      id = parseIdFrom(body.id ?? body?.row?.id)
     }
-    const table = tableByKind[kind]
+  } catch { /* ignore */ }
 
-    // Auth guard
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  if (id == null) {
+    // fallback da query ?id=...
+    const url = new URL(req.url)
+    id = parseIdFrom(url.searchParams.get('id'))
+  }
 
-    // Parse body robusto
-    let body: unknown
-    try {
-      body = await req.json()
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-    }
+  if (id == null) {
+    return NextResponse.json({ error: 'Missing or invalid id' }, { status: 400 })
+  }
 
-    const idRaw = (body as DeleteBody)?.id
-    const id = typeof idRaw === 'number' ? idRaw : String(idRaw ?? '').trim()
-    if (!id) {
-      return NextResponse.json({ error: 'id required' }, { status: 400 })
-    }
+  const { data, error } = await supabase
+    .from(table)
+    .delete()
+    .eq('id', id)
+    .select('id')
+    .maybeSingle()
 
-    const { error } = await supabase.from(table).delete().eq('id', id)
-    if (error) {
-      const isPerm =
-        /permission denied|row-level security|violates row-level|not authorized/i.test(
-          error.message || ''
-        )
-      return NextResponse.json(
-        { error: isPerm ? 'Forbidden' : error.message },
-        { status: isPerm ? 403 : 500 }
-      )
-    }
-
-    return NextResponse.json({ ok: true })
-  } catch (e: any) {
+  if (error) {
+    const isPerm = /permission denied|row-level security|violates row-level|not authorized/i.test(error.message || '')
     return NextResponse.json(
-      { error: e?.message || 'Internal Server Error' },
-      { status: 500 }
+      { error: isPerm ? 'Forbidden' : error.message },
+      { status: isPerm ? 403 : 500 }
     )
   }
+
+  // Se non esisteva, restituiamo comunque 200 con deleted=false
+  return NextResponse.json({ deleted: !!data, id }, { status: 200 })
 }
