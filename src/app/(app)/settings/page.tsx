@@ -81,10 +81,11 @@ export default async function SettingsPage() {
   }
 
   const { data, error } = await supabase
-    .from<Row>(TBL_APP)
-    .select('*')
-    .eq('id', 'singleton')
-    .maybeSingle()
+  .from('app_settings')
+  .select('*')
+  .eq('id', 'singleton')
+  .maybeSingle();
+
 
   const initial: AppSettingsUI = error || !data
     ? DEFAULTS
