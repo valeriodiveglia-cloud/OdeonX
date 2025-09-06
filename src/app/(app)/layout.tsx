@@ -1,7 +1,8 @@
 // src/app/(app)/layout.tsx
-import LeftNav from '@/components/LeftNav'
+import type { ReactNode } from "react"
+import LeftNav from "@/components/LeftNav"
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-slate-900">
       <aside

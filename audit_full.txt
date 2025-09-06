@@ -1,0 +1,2588 @@
+### RUNTIME
+MINGW64_NT-10.0-26120 Valerio-Razer 3.6.3-7674c51e.x86_64 2025-07-01 09:13 UTC x86_64 Msys
+10.9.3
+Next.js v15.4.5
+2aedcfb
+
+### ENV FILES (presenti)
+.env.local
+
+### ENV (mascherate: url host e ultima parte delle chiavi)
+
+### SUPABASE COOKIE NAME atteso (dal project ref ricavato dall'URL)
+
+### package.json (name, scripts, deps summary)
+
+### next.config.*
+next.config.js
+next.config.ts.disabled
+--- next.config.js
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  eslint: {
+    // Non fermare la build per errori ESLint
+    ignoreDuringBuilds: true,
+  },
+}
+
+module.exports = nextConfig
+
+--- next.config.ts.disabled
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+
+### tsconfig.json (prime 200 righe)
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+
+### middleware (src/middleware.ts)
+// src/middleware.ts
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+
+export const config = { matcher: ['/:path*'] }
+
+// --- helpers --------------------------------------------------
+function getProjectRef(): string {
+  try {
+    const u = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '')
+    const host = u.hostname // es: abcdefghijklmnop.supabase.co
+    const parts = host.split('.')
+    const idx = parts.findIndex(p => p.toLowerCase() === 'supabase')
+    if (idx > 0) return parts[idx - 1]
+    return parts[0] || ''
+  } catch {
+    return ''
+  }
+}
+
+function isAuthed(req: NextRequest): boolean {
+  const ref = getProjectRef()
+  const authRe = ref
+    ? new RegExp(`^sb-${ref}-auth-token(?:\\.\\d+)?$`)
+    : /^sb-[^.]+-auth-token(?:\.\d+)?$/
+  return req.cookies.getAll().some(c => authRe.test(c.name))
+}
+
+function isPublic(pathname: string): boolean {
+  if (pathname.startsWith('/_next') || pathname.startsWith('/api')) return true
+  if (
+    pathname === '/favicon.ico' ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml'
+  ) return true
+  if (/\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|woff2?)$/.test(pathname)) return true
+  return false
+}
+
+// --- middleware ----------------------------------------------
+export function middleware(req: NextRequest) {
+  const url = new URL(req.url)
+  const { pathname, search } = url
+  const authed = isAuthed(req)
+
+  // lascia passare POST/PUT/… (server actions, form post, ecc.)
+  if (req.method !== 'GET') return NextResponse.next()
+
+  // health
+  if (pathname === '/__mw-ping') {
+    const res = new NextResponse(null, { status: 204 })
+    res.headers.set('x-mw', 'alive')
+    return res
+  }
+
+  // se sei su /login ed HAI già i cookie, porta alla dest (o /dashboard)
+  if (pathname.startsWith('/login')) {
+    if (authed) {
+      const r = url.searchParams.get('redirect')
+      const dest = r && r !== '/login' ? r : '/dashboard'
+      return NextResponse.redirect(new URL(dest, req.url))
+    }
+    return NextResponse.next()
+  }
+
+  // pubblico
+  if (isPublic(pathname)) return NextResponse.next()
+
+  // protetti
+  if (pathname.startsWith('/suppliers')) {
+    if (!authed) {
+      const to = new URL('/login', req.url)
+      to.searchParams.set('redirect', pathname + (search || ''))
+      return NextResponse.redirect(to)
+    }
+  }
+
+  return NextResponse.next()
+}
+
+### DIR TREE (max depth ~4) - app/pages/components/lib/contexts/hooks/utils
+src/app/(app)/archive/page.tsx
+src/app/(app)/equipment/page.tsx
+src/app/(app)/equipment-history/page.tsx
+src/app/(app)/event-calculator/page.tsx
+src/app/(app)/layout.tsx
+src/app/(app)/materials/page.tsx
+src/app/(app)/materials-history/page.tsx
+src/app/(app)/recipes/page.tsx
+src/app/(app)/settings/categories/[kind]/delete/route.ts
+src/app/(app)/settings/categories/[kind]/list/route.ts
+src/app/(app)/settings/categories/[kind]/page.tsx
+src/app/(app)/settings/categories/[kind]/upsert/route.ts
+src/app/(app)/settings/categories/CategoryManager.tsx
+src/app/(app)/settings/categories/ClientCategoryPage.tsx
+src/app/(app)/settings/page.tsx
+src/app/(app)/settings/settings-client.tsx
+src/app/(app)/suppliers/page.tsx
+src/app/(app)/trash/page.tsx
+src/app/api/admin/data-reset/route.ts
+src/app/api/categories/[kind]/delete/route.ts
+src/app/api/categories/[kind]/list/route.ts
+src/app/api/categories/[kind]/upsert/route.ts
+src/app/api/categories/generic/list/route.ts
+src/app/api/suppliers/delete/route.ts
+src/app/api/suppliers/list/route.ts
+src/app/api/suppliers/upsert/route.ts
+src/app/api/users/admin-delete/route.ts
+src/app/api/users/admin-upsert/route.ts
+src/app/api/users/send-access-link/route.ts
+src/app/auth/callback/page.tsx
+src/app/auth/update-password/page.tsx
+src/app/dashboard/page.tsx
+src/app/favicon.ico
+src/app/globals.css
+src/app/layout.tsx
+src/app/login/page.tsx
+src/app/page.tsx
+src/components/CircularLoader.tsx
+src/components/LeftNav.tsx
+src/components/ResolveNewValues.tsx
+src/contexts/SettingsContext.tsx
+src/lib/i18n.ts
+src/lib/importMaterialsCsv.ts
+src/lib/normalize.ts
+src/lib/normalizeUom.ts
+src/lib/server/auth.ts
+src/lib/storage.ts
+src/lib/supabase.ts
+src/lib/supabase_shim.ts
+src/lib/supabaseAdmin.ts
+src/lib/supabaseAnonServer.ts
+src/lib/supabaseServer.ts
+
+### Route handlers API (src/app/api/**/route.ts)
+src/app/api/admin/data-reset/route.ts
+src/app/api/categories/[kind]/delete/route.ts
+src/app/api/categories/[kind]/list/route.ts
+src/app/api/categories/[kind]/upsert/route.ts
+src/app/api/categories/generic/list/route.ts
+src/app/api/suppliers/delete/route.ts
+src/app/api/suppliers/list/route.ts
+src/app/api/suppliers/upsert/route.ts
+src/app/api/users/admin-delete/route.ts
+src/app/api/users/admin-upsert/route.ts
+src/app/api/users/send-access-link/route.ts
+
+### Login page (src/app/login/page.tsx)
+// Server Component
+import loginAction from './server-login-action'
+
+type SP = Record<string, string | string[] | undefined>
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SP>
+}) {
+  const sp = (await searchParams) ?? {}
+  const redirectRaw = sp.redirect
+  const redirectTo =
+    typeof redirectRaw === 'string' && redirectRaw.length > 0 ? redirectRaw : '/dashboard'
+
+  return (
+    <div className="min-h-screen grid place-items-center p-8 bg-blue-50">
+      <form
+        action={loginAction}
+
+        className="grid gap-3 w-full max-w-sm bg-white p-5 rounded-2xl shadow-lg"
+      >
+        <h2 className="text-2xl font-bold text-blue-700">Staff Login</h2>
+
+        <input
+          name="email"
+          type="email"
+          placeholder="Email"
+          required
+          autoComplete="username"
+          className="rounded-xl border border-blue-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        />
+
+        <input
+          name="password"
+          type="password"
+          placeholder="Password"
+          required
+          autoComplete="current-password"
+          className="rounded-xl border border-blue-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        />
+
+        <input type="hidden" name="redirect" value={redirectTo} />
+
+        <button
+          type="submit"
+          className="rounded-xl px-4 py-2 bg-blue-600 text-white font-semibold hover:bg-blue-700"
+        >
+          Login
+        </button>
+      </form>
+    </div>
+  )
+}
+
+### Server login action (src/app/login/server-login-action.ts)
+'use server'
+
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { createServerClient } from '@supabase/ssr'
+
+type Result = { ok: false; error: string }
+const isProd = process.env.NODE_ENV === 'production'
+
+export default async function loginAction(formData: FormData): Promise<Result | void> {
+  const email = String(formData.get('email') || '').trim()
+  const password = String(formData.get('password') || '')
+  const redirectTo = String(formData.get('redirect') || '/dashboard')
+  if (!email || !password) return { ok: false, error: 'Missing credentials' }
+
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options?: any) {
+          // In dev su http, niente Secure, altrimenti il browser scarta il cookie
+          cookieStore.set({
+            name,
+            value,
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: isProd,
+            ...(options || {}),
+          })
+        },
+        remove(name: string, options?: any) {
+          cookieStore.set({
+            name,
+            value: '',
+            maxAge: 0,
+            path: '/',
+            ...(options || {}),
+          })
+        },
+      },
+    }
+  )
+
+  console.log('[loginAction] start', { email, redirectTo })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  if (error) return { ok: false, error: error.message }
+  console.log('[loginAction] success user:', data.user?.id)
+
+  try {
+    const user = data.user
+    if (user) {
+      const { count } = await supabase.from('app_accounts').select('id', { count: 'exact', head: true })
+      const defaultRole = (count ?? 0) === 0 ? 'owner' : 'staff'
+      await supabase.from('app_accounts').upsert(
+        {
+          user_id: user.id,
+          email: user.email ?? '',
+          is_active: true,
+          name: (user as any)?.user_metadata?.full_name ?? null,
+          phone: (user as any)?.user_metadata?.phone ?? null,
+          position: null,
+          role: defaultRole as 'owner' | 'admin' | 'staff',
+        },
+        { onConflict: 'user_id' }
+      )
+    }
+  } catch (e) {
+    console.warn('[loginAction] upsert ignored:', e)
+  }
+
+  redirect(redirectTo)
+}
+
+### Grep riferimenti loginAction/server-login-action
+src/app/login/page.tsx:2:import loginAction from './server-login-action'
+src/app/login/page.tsx:19:        action={loginAction}
+src/app/login/server-login-action.ts:10:export default async function loginAction(formData: FormData): Promise<Result | void> {
+src/app/login/server-login-action.ts:50:  console.log('[loginAction] start', { email, redirectTo })
+src/app/login/server-login-action.ts:53:  console.log('[loginAction] success user:', data.user?.id)
+src/app/login/server-login-action.ts:74:    console.warn('[loginAction] upsert ignored:', e)
+
+### Supabase shim/client files (contenuto ridotto)
+--- src/app/(app)/settings/page.tsx
+// src/app/settings/page.tsx
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
+import SettingsClient, { type AppSettingsUI } from './settings-client'
+import { toBool } from '@/lib/normalize' // <-- server-safe
+
+// Evita caching aggressivo dei Server Components per questa page
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const TBL_APP = 'app_settings'
+
+export default async function SettingsPage() {
+  const cookieStore = await cookies()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        // API nuova
+        get: (name: string) => cookieStore.get(name)?.value,
+        set: (_name: string, _value: string, _options?: any) => {},            // no-op in RSC
+        remove: (_name: string, _options?: any) => {},         // no-op in RSC
+        // API vecchia (per compat)
+      },
+    }
+  )
+
+  type Row = {
+    id: 'singleton'
+    restaurant_name: string
+    company_name: string
+    address: string
+    tax_code: string
+    phone: string
+    email: string
+    website: string
+    logo_mime: string | null
+    logo_data: string | null
+    language_code: 'en' | 'vi'
+    currency: 'VND' | 'USD' | 'EUR' | 'GBP'
+    vat_enabled: boolean | string | number | null
+    vat_rate: number | null
+    default_markup_equipment_pct: number | null
+    default_markup_recipes_pct: number | null
+    materials_review_months: number
+    csv_require_confirm_refs: boolean | string | number | null
+    materials_exclusive_default: boolean | string | number | null
+    equipment_review_months: number
+    equipment_csv_require_confirm_refs: boolean | string | number | null
+    recipes_review_months: number                 // <-- aggiunto
+    recipes_split_mode: 'split' | 'single'
+    recipes_tab1_name: string
+    recipes_tab2_name: string | null
+    updated_at?: string | null
+  }
+
+  const DEFAULTS: AppSettingsUI = {
+    restaurant_name: '',
+    company_name: '',
+    address: '',
+    tax_code: '',
+    phone: '',
+    email: '',
+    website: '',
+    logo_mime: null,
+    logo_data: null,
+    language_code: 'en',
+    currency: 'VND',
+    vat_enabled: false,
+    vat_rate: 10,
+    default_markup_equipment_pct: 30,
+    default_markup_recipes_pct: 30,
+    materials_review_months: 4,
+    csv_require_confirm_refs: true,
+    materials_exclusive_default: true,
+    equipment_review_months: 4,
+    equipment_csv_require_confirm_refs: true,
+    recipes_review_months: 4,                    // <-- aggiunto
+    recipes_split_mode: 'split',
+    recipes_tab1_name: 'Final',
+    recipes_tab2_name: 'Prep',
+  }
+
+  const { data, error } = await supabase
+    .from(TBL_APP)
+    .select('*')
+    .eq('id', 'singleton')
+    .maybeSingle()
+
+  const initial: AppSettingsUI = error || !data
+    ? DEFAULTS
+    : {
+        ...DEFAULTS,
+        ...data,
+
+        // numerici clampati
+        vat_rate:
+          data.vat_rate == null
+            ? DEFAULTS.vat_rate
+            : Math.min(100, Math.max(0, Math.round(data.vat_rate))),
+        materials_review_months: Math.min(12, Math.max(0, Math.round(data.materials_review_months))),
+        equipment_review_months: Math.min(12, Math.max(0, Math.round(data.equipment_review_months))),
+        recipes_review_months: Math.min(12, Math.max(0, Math.round(data.recipes_review_months))), // <-- normalizzato
+
+        // boolean normalizzati (server-safe)
+        vat_enabled: toBool(data.vat_enabled, DEFAULTS.vat_enabled),
+        csv_require_confirm_refs: toBool(
+          data.csv_require_confirm_refs,
+          DEFAULTS.csv_require_confirm_refs
+        ),
+        materials_exclusive_default: toBool(
+          data.materials_exclusive_default,
+          DEFAULTS.materials_exclusive_default
+        ),
+        equipment_csv_require_confirm_refs: toBool(
+          data.equipment_csv_require_confirm_refs,
+          DEFAULTS.equipment_csv_require_confirm_refs
+        ),
+      }
+
+  return <SettingsClient initial={initial} />
+}
+
+--- src/app/api/admin/data-reset/route.ts
+// app/api/admin/data-reset/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { getCallerInfo } from '@/lib/server/auth'
+
+type Scope =
+  | 'materials'
+  | 'suppliers'
+  | 'categories'
+  | 'recipes'
+  | 'equipment'
+  | 'settings'
+  | 'all'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
+
+const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+})
+
+export async function POST(req: NextRequest) {
+  try {
+    // 1) prendo userId dalla sessione
+    const { role: baseRole, userId } = await getCallerInfo(req)
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 2) ruolo vero dal DB (service role, zero RLS)
+    const { data: acc, error: accErr } = await admin
+      .from('app_accounts')
+      .select('role')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (accErr) {
+      return NextResponse.json({ error: `Accounts lookup failed: ${accErr.message}` }, { status: 500 })
+    }
+    const role = String(acc?.role || baseRole || '').toLowerCase()
+
+    // 3) input
+    const body = await req.json().catch(() => ({}))
+    const scope = String(body?.scope || '').toLowerCase() as Scope
+
+    const allowed: Scope[] = [
+      'materials', 'suppliers', 'categories', 'recipes', 'equipment', 'settings', 'all',
+    ]
+    if (!allowed.includes(scope)) {
+      return NextResponse.json({ error: 'Invalid scope' }, { status: 400 })
+    }
+
+    // 4) autorizzazioni
+    if (scope === 'all') {
+      if (role !== 'owner') {
+        return NextResponse.json({ error: `Only owner can reset all (your role: ${role || 'none'})` }, { status: 403 })
+      }
+    } else {
+      if (role !== 'owner' && role !== 'admin') {
+        return NextResponse.json({ error: `Forbidden (your role: ${role || 'none'})` }, { status: 403 })
+      }
+    }
+
+    // 5) esecuzione per scope singolo
+    const runSingle = async (s: Exclude<Scope, 'all'>) => {
+      if (s === 'suppliers') {
+        const { error } = await admin.rpc('admin_reset_suppliers')
+        if (error) throw error
+        return
+      }
+      if (s === 'settings') {
+        const { error } = await admin.rpc('admin_reset_settings')
+        if (error) throw error
+        return
+      }
+      // per materials / recipes / equipment / categories usiamo la centrale passando userId
+      const { error } = await admin.rpc('admin_reset_data', {
+        scope: s,
+        caller_user_id: userId,
+      })
+      if (error) throw error
+    }
+
+    // 6) dispatch
+    if (scope === 'all') {
+      // ordine sensato
+      for (const s of ['recipes', 'materials', 'equipment', 'categories'] as const) {
+        await runSingle(s)
+      }
+      await runSingle('suppliers')
+      await runSingle('settings')
+      return NextResponse.json({ ok: true }, { status: 200 })
+    } else {
+      await runSingle(scope as Exclude<Scope, 'all'>)
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+  } catch (e: any) {
+    // errore dettagliato in risposta per debuggare senza aprire server logs
+    return NextResponse.json(
+      { error: e?.message || 'Internal error', code: e?.code, details: e?.details, hint: e?.hint },
+      { status: 500 }
+    )
+  }
+}
+
+--- src/app/api/users/admin-delete/route.ts
+import { NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+type Role = 'owner' | 'admin' | 'staff'
+type DeleteBody = {
+  accountId?: string | number | null
+  userId?: string | null
+  email?: string | null
+}
+
+function svc() {
+  // Service role SOLO dopo aver autorizzato il caller
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+function anonWithBearer(authorization: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: authorization } } }
+  )
+}
+
+// Blocca metodi diversi da POST
+export async function GET() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+export async function PUT() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+export async function DELETE() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+
+export async function POST(req: Request) {
+  try {
+    // 1) Auth: cookie (@supabase/auth-helpers) OPPURE Authorization: Bearer <access_token>
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || ''
+    const useBearer = /^Bearer\s+/.test(authHeader)
+    const userClient = useBearer
+      ? anonWithBearer(authHeader)
+      : createRouteHandlerClient({ cookies })
+
+    const { data: meAuth, error: meAuthErr } = await userClient.auth.getUser()
+    if (meAuthErr || !meAuth?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // 2) Autorizzazione (deve essere owner o admin) usando le RPC in contesto utente
+    const { data: isOwner } = await userClient.rpc('app_is_owner')
+    const { data: isAdmin } = await userClient.rpc('app_is_admin')
+    if (!isOwner && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // 3) Parse body robusto
+    let bodyUnknown: unknown
+    try {
+      bodyUnknown = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const body = (bodyUnknown ?? {}) as DeleteBody
+    const accountId = body?.accountId
+    const userId = body?.userId ?? null
+    const email = (body?.email ?? null)?.toString().trim().toLowerCase() || null
+
+    if (!accountId && !userId && !email) {
+      return NextResponse.json({ error: 'Missing identifiers' }, { status: 400 })
+    }
+
+    // 4) Individua target tramite service role (bypassa RLS)
+    const db = svc()
+
+    const orFilters: string[] = []
+    if (accountId) orFilters.push(`id.eq.${accountId}`)
+    if (userId && !accountId) orFilters.push(`user_id.eq.${userId}`)
+    if (email && !accountId && !userId) orFilters.push(`email.eq.${email}`)
+
+    const { data: target, error: tErr } = await db
+      .from('app_accounts')
+      .select('id, user_id, email, role')
+      .or(orFilters.join(','))
+      .maybeSingle()
+
+    if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 })
+    if (!target) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+    // 5) Guard rail: evitare auto-cancellazione tramite endpoint
+    if (target.user_id && target.user_id === meAuth.user.id) {
+      return NextResponse.json({ error: 'Cannot delete your own account via this endpoint' }, { status: 400 })
+    }
+
+    // 6) Regole: admin solo staff; owner tutti MA non l’ultimo owner
+    const myRole: Role = isOwner ? 'owner' : (isAdmin ? 'admin' : 'staff')
+    if (myRole === 'admin' && target.role !== 'staff') {
+      return NextResponse.json({ error: 'Admins can delete staff only' }, { status: 403 })
+    }
+
+    if (target.role === 'owner') {
+      const { count: ownersCount, error: cntErr } = await db
+        .from('app_accounts')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', 'owner')
+      if (cntErr) return NextResponse.json({ error: cntErr.message }, { status: 400 })
+      if ((ownersCount ?? 0) <= 1) {
+        return NextResponse.json({ error: 'Cannot delete the last owner' }, { status: 403 })
+      }
+      if (myRole !== 'owner') {
+        return NextResponse.json({ error: 'Only owners can delete owners' }, { status: 403 })
+      }
+    }
+
+    // 7) Delete in Auth SOLO se conosciamo l'user_id
+    const uid = target.user_id || userId || null
+    if (uid) {
+      const delAuth = await db.auth.admin.deleteUser(uid)
+      if (delAuth.error) {
+        return NextResponse.json({ error: `Auth delete failed: ${delAuth.error.message}` }, { status: 400 })
+      }
+    }
+    // Se abbiamo solo l'email e non l'user_id, per SDK v2 non c'è getUserByEmail:
+    // in tal caso saltiamo la delete in Auth e rimuoviamo solo la riga DB.
+
+    // 8) Delete DB row (una sola volta)
+    const { error: delDbErr } = await db.from('app_accounts').delete().eq('id', target.id)
+    if (delDbErr) {
+      return NextResponse.json({ error: `DB delete failed: ${delDbErr.message}` }, { status: 400 })
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+--- src/app/api/users/admin-delete/route.ts.bak.1756967745
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+function svc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+function anon() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
+
+async function getCaller(req: Request) {
+  const auth = req.headers.get('authorization') || req.headers.get('Authorization')
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null
+  if (!token) return null
+  const supaAnon = anon()
+  const { data, error } = await supaAnon.auth.getUser(token)
+  if (error) return null
+  return data.user ?? null
+}
+
+type Role = 'owner' | 'admin' | 'staff'
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json()
+    const { accountId, userId, email } = body || {}
+
+    if (!accountId && !userId && !email) {
+      return NextResponse.json({ error: 'Missing identifiers' }, { status: 400 })
+    }
+
+    const caller = await getCaller(req)
+    if (!caller) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const db = svc()
+
+    // ruolo del caller
+    const { data: me, error: meErr } = await db
+      .from('app_accounts')
+      .select('id, role')
+      .eq('user_id', caller.id)
+      .maybeSingle()
+    if (meErr) return NextResponse.json({ error: meErr.message }, { status: 400 })
+    const myRole = me?.role as Role | undefined
+    if (!myRole) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    // trova target
+    const { data: target, error: tErr } = await db
+      .from('app_accounts')
+      .select('id, user_id, email, role')
+      .or([
+        accountId ? `id.eq.${accountId}` : '',
+        (!accountId && userId) ? `user_id.eq.${userId}` : '',
+        (!accountId && !userId && email) ? `email.eq.${String(email).toLowerCase()}` : '',
+      ].filter(Boolean).join(','))
+      .maybeSingle()
+    if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 })
+    if (!target) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+    // regole: admin solo staff. owner tutti, ma non l’ultimo owner
+    if (myRole === 'admin' && target.role !== 'staff') {
+      return NextResponse.json({ error: 'Admins can delete staff only' }, { status: 403 })
+    }
+
+    if (target.role === 'owner') {
+      const { count: ownersCount, error: cntErr } = await db
+        .from('app_accounts')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', 'owner')
+      if (cntErr) return NextResponse.json({ error: cntErr.message }, { status: 400 })
+      if ((ownersCount ?? 0) <= 1) {
+        return NextResponse.json({ error: 'Cannot delete the last owner' }, { status: 403 })
+      }
+      if (myRole !== 'owner') {
+        return NextResponse.json({ error: 'Only owners can delete owners' }, { status: 403 })
+      }
+    }
+
+    // elimina anche in Auth (se c'è user_id o lo troviamo per email)
+    const uid = target.user_id || userId || null
+    if (uid) {
+      const delAuth = await db.auth.admin.deleteUser(uid)
+      if (delAuth.error) {
+        return NextResponse.json({ error: `Auth delete failed: ${delAuth.error.message}` }, { status: 400 })
+      }
+    } else if (email) {
+      const list = await db.auth.admin.listUsers({ page: 1, perPage: 1 })
+      const u = list.data?.users?.[0]
+      if (u && u.email?.toLowerCase() === String(email).toLowerCase()) {
+        const delAuth = await db.auth.admin.deleteUser(u.id)
+        if (delAuth.error) {
+          return NextResponse.json({ error: `Auth delete failed: ${delAuth.error.message}` }, { status: 400 })
+        }
+      }
+    }
+
+    // elimina riga DB
+    const { error: delDbErr } = await db.from('app_accounts').delete().eq('id', target.id)
+    if (delDbErr) return NextResponse.json({ error: `DB delete failed: ${delDbErr.message}` }, { status: 400 })
+
+    // delete row from app_accounts (service role bypasses RLS)
+    {
+      const delDb = await db
+        .from("app_accounts")
+        .delete()
+        .eq("id", target.id)
+      if (delDb.error) {
+        return NextResponse.json({ error: delDb.error.message }, { status: 400 })
+      }
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
+  }
+}
+
+--- src/app/api/users/admin-delete/route.ts.bak.fix.1756968255
+import { NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+type Role = 'owner' | 'admin' | 'staff'
+type DeleteBody = {
+  accountId?: string | number | null
+  userId?: string | null
+  email?: string | null
+}
+
+function svc() {
+  // Service role SOLO dopo aver autorizzato il caller
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+function anonWithBearer(authorization: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: authorization } } }
+  )
+}
+
+// Blocca metodi diversi da POST
+export async function GET() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+export async function PUT() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+export async function DELETE() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+
+export async function POST(req: Request) {
+  try {
+    // 1) Auth: cookie (@supabase/auth-helpers) OPPURE Authorization: Bearer <access_token>
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || ''
+    const useBearer = /^Bearer\s+/.test(authHeader)
+    const userClient = useBearer
+      ? anonWithBearer(authHeader)
+      : createRouteHandlerClient({ cookies })
+
+    const { data: meAuth, error: meAuthErr } = await userClient.auth.getUser()
+    if (meAuthErr || !meAuth?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // 2) Autorizzazione (deve essere owner o admin) usando le RPC in contesto utente
+    const { data: isOwner } = await userClient.rpc('app_is_owner')
+    const { data: isAdmin } = await userClient.rpc('app_is_admin')
+    if (!isOwner && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // 3) Parse body robusto
+    let bodyUnknown: unknown
+    try {
+      bodyUnknown = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const body = (bodyUnknown ?? {}) as DeleteBody
+    const accountId = body?.accountId
+    const userId = body?.userId ?? null
+    const email = (body?.email ?? null)?.toString().trim().toLowerCase() || null
+
+    if (!accountId && !userId && !email) {
+      return NextResponse.json({ error: 'Missing identifiers' }, { status: 400 })
+    }
+
+    // 4) Individua target tramite service role (niente sorprese da RLS)
+    const db = svc()
+
+    const orFilters: string[] = []
+    if (accountId) orFilters.push(`id.eq.${accountId}`)
+    if (userId && !accountId) orFilters.push(`user_id.eq.${userId}`)
+    if (email && !accountId && !userId) orFilters.push(`email.eq.${email}`)
+
+    const { data: target, error: tErr } = await db
+      .from('app_accounts')
+      .select('id, user_id, email, role')
+      .or(orFilters.join(','))
+      .maybeSingle()
+
+    if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 })
+    if (!target) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+    // 5) Guard rail: evitare auto-cancellazione tramite endpoint
+    if (target.user_id && target.user_id === meAuth.user.id) {
+      return NextResponse.json({ error: 'Cannot delete your own account via this endpoint' }, { status: 400 })
+    }
+
+    // 6) Regole: admin solo staff; owner tutti MA non l’ultimo owner
+    const myRole: Role = isOwner ? 'owner' : (isAdmin ? 'admin' : 'staff')
+    if (myRole === 'admin' && target.role !== 'staff') {
+      return NextResponse.json({ error: 'Admins can delete staff only' }, { status: 403 })
+    }
+
+    if (target.role === 'owner') {
+      const { count: ownersCount, error: cntErr } = await db
+        .from('app_accounts')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', 'owner')
+      if (cntErr) return NextResponse.json({ error: cntErr.message }, { status: 400 })
+      if ((ownersCount ?? 0) <= 1) {
+        return NextResponse.json({ error: 'Cannot delete the last owner' }, { status: 403 })
+      }
+      if (myRole !== 'owner') {
+        return NextResponse.json({ error: 'Only owners can delete owners' }, { status: 403 })
+      }
+    }
+
+    // 7) Delete in Auth (se identificabile)
+    let uid = target.user_id || userId || null
+    if (!uid && email) {
+      const byEmail = await db.auth.admin.getUserByEmail(email)
+      uid = byEmail.data?.user?.id ?? null
+    }
+    if (uid) {
+      const delAuth = await db.auth.admin.deleteUser(uid)
+      if (delAuth.error) {
+        return NextResponse.json({ error: `Auth delete failed: ${delAuth.error.message}` }, { status: 400 })
+      }
+    }
+
+    // 8) Delete DB row (una sola volta)
+    const { error: delDbErr } = await db.from('app_accounts').delete().eq('id', target.id)
+    if (delDbErr) {
+      return NextResponse.json({ error: `DB delete failed: ${delDbErr.message}` }, { status: 400 })
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+--- src/app/api/users/admin-upsert/route.ts
+// src/app/api/users/admin-upsert/route.ts
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@supabase/supabase-js'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+type Role = 'owner' | 'admin' | 'staff'
+type UpsertBody = {
+  id?: number | string | null
+  email?: string
+  phone?: string | null
+  name?: string | null
+  position?: string | null
+  role?: Role
+  is_active?: boolean | null
+}
+
+// Blocca metodi diversi da POST
+export async function GET() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+export async function PUT() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+export async function DELETE() {
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 })
+}
+
+export async function POST(req: Request) {
+  try {
+    // Supporto sia Cookie (SSR) che Bearer (server-to-server)
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || ''
+    const useBearer = /^Bearer\s+/.test(authHeader)
+    const supabase = useBearer
+      ? createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          { global: { headers: { Authorization: authHeader } } }
+        )
+      : createRouteHandlerClient({ cookies })
+
+    // Caller deve essere loggato
+    const { data: auth, error: authErr } = await supabase.auth.getUser()
+    if (authErr || !auth?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Controllo privilegi (owner o admin)
+    const { data: isOwner } = await supabase.rpc('app_is_owner')
+    const { data: isAdmin } = await supabase.rpc('app_is_admin')
+    if (!isOwner && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // Parse JSON robusto
+    let bodyUnknown: unknown
+    try {
+      bodyUnknown = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const body = (bodyUnknown ?? {}) as UpsertBody
+
+    const rawEmail = String(body?.email ?? '').trim().toLowerCase()
+    if (!rawEmail || !rawEmail.includes('@')) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
+    }
+
+    let role: Role = (String(body?.role ?? 'staff').trim().toLowerCase() as Role)
+    if (!['owner', 'admin', 'staff'].includes(role)) {
+      role = 'staff'
+    }
+
+    const payload = {
+      email: rawEmail,
+      phone: body?.phone ?? null,
+      name: body?.name ?? null,
+      position: body?.position ?? null,
+      role,
+      is_active: Boolean(body?.is_active ?? true),
+    }
+
+    const idPresent = body?.id !== undefined && body?.id !== null && String(body?.id).length > 0
+
+    // Regola: un admin (non owner) può gestire solo account 'staff'
+    if (isAdmin && !isOwner) {
+      if (payload.role !== 'staff') {
+        return NextResponse.json({ error: 'Admins can set role to staff only' }, { status: 403 })
+      }
+      if (idPresent) {
+        const { data: target, error: tErr } = await supabase
+          .from('app_accounts')
+          .select('role')
+          .eq('id', body!.id as any)
+          .maybeSingle()
+        if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 })
+        if (!target) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+        if (String(target.role).toLowerCase() !== 'staff') {
+          return NextResponse.json({ error: 'Admins can modify staff only' }, { status: 403 })
+        }
+      }
+    }
+
+    if (idPresent) {
+      const { data, error } = await supabase
+        .from('app_accounts')
+        .update(payload)
+        .eq('id', body!.id as any)
+        .select('*')
+        .single()
+
+      if (error) {
+        const isPerm =
+          /permission denied|row-level security|violates row-level|not authorized|policy|rls/i.test(
+            error.message || ''
+          )
+        return NextResponse.json(
+          { error: isPerm ? 'Forbidden' : error.message },
+          { status: isPerm ? 403 : 400 }
+        )
+      }
+      return NextResponse.json({ ok: true, data })
+    }
+
+    const { data, error } = await supabase
+      .from('app_accounts')
+      .insert(payload as any)
+      .select('*')
+      .single()
+
+    if (error) {
+      const isPerm =
+        /permission denied|row-level security|violates row-level|not authorized|policy|rls/i.test(
+          error.message || ''
+        )
+      return NextResponse.json(
+        { error: isPerm ? 'Forbidden' : error.message },
+        { status: isPerm ? 403 : 400 }
+      )
+    }
+
+    return NextResponse.json({ ok: true, data })
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e?.message || 'Internal Server Error' },
+      { status: 500 }
+    )
+  }
+}
+
+--- src/app/api/users/admin-upsert/route.ts.bak.1756967328
+// src/app/api/users/admin-upsert/route.ts
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from "@supabase/supabase-js"
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+type Role = 'owner' | 'admin' | 'staff'
+
+export async function POST(req: Request) {
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || ""
+  const useBearer = /^Bearer\s+/.test(authHeader)
+  const supabase = useBearer
+    ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+        global: { headers: { Authorization: authHeader } }
+      })
+    : createRouteHandlerClient({ cookies })
+
+  // DEBUG BLOCK (temporary)
+  const rawCookie = req.headers.get("cookie") || ""
+  const hasSbCookie = /sb-.*-auth-token/i.test(rawCookie)
+  const { data: dbgAuth } = await supabase.auth.getUser()
+  if (!dbgAuth?.user) {
+    return NextResponse.json({
+      error: "Unauthorized",
+      debug: { useBearer, hasAuthHeader: !!authHeader, hasSbCookie }
+    }, { status: 401 })
+  }
+
+
+  // caller must be logged in
+  const { data: auth, error: authErr } = await supabase.auth.getUser()
+  if (authErr || !auth?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // role checks via RPC (match by uid/email inside DB)
+  const { data: isOwner } = await supabase.rpc('app_is_owner')
+  const { data: isAdmin } = await supabase.rpc('app_is_admin')
+  if (!isOwner && !isAdmin) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // payload (flat)
+  const body = await req.json().catch(() => ({} as any))
+  const id = body?.id
+  const email = String(body?.email ?? '').trim().toLowerCase()
+  const role = String(body?.role ?? 'staff').trim().toLowerCase() as Role
+  const payload = {
+    email,
+    phone: body?.phone ?? null,
+    name: body?.name ?? null,
+    position: body?.position ?? null,
+    role,
+    is_active: Boolean(body?.is_active ?? true),
+  }
+
+  if (!email || !email.includes('@')) {
+    return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
+  }
+
+  // admins can only manage staff accounts
+  if (isAdmin && !isOwner) {
+    if (payload.role !== 'staff') {
+      return NextResponse.json({ error: 'Admins can set role to staff only' }, { status: 403 })
+    }
+    if (id) {
+      const { data: target, error: tErr } = await supabase
+        .from('app_accounts')
+        .select('role')
+        .eq('id', id)
+        .maybeSingle()
+      if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 })
+      if (!target) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+      if (String(target.role).toLowerCase() !== 'staff') {
+        return NextResponse.json({ error: 'Admins can modify staff only' }, { status: 403 })
+      }
+    }
+  }
+
+  // update vs insert
+  if (id !== undefined && id !== null && String(id).length > 0) {
+    const { data, error } = await supabase
+      .from('app_accounts')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .single()
+
+    if (error) {
+      // bubble RLS as 403 when relevant
+      const msg = String(error.message || '').toLowerCase()
+      const code = msg.includes('policy') || msg.includes('rls') ? 403 : 400
+      return NextResponse.json({ error: error.message }, { status: code })
+    }
+    return NextResponse.json({ ok: true, data })
+  }
+
+  const { data, error } = await supabase
+    .from('app_accounts')
+    .insert(payload as any)
+    .select('*')
+    .single()
+
+  if (error) {
+    const msg = String(error.message || '').toLowerCase()
+    const code = msg.includes('policy') || msg.includes('rls') ? 403 : 400
+    return NextResponse.json({ error: error.message }, { status: code })
+  }
+  return NextResponse.json({ ok: true, data })
+}
+
+--- src/app/api/users/send-access-link/route.ts
+// src/app/api/users/send-access-link/route.ts
+import { NextResponse } from 'next/server'
+import { cookies } from "next/headers"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
+import { createClient } from "@supabase/supabase-js"
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { supabaseAnonServer } from '@/lib/supabaseAnonServer'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+export async function POST(req: Request) {
+  // auth inline: cookie o bearer
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || ""
+  const useBearer = /^Bearer\s+/.test(authHeader)
+  const supabase = useBearer
+    ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { global: { headers: { Authorization: authHeader } } })
+    : createRouteHandlerClient({ cookies })
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { data: isOwner } = await supabase.rpc("app_is_owner")
+  const { data: isAdmin } = await supabase.rpc("app_is_admin")
+  if (!isOwner && !isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  // DIAG TEMP: check env and caller role path
+  if (req.headers.get("x-diag") === "1") {
+    return NextResponse.json({
+      diag: {
+        has_url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        has_anon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        has_service: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        site_url: process.env.NEXT_PUBLIC_SITE_URL || null
+      }
+    })
+  }
+  // Consenti solo a owner o admin
+
+  try {
+    const body = await req.json().catch(() => null)
+    const email = body?.email?.trim()?.toLowerCase()
+    const redirectToBase: string | undefined = body?.redirectToBase
+
+    if (!email || !email.includes('@')) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
+    }
+
+    const site = redirectToBase || process.env.NEXT_PUBLIC_SITE_URL
+    if (!site) {
+      return NextResponse.json({ error: 'Missing NEXT_PUBLIC_SITE_URL' }, { status: 500 })
+    }
+
+    const redirectTo = `${site}/auth/callback?next=/login`
+
+    // 1) Prova invito come nuovo utente
+    console.log("DEBUG: calling inviteUserByEmail", email, redirectTo)
+    const invite = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo })
+    console.log("DEBUG: invite result", invite)
+    if (!invite.error) {
+      return NextResponse.json({ ok: true, mode: 'invite' })
+    }
+
+    // 2) Se esiste gia, invia reset password con client anon lato server
+    const msg = invite.error.message?.toLowerCase() || ''
+    const already = msg.includes('already') || msg.includes('exists') || msg.includes('registered')
+      console.log("DEBUG: fallback resetPasswordForEmail", email)
+    if (already) {
+      const { error: resetErr } = await supabaseAnonServer.auth.resetPasswordForEmail(email, { redirectTo })
+        console.error("DEBUG: reset error", resetErr)
+      if (resetErr) {
+        return NextResponse.json({ error: resetErr.message }, { status: 400 })
+      }
+      return NextResponse.json({ ok: true, mode: 'password_reset' })
+    }
+
+    return NextResponse.json({ error: invite.error.message || 'Invite failed' }, { status: 400 })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
+  }
+}
+
+--- src/app/auth/callback/route.ts
+// src/app/api/auth/callback/route.ts
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
+
+export async function GET(req: Request) {
+  const { origin, searchParams } = new URL(req.url)
+  const code = searchParams.get('code')
+
+  if (code) {
+    // scambia il "code" per una sessione e SCRIVE i cookie sb-*
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) { return cookieStore.get(name)?.value },
+          set(name, value, options) { cookieStore.set({ name, value, ...options }) },
+          remove(name, options) { cookieStore.set({ name, value: '', ...options, maxAge: 0 }) },
+        },
+      }
+    )
+    await supabase.auth.exchangeCodeForSession(code)
+  }
+
+  // dopo il login torna alla destinazione richiesta (se presente)
+  const redirect = searchParams.get('redirect') || '/'
+  return NextResponse.redirect(new URL(redirect, origin))
+}
+
+--- src/app/auth/callback/route.ts.bak
+// src/app/api/auth/callback/route.ts
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
+
+export async function GET(req: Request) {
+  const { origin, searchParams } = new URL(req.url)
+  const code = searchParams.get('code')
+
+  if (code) {
+    // scambia il "code" per una sessione e SCRIVE i cookie sb-*
+    const cookieStore = cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) { return cookieStore.get(name)?.value },
+          set(name, value, options) { cookieStore.set({ name, value, ...options }) },
+          remove(name, options) { cookieStore.set({ name, value: '', ...options, maxAge: 0 }) },
+        },
+      }
+    )
+    await supabase.auth.exchangeCodeForSession(code)
+  }
+
+  // dopo il login torna alla destinazione richiesta (se presente)
+  const redirect = searchParams.get('redirect') || '/'
+  return NextResponse.redirect(new URL(redirect, origin))
+}
+
+--- src/app/auth/signout/route.ts
+// src/app/api/auth/signout/route.ts
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
+
+export async function POST() {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: (name: string) => cookieStore.get(name)?.value,
+        set: (name: string, value: string, options?: any) =>
+          cookieStore.set({ name, value, ...(options || {}) }),
+        remove: (name: string, options?: any) =>
+          cookieStore.set({ name, value: '', ...(options || {}), maxAge: 0 }),
+      },
+    }
+  )
+
+  await supabase.auth.signOut()
+  return NextResponse.json({ ok: true })
+}
+
+
+--- src/app/dashboard/page.tsx
+// /src/app/page.tsx
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase_shim'
+import type { User } from '@supabase/supabase-js'
+import { t } from '@/lib/i18n'
+import { CalculatorIcon } from '@heroicons/react/24/outline'
+import { useSettings } from '@/contexts/SettingsContext'
+import ReactCountryFlag from 'react-country-flag'
+
+export default function HomeDashboard() {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+  const { language } = useSettings()
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const { data } = await supabase.auth.getUser()
+      if (!mounted) return
+      setUser(data.user ?? null)
+      setLoading(false)
+    })()
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt: any, session: any) => {
+      // niente redirect qui: il middleware protegge l'accesso
+      setUser(session?.user ?? null)
+    })
+
+    return () => sub?.subscription.unsubscribe()
+  }, [router])
+
+  async function handleLogout() {
+    try { await supabase.auth.signOut() } catch {}
+    router.replace('/login')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white">
+        <div className="text-blue-700 text-xl font-bold">{t(language, 'Loading')}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      <Topbar userEmail={user?.email ?? ''} onLogout={handleLogout} />
+
+      {/* Hero / Dashboard */}
+      <main className="relative">
+        {/* Decorative blobs */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-20 -right-24 h-72 w-72 rounded-full bg-blue-200/40 blur-3xl" />
+          <div className="absolute bottom-0 -left-24 h-72 w-72 rounded-full bg-indigo-200/40 blur-3xl" />
+        </div>
+
+        <section className="relative max-w-6xl mx-auto px-4 py-16">
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-gray-600 bg-white/60 backdrop-blur">
+              <span className="h-2 w-2 rounded-full bg-green-500" />
+              {t(language, 'DashboardReady')}
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900">
+              {t(language, 'WelcomeTo')} <span className="text-blue-700">OdeonX</span>
+            </h1>
+            <p className="mt-3 text-gray-600">
+              {t(language, 'DashboardSubtitle')}
+            </p>
+
+            {/* Main Card (stile precedente) */}
+            <div className="mt-8 rounded-2xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden">
+              <div className="grid sm:grid-cols-[1fr,220px]">
+                {/* Left: solo CTA */}
+                <div className="p-6 sm:p-8">
+                  <Link
+                    href="/materials"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+                  >
+                    <CalculatorIcon className="h-6 w-6" />
+                    <span>{t(language, 'Costing')}</span>
+                  </Link>
+                </div>
+
+                {/* Right: pattern */}
+                <div className="relative hidden sm:block bg-gradient-to-br from-blue-50 to-indigo-50">
+                  <svg viewBox="0 0 200 200" className="absolute inset-0 h-full w-full opacity-60" aria-hidden>
+                    <defs>
+                      <pattern id="dots" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+                        <circle cx="1" cy="1" r="1" fill="#93c5fd" />
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#dots)" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-6 text-xs text-gray-400">
+              {t(language, 'SoonMoreModules')}
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+/* ---------- Topbar con switch lingua stile LeftNav ---------- */
+function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => void }) {
+  const { language, setLanguage } = useSettings()
+  const isEN = language === 'en'
+  const countryCode = isEN ? 'GB' : 'VN'
+  const nextLang = isEN ? 'vi' : 'en'
+  const label = isEN ? 'Switch to Tiếng Việt' : 'Switch to English'
+
+  return (
+    <header className="sticky top-0 bg-white/80 backdrop-blur border-b">
+      <div className="h-14 max-w-6xl mx-auto px-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white text-xs font-bold">
+            OX
+          </span>
+          <div className="text-lg font-extrabold text-blue-700">OdeonX</div>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Language switch (flag) */}
+          <button
+            type="button"
+            onClick={() => setLanguage(nextLang as 'en' | 'vi')}
+            aria-label={label}
+            className="w-8 h-8 flex items-center justify-center rounded-full overflow-hidden border border-black/10 hover:bg-black/5 bg-white/70 backdrop-blur"
+          >
+            <ReactCountryFlag
+              countryCode={countryCode}
+              svg
+              style={{ width: '110%', height: '110%', objectFit: 'cover', display: 'block' }}
+            />
+          </button>
+
+          <span className="text-sm text-gray-600 hidden sm:inline">{userEmail}</span>
+          <button
+            onClick={onLogout}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 transition"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+    </header>
+  )
+}
+
+--- src/app/login/server-login-action.ts
+'use server'
+
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { createServerClient } from '@supabase/ssr'
+
+type Result = { ok: false; error: string }
+const isProd = process.env.NODE_ENV === 'production'
+
+export default async function loginAction(formData: FormData): Promise<Result | void> {
+  const email = String(formData.get('email') || '').trim()
+  const password = String(formData.get('password') || '')
+  const redirectTo = String(formData.get('redirect') || '/dashboard')
+  if (!email || !password) return { ok: false, error: 'Missing credentials' }
+
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options?: any) {
+          // In dev su http, niente Secure, altrimenti il browser scarta il cookie
+          cookieStore.set({
+            name,
+            value,
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: isProd,
+            ...(options || {}),
+          })
+        },
+        remove(name: string, options?: any) {
+          cookieStore.set({
+            name,
+            value: '',
+            maxAge: 0,
+            path: '/',
+            ...(options || {}),
+          })
+        },
+      },
+    }
+  )
+
+  console.log('[loginAction] start', { email, redirectTo })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  if (error) return { ok: false, error: error.message }
+  console.log('[loginAction] success user:', data.user?.id)
+
+  try {
+    const user = data.user
+    if (user) {
+      const { count } = await supabase.from('app_accounts').select('id', { count: 'exact', head: true })
+      const defaultRole = (count ?? 0) === 0 ? 'owner' : 'staff'
+      await supabase.from('app_accounts').upsert(
+        {
+          user_id: user.id,
+          email: user.email ?? '',
+          is_active: true,
+          name: (user as any)?.user_metadata?.full_name ?? null,
+          phone: (user as any)?.user_metadata?.phone ?? null,
+          position: null,
+          role: defaultRole as 'owner' | 'admin' | 'staff',
+        },
+        { onConflict: 'user_id' }
+      )
+    }
+  } catch (e) {
+    console.warn('[loginAction] upsert ignored:', e)
+  }
+
+  redirect(redirectTo)
+}
+
+--- src/lib/importMaterialsCsv.ts
+import Papa from 'papaparse';
+import type { ParseResult } from 'papaparse';
+
+'use client';
+
+import { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeUom } from '@/lib/normalizeUom';
+
+export type CsvRow = {
+  name: string;
+  category: string;
+  brand?: string | null;
+  supplier: string;
+  uom: string;
+  package_qty?: string | number | null;
+  package_price?: string | number | null;
+  unit_cost?: string | number | null;
+  notes?: string | null;
+};
+
+export type ExistingSets = {
+  categories: { id: number; name: string }[];
+  suppliers: { id: string; name: string }[];
+  uoms: { id: number; name: 'gr'|'ml'|'unit' }[];
+};
+
+export type PendingNew = { categories: string[]; suppliers: string[] };
+export type ResolveResult = {
+  categoryMap: Record<string, number>;
+  supplierMap: Record<string, string>;
+};
+
+function moneyToNumber(raw: string | number | null | undefined) {
+  if (raw == null) return null;
+  return Number(String(raw).replace(/\s+/g, '').replace(/,/g, ''));
+}
+
+// normalizza chiavi header, rimuove BOM e spazi
+function normKey(k: string) {
+  return String(k || '')
+    .replace(/^\uFEFF/, '')         // ← rimuove BOM
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// mappa tollerante per il tuo template
+const headerMap: Record<string, string> = {
+  'ingredient': 'name',
+  'category': 'category',
+  'supplier': 'supplier',
+  'brand': 'brand',
+  'package qty': 'package_qty',
+  'uom': 'uom',
+  'package cost': 'package_price',
+  'status': '__ignore__',
+  'notes': 'notes',
+  // alternative già compatibili
+  'name': 'name',
+  'package_qty': 'package_qty',
+  'package_price': 'package_price',
+  'unit_cost': 'unit_cost',
+};
+
+export async function importMaterialsCsv(
+  supabase: SupabaseClient,
+  file: File,
+  getExisting: () => Promise<ExistingSets>,
+  resolveNewValues: (pending: PendingNew, existing: ExistingSets) => Promise<ResolveResult>,
+  onProgress?: (pct: number) => void
+): Promise<{ inserted: number; updated: number; skipped: number }> {
+
+  const { categories, suppliers, uoms } = await getExisting();
+
+  // 1) Parse CSV con trasformazione header
+  const parsed = await new Promise<ParseResult<CsvRow>>((resolve, reject) => {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (h: string, _i: number): string => headerMap[normKey(h)] ?? normKey(h),
+      complete: (res: ParseResult<CsvRow>) => { resolve(res) },
+      error: (err: unknown) => { reject(err) },
+    });
+  });
+
+  // adatta le righe al nostro schema
+  const rows: CsvRow[] = (parsed.data || []).map((r: CsvRow) => ({
+    name: String(r['name'] ?? '').trim(),
+    category: String(r['category'] ?? '').trim(),
+    brand: r['brand'] != null ? String(r['brand']).trim() : null,
+    supplier: String(r['supplier'] ?? '').trim(),
+    uom: String(r['uom'] ?? '').trim(),
+    package_qty: r['package_qty'] ?? null,
+    package_price: r['package_price'] ?? null,
+    unit_cost: r['unit_cost'] ?? null,
+    notes: r['notes'] ?? null,
+  })).filter((r: CsvRow) => r.name || r.category || r.supplier);
+
+  if (!rows.length) {
+    throw new Error('CSV appears empty or headers not recognized. Expected columns like: Ingredient, Category, Supplier, Brand, Package QTY, UOM, Package Cost');
+  }
+
+  // 2) Nuovi category/supplier
+  const uniqLower = (a: string[]) => [...new Set(a.filter(Boolean).map(s => s.trim().toLowerCase()))];
+  const csvCats = uniqLower(rows.map((r: CsvRow) => r.category || ''));
+  const csvSups = uniqLower(rows.map((r: CsvRow) => r.supplier || ''));
+
+  const existingCatNames = categories.map(c => c.name.toLowerCase());
+  const existingSupNames = suppliers.map(s => s.name.toLowerCase());
+
+  const pending: PendingNew = {
+    categories: csvCats.filter(n => n && !existingCatNames.includes(n)),
+    suppliers: csvSups.filter(n => n && !existingSupNames.includes(n)),
+  };
+
+  const resolved = await resolveNewValues(pending, { categories, suppliers, uoms });
+
+  // 3) Lookup maps
+  const catByName = new Map(categories.map(c => [c.name.toLowerCase(), c.id]));
+  const supByName = new Map(suppliers.map(s => [s.name.toLowerCase(), s.id]));
+  const uomByName = new Map(uoms.map(u => [u.name as string, u.id]));
+
+  Object.entries(resolved.categoryMap).forEach(([k, id]) => catByName.set(k.toLowerCase(), id));
+  Object.entries(resolved.supplierMap).forEach(([k, id]) => supByName.set(k.toLowerCase(), id));
+
+  // 4) Upsert
+  let done = 0, inserted = 0, updated = 0, skipped = 0;
+
+  for (const r of rows) {
+    const name = (r.name || '').trim();
+    const brand = (r.brand || '')?.trim() || null;
+    const supplierName = (r.supplier || '').trim().toLowerCase();
+    const categoryName = (r.category || '').trim().toLowerCase();
+
+    if (!name || !supplierName || !categoryName) {
+      skipped++; done++; onProgress?.(Math.round((done / rows.length) * 100)); continue;
+    }
+
+    // UOM normalizzato -> id esistente
+    const norm = normalizeUom(String(r.uom || 'unit'));
+    const uomId = uomByName.get(norm.uom);
+    if (!uomId) throw new Error(`Missing UOM in DB for ${norm.uom}. Add 'gr','ml','unit'.`);
+
+    const category_id = catByName.get(categoryName);
+    const supplier_id = supByName.get(supplierName);
+    if (!category_id || !supplier_id) throw new Error('Category or Supplier unresolved');
+
+    const pkgQtyRaw = r.package_qty != null ? Number(r.package_qty) : null;
+    const package_price = moneyToNumber(r.package_price);
+    const packaging_size = pkgQtyRaw != null ? pkgQtyRaw * norm.factor : null;
+
+    let unit_cost = moneyToNumber(r.unit_cost);
+    if (unit_cost == null && package_price != null && pkgQtyRaw != null && pkgQtyRaw > 0) {
+      const denom = pkgQtyRaw * norm.factor;
+      unit_cost = denom > 0 ? package_price / denom : null;
+    }
+
+    const payload = {
+      name,
+      brand,
+      supplier_id,
+      category_id,
+      uom_id: uomId,
+      packaging_size,
+      package_price,
+      unit_cost,
+      notes: r.notes || null,
+      last_update: new Date().toISOString(),
+      is_food_drink: true,
+      is_default: true,
+    };
+
+const { data: existing, error: selErr } = await supabase.from('materials')
+      .select('id, name, brand, supplier_id')
+      .eq('supplier_id', supplier_id)
+      .ilike('name', name)
+      .ilike('brand', brand ?? '')
+      .maybeSingle();
+
+    if (selErr) throw selErr;
+
+    if (existing) {
+      const { error } = await supabase.from('materials').update(payload).eq('id', existing.id);
+      if (error) throw error;
+      updated++;
+    } else {
+      const { error } = await supabase.from('materials').insert(payload);
+      if (error) throw error;
+      inserted++;
+    }
+
+    done++;
+    onProgress?.(Math.round((done / rows.length) * 100));
+  }
+
+  return { inserted, updated, skipped };
+}
+
+--- src/lib/requireSession.ts
+// src/lib/requireSession.ts
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+
+type GateDenied = { ok: false; response: NextResponse }
+type GateAllowed = {
+  ok: true
+  supabase: ReturnType<typeof createServerClient>
+  session: {
+    user: { id: string; email?: string | null }
+    access_token: string
+    expires_at?: number | null
+  }
+}
+
+type CookieOptions = {
+  name?: string
+  path?: string
+  domain?: string
+  httpOnly?: boolean
+  secure?: boolean
+  sameSite?: 'lax' | 'strict' | 'none'
+  maxAge?: number
+  expires?: Date
+}
+
+/**
+ * Verifica che esista una sessione Supabase.
+ * - Se manca: 401 JSON { error: 'Unauthorized' }
+ * - Se c’è: ritorna supabase + session
+ */
+export async function requireSession(): Promise<GateDenied | GateAllowed> {
+  // In Next 15, cookies() è async
+  const cookieStore = await cookies()
+
+  // Adattatore cookie tipato e poi castato per compat con varie versioni @supabase/ssr
+  const cookieMethods = {
+    get(name: string) {
+      return cookieStore.get(name)?.value
+    },
+    set(name: string, value: string, options?: CookieOptions) {
+      cookieStore.set({ name, value, ...options })
+    },
+    remove(name: string, options?: CookieOptions) {
+      cookieStore.set({ name, value: '', ...options, maxAge: 0 })
+    },
+  } as const
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      // Cast esplicito per evitare il mismatch di tipi tra versioni
+      cookies: cookieMethods as unknown as Parameters<typeof createServerClient>[2]['cookies'],
+    }
+  )
+
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !data?.session) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    }
+  }
+
+  const s = data.session
+  return {
+    ok: true,
+    supabase,
+    session: {
+      user: { id: s.user.id, email: s.user.email },
+      access_token: s.access_token,
+      expires_at: s.expires_at ?? null,
+    },
+  }
+}
+
+--- src/lib/routeAuth.ts
+// src/lib/routeAuth.ts
+import { NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import type { SupabaseClient, Session } from '@supabase/supabase-js'
+
+/**
+ * Uso:
+ *   const gate = await authOr401()
+ *   if (!gate.ok) return gate.response
+ *   const { supabase, session } = gate
+ *
+ * Nota: tipizziamo supabase come SupabaseClient “generico” per evitare
+ * conflitti di generics (schema) tra helper Next e @supabase/supabase-js.
+ */
+export async function authOr401(): Promise<
+  | { ok: true; supabase: SupabaseClient; session: Session }
+  | { ok: false; response: NextResponse }
+> {
+  const supabase = createRouteHandlerClient({ cookies }) as unknown as SupabaseClient
+
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession()
+
+  if (error || !session) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    }
+  }
+  return { ok: true, supabase, session }
+}
+
+--- src/lib/server/auth.ts
+// src/lib/server/auth.ts
+import { createClient } from '@supabase/supabase-js'
+
+export type AccountRole = 'owner' | 'admin' | 'staff'
+
+// client anonimo per validare il JWT dell’Authorization
+const supaAnon = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+)
+
+// client service-role per leggere app_accounts senza RLS
+const supaService = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+)
+
+/**
+ * Estrae ruolo e userId dall’Authorization Bearer
+ * @returns { role, userId }
+ */
+export async function getCallerInfo(req: Request): Promise<{ role: AccountRole | null; userId: string | null }> {
+  const auth = req.headers.get('authorization') ?? ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  if (!token) return { role: null, userId: null }
+
+  // valida il token con client anon
+  const { data, error } = await supaAnon.auth.getUser(token)
+  const userId = data?.user?.id ?? null
+  if (error || !userId) return { role: null, userId: null }
+
+  // recupera ruolo da app_accounts
+  const { data: me, error: selErr } = await supaService
+    .from('app_accounts')
+    .select('role')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (selErr) return { role: null, userId }
+
+  return {
+    role: (me?.role as AccountRole | undefined) ?? null,
+    userId,
+  }
+}
+
+--- src/lib/supabase.ts
+import { createClient } from '@supabase/supabase-js'
+
+// Legge dalle env (Vercel e .env.local)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  // Messaggio chiaro se mancano le chiavi
+  throw new Error('Supabase env vars mancanti: NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY')
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+--- src/lib/supabaseAdmin.ts
+// /src/lib/supabaseAdmin.ts
+import { createClient } from '@supabase/supabase-js'
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+if (!url || !serviceRoleKey) {
+  throw new Error('Missing SUPABASE env vars for admin client')
+}
+
+export const supabaseAdmin = createClient(url, serviceRoleKey, {
+  auth: { autoRefreshToken: false, persistSession: false }
+})
+console.log('SUPABASE_SERVICE_ROLE_KEY loaded?', !!serviceRoleKey)
+
+--- src/lib/supabaseAnonServer.ts
+import { createClient } from '@supabase/supabase-js'
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+export const supabaseAnonServer = createClient(url, anonKey, {
+  auth: { autoRefreshToken: false, persistSession: false }
+})
+
+--- src/lib/supabaseServer.ts
+// src/lib/supabaseServer.ts
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
+
+export function createSupabaseServer() {
+  // Alcuni ambienti tipizzano diversamente cookies(); manteniamo API sincrona con cast esplicito.
+  const cookieStore = cookies() as any
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          cookieStore.set(name, value, options)
+        },
+        remove(name: string, options: any) {
+          cookieStore.set(name, '', { ...options, maxAge: 0 })
+        },
+      },
+    }
+  )
+}
+
+
+### Grep uso supabase.* (auth/getUser/signIn/signOut) nei sorgenti
+
+### Suppliers page (src/app/(app)/suppliers/page.tsx se esiste)
+// src/app/suppliers/page.tsx
+'use client'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { supabase } from '@/lib/supabase_shim'
+import { useSettings } from '@/contexts/SettingsContext'
+import { t } from '@/lib/i18n'
+import {
+  ArrowUpTrayIcon,
+  CheckCircleIcon,
+  EllipsisVerticalIcon,
+  PlusIcon,
+  TrashIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline'
+import ExcelJS from 'exceljs'
+
+/* ---------- DB ---------- */
+const TBL_SUPS = 'suppliers'
+
+type Supplier = {
+  id: string
+  name: string
+  poc: string | null
+  phone: string | null
+  email: string | null
+  order_method: string | null
+  payment_term: string | null
+  payment_method: string | null
+  notes: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+/* ---------- UI helpers ---------- */
+function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
+  if (!active) return <span className="inline-block w-4" />
+  return asc ? (
+    <svg className="w-4 h-4 inline-block text-gray-700" viewBox="0 0 20 20" fill="currentColor"><path d="M3 12l7-8 7 8H3z" /></svg>
+  ) : (
+    <svg className="w-4 h-4 inline-block text-gray-700" viewBox="0 0 20 20" fill="currentColor"><path d="M17 8l-7 8-7-8h14z" /></svg>
+  )
+}
+
+function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-black/40" onClick={onClose} />
+      <div className="w-full max-w-3xl h-full bg-white shadow-xl overflow-y-auto">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border p-4 bg-white shadow-sm h-full">
+      <div className="text-sm font-semibold text-gray-800 mb-3">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+/* ---------- Editor overlay ---------- */
+function SupplierEditor(props: {
+  mode: 'create' | 'edit' | 'view'
+  id?: string
+  initial?: Partial<Supplier> | null
+  onClose: () => void
+  onSaved: () => void
+  onDeleted: () => void
+}) {
+  const { language: lang } = useSettings()
+  const { mode, id, initial, onClose, onSaved, onDeleted } = props
+  const [viewMode, setViewMode] = useState(mode === 'view')
+
+  const [name, setName] = useState('')
+  const [poc, setPoc] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [orderMethod, setOrderMethod] = useState('')
+  const [paymentTerm, setPaymentTerm] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    if (mode === 'edit' || mode === 'view') {
+      const h = initial || {}
+      setName(h.name || '')
+      setPoc(h.poc || '')
+      setPhone(h.phone || '')
+      setEmail(h.email || '')
+      setOrderMethod(h.order_method || '')
+      setPaymentTerm(h.payment_term || '')
+      setPaymentMethod(h.payment_method || '')
+      setNotes(h.notes || '')
+      setViewMode(mode === 'view')
+    } else {
+      setName(''); setPoc(''); setPhone(''); setEmail('')
+      setOrderMethod(''); setPaymentTerm(''); setPaymentMethod(''); setNotes('')
+      setViewMode(false)
+    }
+  }, [mode, id, initial])
+
+  const canSave = !viewMode && name.trim().length > 0
+
+  async function save() {
+    if (viewMode) return
+    const payload = {
+      name: name.trim(),
+      poc: poc || null,
+      phone: phone || null,
+      email: email || null,
+      order_method: orderMethod || null,
+      payment_term: paymentTerm || null,
+      payment_method: paymentMethod || null,
+      notes: notes || null,
+      updated_at: new Date().toISOString(),
+    }
+    if (id) {
+      const { error } = await supabase.from(TBL_SUPS).update(payload).eq('id', id)
+      if (error) { alert(`${t('SavedErr', lang)}: ${error.message}`); return }
+      onSaved(); return
+    }
+    const { error } = await supabase.from(TBL_SUPS).insert(payload as any)
+    if (error) { alert(`${t('SavedErr', lang)}: ${error.message}`); return }
+    onSaved()
+  }
+
+  async function handleDelete() {
+    if (viewMode || !id) return
+    const ok = window.confirm(t('DeleteConfirm', lang) || 'Delete?')
+    if (!ok) return
+    const { error } = await supabase.from(TBL_SUPS).delete().eq('id', id)
+    if (error) alert(`${t('DeleteFailed', lang)}: ${error.message}`)
+    else onDeleted()
+  }
+
+  return (
+    <Overlay onClose={onClose}>
+      <div className="h-full flex flex-col text-gray-900">
+        <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
+          <div className="text-xl font-bold">
+            {viewMode
+              ? (t('Supplier', lang) || 'Supplier')
+              : (id ? (t('Edit', lang) || 'Edit') : (t('New', lang) || 'New'))}
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', lang)}>
+            <XMarkIcon className="w-7 h-7" />
+          </button>
+        </div>
+
+        <div className="px-4 md:px-6 py-4 grid gap-4 md:grid-cols-2 flex-1 overflow-y-auto items-start">
+          <SectionCard title={t('Header', lang) || 'Header'}>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-sm text-gray-800">{t('Name', lang)}</label>
+                <input
+                  className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 disabled:bg-gray-50 h-10"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  disabled={viewMode}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-800">{t('PointOfContact', lang)}</label>
+                <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
+                       value={poc} onChange={e => setPoc(e.target.value)} disabled={viewMode} />
+              </div>
+              <div>
+                <label className="text-sm text-gray-800">{t('Phone', lang)}</label>
+                <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
+                       value={phone} onChange={e => setPhone(e.target.value)} disabled={viewMode} />
+              </div>
+
+              <div className="col-span-2">
+                <label className="text-sm text-gray-800">{t('Email', lang)}</label>
+                <input type="email" className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
+                       value={email} onChange={e => setEmail(e.target.value)} disabled={viewMode} />
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={t('Details', lang) || 'Details'}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-gray-800">{t('OrderMethod', lang)}</label>
+                <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
+                       value={orderMethod} onChange={e => setOrderMethod(e.target.value)} disabled={viewMode} />
+              </div>
+              <div>
+                <label className="text-sm text-gray-800">{t('PaymentTerm', lang)}</label>
+                <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
+                       value={paymentTerm} onChange={e => setPaymentTerm(e.target.value)} disabled={viewMode} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm text-gray-800">{t('PaymentMethod', lang)}</label>
+                <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
+                       value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} disabled={viewMode} />
+              </div>
+
+              <div className="col-span-2">
+                <label className="text-sm text-gray-800">{t('Notes', lang)}</label>
+                <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
+                       value={notes} onChange={e => setNotes(e.target.value)} disabled={viewMode} />
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+
+        <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {viewMode ? (
+              <button onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95">
+                {t('Edit', lang)}
+              </button>
+            ) : (
+              id && <button onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{t('Delete', lang)}</button>
+
+### Altre pagine sensibili (dashboard, layout)
+--- src/app/dashboard/page.tsx
+// /src/app/page.tsx
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase_shim'
+import type { User } from '@supabase/supabase-js'
+import { t } from '@/lib/i18n'
+import { CalculatorIcon } from '@heroicons/react/24/outline'
+import { useSettings } from '@/contexts/SettingsContext'
+import ReactCountryFlag from 'react-country-flag'
+
+export default function HomeDashboard() {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+  const { language } = useSettings()
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const { data } = await supabase.auth.getUser()
+      if (!mounted) return
+      setUser(data.user ?? null)
+      setLoading(false)
+    })()
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt: any, session: any) => {
+      // niente redirect qui: il middleware protegge l'accesso
+      setUser(session?.user ?? null)
+    })
+
+    return () => sub?.subscription.unsubscribe()
+  }, [router])
+
+  async function handleLogout() {
+    try { await supabase.auth.signOut() } catch {}
+    router.replace('/login')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white">
+        <div className="text-blue-700 text-xl font-bold">{t(language, 'Loading')}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      <Topbar userEmail={user?.email ?? ''} onLogout={handleLogout} />
+
+      {/* Hero / Dashboard */}
+      <main className="relative">
+        {/* Decorative blobs */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-20 -right-24 h-72 w-72 rounded-full bg-blue-200/40 blur-3xl" />
+          <div className="absolute bottom-0 -left-24 h-72 w-72 rounded-full bg-indigo-200/40 blur-3xl" />
+        </div>
+
+        <section className="relative max-w-6xl mx-auto px-4 py-16">
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-gray-600 bg-white/60 backdrop-blur">
+              <span className="h-2 w-2 rounded-full bg-green-500" />
+              {t(language, 'DashboardReady')}
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900">
+              {t(language, 'WelcomeTo')} <span className="text-blue-700">OdeonX</span>
+            </h1>
+            <p className="mt-3 text-gray-600">
+              {t(language, 'DashboardSubtitle')}
+            </p>
+
+            {/* Main Card (stile precedente) */}
+            <div className="mt-8 rounded-2xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden">
+              <div className="grid sm:grid-cols-[1fr,220px]">
+                {/* Left: solo CTA */}
+                <div className="p-6 sm:p-8">
+                  <Link
+                    href="/materials"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+                  >
+                    <CalculatorIcon className="h-6 w-6" />
+                    <span>{t(language, 'Costing')}</span>
+                  </Link>
+                </div>
+
+                {/* Right: pattern */}
+                <div className="relative hidden sm:block bg-gradient-to-br from-blue-50 to-indigo-50">
+                  <svg viewBox="0 0 200 200" className="absolute inset-0 h-full w-full opacity-60" aria-hidden>
+                    <defs>
+                      <pattern id="dots" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+                        <circle cx="1" cy="1" r="1" fill="#93c5fd" />
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#dots)" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-6 text-xs text-gray-400">
+              {t(language, 'SoonMoreModules')}
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+/* ---------- Topbar con switch lingua stile LeftNav ---------- */
+function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => void }) {
+  const { language, setLanguage } = useSettings()
+  const isEN = language === 'en'
+  const countryCode = isEN ? 'GB' : 'VN'
+  const nextLang = isEN ? 'vi' : 'en'
+  const label = isEN ? 'Switch to Tiếng Việt' : 'Switch to English'
+
+  return (
+    <header className="sticky top-0 bg-white/80 backdrop-blur border-b">
+      <div className="h-14 max-w-6xl mx-auto px-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white text-xs font-bold">
+            OX
+          </span>
+          <div className="text-lg font-extrabold text-blue-700">OdeonX</div>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Language switch (flag) */}
+          <button
+            type="button"
+            onClick={() => setLanguage(nextLang as 'en' | 'vi')}
+            aria-label={label}
+            className="w-8 h-8 flex items-center justify-center rounded-full overflow-hidden border border-black/10 hover:bg-black/5 bg-white/70 backdrop-blur"
+          >
+            <ReactCountryFlag
+              countryCode={countryCode}
+              svg
+              style={{ width: '110%', height: '110%', objectFit: 'cover', display: 'block' }}
+            />
+          </button>
+
+          <span className="text-sm text-gray-600 hidden sm:inline">{userEmail}</span>
+          <button
+            onClick={onLogout}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 transition"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+    </header>
+  )
+}
+
+--- src/app/layout.tsx
+// src/app/layout.tsx
+import type { Metadata } from 'next'
+import './globals.css'
+import { SettingsProvider } from '@/contexts/SettingsContext'
+
+// Font sans con supporto VI
+import { Be_Vietnam_Pro } from 'next/font/google'
+// Monospace (puoi tenere Geist_Mono se lo usi)
+import { Geist_Mono } from 'next/font/google'
+
+const beVietnam = Be_Vietnam_Pro({
+  subsets: ['vietnamese', 'latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
+})
+
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+})
+
+export const metadata: Metadata = {
+  title: 'OdeonX',
+  description: 'OdeonX — Food costing & operations',
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Mostra il badge solo se siamo in dev o preview
+  const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV // 'development' | 'preview' | 'production'
+  const showEnvBadge = vercelEnv !== 'production'
+
+  return (
+    <html lang="en">
+      {/* Applico direttamente il font sans a tutto il body */}
+      <body className={`${beVietnam.className} ${geistMono.variable} antialiased`}>
+        <SettingsProvider>{children}</SettingsProvider>
+
+        {showEnvBadge && (
+          <div className="fixed bottom-2 right-2 text-xs px-2 py-1 rounded bg-black/70 text-white z-50">
+            {process.env.NEXT_PUBLIC_SUPABASE_URL
+              ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
+              : 'env non settato'}
+          </div>
+        )}
+      </body>
+    </html>
+  )
+}
+
+--- src/app/(app)/layout.tsx
+// src/app/(app)/layout.tsx
+import type { ReactNode } from "react"
+import LeftNav from "@/components/LeftNav"
+
+export default function AppLayout({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-screen bg-slate-900">
+      <aside
+        className="peer group/sidebar fixed inset-y-0 left-0 z-40
+                   w-16 hover:w-64 transition-all duration-200
+                   bg-[#0B1537] border-r border-white/10"
+      >
+        <LeftNav />
+      </aside>
+
+      <main className="flex-1 min-h-screen pl-16 peer-hover:pl-64 transition-[padding] duration-200">
+        <div className="p-4">{children}</div>
+      </main>
+    </div>
+  )
+}
+
+### Supabase migrations/config nel repo (se presenti)
+no supabase/ folder
+
+### BUILD (estratto per manifest Server Actions)
+$ npm run build (silente, può fallire: continuiamo)
+
+### server-reference-manifest.json — cerca login/server actions
+✓ manifest presente
+1:{"node":{"40ade72df3de965fb8bb4fc55955a8a1ede7dd7b2d":{"workers":{"app/login/page":{"moduleId":"8043","async":false}},"layer":{"app/login/page":"rsc"}}},"edge":{},"encryptionKey":"X2EX163SjBh5SPigqxn9fvdmBBzhqexfB6NmOmKOEa0="}
+nessun 'server-login-action' nel manifest
+

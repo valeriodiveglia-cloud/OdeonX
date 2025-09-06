@@ -1,0 +1,265 @@
+### RUNTIME
+10.9.3
+Next.js v15.4.5
+
+### package.json (name, scripts, deps)
+
+### next.config.*
+next.config.js
+next.config.ts
+--- next.config.js
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  eslint: {
+    // Non fermare la build per errori ESLint
+    ignoreDuringBuilds: true,
+  },
+}
+
+module.exports = nextConfig
+
+--- next.config.ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+
+### tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+
+### middleware (src/middleware.ts)
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+
+export const config = { matcher: ['/:path*'] };
+
+export function middleware(req: NextRequest) {
+  const pathname = new URL(req.url).pathname;
+
+  // Health check
+  if (pathname === '/__mw-ping') {
+    const res = new NextResponse(null, { status: 204 });
+    res.headers.set('x-mw', 'alive');
+    return res;
+  }
+
+  // Skip assets/internals
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname === '/favicon.ico' ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml' ||
+    /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$/.test(pathname)
+  ) {
+    return NextResponse.next();
+  }
+
+  // Redirect if unauthenticated
+  if (pathname.startsWith('/suppliers')) {
+    const c = req.cookies;
+    const hasSession = Boolean(
+      c.get('sb-access-token')?.value ||
+      c.get('sb-refresh-token')?.value ||
+      c.get('session')?.value
+    );
+    if (!hasSession) {
+      const url = new URL('/login', req.url);
+      url.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(url, 302);
+    }
+  }
+
+  return NextResponse.next();
+}
+
+### DIR TREE (src/app/* e src/pages/*) — max depth 4
+src/app/(app)/archive/page.tsx
+src/app/(app)/equipment/page.tsx
+src/app/(app)/equipment-history/page.tsx
+src/app/(app)/event-calculator/page.tsx
+src/app/(app)/layout.tsx
+src/app/(app)/materials/page.tsx
+src/app/(app)/materials-history/page.tsx
+src/app/(app)/recipes/page.tsx
+src/app/(app)/settings/categories/[kind]/delete/route.ts
+src/app/(app)/settings/categories/[kind]/list/route.ts
+src/app/(app)/settings/categories/[kind]/page.tsx
+src/app/(app)/settings/categories/[kind]/upsert/route.ts
+src/app/(app)/settings/categories/CategoryManager.tsx
+src/app/(app)/settings/categories/ClientCategoryPage.tsx
+src/app/(app)/settings/page.tsx
+src/app/(app)/settings/settings-client.tsx
+src/app/(app)/suppliers/page.tsx
+src/app/(app)/trash/page.tsx
+src/app/api/admin/data-reset/route.ts
+src/app/api/categories/[kind]/delete/route.ts
+src/app/api/categories/[kind]/list/route.ts
+src/app/api/categories/[kind]/upsert/route.ts
+src/app/api/categories/generic/list/route.ts
+src/app/api/suppliers/delete/route.ts
+src/app/api/suppliers/list/route.ts
+src/app/api/suppliers/upsert/route.ts
+src/app/api/users/admin-delete/route.ts
+src/app/api/users/admin-upsert/route.ts
+src/app/api/users/send-access-link/route.ts
+src/app/auth/callback/page.tsx
+src/app/auth/update-password/page.tsx
+src/app/dashboard/page.tsx
+src/app/favicon.ico
+src/app/globals.css
+src/app/layout.tsx
+src/app/login/page.tsx
+src/app/page.tsx
+
+### login page
+// Server Component (no 'use client')
+import loginAction from './server-login-action'
+
+type SP = Record<string, string | string[] | undefined>
+
+export default async function LoginPage({ searchParams }: { searchParams?: Promise<SP> }) {
+  const sp = (await searchParams) ?? {}
+  const redirectRaw = sp.redirect
+  const redirectTo = typeof redirectRaw === 'string' ? redirectRaw : '/dashboard'
+
+  return (
+    <div className="min-h-screen grid place-items-center p-8 bg-blue-50">
+      <form action={loginAction} className="grid gap-3 w-full max-w-sm bg-white p-5 rounded-2xl shadow-lg">
+        <h2 className="text-2xl font-bold text-blue-700">Staff Login</h2>
+
+        <input
+          name="email"
+          type="email"
+          placeholder="Email"
+          required
+          autoComplete="username"
+          className="rounded-xl border border-blue-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        />
+
+        <input
+          name="password"
+          type="password"
+          placeholder="Password"
+          required
+          autoComplete="current-password"
+          className="rounded-xl border border-blue-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        />
+
+        <input type="hidden" name="redirect" value={redirectTo} />
+
+        <button
+          type="submit"
+          className="rounded-xl px-4 py-2 bg-blue-600 text-white font-semibold hover:bg-blue-700"
+        >
+          Login
+        </button>
+      </form>
+    </div>
+  )
+}
+
+### server-login-action
+'use server'
+
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { createServerClient } from '@supabase/ssr'
+
+type Result = { ok: false; error: string }
+
+export default async function loginAction(formData: FormData): Promise<Result | void> {
+  const email = String(formData.get('email') || '').trim()
+  const password = String(formData.get('password') || '')
+  const redirectTo = String(formData.get('redirect') || '/dashboard')
+
+  if (!email || !password) return { ok: false, error: 'Missing credentials' }
+
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options?: any) {
+          cookieStore.set({ name, value, ...(options || {}) })
+        },
+        remove(name: string, options?: any) {
+          cookieStore.set({ name, value: '', ...(options || {}), maxAge: 0 })
+        },
+      },
+    }
+  )
+
+  const { error, data } = await supabase.auth.signInWithPassword({ email, password })
+  if (error) return { ok: false, error: error.message }
+
+  // (opzionale) prima-login: crea/sincronizza account base
+  try {
+    const user = data.user
+    if (user) {
+      const { count } = await supabase.from('app_accounts').select('id', { count: 'exact', head: true })
+      const defaultRole = (count ?? 0) === 0 ? 'owner' : 'staff'
+      await supabase
+        .from('app_accounts')
+        .upsert(
+          {
+            user_id: user.id,
+            email: user.email ?? '',
+            is_active: true,
+            name: (user as any)?.user_metadata?.full_name ?? null,
+            phone: (user as any)?.user_metadata?.phone ?? null,
+            position: null,
+            role: defaultRole as 'owner' | 'admin' | 'staff',
+          },
+          { onConflict: 'user_id' }
+        )
+    }
+  } catch {
+    // non bloccare il login se fallisce la sync
+  }
+
+  // ✅ Redirect server-side: i cookie sono già impostati, il middleware vede la sessione
+  redirect(redirectTo)
+}
+
+### grep riferimenti a server-login-action
+src/app/login/page.tsx:2:import loginAction from './server-login-action'
+
+### BUILD (solo per manifest check)
+$ npm run build (estratto)…
+
+### server-reference-manifest.json — cerca login
+server-login-action: NOT FOUND

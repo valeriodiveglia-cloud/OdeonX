@@ -1,7 +1,6 @@
 // src/app/api/categories/[kind]/list/route.ts
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { authOr401 } from '@/lib/routeAuth'
 
 export const runtime = 'nodejs'
 
@@ -22,8 +21,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ kind: s
     return NextResponse.json({ error: 'Invalid kind' }, { status: 400 })
   }
 
-  // Client legato ai cookie HttpOnly ⇒ usa la sessione dell’utente
-  const supabase = createRouteHandlerClient({ cookies })
+  // ✅ Enforce auth (401 se non autenticato) e ottieni supabase “session-bound”
+  const gate = await authOr401()
+  if (!gate.ok) return gate.response
+  const { supabase } = gate
 
   try {
     const table = tableByKind[kind]
@@ -34,15 +35,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ kind: s
       .order('name', { ascending: true })
 
     if (error) {
-      // Se sessione scaduta o RLS, supabase può restituire 401/403
       return NextResponse.json({ error: error.message }, { status: 403 })
     }
 
     return NextResponse.json({ data: data ?? [] })
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || 'Unknown server error' },
-      { status: 500 }
-    )
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Unknown server error'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

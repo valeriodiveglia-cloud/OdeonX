@@ -81,7 +81,7 @@ type PrepHeaderDraft = {
   type?: 'food' | 'beverage' | null
   yield_qty?: number | null
   waste_pct?: number | null
-  yield_uom_id?: number | null
+  uom_id?: number | null
   portion_size?: number | null
 }
 
@@ -527,7 +527,7 @@ function PrepEditor(props: PrepEditorProps) {
       setType((h.type as any) || '')
       setYieldQty(h.yield_qty != null ? String(h.yield_qty) : '')
       setWastePct(h.waste_pct != null ? String(h.waste_pct as any) : '0') // safe fallback
-      setUomId(h.yield_uom_id ? String(h.yield_uom_id) : '')
+      setUomId(h.uom_id ? String(h.uom_id) : '')
       setPortionSize(h.portion_size != null ? String(h.portion_size) : '1')
       if (initialLines && initialLines.length > 0) {
         setLines(initialLines)
@@ -577,7 +577,7 @@ function PrepEditor(props: PrepEditorProps) {
           yield_qty: yieldQty ? Number(yieldQty) : null,
           waste_pct: wastePct ? Number(wastePct) : 0,
           cost_per_unit_vnd: Math.round(servingCost),
-          yield_uom_id: uomId ? Number(uomId) : null,
+          uom_id: uomId ? Number(uomId) : null,
           portion_size: portionSize ? Number(portionSize) : null,
         })
         .eq('id', prepId)
@@ -618,7 +618,7 @@ function PrepEditor(props: PrepEditorProps) {
         yield_qty: yieldQty ? Number(yieldQty) : null,
         waste_pct: wastePct ? Number(wastePct) : 0,
         cost_per_unit_vnd: Math.round(servingCost),
-        yield_uom_id: uomId ? Number(uomId) : null,
+        uom_id: uomId ? Number(uomId) : null,
         portion_size: portionSize ? Number(portionSize) : null,
       })
       .select('id')
@@ -1789,7 +1789,7 @@ export default function Page() {
     setEditingPrepId(id)
 
     const [hdr, items] = await Promise.all([
-      supabase.from(TBL_PREP).select('id,name,category_id,type,yield_qty,waste_pct,yield_uom_id,portion_size').eq('id', id).single(),
+      supabase.from(TBL_PREP).select('id,name,category_id,type,yield_qty,waste_pct,uom_id,portion_size').eq('id', id).single(),
       supabase.from(TBL_PREP_ITEMS).select('id, ref_type, ref_id, name, qty, uom, cost').eq('prep_id', id)
     ])
 
@@ -1799,7 +1799,7 @@ export default function Page() {
       type: (hdr.data.type as any) ?? null,
       yield_qty: hdr.data.yield_qty ?? null,
       waste_pct: hdr.data.waste_pct ?? 0,
-      yield_uom_id: hdr.data.yield_uom_id ?? null,
+      uom_id: hdr.data.uom_id ?? null,
       portion_size: hdr.data.portion_size ?? 1,
     } : {}
 
@@ -1855,7 +1855,7 @@ export default function Page() {
     const [hdr, items] = await Promise.all([
       supabase
         .from(TBL_PREP)
-        .select('id,name,category_id,type,yield_qty,waste_pct,yield_uom_id,portion_size')
+        .select('id,name,category_id,type,yield_qty,waste_pct,uom_id,portion_size')
         .eq('id', id)
         .single(),
       supabase
@@ -1870,7 +1870,7 @@ export default function Page() {
       type: (hdr.data.type as any) ?? null,
       yield_qty: hdr.data.yield_qty ?? null,
       waste_pct: hdr.data.waste_pct ?? 0,
-      yield_uom_id: hdr.data.yield_uom_id ?? null,
+      uom_id: hdr.data.uom_id ?? null,
       portion_size: hdr.data.portion_size ?? 1,
     } : {}
 

@@ -25,29 +25,11 @@ export async function GET(_req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Primo tentativo: schema "nuovo"
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('categories')
       .select('id,name,description,sort_order,is_active')
       .order('sort_order', { ascending: true, nullsFirst: true })
       .order('name', { ascending: true })
-
-    // Fallback se alcune colonne non esistono (ambienti non migrati)
-    if (error && /column .* does not exist/i.test(error.message || '')) {
-      const res2 = await supabase
-        .from('categories')
-        .select('id,name')
-        .order('name', { ascending: true })
-
-      data = (res2.data ?? []).map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        description: null,
-        sort_order: null,
-        is_active: true,
-      }))
-      error = res2.error
-    }
 
     if (error) {
       const isPerm =

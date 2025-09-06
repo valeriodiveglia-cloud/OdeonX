@@ -21,25 +21,21 @@ export default function HomeDashboard() {
     let mounted = true
     ;(async () => {
       const { data } = await supabase.auth.getUser()
-      if (!data.user) {
-        router.replace('/login')
-        return
-      }
       if (!mounted) return
-      setUser(data.user)
+      setUser(data.user ?? null)
       setLoading(false)
     })()
 
     const { data: sub } = supabase.auth.onAuthStateChange((_evt: any, session: any) => {
-      if (!session?.user) router.replace('/login')
-      else setUser(session.user)
+      // niente redirect qui: il middleware protegge l'accesso
+      setUser(session?.user ?? null)
     })
 
     return () => sub?.subscription.unsubscribe()
   }, [router])
 
   async function handleLogout() {
-    await supabase.auth.signOut()
+    try { await supabase.auth.signOut() } catch {}
     router.replace('/login')
   }
 
