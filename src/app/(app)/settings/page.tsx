@@ -4,7 +4,6 @@ import { createServerClient } from '@supabase/ssr'
 import SettingsClient, { type AppSettingsUI } from './settings-client'
 import { toBool } from '@/lib/normalize' // <-- server-safe
 
-// Evita caching aggressivo dei Server Components per questa page
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -18,11 +17,9 @@ export default async function SettingsPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        // API nuova
         get: (name: string) => cookieStore.get(name)?.value,
-        set: (_name: string, _value: string, _options?: any) => {},            // no-op in RSC
-        remove: (_name: string, _options?: any) => {},         // no-op in RSC
-        // API vecchia (per compat)
+        set: () => {},   // no-op in RSC
+        remove: () => {},// no-op in RSC
       },
     }
   )
@@ -49,7 +46,7 @@ export default async function SettingsPage() {
     materials_exclusive_default: boolean | string | number | null
     equipment_review_months: number
     equipment_csv_require_confirm_refs: boolean | string | number | null
-    recipes_review_months: number                 // <-- aggiunto
+    recipes_review_months: number
     recipes_split_mode: 'split' | 'single'
     recipes_tab1_name: string
     recipes_tab2_name: string | null
@@ -77,14 +74,14 @@ export default async function SettingsPage() {
     materials_exclusive_default: true,
     equipment_review_months: 4,
     equipment_csv_require_confirm_refs: true,
-    recipes_review_months: 4,                    // <-- aggiunto
+    recipes_review_months: 4,
     recipes_split_mode: 'split',
     recipes_tab1_name: 'Final',
     recipes_tab2_name: 'Prep',
   }
 
   const { data, error } = await supabase
-    .from(TBL_APP)
+    .from<Row>(TBL_APP)
     .select('*')
     .eq('id', 'singleton')
     .maybeSingle()
@@ -95,16 +92,14 @@ export default async function SettingsPage() {
         ...DEFAULTS,
         ...data,
 
-        // numerici clampati
         vat_rate:
           data.vat_rate == null
             ? DEFAULTS.vat_rate
             : Math.min(100, Math.max(0, Math.round(data.vat_rate))),
         materials_review_months: Math.min(12, Math.max(0, Math.round(data.materials_review_months))),
         equipment_review_months: Math.min(12, Math.max(0, Math.round(data.equipment_review_months))),
-        recipes_review_months: Math.min(12, Math.max(0, Math.round(data.recipes_review_months))), // <-- normalizzato
+        recipes_review_months: Math.min(12, Math.max(0, Math.round(data.recipes_review_months))),
 
-        // boolean normalizzati (server-safe)
         vat_enabled: toBool(data.vat_enabled, DEFAULTS.vat_enabled),
         csv_require_confirm_refs: toBool(
           data.csv_require_confirm_refs,

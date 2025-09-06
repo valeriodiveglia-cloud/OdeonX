@@ -154,7 +154,6 @@ async function sendAccessLink(email: string) {
   return data as { ok: true; mode: 'invite' | 'password_reset' }
 }
 
-
 async function authFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
@@ -303,65 +302,85 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   }, [s.logo_data])
 
   async function onSave() {
-    setSaving(true)
-    try {
-      const payload: AppSettingsRow = {
-        id: 'singleton',
-        restaurant_name: (s.restaurant_name ?? '').trim(),
-        company_name: (s.company_name ?? '').trim(),
-        address: (s.address ?? '').trim(),
-        tax_code: (s.tax_code ?? '').trim(),
-        phone: (s.phone ?? '').trim(),
-        email: (s.email ?? '').trim(),
-        website: (s.website ?? '').trim(),
-        logo_mime: s.logo_mime ?? null,
-        logo_data: s.logo_data ?? null,
-        language_code: s.language_code,
-        currency: s.currency,
-        vat_enabled: !!s.vat_enabled,
-        vat_rate: clampInt(s.vat_rate ?? 0, 0, 100),
-        default_markup_equipment_pct: s.default_markup_equipment_pct ?? null,
-        default_markup_recipes_pct: s.default_markup_recipes_pct ?? null,
-        materials_review_months: clampInt(s.materials_review_months ?? 4, 0, 12),
-        csv_require_confirm_refs: !!s.csv_require_confirm_refs,
-        materials_exclusive_default: !!s.materials_exclusive_default,
-        equipment_review_months: clampInt(s.equipment_review_months ?? 4, 0, 12),
-        equipment_csv_require_confirm_refs: !!s.equipment_csv_require_confirm_refs,
-        recipes_review_months: clampInt(s.recipes_review_months ?? 4, 0, 12),
-        recipes_split_mode: s.recipes_split_mode,
-        recipes_tab1_name: s.recipes_tab1_name ?? 'Final',
-        recipes_tab2_name: s.recipes_split_mode === 'split' ? (s.recipes_tab2_name ?? 'Prep') : null,
-        updated_at: new Date().toISOString(),
-      }
+  setSaving(true)
+  try {
+    const payload: AppSettingsRow = {
+      id: 'singleton',
+      restaurant_name: (s.restaurant_name ?? '').trim(),
+      company_name: (s.company_name ?? '').trim(),
+      address: (s.address ?? '').trim(),
+      tax_code: (s.tax_code ?? '').trim(),
+      phone: (s.phone ?? '').trim(),
+      email: (s.email ?? '').trim(),
+      website: (s.website ?? '').trim(),
+      logo_mime: s.logo_mime ?? null,
+      logo_data: s.logo_data ?? null,
+      language_code: s.language_code,
+      currency: s.currency,
+      vat_enabled: !!s.vat_enabled,
+      vat_rate: s.vat_enabled ? clampInt(s.vat_rate ?? 0, 0, 100) : null,
+      default_markup_equipment_pct:
+        s.default_markup_equipment_pct == null ? null : clampInt(s.default_markup_equipment_pct, 0, 100),
+      default_markup_recipes_pct:
+        s.default_markup_recipes_pct == null ? null : clampInt(s.default_markup_recipes_pct, 0, 100),
+      materials_review_months: clampInt(s.materials_review_months ?? 4, 0, 12),
+      csv_require_confirm_refs: !!s.csv_require_confirm_refs,
+      materials_exclusive_default: !!s.materials_exclusive_default,
+      equipment_review_months: clampInt(s.equipment_review_months ?? 4, 0, 12),
+      equipment_csv_require_confirm_refs: !!s.equipment_csv_require_confirm_refs,
+      recipes_review_months: clampInt(s.recipes_review_months ?? 4, 0, 12),
+      recipes_split_mode: s.recipes_split_mode,
+      recipes_tab1_name: s.recipes_tab1_name ?? 'Final',
+      recipes_tab2_name: s.recipes_split_mode === 'split' ? (s.recipes_tab2_name ?? 'Prep') : null,
+      updated_at: new Date().toISOString(),
+    }
 
-      const { data: saved, error } = await supabase
+    // 1) Prova UPDATE
+    const upd = await supabase
+      .from(TBL_APP)
+      .update({ ...payload }) // include anche updated_at
+      .eq('id', 'singleton')
+      .select()
+
+    if (upd.error) throw upd.error
+
+    let saved: any | null = null
+
+    if ((upd.data?.length ?? 0) > 0) {
+      // aggiornato
+      saved = upd.data[0]
+    } else {
+      // 2) se non esiste, fai INSERT
+      const ins = await supabase
         .from(TBL_APP)
-        .upsert(payload, { onConflict: 'id' })
+        .insert(payload)
         .select()
         .single()
 
-      if (error) throw error
-
-      setS(saved)
-      setDirty(false)
-      setSaveMessage(t('SavedOk', s.language_code))
-      setTimeout(() => setSaveMessage(null), 2500)
-
-      // cambia la lingua dell'UI DOPO il salvataggio
-      try {
-        setVatEnabled(!!saved.vat_enabled)
-        setVatRate(saved.vat_rate ?? 0)
-        setLanguage(saved.language_code as Lang)
-      } catch {}
-
-      router.refresh()
-    } catch (err: any) {
-      setSaveMessage(`${t('SavedErr', lang)}: ${err?.message || String(err)}`)
-      setTimeout(() => setSaveMessage(null), 5000)
-    } finally {
-      setSaving(false)
+      if (ins.error) throw ins.error
+      saved = ins.data
     }
+
+    setS(saved as AppSettingsUI)
+    setDirty(false)
+    setSaveMessage(t('SavedOk', s.language_code))
+    setTimeout(() => setSaveMessage(null), 2500)
+
+    try {
+      setVatEnabled(!!saved.vat_enabled)
+      setVatRate(saved.vat_rate ?? 0)
+      setLanguage(saved.language_code as Lang)
+    } catch {}
+
+    router.refresh()
+  } catch (err: any) {
+    setSaveMessage(`${t('SavedErr', lang)}: ${err?.message || String(err)}`)
+    setTimeout(() => setSaveMessage(null), 5000)
+  } finally {
+    setSaving(false)
   }
+}
+
 
   function onResetLocal() {
     setS(prev => ({
@@ -494,7 +513,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         user_id: user.id, email: user.email ?? '', role: defaultRole, is_active: true,
         name: (user as any)?.user_metadata?.full_name ?? null,
         phone: (user as any)?.user_metadata?.phone ?? null, position: null,
-      } as any, { onConflict: 'user_id' })
+      } as any, { onConflict: 'email' })
       if (upErr) showAccErr(`Accounts upsert error: ${upErr.message}`)
     }
 
@@ -837,7 +856,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                 value={s.language_code}
                 onChange={e => {
                   const newLang = e.target.value as Lang
-                  // ❗️non cambiamo il context qui: solo stato locale
                   patch('language_code', newLang)
                 }}
                 className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10">
@@ -1290,18 +1308,24 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </Modal>
 
       {/* Accounts: Post invite confirm */}
-      <Modal open={postInviteOpen} title={t('SendInvite', lang) || 'Send invite'} onClose={() => { setPostInviteOpen(false); setPostInviteEmail(null) }} width="max-w-md">
+      <Modal
+        open={postInviteOpen}
+        title={t('SendAccessLinkTitle', lang) || 'Send access link?'}
+        onClose={() => { setPostInviteOpen(false); setPostInviteEmail(null) }}
+        width="max-w-md"
+      >
         <div className="space-y-3 text-gray-800">
           <p className="text-sm">
-            {(t('SendInviteTo', lang) || 'Send an access link to') + ' '}
-            <span className="font-mono">{postInviteEmail}</span>?
+            {postInviteEmail
+              ? (t('SendAccessLinkBodyKnown', lang) || 'Send a sign-in link to {{email}}?').replace('{{email}}', postInviteEmail!)
+              : (t('SendAccessLinkBodyGeneric', lang) || 'Do you want to send a sign-in link now?')}
           </p>
           <div className="pt-2 flex items-center justify-end gap-2">
             <button type="button" onClick={skipInviteForNow} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
-              {t('Skip', lang) || 'Skip'}
+              {t('NotNow', lang) || 'Not now'}
             </button>
             <button type="button" onClick={confirmSendInviteNow} className="px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
-              {t('Send', lang) || 'Send'}
+              {t('SendLink', lang) || 'Send link'}
             </button>
           </div>
         </div>

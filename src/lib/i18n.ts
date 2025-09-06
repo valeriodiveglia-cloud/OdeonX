@@ -63,7 +63,7 @@ const dict = {
     Brand: 'Brand',
     Category: 'Category',
     Supplier: 'Supplier',
-    SupplierName: 'Supplier name',              // <-- added
+    SupplierName: 'Supplier name',
     Uom: 'UOM',
     PackagingSize: 'Packaging size',
     PackagePrice: 'Package cost',
@@ -89,7 +89,7 @@ const dict = {
     CreatedAt: 'Created at',
     Updated: 'Updated',
     UpdatedShort: 'Updated',
-    UpdatedAt: 'Updated at',            // NEW
+    UpdatedAt: 'Updated at',
     History: 'History',
     PriceHistory: 'Price history',
     Filters: 'Filters',
@@ -321,7 +321,7 @@ const dict = {
     HideArchived: 'Hide archived',
     ArchiveSelected: 'Archive selected',
     ConfirmArchive: 'Archive this item?',
-    Restore: 'Restore',                 // NEW (used for “unarchive”/“restore” buttons)
+    Restore: 'Restore',
 
     // ---------- ACCOUNTS ----------
     Accounts: 'Accounts',
@@ -351,6 +351,16 @@ const dict = {
     SendAccessLinkBodyKnown: 'Do you want to send a sign-in link to {{email}}?',
     SendAccessLinkBodyGeneric: 'Do you want to send a sign-in link now?',
     NotNow: 'Not now',
+
+    // --- Modal keys used in settings-client (added/normalized) ---
+    SendInvite: 'Send access link',
+    SendInviteTo: 'Send access link to', // no {{email}}
+    Skip: 'Skip',
+    Send: 'Send',
+    SendAccessLink: 'Send access link', // tooltip/title in table
+    EditAccount: 'Edit account',
+    Position: 'Position',
+    NoData: 'No data',
 
     // ---------- AUTH / LOGIN ----------
     StaffLogin: 'Staff login',
@@ -418,7 +428,7 @@ const dict = {
     ResetCompleted: 'Reset completed',
     OK: 'OK',
 
-    // Reset buttons (Data section) ---- NEW
+    // Reset buttons (Data section)
     ResetMaterials: 'Reset Materials',
     ResetSuppliers: 'Reset Suppliers',
     ResetCategories: 'Reset Categories',
@@ -445,7 +455,7 @@ const dict = {
 
     // ---------- Suppliers page (NEW) ----------
     Suppliers: 'Suppliers',
-    SupplierLabel: 'Supplier',                 // reuse generic label as singular
+    SupplierLabel: 'Supplier',
     NewSupplier: 'New supplier',
     PointOfContact: 'Point of Contact',
     OrderMethod: 'Order Method',
@@ -515,7 +525,7 @@ const dict = {
     Brand: 'Thương hiệu',
     Category: 'Danh mục',
     Supplier: 'Nhà cung cấp',
-    SupplierName: 'Tên nhà cung cấp',          // <-- added
+    SupplierName: 'Tên nhà cung cấp',
     Uom: 'Đơn vị',
     PackagingSize: 'Quy cách đóng gói',
     PackagePrice: 'Chi phí gói',
@@ -541,7 +551,7 @@ const dict = {
     CreatedAt: 'Tạo lúc',
     Updated: 'Cập nhật',
     UpdatedShort: 'Cập nhật',
-    UpdatedAt: 'Cập nhật lúc',        // NEW
+    UpdatedAt: 'Cập nhật lúc',
     History: 'Lịch sử',
     PriceHistory: 'Lịch sử giá',
     Filters: 'Bộ lọc',
@@ -773,7 +783,7 @@ const dict = {
     HideArchived: 'Ẩn mục đã lưu trữ',
     ArchiveSelected: 'Lưu trữ đã chọn',
     ConfirmArchive: 'Lưu trữ mục này?',
-    Restore: 'Khôi phục',             // NEW
+    Restore: 'Khôi phục',
 
     // ---------- ACCOUNTS ----------
     Accounts: 'Tài khoản',
@@ -803,6 +813,16 @@ const dict = {
     SendAccessLinkBodyKnown: 'Bạn có muốn gửi liên kết đăng nhập đến {{email}} không?',
     SendAccessLinkBodyGeneric: 'Bạn có muốn gửi liên kết đăng nhập ngay bây giờ không?',
     NotNow: 'Để sau',
+
+    // --- Modal keys used in settings-client (added/normalized) ---
+    SendInvite: 'Gửi liên kết đăng nhập',
+    SendInviteTo: 'Gửi liên kết đăng nhập đến', // no {{email}}
+    Skip: 'Bỏ qua',
+    Send: 'Gửi',
+    SendAccessLink: 'Gửi liên kết đăng nhập',
+    EditAccount: 'Sửa tài khoản',
+    Position: 'Chức vụ',
+    NoData: 'Không có dữ liệu',
 
     // ---------- AUTH / LOGIN ----------
     StaffLogin: 'Đăng nhập nhân viên',
@@ -870,7 +890,7 @@ const dict = {
     ResetCompleted: 'Hoàn tất đặt lại',
     OK: 'OK',
 
-    // Reset buttons (Data section) ---- NEW
+    // Reset buttons (Data section)
     ResetMaterials: 'Đặt lại Nguyên liệu',
     ResetSuppliers: 'Đặt lại Nhà cung cấp',
     ResetCategories: 'Đặt lại Danh mục',
@@ -897,7 +917,7 @@ const dict = {
 
     // ---------- Suppliers page (NEW) ----------
     Suppliers: 'Nhà cung cấp',
-    SupplierLabel: 'Nhà cung cấp',           // singular
+    SupplierLabel: 'Nhà cung cấp',
     NewSupplier: 'Thêm nhà cung cấp',
     PointOfContact: 'Người liên hệ',
     OrderMethod: 'Phương thức đặt hàng',

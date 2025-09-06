@@ -1,0 +1,461 @@
+============================================================
+APP AUDIT SNAPSHOT
+Timestamp: Sat, Sep  6, 2025 10:31:02 AM UTC
+Working dir: /c/Users/baron/foodcost-webapp
+============================================================
+
+[OS and toolchain]
+uname -a:
+MINGW64_NT-10.0-26120 Valerio-Razer 3.6.3-7674c51e.x86_64 2025-07-01 09:13 UTC x86_64 Msys
+
+Shell: /usr/bin/bash
+Git:  git version 2.50.1.windows.1
+Node: not found
+npm:  11.6.0
+pnpm: not found
+yarn: not found
+jq:   jq-1.8.1
+
+============================================================
+[Git overview]
+Repo root: C:/Users/baron/foodcost-webapp
+Branch:    main
+Remote(s):
+  origin	https://github.com/valeriodiveglia-cloud/OdeonX.git (fetch)
+  origin	https://github.com/valeriodiveglia-cloud/OdeonX.git (push)
+
+Last 10 commits:
+  * 7154179 (HEAD -> main, origin/main, origin/HEAD) feat(api): add auth-protected delete route for categories (dish, prep, equipment)
+  * 8288aa3 Fix categorie upsert: authOr401 + default sort_order + RLS alignment prep
+  * fa7ecd7 Security hardening (RLS + auth guards): - Aggiunte policy RLS materiali, suppliers, ricette ecc. - Middleware aggiornato per percorsi protetti - AuthOr401 centralizzato per API - Audit iniziale + vincoli DB
+  * 64c0ada Security hardening (RLS + auth guards): - Aggiunte policy RLS materiali, suppliers, ricette ecc. - Middleware aggiornato per percorsi protetti - AuthOr401 centralizzato per API - Audit iniziale + vincoli DB
+  * 2aedcfb chore(settings): remove debug console logs from settings client
+  * 6f9d706 debug: test supabase session/insert from settings-client
+  * bcf395f fix(ts): annotate onAuthStateChange params in dashboard
+  * 7cea5c0 fix(ts): annotate onAuthStateChange params to avoid implicit any
+  * bf3d0d9 fix(ts): annotate getSession then param to avoid implicit any
+  * 2ea260f fix(ts): force uom_name to string in MatOption/PrepOption mapping
+
+Uncommitted changes (short):
+  ?? APP_AUDIT_2025-09-06_17-31-00.txt
+
+============================================================
+[Project files quick scan]
+Top level files and dirs (excluding heavy dirs):
+  total 1039
+  drwxr-xr-x 1 baron 197609      0 Sep  6 17:31 ./
+  drwxr-xr-x 1 baron 197609      0 Sep  5 10:03 ../
+  -rw-r--r-- 1 baron 197609    624 Aug 31 20:36 .env.local
+  drwxr-xr-x 1 baron 197609      0 Sep  6 17:31 .git/
+  -rw-r--r-- 1 baron 197609    548 Sep  3 08:43 .gitignore
+  drwxr-xr-x 1 baron 197609      0 Sep  6 08:30 .next/
+  -rw-r--r-- 1 baron 197609    317 Sep  4 19:11 .next-dev.log
+  drwxr-xr-x 1 baron 197609      0 Aug 30 10:45 .vercel/
+  drwxr-xr-x 1 baron 197609      0 Aug  6 16:33 .vscode/
+  drwxr-xr-x 1 baron 197609      0 Sep  5 09:02 __backup__/
+  -rw-r--r-- 1 baron 197609      0 Sep  3 19:29 {
+  -rw-r--r-- 1 baron 197609   2093 Sep  6 17:31 APP_AUDIT_2025-09-06_17-31-00.txt
+  -rw-r--r-- 1 baron 197609   7771 Sep  5 10:08 audit.txt
+  -rw-r--r-- 1 baron 197609  89879 Sep  5 12:15 audit_full.txt
+  -rw-r--r-- 1 baron 197609   3524 Sep  1 17:02 backup_categories_schema.sql
+  -rw-r--r-- 1 baron 197609   1491 Sep  1 17:24 dev_open_grants.sql
+  -rw-r--r-- 1 baron 197609   1156 Sep  1 17:26 dev_recipe_grants.sql
+  -rw-r--r-- 1 baron 197609  98578 Sep  2 11:35 dev_schema.sql
+  -rw-r--r-- 1 baron 197609    393 Aug  5 15:44 eslint.config.mjs
+  -rw-r--r-- 1 baron 197609   5184 Aug 30 10:38 fix_build.sh
+  -rw-r--r-- 1 baron 197609    195 Aug 29 17:59 next.config.js
+  -rw-r--r-- 1 baron 197609    133 Aug  5 15:44 next.config.ts.disabled
+  -rw-r--r-- 1 baron 197609    211 Aug  5 15:44 next-env.d.ts
+  drwxr-xr-x 1 baron 197609      0 Sep  5 12:37 node_modules/
+  -rw-r--r-- 1 baron 197609 103805 Aug 31 20:18 odeonx_schema.sql
+  -rw-r--r-- 1 baron 197609   1152 Aug 23 10:05 package.json
+  -rw-r--r-- 1 baron 197609 315544 Sep  5 12:37 package-lock.json
+  -rw-r--r-- 1 baron 197609     81 Aug  5 15:44 postcss.config.mjs
+  -rw-r--r-- 1 baron 197609    831 Sep  2 10:59 prevent_last_owner_change_fix.sql
+  -rw-r--r-- 1 baron 197609    986 Sep  2 11:42 prod_patch_accounts.sql
+  -rw-r--r-- 1 baron 197609  41337 Sep  2 11:38 prod_safe_schema.sql
+  drwxr-xr-x 1 baron 197609      0 Aug  9 22:28 public/
+  -rw-r--r-- 1 baron 197609   1450 Aug  5 15:44 README.md
+  -rw-r--r-- 1 baron 197609    952 Sep  1 17:20 reset_all_public_tables_disable_rls.sql
+  -rw-r--r-- 1 baron 197609   1871 Sep  1 17:11 reset_categories.sql
+  -rw-r--r-- 1 baron 197609    941 Sep  1 17:18 reset_disable_rls.sql
+  drwxr-xr-x 1 baron 197609      0 Sep  5 09:15 src/
+  drwxr-xr-x 1 baron 197609      0 Sep  5 19:48 supabase/
+  -rw-r--r-- 1 baron 197609    602 Aug  5 15:46 tsconfig.json
+  -rw-r--r-- 1 baron 197609 197339 Aug 30 10:23 tsconfig.tsbuildinfo
+  -rw-r--r-- 1 baron 197609    447 Sep  1 17:11 verify_categories.sql
+  -rw-r--r-- 1 baron 197609    462 Sep  1 17:23 verify_no_policies_rls_state.sql
+
+Disk usage summary (excluding .git and node_modules):
+1.1G	.
+  1.0K	.env.local
+  1.0K	.gitignore
+  509M	.next
+  1.0K	.next-dev.log
+  2.0K	.vercel
+  1.0K	.vscode
+  4.0K	__backup__
+  0	{
+  8.0K	APP_AUDIT_2025-09-06_17-31-00.txt
+  8.0K	audit.txt
+  88K	audit_full.txt
+  4.0K	backup_categories_schema.sql
+  4.0K	dev_open_grants.sql
+  4.0K	dev_recipe_grants.sql
+  100K	dev_schema.sql
+  1.0K	eslint.config.mjs
+  8.0K	fix_build.sh
+  1.0K	next.config.js
+  1.0K	next.config.ts.disabled
+  1.0K	next-env.d.ts
+  104K	odeonx_schema.sql
+  4.0K	package.json
+  312K	package-lock.json
+  1.0K	postcss.config.mjs
+  4.0K	prevent_last_owner_change_fix.sql
+  4.0K	prod_patch_accounts.sql
+  44K	prod_safe_schema.sql
+  11K	public
+  4.0K	README.md
+  4.0K	reset_all_public_tables_disable_rls.sql
+  4.0K	reset_categories.sql
+  4.0K	reset_disable_rls.sql
+  898K	src
+  11K	supabase
+  1.0K	tsconfig.json
+  196K	tsconfig.tsbuildinfo
+  1.0K	verify_categories.sql
+  1.0K	verify_no_policies_rls_state.sql
+
+Environment files:
+  -rw-r--r-- 1 baron 197609 624 Aug 31 20:36 .env.local
+
+============================================================
+[package.json summary]
+name: foodcost-webapp
+version: 0.1.0
+next: 15.4.5
+react: 19.1.0
+typescript: ^5
+
+Scripts:
+  dev: next dev
+  build: next build
+  start: next start
+  lint: next lint
+
+Key deps likely relevant:
+  next: 15.4.5
+  react: 19.1.0
+  react-dom: 19.1.0
+  typescript: ^5
+  tailwindcss: ^4
+  @supabase/supabase-js: ^2.53.0
+  @supabase/ssr: ^0.7.0
+  lucide-react: ^0.539.0
+
+============================================================
+[Next.js structure hints]
+next.config.*:
+  next.config.js
+  next.config.ts.disabled
+
+Head of next.config.js:
+  /** @type {import('next').NextConfig} */
+  const nextConfig = {
+    eslint: {
+      // Non fermare la build per errori ESLint
+      ignoreDuringBuilds: true,
+    },
+  }
+  
+  module.exports = nextConfig
+
+tsconfig files:
+  tsconfig.json
+
+Head of tsconfig.json:
+  {
+    "compilerOptions": {
+      "target": "ES2017",
+      "lib": ["dom", "dom.iterable", "esnext"],
+      "allowJs": true,
+      "skipLibCheck": true,
+      "strict": true,
+      "noEmit": true,
+      "esModuleInterop": true,
+      "module": "esnext",
+      "moduleResolution": "bundler",
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      "jsx": "preserve",
+      "incremental": true,
+      "plugins": [
+        {
+          "name": "next"
+        }
+      ],
+      "paths": {
+        "@/*": ["./src/*"]
+      }
+    },
+    "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+    "exclude": ["node_modules"]
+  }
+
+============================================================
+[App routing overview]
+Folders under src/app (depth 3):
+  src/app
+  src/app/(app)
+  src/app/(app)/archive
+  src/app/(app)/equipment
+  src/app/(app)/equipment-history
+  src/app/(app)/event-calculator
+  src/app/(app)/materials
+  src/app/(app)/materials-history
+  src/app/(app)/recipes
+  src/app/(app)/settings
+  src/app/(app)/settings/categories
+  src/app/(app)/suppliers
+  src/app/(app)/trash
+  src/app/api
+  src/app/api/_diag
+  src/app/api/_diag/auth
+  src/app/api/admin
+  src/app/api/admin/data-reset
+  src/app/api/categories
+  src/app/api/categories/[kind]
+  src/app/api/categories/generic
+  src/app/api/diag
+  src/app/api/diag/auth
+  src/app/api/diag/cookies
+  src/app/api/diag/ping
+  src/app/api/suppliers
+  src/app/api/suppliers/delete
+  src/app/api/suppliers/list
+  src/app/api/suppliers/upsert
+  src/app/api/users
+  src/app/api/users/admin-delete
+  src/app/api/users/admin-upsert
+  src/app/api/users/send-access-link
+  src/app/auth
+  src/app/auth/callback
+  src/app/auth/signout
+  src/app/auth/update-password
+  src/app/dashboard
+  src/app/login
+
+API routes (route.ts*):
+  src/app/api/_diag/auth/route.ts
+  src/app/api/admin/data-reset/route.ts
+  src/app/api/categories/[kind]/delete/route.ts
+  src/app/api/categories/[kind]/delete/route.ts.bak.1756964517
+  src/app/api/categories/[kind]/list/route.ts
+  src/app/api/categories/[kind]/upsert/route.ts
+  src/app/api/categories/[kind]/upsert/route.ts.bak.1756960026
+  src/app/api/categories/generic/list/route.ts
+  src/app/api/categories/generic/list/route.ts.bak.1756966634
+  src/app/api/categories/generic/list/route.ts.bak.1756966968
+  src/app/api/diag/auth/route.ts
+  src/app/api/diag/cookies/route.ts
+  src/app/api/diag/ping/route.ts
+  src/app/api/diag/route.ts
+  src/app/api/suppliers/delete/route.ts
+  src/app/api/suppliers/delete/route.ts.bak.1756949215
+  src/app/api/suppliers/list/route.ts
+  src/app/api/suppliers/upsert/route.ts
+  src/app/api/suppliers/upsert/route.ts.bak.1756948246
+  src/app/api/users/admin-delete/route.ts
+  src/app/api/users/admin-delete/route.ts.bak.1756967745
+  src/app/api/users/admin-delete/route.ts.bak.fix.1756968255
+  src/app/api/users/admin-upsert/route.ts
+  src/app/api/users/admin-upsert/route.ts.bak.1756967328
+  src/app/api/users/send-access-link/route.ts
+
+============================================================
+[Components and UI]
+Components root:
+  src/components
+
+shadcn ui components if present:
+  src/components/ui not found
+
+============================================================
+[Server code hints]
+Dir src/lib:
+  src/lib/i18n.ts
+  src/lib/importMaterialsCsv.ts
+  src/lib/normalize.ts
+  src/lib/normalizeUom.ts
+  src/lib/requireSession.ts
+  src/lib/routeAuth.ts
+  src/lib/server/auth.ts
+  src/lib/storage.ts
+  src/lib/supabase.ts
+  src/lib/supabase_shim.ts
+  src/lib/supabaseAdmin.ts
+  src/lib/supabaseAnonServer.ts
+  src/lib/supabaseServer.ts
+
+============================================================
+[Supabase local footprint]
+supabase dir tree (depth 3):
+  supabase
+  supabase/.temp
+  supabase/.temp/cli-latest
+  supabase/.temp/gotrue-version
+  supabase/.temp/pooler-url
+  supabase/.temp/postgres-version
+  supabase/.temp/project-ref
+  supabase/.temp/rest-version
+  supabase/.temp/storage-version
+  supabase/migrations
+  supabase/migrations/20250905124826_remote_schema.sql
+
+Migrations preview:
+  supabase/migrations/20250905124826_remote_schema.sql
+
+============================================================
+[Env keys preview excluding values]
+.env.local:
+  NEXT_PUBLIC_APP_VERSION
+  NEXT_PUBLIC_SITE_URL
+  NEXT_PUBLIC_SUPABASE_ANON_KEY
+  NEXT_PUBLIC_SUPABASE_URL
+  SUPABASE_SERVICE_ROLE_KEY
+
+============================================================
+[Code size and languages]
+Files count by extension:
+  .ts       51 files
+  .tsx      25 files
+  .js      212 files
+  .jsx       0 files
+  .sql      14 files
+  .json     41 files
+  .css       2 files
+  .md        1 files
+
+Line counts quick estimate:
+  ts       4964 lines
+  tsx     15020 lines
+  js      47834 lines
+  jsx         0 lines
+  sql      8340 lines
+
+============================================================
+[Top 100 largest files excluding node_modules and .git]
+    94222793 bytes  ./.next/cache/webpack/server-production/0.pack
+    56311636 bytes  ./.next/cache/webpack/client-production/0.pack
+    41588176 bytes  ./.next/cache/webpack/server-production/1.pack
+    20541378 bytes  ./.next/cache/webpack/client-development-fallback/0.pack.gz
+    20405070 bytes  ./.next/cache/webpack/client-production/1.pack
+    19150557 bytes  ./.next/cache/webpack/server-production/index.pack
+    19150528 bytes  ./.next/cache/webpack/server-production/index.pack.old
+    14027740 bytes  ./.next/cache/webpack/server-production/2.pack
+    10924759 bytes  ./.next/cache/webpack/server-development/7.pack.gz
+    10268806 bytes  ./.next/cache/webpack/client-development/23.pack.gz
+    10207147 bytes  ./.next/cache/webpack/client-development/8.pack.gz
+     9887023 bytes  ./.next/cache/webpack/server-development/21.pack.gz
+     9029025 bytes  ./.next/cache/webpack/client-production/index.pack
+     9028243 bytes  ./.next/cache/webpack/client-production/index.pack.old
+     8615588 bytes  ./.next/server/vendor-chunks/next.js
+     7292204 bytes  ./.next/cache/webpack/edge-server-production/1.pack
+     7218701 bytes  ./.next/static/chunks/fallback/main-app.js
+     7218693 bytes  ./.next/static/chunks/main-app.js
+     6798822 bytes  ./.next/cache/webpack/client-development/3.pack.gz
+     6423666 bytes  ./.next/static/chunks/main.js
+     6422240 bytes  ./.next/static/chunks/fallback/main.js
+     6226553 bytes  ./.next/cache/webpack/server-development/20.pack.gz
+     6193003 bytes  ./.next/cache/webpack/client-production/2.pack
+     5722054 bytes  ./.next/cache/webpack/server-development/13.pack.gz
+     5636599 bytes  ./.next/static/chunks/app/(app)/materials-history/page.js
+     5483385 bytes  ./.next/cache/webpack/client-development/13.pack.gz
+     5263891 bytes  ./.next/cache/webpack/client-development/28.pack.gz
+     5138429 bytes  ./.next/cache/webpack/client-development/10.pack.gz
+     4879495 bytes  ./.next/cache/webpack/client-development/22.pack.gz
+     4660686 bytes  ./.next/static/chunks/app/(app)/recipes/page.js
+     4626177 bytes  ./.next/static/chunks/app/(app)/materials/page.js
+     3172643 bytes  ./.next/cache/webpack/server-development/9.pack.gz
+     2786327 bytes  ./.next/cache/webpack/server-production/4.pack
+     2597944 bytes  ./.next/cache/webpack/client-development/17.pack.gz
+     2567110 bytes  ./.next/server/vendor-chunks/@supabase.js
+     2376280 bytes  ./.next/cache/webpack/client-production/5.pack
+     2302340 bytes  ./.next/cache/webpack/server-development/24.pack.gz
+     2203141 bytes  ./.next/cache/webpack/client-development/7.pack.gz
+     2132050 bytes  ./.next/server/vendor-chunks/recharts.js
+     1990677 bytes  ./.next/cache/webpack/edge-server-production/2.pack
+     1937376 bytes  ./.next/static/chunks/app/(app)/settings/page.js
+     1803843 bytes  ./.next/static/chunks/app/(app)/layout.js
+     1768796 bytes  ./.next/cache/webpack/client-development/2.pack.gz
+     1742383 bytes  ./.next/cache/webpack/client-development/9.pack.gz
+     1739461 bytes  ./.next/cache/webpack/client-development/5.pack.gz
+     1686473 bytes  ./.next/cache/webpack/client-development/20.pack.gz
+     1589353 bytes  ./.next/server/vendor-chunks/exceljs.js
+     1580980 bytes  ./.next/cache/webpack/edge-server-production/0.pack
+     1499976 bytes  ./.next/cache/webpack/client-development/1.pack.gz
+     1450437 bytes  ./.next/cache/webpack/client-development/16.pack.gz
+     1441823 bytes  ./.next/static/chunks/app/layout.js
+     1383017 bytes  ./.next/cache/webpack/client-development/34.pack.gz
+     1361784 bytes  ./.next/static/chunks/fallback/amp.js
+     1338850 bytes  ./.next/cache/webpack/server-development/12.pack.gz
+     1257600 bytes  ./.next/server/app/(app)/recipes/page.js
+     1114612 bytes  ./.next/cache/webpack/server-development/31.pack.gz
+     1060966 bytes  ./.next/server/middleware.js
+     1045224 bytes  ./.next/cache/webpack/client-development/25.pack.gz
+     1023706 bytes  ./.next/server/app/(app)/materials/page.js
+     1000144 bytes  ./.next/cache/webpack/edge-server-development/4.pack.gz
+      973351 bytes  ./.next/server/app/(app)/settings/page.js
+      942393 bytes  ./.next/cache/webpack/client-development/27.pack.gz
+      929641 bytes  ./.next/cache/webpack/server-development/30.pack.gz
+      870026 bytes  ./.next/cache/webpack/server-development/14.pack.gz
+      843828 bytes  ./.next/cache/webpack/server-development/3.pack.gz
+      753431 bytes  ./.next/server/vendor-chunks/ws.js
+      738040 bytes  ./.next/cache/webpack/server-development/27.pack.gz
+      734968 bytes  ./.next/cache/webpack/server-development/19.pack.gz
+      730168 bytes  ./.next/cache/webpack/server-development/5.pack.gz
+      704811 bytes  ./.next/server/app/(app)/materials-history/page.js
+      641943 bytes  ./.next/cache/webpack/server-development/index.pack.gz
+      641803 bytes  ./.next/cache/webpack/server-development/index.pack.gz.old
+      629251 bytes  ./.next/server/vendor-chunks/jszip.js
+      612735 bytes  ./.next/trace
+      593221 bytes  ./.next/server/vendor-chunks/pako.js
+      581646 bytes  ./.next/cache/webpack/edge-server-production/index.pack
+      575976 bytes  ./.next/cache/webpack/server-development/26.pack.gz
+      571388 bytes  ./.next/server/app/(app)/settings/categories/[kind]/page.js
+      564143 bytes  ./.next/server/vendor-chunks/tr46.js
+      561952 bytes  ./.next/cache/webpack/edge-server-production/index.pack.old
+      536627 bytes  ./.next/server/vendor-chunks/async.js
+      495190 bytes  ./.next/server/vendor-chunks/bluebird.js
+      493173 bytes  ./.next/cache/webpack/client-development/30.pack.gz
+      484914 bytes  ./.next/cache/webpack/server-development/16.pack.gz
+      479712 bytes  ./.next/cache/webpack/edge-server-development/0.pack.gz
+      360091 bytes  ./.next/cache/webpack/edge-server-development/1.pack.gz
+      353737 bytes  ./.next/cache/webpack/client-development/11.pack.gz
+      342910 bytes  ./.next/server/vendor-chunks/unzipper.js
+      340400 bytes  ./.next/cache/webpack/server-development/15.pack.gz
+      329376 bytes  ./.next/cache/webpack/server-production/3.pack
+      318569 bytes  ./.next/cache/webpack/server-development/29.pack.gz
+      315544 bytes  ./package-lock.json
+      311673 bytes  ./.next/cache/webpack/server-development/18.pack.gz
+      310001 bytes  ./.next/cache/webpack/server-development/17.pack.gz
+      309789 bytes  ./.next/cache/webpack/client-development/index.pack.gz
+      309773 bytes  ./.next/cache/webpack/client-development/index.pack.gz.old
+      309352 bytes  ./.next/server/app/_not-found/page.js
+      309089 bytes  ./.next/cache/webpack/client-development/21.pack.gz
+      286965 bytes  ./.next/server/vendor-chunks/readable-stream.js
+      274862 bytes  ./.next/server/vendor-chunks/d3-shape.js
+
+============================================================
+[Health checks]
+Lockfiles:
+  package-lock.json
+  none
+TypeScript present: yes
+Tailwind present:   no
+Prettier present:   no
+ESLint present:     no
+
+============================================================
+[End of report]

@@ -17,7 +17,11 @@ export async function GET() {
     .maybeSingle()
 
   return NextResponse.json({
-    session: { userId: user.id, email: user.email },
+    session: {
+      userId: user.id,
+      email: user.email,
+      access_token: session.access_token, // aggiunto per test
+    },
     appAccount: acct ?? null,
     appAccountError: error?.message ?? null,
   })
