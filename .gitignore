@@ -42,3 +42,4 @@ next-env.d.ts
 
 # escludo la parte event-calculator
 src/app/event-calculator/*.sql
+APP_AUDIT_*.txt
