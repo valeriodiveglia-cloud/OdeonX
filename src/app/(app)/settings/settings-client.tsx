@@ -415,7 +415,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       vat_rate: 10,
       // default moltiplicatore
       default_markup_equipment_pct: 1.5,
-      default_markup_recipes_pct: 30,
       materials_review_months: 4,
       csv_require_confirm_refs: true,
       materials_exclusive_default: true,

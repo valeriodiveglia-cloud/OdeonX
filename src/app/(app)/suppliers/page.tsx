@@ -606,33 +606,45 @@ export default function SuppliersPage() {
             </thead>
 
             <tbody>
-              {filtered.map(it => {
-                const isSelected = !!selected[it.id]
-                return (
-                  <tr key={it.id} className={`border-t hover:bg-blue-50 ${isSelected ? 'bg-blue-100/70' : ''}`}>
-                    <td className="p-2">
-                      {selectMode && (
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          checked={isSelected}
-                          onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
-                        />
-                      )}
-                    </td>
+  {filtered.map(it => {
+    const isSelected = !!selected[it.id]
+    return (
+      <tr
+        key={it.id}
+        className={`border-t hover:bg-blue-50/40 cursor-pointer ${isSelected ? 'bg-blue-100/70' : ''}`}
+        onClick={() => openView(it)}
+        onDoubleClick={() => openEdit(it)}
+      >
+        {/* checkbox: non propagare il click */}
+        <td
+          className="p-2"
+          onClick={e => e.stopPropagation()}
+          onDoubleClick={e => e.stopPropagation()}
+        >
+          {selectMode && (
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={isSelected}
+              onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
+            />
+          )}
+        </td>
 
-                    <td className="p-2 font-medium cursor-pointer text-blue-700 hover:underline" onClick={() => openView(it)}>{it.name}</td>
-                    <td className="p-2">{it.poc}</td>
-                    <td className="p-2 truncate">{it.email}</td>
-                    <td className="p-2">{it.phone}</td>
-                    <td className="p-2">{it.order_method}</td>
-                    <td className="p-2">{it.payment_term}</td>
-                    <td className="p-2">{it.payment_method}</td>
-                    <td className="p-2 truncate">{it.notes}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
+        {/* niente link blu: il click è sulla riga */}
+        <td className="p-2 font-medium">{it.name}</td>
+        <td className="p-2">{it.poc}</td>
+        <td className="p-2 truncate">{it.email}</td>
+        <td className="p-2">{it.phone}</td>
+        <td className="p-2">{it.order_method}</td>
+        <td className="p-2">{it.payment_term}</td>
+        <td className="p-2">{it.payment_method}</td>
+        <td className="p-2 truncate">{it.notes}</td>
+      </tr>
+    )
+  })}
+</tbody>
+
           </table>
         </div>
       </div>
