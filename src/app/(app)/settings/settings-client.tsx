@@ -1,4 +1,3 @@
-// src/app/(app)/settings/settings-client.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -132,6 +131,9 @@ function parseNumOrNull(v: string): number | null {
 function clampInt(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.round(n)))
 }
+function clampFloat(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n))
+}
 function isValidEmail(x: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) }
 
 async function sendAccessLink(email: string) {
@@ -186,8 +188,14 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       .maybeSingle()
     if (error) return
     if (!data) return
+
+    // ⬇️ FIX: NON riscrivere a 1.5 quando > 5: mantieni sempre il valore come moltiplicatore ×
+    const rawDm = Number((data as any).default_markup_equipment_pct)
+    const normalizedDm = Number.isFinite(rawDm) && rawDm > 0 ? rawDm : 1.5
+
     const normalized: AppSettingsUI = {
       ...data,
+      default_markup_equipment_pct: normalizedDm,
       vat_enabled: toBool(data.vat_enabled, false),
       csv_require_confirm_refs: toBool(data.csv_require_confirm_refs, true),
       materials_exclusive_default: toBool(data.materials_exclusive_default, true),
@@ -224,8 +232,13 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         .eq('id', 'singleton')
         .maybeSingle()
       if (!error && data && !cancelled) {
+        // ⬇️ FIX: non forzare a 1.5 quando > 5
+        const rawDm = Number((data as any).default_markup_equipment_pct)
+        const normalizedDm = Number.isFinite(rawDm) && rawDm > 0 ? rawDm : 1.5
+
         const normalized: AppSettingsUI = {
           ...data,
+          default_markup_equipment_pct: normalizedDm,
           vat_enabled: toBool(data.vat_enabled, false),
           csv_require_confirm_refs: toBool(data.csv_require_confirm_refs, true),
           materials_exclusive_default: toBool(data.materials_exclusive_default, true),
@@ -302,85 +315,89 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   }, [s.logo_data])
 
   async function onSave() {
-  setSaving(true)
-  try {
-    const payload: AppSettingsRow = {
-      id: 'singleton',
-      restaurant_name: (s.restaurant_name ?? '').trim(),
-      company_name: (s.company_name ?? '').trim(),
-      address: (s.address ?? '').trim(),
-      tax_code: (s.tax_code ?? '').trim(),
-      phone: (s.phone ?? '').trim(),
-      email: (s.email ?? '').trim(),
-      website: (s.website ?? '').trim(),
-      logo_mime: s.logo_mime ?? null,
-      logo_data: s.logo_data ?? null,
-      language_code: s.language_code,
-      currency: s.currency,
-      vat_enabled: !!s.vat_enabled,
-      vat_rate: s.vat_enabled ? clampInt(s.vat_rate ?? 0, 0, 100) : null,
-      default_markup_equipment_pct:
-        s.default_markup_equipment_pct == null ? null : clampInt(s.default_markup_equipment_pct, 0, 100),
-      default_markup_recipes_pct:
-        s.default_markup_recipes_pct == null ? null : clampInt(s.default_markup_recipes_pct, 0, 100),
-      materials_review_months: clampInt(s.materials_review_months ?? 4, 0, 12),
-      csv_require_confirm_refs: !!s.csv_require_confirm_refs,
-      materials_exclusive_default: !!s.materials_exclusive_default,
-      equipment_review_months: clampInt(s.equipment_review_months ?? 4, 0, 12),
-      equipment_csv_require_confirm_refs: !!s.equipment_csv_require_confirm_refs,
-      recipes_review_months: clampInt(s.recipes_review_months ?? 4, 0, 12),
-      recipes_split_mode: s.recipes_split_mode,
-      recipes_tab1_name: s.recipes_tab1_name ?? 'Final',
-      recipes_tab2_name: s.recipes_split_mode === 'split' ? (s.recipes_tab2_name ?? 'Prep') : null,
-      updated_at: new Date().toISOString(),
-    }
-
-    // 1) Prova UPDATE
-    const upd = await supabase
-      .from(TBL_APP)
-      .update({ ...payload }) // include anche updated_at
-      .eq('id', 'singleton')
-      .select()
-
-    if (upd.error) throw upd.error
-
-    let saved: any | null = null
-
-    if ((upd.data?.length ?? 0) > 0) {
-      // aggiornato
-      saved = upd.data[0]
-    } else {
-      // 2) se non esiste, fai INSERT
-      const ins = await supabase
-        .from(TBL_APP)
-        .insert(payload)
-        .select()
-        .single()
-
-      if (ins.error) throw ins.error
-      saved = ins.data
-    }
-
-    setS(saved as AppSettingsUI)
-    setDirty(false)
-    setSaveMessage(t('SavedOk', s.language_code))
-    setTimeout(() => setSaveMessage(null), 2500)
-
+    setSaving(true)
     try {
-      setVatEnabled(!!saved.vat_enabled)
-      setVatRate(saved.vat_rate ?? 0)
-      setLanguage(saved.language_code as Lang)
-    } catch {}
+      const payload: AppSettingsRow = {
+        id: 'singleton',
+        restaurant_name: (s.restaurant_name ?? '').trim(),
+        company_name: (s.company_name ?? '').trim(),
+        address: (s.address ?? '').trim(),
+        tax_code: (s.tax_code ?? '').trim(),
+        phone: (s.phone ?? '').trim(),
+        email: (s.email ?? '').trim(),
+        website: (s.website ?? '').trim(),
+        logo_mime: s.logo_mime ?? null,
+        logo_data: s.logo_data ?? null,
+        language_code: s.language_code,
+        currency: s.currency,
+        vat_enabled: !!s.vat_enabled,
+        vat_rate: s.vat_enabled ? clampInt(s.vat_rate ?? 0, 0, 100) : null,
 
-    router.refresh()
-  } catch (err: any) {
-    setSaveMessage(`${t('SavedErr', lang)}: ${err?.message || String(err)}`)
-    setTimeout(() => setSaveMessage(null), 5000)
-  } finally {
-    setSaving(false)
+        // ✅ SALVIAMO SEMPRE COME MOLTIPLICATORE × (no conversioni / no >5→1.5)
+        default_markup_equipment_pct:
+          s.default_markup_equipment_pct == null
+            ? null
+            : clampFloat(Number(s.default_markup_equipment_pct) || 0, 0, 100),
+
+        default_markup_recipes_pct:
+          s.default_markup_recipes_pct == null ? null : clampInt(s.default_markup_recipes_pct, 0, 100),
+
+        materials_review_months: clampInt(s.materials_review_months ?? 4, 0, 12),
+        csv_require_confirm_refs: !!s.csv_require_confirm_refs,
+        materials_exclusive_default: !!s.materials_exclusive_default,
+        equipment_review_months: clampInt(s.equipment_review_months ?? 4, 0, 12),
+        equipment_csv_require_confirm_refs: !!s.equipment_csv_require_confirm_refs,
+        recipes_review_months: clampInt(s.recipes_review_months ?? 4, 0, 12),
+        recipes_split_mode: s.recipes_split_mode,
+        recipes_tab1_name: s.recipes_tab1_name ?? 'Final',
+        recipes_tab2_name: s.recipes_split_mode === 'split' ? (s.recipes_tab2_name ?? 'Prep') : null,
+        updated_at: new Date().toISOString(),
+      }
+
+      // 1) UPDATE
+      const upd = await supabase
+        .from(TBL_APP)
+        .update({ ...payload })
+        .eq('id', 'singleton')
+        .select()
+
+      if (upd.error) throw upd.error
+
+      let saved: any | null = null
+
+      if ((upd.data?.length ?? 0) > 0) {
+        saved = upd.data[0]
+      } else {
+        // 2) INSERT se non esiste
+        const ins = await supabase
+          .from(TBL_APP)
+          .insert(payload)
+          .select()
+          .single()
+
+        if (ins.error) throw ins.error
+        saved = ins.data
+      }
+
+      setS(saved as AppSettingsUI)
+      setDirty(false)
+      setSaveMessage(t('SavedOk', s.language_code))
+      setTimeout(() => setSaveMessage(null), 2500)
+
+      try {
+        setVatEnabled(!!saved.vat_enabled)
+        setVatRate(saved.vat_rate ?? 0)
+        setLanguage(saved.language_code as Lang)
+      } catch {}
+
+      router.refresh()
+    } catch (err: any) {
+      setSaveMessage(`${t('SavedErr', lang)}: ${err?.message || String(err)}`)
+      setTimeout(() => setSaveMessage(null), 5000)
+    } finally {
+      setSaving(false)
+    }
   }
-}
-
 
   function onResetLocal() {
     setS(prev => ({
@@ -396,7 +413,8 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       currency: 'VND',
       vat_enabled: false,
       vat_rate: 10,
-      default_markup_equipment_pct: 30,
+      // default moltiplicatore
+      default_markup_equipment_pct: 1.5,
       default_markup_recipes_pct: 30,
       materials_review_months: 4,
       csv_require_confirm_refs: true,
@@ -898,12 +916,50 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
         <SectionCard title={t('Equipment', lang)}>
           <div className="grid grid-cols-2 gap-3">
+            {/* Review months: label sx / input piccolo dx */}
             <div className="col-span-2">
               <div className="grid grid-cols-[1fr_auto] items-center gap-2">
                 <label className="text-sm text-gray-800">{t('ReviewMonths', lang)}</label>
-                <input type="number" min={0} max={12} value={s.equipment_review_months} onChange={handleMonthsChange('equipment_review_months')} className="border rounded-lg px-2 py-1 text-gray-900 h-9 w-24" />
+                <input
+                  type="number"
+                  min={0}
+                  max={12}
+                  value={s.equipment_review_months}
+                  onChange={handleMonthsChange('equipment_review_months')}
+                  className="border rounded-lg px-2 py-1 text-gray-900 h-9 w-24"
+                />
               </div>
             </div>
+
+            {/* Default Import Markup × (moltiplicatore) */}
+            <div className="col-span-2">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                <label className="text-sm text-gray-800">
+                  {/* Simbolo nel label, PRIMA del numero */}
+                   {(t('DefaultImportMarkup', lang) || 'Default Import Markup')}{' '}
+                   <span className="text-gray-500">(×)</span>
+                </label>
+                <div className="w-24">
+                  <input
+                    type="number"
+                    step={0.1}
+                    min={0}
+                    value={s.default_markup_equipment_pct ?? 1.5}
+                    onChange={e => {
+                      const raw = e.target.value
+                      const v = raw === '' ? null : Number(raw)
+                      patch('default_markup_equipment_pct', v == null || !isFinite(v) ? null : clampFloat(v, 0, 100))
+                    }}
+                    placeholder="1.5"
+                    className="w-full border rounded-lg px-2 py-1 text-gray-900 h-9"
+                  />
+                </div>
+              </div>
+              <div className="text-xs text-gray-600 mt-1">
+                {(t('DefaultImportMarkupHint', lang) || 'Usato come moltiplicatore: prezzo = (costo + IVA) × markup.')}
+              </div>
+            </div>
+
             <div className="col-span-2 border-t pt-2">
               <Toggle id="csv_confirm_equipment" checked={!!s.equipment_csv_require_confirm_refs} onChange={v => patch('equipment_csv_require_confirm_refs', !!v)} label={t('AskCsvConfirm', lang)} />
             </div>
@@ -1243,6 +1299,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </Modal>
 
       {/* Accounts: Edit */}
+      {/* Accounts: Edit */}
       <Modal open={editOpen && !!formEdit} title={t('EditAccount', lang) || 'Edit account'} onClose={() => { setEditOpen(false); setSelected(null); setFormEdit(null) }} width="max-w-lg">
         {formEdit ? (
           <div className="space-y-3 text-gray-800">
@@ -1256,26 +1313,26 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
               <div>
                 <label className="text-sm">{t('Phone', lang) || 'Phone'}</label>
                 <input type="text" value={formEdit.phone}
-                       onChange={e => setFormEdit(v => v ? ({ ...v, phone: e.target.value }) : v)}
+                       onChange={e => setFormEdit(v => (v ? ({ ...v, phone: e.target.value }) : v))}
                        className="w-full border rounded-lg px-2 py-1 h-9" />
               </div>
               <div>
                 <label className="text-sm">{t('Name', lang) || 'Name'}</label>
                 <input type="text" value={formEdit.name}
-                       onChange={e => setFormEdit(v => v ? ({ ...v, name: e.target.value }) : v)}
+                       onChange={e => setFormEdit(v => (v ? ({ ...v, name: e.target.value }) : v))}
                        className="w-full border rounded-lg px-2 py-1 h-9" />
               </div>
               <div>
                 <label className="text-sm">{t('Position', lang) || 'Position'}</label>
                 <input type="text" value={formEdit.position}
-                       onChange={e => setFormEdit(v => v ? ({ ...v, position: e.target.value }) : v)}
+                       onChange={e => setFormEdit(v => (v ? ({ ...v, position: e.target.value }) : v))}
                        className="w-full border rounded-lg px-2 py-1 h-9" />
               </div>
               <div>
                 <label className="text-sm">{t('Role', lang) || 'Role'}</label>
                 <select
                   value={formEdit.role}
-                  onChange={e => setFormEdit(v => v ? ({ ...v, role: e.target.value as AccountRole }) : v)}
+                  onChange={e => setFormEdit(v => (v ? ({ ...v, role: e.target.value as AccountRole }) : v))}
                   className="w-full border rounded-lg px-2 py-1 h-10 bg-white">
                   <option value="staff">staff</option>
                   <option value="admin" disabled={myRole === 'admin'}>admin</option>
@@ -1285,7 +1342,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
               <div className="flex items-end">
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={formEdit.is_active}
-                         onChange={e => setFormEdit(v => v ? ({ ...v, is_active: e.target.checked }) : v)} />
+                         onChange={e => setFormEdit(v => (v ? ({ ...v, is_active: e.target.checked }) : v))} />
                   {t('Active', lang) || 'Active'}
                 </label>
               </div>

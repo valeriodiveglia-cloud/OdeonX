@@ -1083,13 +1083,14 @@ export default function MaterialsPage() {
   }), [locale, currency])
 
   const num = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        maximumFractionDigits: currency === 'VND' ? 0 : 2,
-        minimumFractionDigits: currency === 'VND' ? 0 : 2,
-      }),
-    [locale, currency]
-  )
+  () =>
+    new Intl.NumberFormat(locale, {
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    }),
+  [locale]
+)
+
 
   const [cats, setCats] = useState<Cat[]>([])
   const [uoms, setUoms] = useState<Uom[]>([])

@@ -7,12 +7,29 @@ import type { Lang } from '@/lib/i18n'
 
 type Currency = 'VND' | 'USD' | 'EUR' | 'GBP'
 
-// Helper robusto per normalizzare booleani potenzialmente stringa/numero
+/* ---------------- Helpers ---------------- */
+
 export function toBool(v: any, fallback: boolean): boolean {
   if (v === true || v === 'true' || v === 1 || v === '1') return true
   if (v === false || v === 'false' || v === 0 || v === '0') return false
   return fallback
 }
+
+function clampPct(p: number) {
+  const safe = Math.max(0, Math.min(100, Number(p)))
+  return Math.round(safe * 100) / 100
+}
+// moltiplicatore ×: limiti ampi (0..1000)
+function clampMarkup(m: number) {
+  const safe = Math.max(0, Math.min(1000, Number(m)))
+  return Math.round(safe * 100) / 100
+}
+function clampMonths(n: number) {
+  const safe = Math.max(0, Math.min(12, Math.round(Number(n))))
+  return safe
+}
+
+/* ---------------- Ctx ---------------- */
 
 type Ctx = {
   hydrated: boolean
@@ -25,12 +42,20 @@ type Ctx = {
   // VAT
   vatEnabled: boolean
   setVatEnabled: (on: boolean) => void
-  vatRate: number // percent
+  vatRate: number
   setVatRate: (p: number) => void
 
-  // Markup globale
+  // Markup globale ricette in percentuale (0..100)
   defaultMarkupPct: number
   setDefaultMarkupPct: (p: number) => void
+
+  // Markup attrezzature (moltiplicatore ×)
+  defaultMarkupEquipmentPct: number
+  setDefaultMarkupEquipmentPct: (m: number) => void
+
+  // Alias retro-compatibile (moltiplicatore ×)
+  equipmentDefaultMarkup: number
+  setEquipmentDefaultMarkup: (m: number) => void
 
   // Materials settings
   reviewMonths: number
@@ -49,7 +74,7 @@ type Ctx = {
   // Forzare ricarica
   reloadSettings: () => Promise<void>
 
-  // Revision per forzare remount delle sezioni ostinate (usalo come key)
+  // Forzare remount di componenti ostinate
   revision: number
 }
 
@@ -69,6 +94,12 @@ const SettingsCtx = createContext<Ctx>({
   defaultMarkupPct: 30,
   setDefaultMarkupPct: () => {},
 
+  defaultMarkupEquipmentPct: 1.5,
+  setDefaultMarkupEquipmentPct: () => {},
+
+  equipmentDefaultMarkup: 1.5,
+  setEquipmentDefaultMarkup: () => {},
+
   reviewMonths: 4,
   setReviewMonths: () => {},
   askCsvConfirm: true,
@@ -85,6 +116,8 @@ const SettingsCtx = createContext<Ctx>({
   revision: 0,
 })
 
+/* ---------------- Provider ---------------- */
+
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false)
   const [revision, setRevision] = useState(0)
@@ -96,8 +129,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [vatEnabled, setVatEnabledState] = useState<boolean>(false)
   const [vatRate, setVatRateState] = useState<number>(10)
 
-  // Markup globale
+  // Ricette %
   const [defaultMarkupPct, setDefaultMarkupPctState] = useState<number>(30)
+
+  // Attrezzature ×
+  const [defaultMarkupEquipmentPct, setDefaultMarkupEquipmentPctState] = useState<number>(1.5)
 
   // Materials
   const [reviewMonths, setReviewMonthsState] = useState<number>(4)
@@ -107,20 +143,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   // Equipment
   const [equipmentReviewMonths, setEquipmentReviewMonthsState] = useState<number>(4)
   const [equipmentCsvConfirm, setEquipmentCsvConfirmState] = useState<boolean>(true)
-
-  // Helpers
-  function clampPct(p: number) {
-    const safe = Math.max(0, Math.min(100, Number(p)))
-    return Math.round(safe * 100) / 100
-  }
-  function clampMarkup(p: number) {
-    const safe = Math.max(0, Math.min(1000, Number(p)))
-    return Math.round(safe * 100) / 100
-  }
-  function clampMonths(n: number) {
-    const safe = Math.max(0, Math.min(12, Math.round(Number(n))))
-    return safe
-  }
 
   // Chiavi localStorage usate dall’app
   const LS_KEYS = [
@@ -138,13 +160,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }
 
-  // 🔧 Salvataggio "sparse": scrive SOLO i campi presenti nel partial
+  /** Upsert “sparse”: scrivo solo i campi presenti.
+   *  Al termine: dispatch di 'settings-changed' e bump revision per propagare subito. */
   async function saveToDb(partial: {
     language?: Lang
     currency?: Currency
     vatEnabled?: boolean
     vatRate?: number
     defaultMarkupPct?: number
+    defaultMarkupEquipmentPct?: number
+    equipmentDefaultMarkup?: number // alias in ingresso
     reviewMonths?: number
     askCsvConfirm?: boolean
     materialsExclusiveDefault?: boolean
@@ -159,6 +184,17 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if ('vatRate' in partial) patch.vat_rate = partial.vatRate
     if ('defaultMarkupPct' in partial) patch.default_markup_pct = partial.defaultMarkupPct
 
+    // accetto sia defaultMarkupEquipmentPct che alias equipmentDefaultMarkup
+    const equipMul =
+      'defaultMarkupEquipmentPct' in partial
+        ? partial.defaultMarkupEquipmentPct
+        : 'equipmentDefaultMarkup' in partial
+          ? partial.equipmentDefaultMarkup
+          : undefined
+    if (typeof equipMul !== 'undefined') {
+      patch.default_markup_equipment_pct = equipMul
+    }
+
     if ('reviewMonths' in partial) patch.materials_review_months = partial.reviewMonths
     if ('askCsvConfirm' in partial) patch.csv_require_confirm_refs = partial.askCsvConfirm
     if ('materialsExclusiveDefault' in partial) patch.materials_exclusive_default = partial.materialsExclusiveDefault
@@ -167,16 +203,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if ('equipmentCsvConfirm' in partial) patch.equipment_csv_require_confirm_refs = partial.equipmentCsvConfirm
 
     const { error } = await supabase.from('app_settings').upsert(patch, { onConflict: 'id' })
-    if (error) console.warn('Settings save error', error)
+    if (error) {
+      console.warn('Settings save error', error)
+      return
+    }
+
+    // 🔔 notifica TUTTI i tab/componenti
+    try { window.dispatchEvent(new CustomEvent('settings-changed')) } catch {}
+    try { new BroadcastChannel('app-events').postMessage('settings-changed') } catch {}
+
+    // 🔁 bump revision per forzare re-render immediato nel tab corrente
+    setRevision(r => r + 1)
   }
 
-  // Funzione unica di idratazione da DB + localStorage
+  // Lettura unica DB + rispetta LS/override
   async function hydrateFromSources() {
-    // 1) DB
     const { data, error } = await supabase
       .from('app_settings')
       .select(
-        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs'
+        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs'
       )
       .eq('id', 'singleton')
       .maybeSingle()
@@ -199,11 +244,21 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const parsedRate = typeof data?.vat_rate === 'number' ? data.vat_rate : Number(data?.vat_rate)
     setVatRateState(Number.isFinite(parsedRate) ? clampPct(parsedRate) : 10)
 
-    const parsedMarkup =
+    const parsedMarkupPct =
       typeof data?.default_markup_pct === 'number' ? data.default_markup_pct : Number(data?.default_markup_pct)
-    setDefaultMarkupPctState(Number.isFinite(parsedMarkup) ? clampMarkup(parsedMarkup) : 30)
+    setDefaultMarkupPctState(Number.isFinite(parsedMarkupPct) ? clampPct(parsedMarkupPct) : 30)
 
-    // 2) Materials da DB con fallback a localStorage
+    // Moltiplicatore × attrezzature
+    const parsedEquipMul =
+      typeof data?.default_markup_equipment_pct === 'number'
+        ? data.default_markup_equipment_pct
+        : Number(data?.default_markup_equipment_pct)
+
+    setDefaultMarkupEquipmentPctState(
+      Number.isFinite(parsedEquipMul) && parsedEquipMul > 0 ? clampMarkup(parsedEquipMul) : 1.5
+    )
+
+    // Materials da DB con fallback a localStorage
     const matMonthsDb = Number.isFinite(Number(data?.materials_review_months))
       ? clampMonths(Number(data?.materials_review_months))
       : undefined
@@ -216,7 +271,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         ? toBool((data as any).materials_exclusive_default, true)
         : undefined
 
-    // 3) Equipment da DB con fallback a localStorage
+    // Equipment da DB con fallback a localStorage
     const eqMonthsDb = Number.isFinite(Number(data?.equipment_review_months))
       ? clampMonths(Number(data?.equipment_review_months))
       : undefined
@@ -269,11 +324,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Caricamento iniziale
+  // Caricamento iniziale + listeners
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      // Prima prova a leggere la lingua dal LS per evitare flicker SSR/CSR
+      // Prova a leggere la lingua dal LS per evitare flicker
       try {
         const lsLang = localStorage.getItem('app_lang') as Lang | null
         if (lsLang === 'en' || lsLang === 'vi') {
@@ -287,7 +342,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       try { window.dispatchEvent(new CustomEvent('settings-hydrated')) } catch {}
     })()
 
-    // Storage sync tra tab per settings locali
+    // Sync via storage
     const onStorage = (ev: StorageEvent) => {
       if (ev.key === 'app_lang' && ev.newValue) {
         const l = ev.newValue as Lang
@@ -316,12 +371,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener('storage', onStorage)
 
-    // BroadcastChannel: data-reset e sync lingua
+    // BroadcastChannel: reset / lingua / settings-changed
     let bc: BroadcastChannel | null = null
     try {
       bc = new BroadcastChannel('app-events')
       bc.onmessage = (e) => {
-        if (e?.data === 'data-reset') {
+        if (e?.data === 'data-reset' || e?.data === 'settings-changed') {
           void reloadSettings()
         }
         if (e?.data?.type === 'lang' && (e.data.value === 'en' || e.data.value === 'vi')) {
@@ -332,36 +387,32 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
+    // Listener diretto su window (stesso tab)
+    const onSettingsChanged = () => { void reloadSettings() }
+    window.addEventListener('settings-changed' as any, onSettingsChanged)
+
     return () => {
       mounted = false
       window.removeEventListener('storage', onStorage)
+      window.removeEventListener('settings-changed' as any, onSettingsChanged)
       try { bc?.close() } catch {}
     }
   }, [])
 
   // API pubblica per ricaricare tutto dopo un reset
   const reloadSettings = async () => {
-    // 1) stop rendering per evitare flicker incoerenti
     setHydrated(false)
-
-    // 2) pulizia forte delle preferenze locali
     clearLocalSettings()
-
-    // 3) re-idrata dal DB (che ora è “reset”)
     await hydrateFromSources()
-
-    // 4) bump revision per forzare remount di sezioni che memorizzano stato interno
     setRevision((r) => r + 1)
-
-    // 5) ri-attiva rendering + annuncio
     setHydrated(true)
     try { window.dispatchEvent(new CustomEvent('settings-hydrated')) } catch {}
   }
 
-  // Setters DB-backed
+  /* -------- Setters DB-backed -------- */
+
   function setLanguage(l: Lang) {
     setLanguageState(l)
-    // Aggiorna subito HTML lang e LS
     try {
       document.documentElement.lang = l
       localStorage.setItem('app_lang', l)
@@ -374,7 +425,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     void saveToDb({ currency: c })
   }
 
-  // VAT toggle con ricalcolo server
   function setVatEnabled(on: boolean) {
     setVatEnabledState(on)
     void saveToDb({ vatEnabled: on })
@@ -394,13 +444,29 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setVatRateState(rounded)
     void saveToDb({ vatRate: rounded })
   }
+
   function setDefaultMarkupPct(p: number) {
-    const rounded = clampMarkup(p)
+    const rounded = clampPct(p)
     setDefaultMarkupPctState(rounded)
     void saveToDb({ defaultMarkupPct: rounded })
   }
 
-  // Setters con localStorage e DB
+  // Setter unico (valore ×)
+  function _setEquipmentMultiplierRaw(m: number) {
+    const rounded = clampMarkup(m)
+    setDefaultMarkupEquipmentPctState(rounded)
+    void saveToDb({ defaultMarkupEquipmentPct: rounded })
+  }
+  // Nome “nuovo/corretto”
+  function setDefaultMarkupEquipmentPct(m: number) {
+    _setEquipmentMultiplierRaw(m)
+  }
+  // Alias retro-compatibile
+  function setEquipmentDefaultMarkup(m: number) {
+    _setEquipmentMultiplierRaw(m)
+  }
+
+  // Setters con localStorage + DB
   function setReviewMonths(n: number) {
     const v = clampMonths(n)
     setReviewMonthsState(v)
@@ -446,8 +512,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setVatEnabled,
         vatRate,
         setVatRate,
+
         defaultMarkupPct,
         setDefaultMarkupPct,
+
+        defaultMarkupEquipmentPct,
+        setDefaultMarkupEquipmentPct,
+
+        // alias: SEMPRE lo stesso valore del moltiplicatore ×
+        equipmentDefaultMarkup: defaultMarkupEquipmentPct,
+        setEquipmentDefaultMarkup,
 
         reviewMonths,
         setReviewMonths,
@@ -469,6 +543,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     </SettingsCtx.Provider>
   )
 }
+
+/* ---------------- Hook ---------------- */
 
 export function useSettings() {
   return useContext(SettingsCtx)
