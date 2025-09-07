@@ -295,6 +295,10 @@ const dict = {
     NoEquipment: 'No equipment',
     MarkAsReviewed: 'Mark as reviewed',
 
+    // ---- Equipment settings (used in SettingsClient) ----
+    DefaultImportMarkup: 'Default Import Markup',
+    DefaultImportMarkupHint: 'Used as a multiplier: price = (cost + VAT) × markup.',
+
     // ---------- Equipment History ----------
     EquipmentCostHistory: 'Equipment Cost History',
     Detail: 'Detail',
@@ -757,6 +761,10 @@ const dict = {
     NoEquipment: 'Không có thiết bị',
     MarkAsReviewed: 'Đánh dấu đã rà soát',
 
+    // ---- Equipment settings (used in SettingsClient) ----
+    DefaultImportMarkup: 'Markup nhập mặc định',
+    DefaultImportMarkupHint: 'Dùng như hệ số nhân: giá = (chi phí + VAT) × markup.',
+
     // ---------- Equipment History ----------
     EquipmentCostHistory: 'Lịch sử chi phí thiết bị',
     Detail: 'Chi tiết',
@@ -816,7 +824,7 @@ const dict = {
 
     // --- Modal keys used in settings-client (added/normalized) ---
     SendInvite: 'Gửi liên kết đăng nhập',
-    SendInviteTo: 'Gửi liên kết đăng nhập đến', // no {{email}}
+    SendInviteTo: 'Gửi liên kết đăng nhập đến',
     Skip: 'Bỏ qua',
     Send: 'Gửi',
     SendAccessLink: 'Gửi liên kết đăng nhập',
