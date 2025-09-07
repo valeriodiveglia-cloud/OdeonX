@@ -955,7 +955,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                 </div>
               </div>
               <div className="text-xs text-gray-600 mt-1">
-                {(t('DefaultImportMarkupHint', lang) || 'Usato come moltiplicatore: prezzo = (costo + IVA) × markup.')}
               </div>
             </div>
 
