@@ -245,8 +245,18 @@ function MaterialEditor(props: MaterialEditorProps) {
     return (p / q).toFixed(2)
   }, [packPrice, packSize])
 
-  const canSave = !viewMode && name.trim().length > 0 && categoryId && supplierId && uomId
+  // ✅ nuove guardie
+  const hasPackSize = packSize.trim() !== '' && isFinite(Number(packSize)) && Number(packSize) > 0
+  const hasPackPrice = packPrice.trim() !== '' && isFinite(Number(packPrice)) && Number(packPrice) > 0
 
+  const canSave =
+    !viewMode &&
+    name.trim().length > 0 &&
+    categoryId &&
+    supplierId &&
+    uomId &&
+    hasPackSize &&
+    hasPackPrice
   // rende unico il default per nome
   async function enforceSingleDefaultByName(materialName: string, keepId: string) {
     await supabase

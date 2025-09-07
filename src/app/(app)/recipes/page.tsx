@@ -659,7 +659,22 @@ function PrepEditor(props: PrepEditorProps) {
     else onDeleted()
   }
 
-  const canSave = !viewMode && name.trim().length > 0
+  const nameOk     = name.trim().length > 0
+const categoryOk = !!category
+const typeOk     = type === 'food' || type === 'beverage'
+const yieldOk    = Number(yieldQty) > 0
+const portionOk  = Number(portionSize) > 0
+const uomOk      = !!uomId
+
+// 👇 Save abilitato solo se tutti gli obbligatori sono validi (wastePct NON richiesto)
+const canSave =
+  !viewMode &&
+  nameOk &&
+  categoryOk &&
+  typeOk &&
+  yieldOk &&
+  portionOk &&
+  uomOk
 
   return (
     <Overlay onClose={onClose}>

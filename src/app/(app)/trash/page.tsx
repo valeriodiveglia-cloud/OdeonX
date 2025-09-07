@@ -24,6 +24,9 @@ const TBL_PREP_CATS = 'recipe_categories'
 const TBL_FINAL = 'final_recipes'
 const TBL_DISH_CATS = 'dish_categories'
 
+const TBL_EQ = 'rental_equipment'
+const TBL_EQ_CATS = 'equipment_categories'
+
 /* ---------- Types ---------- */
 type Uom = { id: number; name: string }
 type Sup = { id: string; name: string }
@@ -31,6 +34,7 @@ type Sup = { id: string; name: string }
 type MatCat = { id: number; name: string }
 type DishCat = { id: number; name: string }
 type PrepCat = { id: number; name: string }
+type EqCat = { id: number; name: string }
 
 type Mat = {
   id: string
@@ -72,6 +76,20 @@ type DishTrash = {
   last_update?: string | null
 }
 
+type EqTrash = {
+  id: string
+  name: string
+  category_id: number | null
+  supplier_id: string | null
+  cost: number | null
+  vat_rate_percent: number | null
+  markup_x: number | null
+  final_price: number | null
+  deleted_at: string | null
+  updated_at?: string | null
+  last_update?: string | null
+}
+
 /* ---------- Utils ---------- */
 function fmtDate(s?: string | null) {
   if (!s) return ''
@@ -104,7 +122,7 @@ export default function TrashPage() {
     [locale, currency]
   )
 
-  const [tab, setTab] = useState<'Materials' | 'Dishes' | 'Preps'>('Materials')
+  const [tab, setTab] = useState<'Materials' | 'Dishes' | 'Preps' | 'Equipment'>('Materials')
 
   /* ---------- Dictionaries ---------- */
   const [uoms, setUoms] = useState<Uom[]>([])
@@ -112,11 +130,13 @@ export default function TrashPage() {
   const [matCats, setMatCats] = useState<MatCat[]>([])
   const [dishCats, setDishCats] = useState<DishCat[]>([])
   const [prepCats, setPrepCats] = useState<PrepCat[]>([])
+  const [eqCats, setEqCats] = useState<EqCat[]>([])
 
   /* ---------- Data ---------- */
   const [mats, setMats] = useState<Mat[]>([])
   const [dishes, setDishes] = useState<DishTrash[]>([])
   const [preps, setPreps] = useState<PrepTrash[]>([])
+  const [eqs, setEqs] = useState<EqTrash[]>([])
 
   const [loading, setLoading] = useState(true)
 
@@ -136,6 +156,11 @@ export default function TrashPage() {
     name: '',
     categoryId: '' as string | number | '',
     type: '' as '' | 'food' | 'beverage',
+  })
+  const [eqFilters, setEqFilters] = useState({
+    name: '',
+    categoryId: '' as string | number | '',
+    supplierId: '' as string | '',
   })
 
   /* ---------- Selection & menu (per tab) ---------- */
@@ -157,12 +182,19 @@ export default function TrashPage() {
   const [menuOpenPrep, setMenuOpenPrep] = useState(false)
   const menuRefPrep = useRef<HTMLDivElement>(null)
 
+  const [selectModeEq, setSelectModeEq] = useState(false)
+  const [selectedEq, setSelectedEq] = useState<Record<string, boolean>>({})
+  const headerCbEq = useRef<HTMLInputElement>(null)
+  const [menuOpenEq, setMenuOpenEq] = useState(false)
+  const menuRefEq = useRef<HTMLDivElement>(null)
+
   // click outside chiude i menu
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (menuRefMat.current && !menuRefMat.current.contains(e.target as Node)) setMenuOpenMat(false)
       if (menuRefDish.current && !menuRefDish.current.contains(e.target as Node)) setMenuOpenDish(false)
       if (menuRefPrep.current && !menuRefPrep.current.contains(e.target as Node)) setMenuOpenPrep(false)
+      if (menuRefEq.current && !menuRefEq.current.contains(e.target as Node)) setMenuOpenEq(false)
     }
     document.addEventListener('mousedown', onDocClick)
     return () => document.removeEventListener('mousedown', onDocClick)
@@ -173,18 +205,22 @@ export default function TrashPage() {
 
   async function fetchAll() {
     setLoading(true)
-    const [uRes, sRes, mcRes, dcRes, pcRes, mRes, dRes, pRes] = await Promise.all([
+    const [uRes, sRes, mcRes, dcRes, pcRes, ecRes, mRes, dRes, pRes, eRes] = await Promise.all([
       supabase.from(TBL_UOM).select('*').order('name', { ascending: true }),
       supabase.from(TBL_SUPS).select('*').order('name', { ascending: true }),
       supabase.from(TBL_MAT_CATS).select('*').order('name', { ascending: true }),
       supabase.from(TBL_DISH_CATS).select('*').order('name', { ascending: true }),
       supabase.from(TBL_PREP_CATS).select('*').order('name', { ascending: true }),
+      supabase.from(TBL_EQ_CATS).select('*').order('name', { ascending: true }),
 
-      supabase.from(TBL_MATERIALS).select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+      supabase.from(TBL_MATERIALS).select('*')
+        .not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
       supabase.from(TBL_FINAL).select('id,name,category_id,type,price_vnd,deleted_at,updated_at,last_update')
         .not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
-      // FIX: niente 'updated_at' per i prep (la colonna non esiste su prep_recipes)
+      // niente 'updated_at' per prep_recipes
       supabase.from(TBL_PREP).select('id,name,category_id,type,deleted_at,last_update')
+        .not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+      supabase.from(TBL_EQ).select('*')
         .not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
     ])
 
@@ -193,18 +229,22 @@ export default function TrashPage() {
     if (mcRes.data) setMatCats(mcRes.data)
     if (dcRes.data) setDishCats(dcRes.data)
     if (pcRes.data) setPrepCats(pcRes.data)
+    if (ecRes.data) setEqCats(ecRes.data)
 
     if (mRes.error) console.error('Trash MATERIALS select error:', mRes.error)
     if (dRes.error) console.error('Trash DISHES select error:', dRes.error)
     if (pRes.error) console.error('Trash PREPS select error:', pRes.error)
+    if (eRes.error) console.error('Trash EQUIPMENT select error:', eRes.error)
 
     setMats(mRes.data || [])
     setDishes(dRes.data || [])
     setPreps(pRes.data || [])
+    setEqs(eRes.data || [])
 
     setSelectedMat({})
     setSelectedDish({})
     setSelectedPrep({})
+    setSelectedEq({})
 
     setLoading(false)
   }
@@ -277,6 +317,27 @@ export default function TrashPage() {
   }
   const selectedPrepIds = useMemo(() => Object.keys(selectedPrep).filter(id => selectedPrep[id]), [selectedPrep])
 
+  // Equipment
+  function applyEqFilters(list: EqTrash[]) {
+    let rows = [...list]
+    if (eqFilters.name.trim()) rows = rows.filter(r => r.name.toLowerCase().includes(eqFilters.name.trim().toLowerCase()))
+    if (eqFilters.categoryId !== '') rows = rows.filter(r => r.category_id === Number(eqFilters.categoryId))
+    if (eqFilters.supplierId !== '') rows = rows.filter(r => r.supplier_id === String(eqFilters.supplierId))
+    return rows
+  }
+  const eqsFiltered = applyEqFilters(eqs)
+  const eqAllVisibleSelected = eqsFiltered.length > 0 && eqsFiltered.every(m => !!selectedEq[m.id])
+  const eqSomeVisibleSelected = eqsFiltered.some(m => !!selectedEq[m.id]) && !eqAllVisibleSelected
+  useEffect(() => { if (headerCbEq.current) headerCbEq.current.indeterminate = eqSomeVisibleSelected }, [eqSomeVisibleSelected, eqAllVisibleSelected, eqsFiltered.length])
+  useEffect(() => { if (!selectModeEq) setSelectedEq({}) }, [selectModeEq])
+  function toggleSelectAllVisibleEq() {
+    const next: Record<string, boolean> = { ...selectedEq }
+    if (eqAllVisibleSelected) eqsFiltered.forEach(m => next[m.id] = false)
+    else eqsFiltered.forEach(m => next[m.id] = true)
+    setSelectedEq(next)
+  }
+  const selectedEqIds = useMemo(() => Object.keys(selectedEq).filter(id => selectedEq[id]), [selectedEq])
+
   /* =====================================================
      Actions: Restore / Delete forever
   ====================================================== */
@@ -329,6 +390,22 @@ export default function TrashPage() {
     await fetchAll()
   }
 
+  // Equipment
+  async function restoreEquipment(ids: string[]) {
+    if (!ids.length) return
+    const { error } = await supabase.from(TBL_EQ).update({ deleted_at: null }).in('id', ids)
+    if (error) { alert((t('SavedErr', lang) || 'Error') + ': ' + error.message); return }
+    await fetchAll()
+  }
+  async function deleteEquipmentForever(ids: string[]) {
+    if (!ids.length) return
+    const ok = window.confirm(`Permanently delete ${ids.length} equipment item(s)? This cannot be undone.`)
+    if (!ok) return
+    const { error } = await supabase.from(TBL_EQ).delete().in('id', ids)
+    if (error) { alert((t('SavedErr', lang) || 'Error') + ': ' + error.message); return }
+    await fetchAll()
+  }
+
   /* =====================================================
      Renders
   ====================================================== */
@@ -336,11 +413,15 @@ export default function TrashPage() {
   if (loading) return <div className="p-6">{t('Loading', lang) || 'Loading…'}</div>
 
   // Helpers current tab states
-  const selectedCount = tab === 'Materials' ? selectedMatIds.length : tab === 'Dishes' ? selectedDishIds.length : selectedPrepIds.length
+  const selectedCount =
+    tab === 'Materials' ? selectedMatIds.length
+    : tab === 'Dishes' ? selectedDishIds.length
+    : tab === 'Preps' ? selectedPrepIds.length
+    : selectedEqIds.length
 
   return (
     <div className="max-w-none mx-auto p-4 text-gray-100">
-      {/* Header: solo titolo e kebab quando in select. Nessun pulsante Select qui */}
+      {/* Header */}
       <div className="mb-3 flex items-center justify-start">
         <div className="flex items-center gap-2">
           {/* Kebab per Materials */}
@@ -448,6 +529,41 @@ export default function TrashPage() {
               )}
             </div>
           )}
+          {/* Kebab per Equipment */}
+          {tab === 'Equipment' && selectModeEq && (
+            <div className="relative" ref={menuRefEq}>
+              <button
+                type="button"
+                onClick={() => setMenuOpenEq(v => !v)}
+                className="p-2 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                title={t('BulkActions', lang) || 'Bulk actions'}
+                aria-haspopup="menu"
+                aria-expanded={menuOpenEq}
+              >
+                <EllipsisVerticalIcon className="w-6 h-6 text-white" />
+              </button>
+              {menuOpenEq && (
+                <div className="absolute z-10 mt-2 w-64 rounded-xl border border-white/10 bg-white text-gray-900 shadow-xl">
+                  <button
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50 flex items-center gap-2"
+                    onClick={() => { setMenuOpenEq(false); restoreEquipment(selectedEqIds) }}
+                    disabled={selectedEqIds.length === 0}
+                  >
+                    <ArrowUturnLeftIcon className="w-4 h-4" />
+                    {t('Restore', lang) || 'Restore'}
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 disabled:opacity-50 flex items-center gap-2"
+                    onClick={() => { setMenuOpenEq(false); deleteEquipmentForever(selectedEqIds) }}
+                    disabled={selectedEqIds.length === 0}
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                    {t('Delete', lang) || 'Delete permanently'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <h1 className="text-2xl font-bold text-white">Trash</h1>
           {selectedCount > 0 && (
@@ -456,7 +572,7 @@ export default function TrashPage() {
         </div>
       </div>
 
-      {/* Tabs + Select allineati sulla stessa riga, Select a destra (in basso rispetto al titolo) */}
+      {/* Tabs + Select allineati sulla stessa riga */}
       <div className="mb-4 flex items-center justify-between">
         {/* Tabs a sinistra */}
         <div className="inline-flex rounded-xl border overflow-hidden">
@@ -481,9 +597,16 @@ export default function TrashPage() {
           >
             {t('Prep', lang)}
           </button>
+          <button
+            aria-pressed={tab === 'Equipment'}
+            className={`px-4 py-2 font-medium transition ${tab === 'Equipment' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 hover:bg-blue-50'}`}
+            onClick={() => setTab('Equipment')}
+          >
+            {t('Equipment', lang) || 'Equipment'}
+          </button>
         </div>
 
-        {/* Pulsante Select a destra, dipende dalla tab corrente */}
+        {/* Pulsante Select a destra */}
         <div className="flex items-center gap-2">
           {tab === 'Materials' && (
             <button
@@ -534,6 +657,23 @@ export default function TrashPage() {
             >
               <CheckCircleIcon className="w-5 h-5" />
               {selectModePrep ? (t('Selecting', lang) || 'Selecting') : (t('Select', lang) || 'Select')}
+            </button>
+          )}
+          {tab === 'Equipment' && (
+            <button
+              onClick={() => {
+                setSelectModeEq(s => !s)
+                setMenuOpenEq(false)
+              }}
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
+                selectModeEq
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+              }`}
+              title={selectModeEq ? (t('ExitSelection', lang) || 'Exit selection') : (t('EnterSelection', lang) || 'Select')}
+            >
+              <CheckCircleIcon className="w-5 h-5" />
+              {selectModeEq ? (t('Selecting', lang) || 'Selecting') : (t('Select', lang) || 'Select')}
             </button>
           )}
         </div>
@@ -862,6 +1002,130 @@ export default function TrashPage() {
                   <tr>
                     <td className="p-3 text-gray-500" colSpan={5}>
                       {t('NoPreps', lang) || 'No items'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ============ EQUIPMENT ============ */}
+      {tab === 'Equipment' && (
+        <>
+          {/* Filter bar */}
+          <div className="bg-white rounded-2xl shadow p-3 mb-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder={t('FilterByName', lang) || 'Filter by name'}
+                value={eqFilters.name}
+                onChange={e => setEqFilters(s => ({ ...s, name: e.target.value }))}
+                className="border rounded-lg px-2 h-9 text-sm text-gray-900 placeholder-gray-600 w-[200px]"
+              />
+              <select
+                value={eqFilters.categoryId}
+                onChange={e => setEqFilters(s => ({ ...s, categoryId: e.target.value }))}
+                className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[200px]"
+              >
+                <option value="">{t('AllCategories', lang) || 'All categories'}</option>
+                {eqCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <select
+                value={eqFilters.supplierId}
+                onChange={e => setEqFilters(s => ({ ...s, supplierId: e.target.value }))}
+                className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[200px]"
+              >
+                <option value="">{t('AllSuppliers', lang) || 'All suppliers'}</option>
+                {sups.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+
+              <div className="ml-auto" />
+
+              <button
+                type="button"
+                onClick={() => setEqFilters({ name: '', categoryId: '', supplierId: '' })}
+                className="inline-flex items-center gap-1 px-3 h-9 rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 overflow-hidden min-w-0"
+                title={t('Clear', lang) || 'Clear'}
+              >
+                {t('Clear', lang) || 'Clear'}
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-2xl shadow p-3">
+            <table className="w-full table-auto text-sm text-gray-900">
+              <thead>
+                <tr>
+                  <th className="p-2 w-7">
+                    {selectModeEq ? (
+                      <input
+                        ref={headerCbEq}
+                        type="checkbox"
+                        checked={eqAllVisibleSelected}
+                        onChange={toggleSelectAllVisibleEq}
+                        className="h-4 w-4"
+                        title={t('SelectAll', lang) || 'Select all'}
+                      />
+                    ) : null}
+                  </th>
+                  <th className="p-2 text-left">{t('Name', lang) || 'Name'}</th>
+                  <th className="p-2 text-left">{t('Category', lang) || 'Category'}</th>
+                  <th className="p-2 text-left">{t('Supplier', lang) || 'Supplier'}</th>
+                  <th className="p-2 text-center">{t('Cost', lang) || 'Cost'}</th>
+                  {vatEnabled && <th className="p-2 text-center">{t('VatRatePct', lang) || 'VAT %'}</th>}
+                  <th className="p-2 text-center">{t('Markup', lang) || 'Markup ×'}</th>
+                  <th className="p-2 text-center">{t('FinalPrice', lang) || 'Final price'}</th>
+                  <th className="p-2 text-center">Deleted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eqsFiltered.map(r => {
+                  const catName = eqCats.find(c => c.id === r.category_id)?.name || ''
+                  const supName = sups.find(s => s.id === r.supplier_id)?.name || ''
+                  const vatEff = vatEnabled ? (r.vat_rate_percent ?? (vatRate ?? 0)) : 0
+                  return (
+                    <tr key={r.id} className="border-t">
+                      <td className="p-2 w-7">
+                        {selectModeEq ? (
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={!!selectedEq[r.id]}
+                            onChange={e => setSelectedEq(prev => ({ ...prev, [r.id]: e.target.checked }))}
+                            title={t('SelectRow', lang) || 'Select row'}
+                          />
+                        ) : null}
+                      </td>
+                      <td className="p-2">{r.name}</td>
+                      <td className="p-2">{catName || '-'}</td>
+                      <td className="p-2">{supName || '-'}</td>
+                      <td className="p-2 text-center tabular-nums">{r.cost != null ? num.format(r.cost) : '-'}</td>
+                      {vatEnabled && <td className="p-2 text-center tabular-nums">{num.format(Math.max(0, Math.min(100, Number(vatEff))))}</td>}
+                      <td className="p-2 text-center tabular-nums">{r.markup_x != null ? num.format(r.markup_x) : '-'}</td>
+
+                      {/* FINAL PRICE calcolato come nella pagina Equipment: cost × markup × (1 + VAT%) */}
+                      {(() => {
+                        const markup = r.markup_x ?? 1
+                        const base = r.cost != null ? Number(r.cost) * markup : null
+                        const final = base == null ? null : base * (vatEnabled ? (1 + Number(vatEff) / 100) : 1)
+                        return (
+                          <td className="p-2 text-center tabular-nums">
+                            {final != null ? num.format(final) : '-'}
+                          </td>
+                        )
+                      })()}
+
+                      <td className="p-2 text-center tabular-nums">{fmtDate(r.deleted_at)}</td>
+                    </tr>
+                  )
+                })}
+                {eqsFiltered.length === 0 && (
+                  <tr>
+                    <td className="p-3 text-gray-500" colSpan={vatEnabled ? 9 : 8}>
+                      {t('NoEquipment', lang) || 'No items'}
                     </td>
                   </tr>
                 )}
