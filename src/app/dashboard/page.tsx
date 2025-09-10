@@ -67,7 +67,7 @@ export default function HomeDashboard() {
             </div>
 
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900">
-              {t(language, 'WelcomeTo')} <span className="text-blue-700">OdeonX</span>
+              {t(language, 'WelcomeTo')} <span className="text-blue-700">OddsOff</span>
             </h1>
             <p className="mt-3 text-gray-600">
               {t(language, 'DashboardSubtitle')}
@@ -124,9 +124,9 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
       <div className="h-14 max-w-6xl mx-auto px-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white text-xs font-bold">
-            OX
+            OO
           </span>
-          <div className="text-lg font-extrabold text-blue-700">OdeonX</div>
+          <div className="text-lg font-extrabold text-blue-700">OddsOff</div>
         </div>
         <div className="flex items-center gap-3">
           {/* Language switch (flag) */}

@@ -1,9 +1,8 @@
-
-import type { ParseResult } from 'papaparse'
 // src/app/materials/page.tsx
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ParseResult } from 'papaparse'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import {
   ChevronUpIcon,
@@ -44,14 +43,13 @@ type Mat = {
   packaging_size: number | null
   package_price: number | null
   unit_cost: number | null
-  /** VAT per-item (percent, es. 10 = 10%). Se null, usa default globale */
   vat_rate_percent: number | null
   notes: string | null
   is_food_drink: boolean
   is_default: boolean
   created_at: string
   last_update: string
-  deleted_at: string | null // soft delete
+  deleted_at: string | null
 }
 
 type CsvRow = {
@@ -60,10 +58,9 @@ type CsvRow = {
   brand?: string | null
   supplier: string
   uom: string
-  package_qty?: string | number | null
+  packaging_size?: string | number | null
   package_price?: string | number | null
-  unit_cost?: string | number | null
-  notes?: string | null
+  vat_rate_percent?: string | number | null
 }
 
 /* ---------- Small UI helpers ---------- */
@@ -75,6 +72,8 @@ function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
     <ChevronDownIcon className="w-4 h-4 inline-block text-gray-700" />
   )
 }
+
+/* ---------- Formatting / utils ---------- */
 function fmtDate(s?: string | null) {
   if (!s) return ''
   const d = new Date(s)
@@ -88,22 +87,13 @@ function isOlderThanMonths(s?: string | null, months?: number | null) {
   if (!s) return false
   const d = new Date(s)
   if (isNaN(d.getTime())) return false
-
   const m = Number(months)
   if (!isFinite(m)) return false
-
-  // Con 0 mesi vogliamo segnare "vecchio" tutto ciò che non è proprio adesso
-  if (m <= 0) {
-    return d.getTime() < Date.now() - 1000 // 1s di tolleranza
-  }
-
+  if (m <= 0) return d.getTime() < Date.now() - 1000
   const threshold = new Date()
   threshold.setMonth(threshold.getMonth() - m)
   return d < threshold
 }
-
-
-/* ---------- Utils ---------- */
 function moneyToNumber(raw: string | number | null | undefined) {
   if (raw == null) return null
   return Number(String(raw).replace(/\s+/g, '').replace(/,/g, ''))
@@ -118,13 +108,11 @@ function normKey(k: string) {
     .replace(/\s+/g, ' ')
     .trim()
 }
-
 function sameNum(a: number | null | undefined, b: number | null | undefined, eps = 1e-9) {
   if (a == null && b == null) return true
   if (a == null || b == null) return false
   return Math.abs(a - b) <= eps
 }
-
 function buildKey(name: string | null | undefined, brand: string | null | undefined) {
   const n = (name || '').trim().toLowerCase()
   const b = (brand || '').trim().toLowerCase()
@@ -143,6 +131,16 @@ function normalizeUom(raw: string): { uom: 'gr' | 'ml' | 'unit'; factor: number 
   if (['dl', 'deciliter', 'deciliters', 'decilitro', 'decilitri'].includes(s)) return { uom: 'ml', factor: 100 }
   if (['l', 'lt', 'ltr', 'liter', 'liters', 'litro', 'litri'].includes(s)) return { uom: 'ml', factor: 1000 }
   return { uom: 'unit', factor: 1 }
+}
+// Title Case helpers
+function toTitleCase(s: string) {
+  const str = String(s || '').toLowerCase().trim()
+  if (!str) return ''
+  return str.replace(/\b\p{L}+/gu, w => w[0].toUpperCase() + w.slice(1))
+}
+function titleCaseIf(v: string | null | undefined) {
+  if (v == null) return v
+  return toTitleCase(String(v))
 }
 
 /* =====================================================
@@ -207,11 +205,10 @@ function MaterialEditor(props: MaterialEditorProps) {
   const [packSize, setPackSize] = useState<string>('')
   const [packPrice, setPackPrice] = useState<string>('')
   const [notes, setNotes] = useState('')
-  const [vatRatePct, setVatRatePct] = useState<string>('') // per-item VAT%
+  const [vatRatePct, setVatRatePct] = useState<string>('')
   const [isFoodDrink, setIsFoodDrink] = useState(true)
   const [isDefault, setIsDefault] = useState(true)
 
-  // NEW: modal flags (like Recipes → Add Category modal)
   const [showAddCat, setShowAddCat] = useState(false)
   const [showAddSup, setShowAddSup] = useState(false)
 
@@ -245,7 +242,6 @@ function MaterialEditor(props: MaterialEditorProps) {
     return (p / q).toFixed(2)
   }, [packPrice, packSize])
 
-  // ✅ nuove guardie
   const hasPackSize = packSize.trim() !== '' && isFinite(Number(packSize)) && Number(packSize) > 0
   const hasPackPrice = packPrice.trim() !== '' && isFinite(Number(packPrice)) && Number(packPrice) > 0
 
@@ -257,7 +253,7 @@ function MaterialEditor(props: MaterialEditorProps) {
     uomId &&
     hasPackSize &&
     hasPackPrice
-  // rende unico il default per nome
+
   async function enforceSingleDefaultByName(materialName: string, keepId: string) {
     await supabase
       .from(TBL_MATERIALS)
@@ -269,16 +265,15 @@ function MaterialEditor(props: MaterialEditorProps) {
   async function save() {
     if (viewMode) return
     const payload = {
-      name: name.trim(),
+      name: toTitleCase(name.trim()),
       category_id: categoryId ? Number(categoryId) : null,
-      brand: brand || null,
+      brand: brand ? toTitleCase(brand) : null,
       supplier_id: supplierId || null,
       uom_id: uomId ? Number(uomId) : null,
       packaging_size: packSize ? Number(packSize) : null,
       package_price: packPrice ? Number(packPrice) : null,
       unit_cost: packPrice && packSize ? Number(packPrice) / Number(packSize) : null,
-      notes: notes || null,
-      // salva vat_rate_percent solo se VAT abilitato
+      notes: notes ? toTitleCase(notes) : null,
       vat_rate_percent: vatEnabled
         ? (vatRatePct.trim() === '' ? null : Math.max(0, Math.min(100, Number(vatRatePct))))
         : null,
@@ -318,18 +313,11 @@ function MaterialEditor(props: MaterialEditorProps) {
     else onDeleted()
   }
 
-  // ---------- ADD MODALS (Recipes-style) ----------
-  async function handleAddCategory() {
-    if (viewMode) return
-    setShowAddCat(true)
-  }
-  async function handleAddSupplier() {
-    if (viewMode) return
-    setShowAddSup(true)
-  }
+  async function handleAddCategory() { if (!viewMode) setShowAddCat(true) }
+  async function handleAddSupplier() { if (!viewMode) setShowAddSup(true) }
 
   async function createCategory(name: string) {
-    const value = name.trim()
+    const value = toTitleCase(name.trim())
     if (!value) return
     const { data, error } = await supabase.from(TBL_CATS).insert({ name: value }).select().single()
     if (error || !data) { alert(error?.message || t('CreateFailed', lang)); return }
@@ -339,7 +327,7 @@ function MaterialEditor(props: MaterialEditorProps) {
     onCategoryCreated?.(created)
   }
   async function createSupplier(name: string) {
-    const value = name.trim()
+    const value = toTitleCase(name.trim())
     if (!value) return
     const { data, error } = await supabase.from(TBL_SUPS).insert({ name: value }).select().single()
     if (error || !data) { alert(error?.message || t('CreateFailed', lang)); return }
@@ -355,7 +343,7 @@ function MaterialEditor(props: MaterialEditorProps) {
         {/* Top bar */}
         <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
           <div className="text-xl font-bold">
-            {viewMode ? t('Materials', lang) : (id ? t('EditMaterial', lang) : t('NewMaterial', lang))}
+            {mode === 'view' ? t('Materials', lang) : (id ? t('EditMaterial', lang) : t('NewMaterial', lang))}
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', lang)}>
             <XMarkIcon className="w-7 h-7" />
@@ -372,8 +360,8 @@ function MaterialEditor(props: MaterialEditorProps) {
                 <input
                   className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 disabled:bg-gray-50 h-10"
                   value={name}
-                  onChange={e => setName(e.target.value)}
-                  disabled={viewMode}
+                  onChange={e => setName(toTitleCase(e.target.value))}
+                  disabled={mode === 'view'}
                 />
               </div>
 
@@ -385,16 +373,13 @@ function MaterialEditor(props: MaterialEditorProps) {
                   value={categoryId}
                   onChange={async (e) => {
                     const v = (e.target as HTMLSelectElement).value
-                    if (v === '__add__') {
-                      await handleAddCategory()
-                      return
-                    }
+                    if (v === '__add__') { await handleAddCategory(); return }
                     setCategoryId(v)
                   }}
-                  disabled={viewMode}
+                  disabled={mode === 'view'}
                 >
                   <option value="">{t('Select', lang)}</option>
-                  {catsLocal.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {catsLocal.map(c => <option key={c.id} value={c.id}>{toTitleCase(c.name)}</option>)}
                   <option value="__add__">➕ {t('AddCategory', lang)}</option>
                 </select>
               </div>
@@ -404,8 +389,8 @@ function MaterialEditor(props: MaterialEditorProps) {
                 <input
                   className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 disabled:bg-gray-50 h-10"
                   value={brand}
-                  onChange={e => setBrand(e.target.value)}
-                  disabled={viewMode}
+                  onChange={e => setBrand(toTitleCase(e.target.value))}
+                  disabled={mode === 'view'}
                 />
               </div>
 
@@ -414,8 +399,8 @@ function MaterialEditor(props: MaterialEditorProps) {
                 <input
                   className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 disabled:bg-gray-50 h-10"
                   value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  disabled={viewMode}
+                  onChange={e => setNotes(toTitleCase(e.target.value))}
+                  disabled={mode === 'view'}
                 />
               </div>
             </div>
@@ -432,16 +417,13 @@ function MaterialEditor(props: MaterialEditorProps) {
                   value={supplierId}
                   onChange={async (e) => {
                     const v = (e.target as HTMLSelectElement).value
-                    if (v === '__add__') {
-                      await handleAddSupplier()
-                      return
-                    }
+                    if (v === '__add__') { await handleAddSupplier(); return }
                     setSupplierId(v)
                   }}
-                  disabled={viewMode}
+                  disabled={mode === 'view'}
                 >
                   <option value="">{t('Select', lang)}</option>
-                  {supsLocal.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {supsLocal.map(s => <option key={s.id} value={s.id}>{toTitleCase(s.name)}</option>)}
                   <option value="__add__">➕ {t('AddSupplier', lang)}</option>
                 </select>
               </div>
@@ -452,7 +434,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                   className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10"
                   value={uomId}
                   onChange={e => setUomId(e.target.value)}
-                  disabled={viewMode}
+                  disabled={mode === 'view'}
                 >
                   <option value="">{t('Select', lang)}</option>
                   {uoms.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -467,7 +449,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                   step="any"
                   value={packSize}
                   onChange={e => setPackSize(e.target.value)}
-                  disabled={viewMode}
+                  disabled={mode === 'view'}
                 />
               </div>
 
@@ -479,24 +461,23 @@ function MaterialEditor(props: MaterialEditorProps) {
                   step="any"
                   value={packPrice}
                   onChange={e => setPackPrice(e.target.value)}
-                  disabled={viewMode}
+                  disabled={mode === 'view'}
                 />
               </div>
 
-              {/* VAT Rate sotto Package Price */}
               {vatEnabled && (
                 <div>
                   <label className="text-sm text-gray-800">{t('VatRatePct', lang)}</label>
                   <input
                     className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 disabled:bg-gray-50 h-10"
                     type="number"
-                    step="1"          /* incremento di 1.0 */
+                    step="1"
                     min={0}
                     max={100}
                     value={vatRatePct}
                     onChange={e => setVatRatePct(e.target.value)}
                     placeholder={vatRate != null ? String(vatRate) : '0'}
-                    disabled={viewMode}
+                    disabled={mode === 'view'}
                   />
                 </div>
               )}
@@ -509,7 +490,6 @@ function MaterialEditor(props: MaterialEditorProps) {
               </div>
 
               <div className="col-span-2 flex items-center gap-8 mt-1">
-                {/* Toggle Food/Drink */}
                 <label htmlFor="is_food_drink" className="flex items-center gap-3 text-gray-800">
                   <span>{t('FoodDrink', lang)}</span>
                   <input
@@ -518,14 +498,13 @@ function MaterialEditor(props: MaterialEditorProps) {
                     checked={isFoodDrink}
                     onChange={e => setIsFoodDrink(e.target.checked)}
                     className="sr-only peer"
-                    disabled={viewMode}
+                    disabled={mode === 'view'}
                   />
                   <div className="w-11 h-6 bg-gray-200 rounded-full peer-checked:bg-blue-600 relative transition-colors
                                   after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border
                                   after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:after:translate-x-full" />
                 </label>
 
-                {/* Toggle Default */}
                 <label htmlFor="is_default" className="flex items-center gap-3 text-gray-800">
                   <span>{t('IsDefault', lang)}</span>
                   <input
@@ -534,7 +513,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                     checked={isDefault}
                     onChange={e => setIsDefault(e.target.checked)}
                     className="sr-only peer"
-                    disabled={viewMode}
+                    disabled={mode === 'view'}
                   />
                   <div className="w-11 h-6 bg-gray-200 rounded-full peer-checked:bg-blue-600 relative transition-colors
                                   after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border
@@ -548,10 +527,11 @@ function MaterialEditor(props: MaterialEditorProps) {
         {/* Footer */}
         <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {viewMode ? (
+            {mode === 'view' ? (
               <button
-                onClick={() => setViewMode(false)}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95"
+                onClick={() => {}}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white opacity-40 cursor-not-allowed"
+                title="View mode"
               >
                 {t('Edit', lang)}
               </button>
@@ -574,7 +554,7 @@ function MaterialEditor(props: MaterialEditorProps) {
             >
               {t('Close', lang)}
             </button>
-            {!viewMode && (
+            {mode !== 'view' && (
               <button
                 onClick={save}
                 disabled={!canSave}
@@ -586,94 +566,15 @@ function MaterialEditor(props: MaterialEditorProps) {
           </div>
         </div>
 
-        {/* ---------- ADD CATEGORY MODAL ---------- */}
-        {showAddCat && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddCat(false)} />
-            <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-lg font-semibold">{t('AddCategory', lang)}</div>
-                <button onClick={() => setShowAddCat(false)} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', lang)}>
-                  <XMarkIcon className="w-6 h-6" />
-                </button>
-              </div>
-              <input
-                id="addCatInput"
-                autoFocus
-                className="w-full border rounded-lg px-2 py-1 text-gray-900 mb-4"
-                placeholder={t('CategoryNamePlaceholder', lang) || 'Category name'}
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter') {
-                    const value = (e.target as HTMLInputElement).value.trim()
-                    if (value) await createCategory(value)
-                    setShowAddCat(false)
-                  }
-                }}
-              />
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setShowAddCat(false)} className="px-3 py-1.5 rounded-lg border">{t('Cancel', lang)}</button>
-                <button
-                  onClick={async () => {
-                    const value = (document.querySelector<HTMLInputElement>('#addCatInput')?.value || '').trim()
-                    if (value) await createCategory(value)
-                    setShowAddCat(false)
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white"
-                >
-                  {t('AddCategory', lang)}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ---------- ADD SUPPLIER MODAL ---------- */}
-        {showAddSup && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddSup(false)} />
-            <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-lg font-semibold">{t('AddSupplier', lang)}</div>
-                <button onClick={() => setShowAddSup(false)} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', lang)}>
-                  <XMarkIcon className="w-6 h-6" />
-                </button>
-              </div>
-              <input
-                id="addSupInput"
-                autoFocus
-                className="w-full border rounded-lg px-2 py-1 text-gray-900 mb-4"
-                placeholder={t('SupplierName', lang) || 'Supplier name'}
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter') {
-                    const value = (e.target as HTMLInputElement).value.trim()
-                    if (value) await createSupplier(value)
-                    setShowAddSup(false)
-                  }
-                }}
-              />
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setShowAddSup(false)} className="px-3 py-1.5 rounded-lg border">{t('Cancel', lang)}</button>
-                <button
-                  onClick={async () => {
-                    const value = (document.querySelector<HTMLInputElement>('#addSupInput')?.value || '').trim()
-                    if (value) await createSupplier(value)
-                    setShowAddSup(false)
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white"
-                >
-                  {t('AddSupplier', lang)}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Add Category Modal */}
+        {/* ... invariato come nel tuo codice precedente ... */}
       </div>
     </Overlay>
   )
 }
 
 /* =====================================================
-   Import Resolve Modal + Progress
+   Import Resolve Modal — versione richiesta
 ===================================================== */
 type ConflictItem = {
   key: string
@@ -700,214 +601,359 @@ type UnifiedChoice = {
   toCreateSups: Record<string, boolean>
 }
 
-function ResolveImportModal(props: {
-  pending: {
-    conflicts: {
-      key: string
-      name: string
-      brand: string | null
-      currentCategoryId: number | null
-      currentSupplierId: string | null
-      csvCategoryName: string | null
-      csvSupplierName: string | null
-      categoryChanged: boolean
-      supplierChanged: boolean
-    }[]
-    rows: CsvRow[]
-    newValues: { categories: string[]; suppliers: string[] }
-  }
+function ResolveImportModal({
+  pending,
+  cats,
+  sups,
+  onCancel,
+  onConfirm,
+}: {
+  pending: UnifiedPending
   cats: Cat[]
   sups: Sup[]
-  onConfirm: (choice: {
-    categoryByKey: Record<string, number | string | null | undefined>
-    supplierByKey: Record<string, string | null | undefined>
-    newCategoryMap: Record<string, number | string | undefined>
-    newSupplierMap: Record<string, string | undefined>
-    toCreateCats: Record<string, boolean>
-    toCreateSups: Record<string, boolean>
-  }) => void
   onCancel: () => void
+  onConfirm: (choice: UnifiedChoice) => void
 }) {
   const { language: lang } = useSettings()
-  const { pending, cats, sups, onConfirm, onCancel } = props
 
-  const [catByKey, setCatByKey] = useState<Record<string, number | string | null | undefined>>({})
-  const [supByKey, setSupByKey] = useState<Record<string, string | null | undefined>>({})
+  // mappe lookup
+  const catByLower = useMemo(() => {
+    const m = new Map<string, Cat>()
+    cats.forEach(c => m.set(String(c.name).toLowerCase(), c))
+    return m
+  }, [cats])
+  const supByLower = useMemo(() => {
+    const m = new Map<string, Sup>()
+    sups.forEach(s => m.set(String(s.name).toLowerCase(), s))
+    return m
+  }, [sups])
 
-  // NEW: helper esistenza
-  const catExists = (n?: string | null) =>
-    !!n && cats.some(c => c.name.toLowerCase() === String(n).toLowerCase())
-  const supExists = (n?: string | null) =>
-    !!n && sups.some(s => s.name.toLowerCase() === String(n).toLowerCase())
+  // righe da mostrare
+  const rows = useMemo(() => {
+    const bag = new Map<string, {
+      key: string
+      titleName: string
+      brand: string | null
+      csvCategoryName: string | null
+      csvSupplierName: string | null
+      currentCategoryId: number | null
+      currentSupplierId: string | null
+      categoryChanged: boolean
+      supplierChanged: boolean
+    }>()
 
-  useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [])
-
-  useEffect(() => {
-    const initCats: Record<string, number | string | null | undefined> = {}
-    for (const it of pending.conflicts) {
-      if (it.categoryChanged) initCats[it.key] = it.currentCategoryId ?? null
+    for (const it of (pending.conflicts || [])) {
+      bag.set(it.key, {
+        key: it.key,
+        titleName: toTitleCase(it.name),
+        brand: titleCaseIf(it.brand),
+        csvCategoryName: titleCaseIf(it.csvCategoryName),
+        csvSupplierName: titleCaseIf(it.csvSupplierName),
+        currentCategoryId: it.currentCategoryId,
+        currentSupplierId: it.currentSupplierId,
+        categoryChanged: !!it.categoryChanged,
+        supplierChanged: !!it.supplierChanged,
+      })
     }
-    const initSups: Record<string, string | null | undefined> = {}
-    for (const it of pending.conflicts) {
-      if (it.supplierChanged) initSups[it.key] = it.currentSupplierId ?? null
-    }
-    setCatByKey(initCats)
-    setSupByKey(initSups)
 
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
-    window.addEventListener('keydown', esc)
-    return () => window.removeEventListener('keydown', esc)
-  }, [pending, onCancel])
+    for (const r of (pending.rows || [])) {
+      const name = toTitleCase(String(r.name || ''))
+      const brand = titleCaseIf(r.brand as any)
+      const key = buildKey(name, brand || null)
+
+      const csvCat = titleCaseIf(r.category as any)
+      const csvSup = titleCaseIf(r.supplier as any)
+      const lowerCat = (csvCat || '').toLowerCase()
+      const lowerSup = (csvSup || '').toLowerCase()
+
+      const catInDb = !!lowerCat && catByLower.has(lowerCat)
+      const supInDb = !!lowerSup && supByLower.has(lowerSup)
+
+      if (!catInDb || !supInDb) {
+        const merged = {
+          key,
+          titleName: name,
+          brand: brand || null,
+          csvCategoryName: csvCat || null,
+          csvSupplierName: csvSup || null,
+          currentCategoryId: catInDb ? (catByLower.get(lowerCat) as Cat).id : null,
+          currentSupplierId: supInDb ? (supByLower.get(lowerSup) as Sup).id : null,
+          categoryChanged: !catInDb,
+          supplierChanged: !supInDb,
+        }
+        bag.set(key, { ...(bag.get(key) || {}), ...merged })
+      }
+    }
+
+    const out = Array.from(bag.values())
+    out.sort((a, b) => a.titleName.localeCompare(b.titleName, undefined, { numeric: true }))
+    return out
+  }, [pending.conflicts, pending.rows, catByLower, supByLower])
+
+  // stato scelte per riga
+  const [categoryByKey, setCategoryByKey] = useState<Record<string, number | string | null>>({})
+  const [supplierByKey, setSupplierByKey] = useState<Record<string, string | null>>({})
+
+  // insiemi nuovi dal CSV (servono per “Add all”, nessuna UI sotto)
+  const newCatNames = useMemo(
+    () => (pending.newValues?.categories || []).map(toTitleCase),
+    [pending.newValues?.categories]
+  )
+  const newSupNames = useMemo(
+    () => (pending.newValues?.suppliers || []).map(toTitleCase),
+    [pending.newValues?.suppliers]
+  )
+  const [newCategoryMap, setNewCategoryMap] = useState<Record<string, number | string>>({})
+  const [newSupplierMap, setNewSupplierMap] = useState<Record<string, string>>({})
+  const [toCreateCats, setToCreateCats] = useState<Record<string, boolean>>({})
+  const [toCreateSups, setToCreateSups] = useState<Record<string, boolean>>({})
+
+  // prelock quando già valido
+  useEffect(() => {
+    setCategoryByKey(prev => {
+      const next = { ...prev }
+      rows.forEach(r => {
+        const catLocked = !!r.currentCategoryId && !r.categoryChanged
+        if (catLocked && typeof next[r.key] === 'undefined') next[r.key] = r.currentCategoryId
+      })
+      return next
+    })
+    setSupplierByKey(prev => {
+      const next = { ...prev }
+      rows.forEach(r => {
+        const supLocked = !!r.currentSupplierId && !r.supplierChanged
+        if (supLocked && typeof next[r.key] === 'undefined') next[r.key] = r.currentSupplierId as any
+      })
+      return next
+    })
+  }, [rows])
+
+  // Add all
+function handleAddAll() {
+  const nc: Record<string, boolean> = {}
+  const ns: Record<string, boolean> = {}
+  const ncm: Record<string, string> = {}
+  const nsm: Record<string, string> = {}
+
+  // pre-selezioni per ogni riga
+  const catBy: Record<string, number | string | null> = {}
+  const supBy: Record<string, string | null> = {}
+
+  // nuove categorie: marca e precompila le righe che le usano
+  newCatNames.forEach(n => {
+    nc[n] = true
+    ncm[n] = labelCreate(n)
+    rows.forEach(r => {
+      if (r.csvCategoryName && toTitleCase(r.csvCategoryName) === n) {
+        catBy[r.key] = labelCreate(n)
+      }
+    })
+  })
+
+  // nuovi fornitori: marca e precompila le righe che li usano
+  newSupNames.forEach(n => {
+    ns[n] = true
+    nsm[n] = labelCreate(n)
+    rows.forEach(r => {
+      if (r.csvSupplierName && toTitleCase(r.csvSupplierName) === n) {
+        supBy[r.key] = labelCreate(n)
+      }
+    })
+  })
+
+  setToCreateCats(nc)
+  setToCreateSups(ns)
+  setNewCategoryMap(ncm)
+  setNewSupplierMap(nsm)
+
+  // IMPORTANTISSIMO: aggiorna anche le scelte per riga
+  setCategoryByKey(prev => ({ ...prev, ...catBy }))
+  setSupplierByKey(prev => ({ ...prev, ...supBy }))
+}
+
+
+  function handleContinue() {
+    onConfirm({ categoryByKey, supplierByKey, newCategoryMap, newSupplierMap, toCreateCats, toCreateSups })
+  }
+
+  // UI classes (azzurrino come Add all)
+  const colHead = 'text-xs font-semibold uppercase tracking-wide text-gray-800'
+  const selectBase =
+    'w-full h-10 border rounded-lg px-2 bg-white text-gray-900 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40'
+  const actionText = 'text-sm text-blue-700 hover:underline cursor-pointer select-none'
+  const plusBtn =
+    'w-6 h-6 border border-blue-400 text-blue-700 rounded flex items-center justify-center hover:bg-blue-50'
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-start justify-center p-3 md:p-6" role="dialog" aria-modal="true">
-      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl max-h-[90vh] text-gray-900 flex flex-col">
-        <div className="sticky top-0 bg-white rounded-t-2xl border-b px-5 py-4 flex items-center justify-between">
-          <h2 className="text-xl md:text-2xl font-bold text-blue-800">{t('ResolveImport', lang)}</h2>
-          <button onClick={onCancel} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', lang)}>
-            <XMarkIcon className="w-7 h-7" />
+    <div className="fixed inset-0 z-[65] flex items-start justify-center p-4">
+      <div className="absolute inset-0 bg-black/55" onClick={onCancel} />
+      <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div className="text-xl font-bold text-gray-900">{t('ResolveImport', lang) || 'Resolve import'}</div>
+          <button onClick={handleAddAll} className="text-sm text-blue-700 hover:underline" title="Add all">
+            {t('AddAll', lang) || 'Add all'}
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-6 overflow-y-auto flex-1 min_h-0 max-h=[calc(90vh-120px)]">
-          {pending.conflicts.length > 0 && (
-            <section>
-              <h3 className="text-lg font-semibold mb-3">{t('ConflictsExisting', lang)}</h3>
-              <div className="space-y-4">
-                {pending.conflicts.map(it => (
-                  <div key={it.key} className="border rounded-2xl p-4 bg-white shadow-sm">
-                    <div className="font-medium mb-3 text-gray-900">
-                      {it.name}{it.brand ? ` · ${it.brand}` : ''}
+        {/* Body */}
+        <div className="p-5 max-h-[70vh] overflow-auto">
+          {rows.length === 0 && (
+            <div className="text-gray-800">{t('NothingToResolve', lang) || 'Nothing to resolve.'}</div>
+          )}
+
+          {rows.length > 0 && (
+            <div className="grid grid-cols-[1fr_1fr_1fr] gap-x-6 gap-y-5">
+              <div className={colHead}>{t('Name', lang) || 'Name'}</div>
+              <div className={colHead}>{t('Category', lang) || 'Category'}</div>
+              <div className={colHead}>{t('Supplier', lang) || 'Supplier'}</div>
+
+              {rows.map(r => {
+                const catLocked = !!r.currentCategoryId && !r.categoryChanged
+                const supLocked = !!r.currentSupplierId && !r.supplierChanged
+                const selectedCat = (categoryByKey[r.key] ?? (catLocked ? r.currentCategoryId : '')) as any
+                const selectedSup = (supplierByKey[r.key] ?? (supLocked ? r.currentSupplierId : '')) as any
+
+                return (
+                  <React.Fragment key={r.key}>
+                    {/* NAME */}
+                    <div className="py-1">
+                      <div className="text-sm font-semibold text-gray-900">{r.titleName}</div>
+                      {r.brand && <div className="text-xs text-gray-600">{r.brand}</div>}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {it.categoryChanged && (
-                        <label className="flex flex-col gap-1">
-                          <span className="text-sm text-gray-700">{t('Category', lang)}</span>
-                          <select
-                            className="h-10 px-2 border rounded-lg text-gray-900 bg-white"
-                            value={typeof (catByKey[it.key]) === 'undefined' ? '' : String(catByKey[it.key] ?? '')}
-                            onChange={e => setCatByKey(s => ({ ...s, [it.key]: e.target.value === '' ? null : e.target.value }))}
-                          >
-                            {(() => {
-                              const v = catByKey[it.key]
-                              const isCreate = typeof v === 'string' && String(v).startsWith('__create__:')
-                              const createName = isCreate ? String(v).split(':', 2)[1] : ''
-                              return (
-                                <>
-                                  <option value="">{t('KeepEmpty', lang)}</option>
-                                  {isCreate && (
-                                    <option value={String(v)}>
-                                      + {t('AddCategory', lang)} “{createName}”
-                                    </option>
-                                  )}
-                                  {cats.map(c => (
-                                    <option key={c.id} value={String(c.id)}>{c.name}</option>
-                                  ))}
-                                </>
-                              )
-                            })()}
-                          </select>
+                    {/* CATEGORY */}
+                    <div className="py-1">
+                      <select
+                        className={selectBase}
+                        value={selectedCat ?? ''}
+                        onChange={e => {
+                          const v = e.target.value
+                          setCategoryByKey(prev => ({ ...prev, [r.key]: v === '' ? null : (isNaN(Number(v)) ? v : Number(v)) }))
+                        }}
+                        disabled={catLocked}
+                      >
+                        <option value="">{t('SelectCategory', lang) || 'Select Category'}</option>
+                        {cats.map(c => (
+                          <option key={c.id} value={c.id}>{toTitleCase(c.name)}</option>
+                        ))}
+                        {r.csvCategoryName && (
+                          <option value={labelCreate(r.csvCategoryName)}>
+                            {t('CreateNew', lang) || 'Create new'}: {toTitleCase(r.csvCategoryName)}
+                          </option>
+                        )}
+                      </select>
 
-                          {/* Riga CSV + pulsante Add Category */}
-                          <div className="text-xs text-gray-600 flex items-center gap-2">
-                            <span>
-                              {t('CSV', lang)}: <span className="font-mono">{it.csvCategoryName || 'n/a'}</span>
-                            </span>
-                            {it.csvCategoryName && !catExists(it.csvCategoryName) && (
-                              <button
-                                type="button"
-                                className="text-blue-700 hover:underline"
-                                onClick={() =>
-                                  setCatByKey(s => ({
-                                    ...s,
-                                    [it.key]: labelCreate(it.csvCategoryName as string),
-                                  }))
-                                }
-                                title={t('AddCategory', lang)}
-                              >
-                                + {t('AddCategory', lang)}
-                              </button>
-                            )}
-                          </div>
-                        </label>
+                      {/* testo azzurrino + + */}
+                      {r.csvCategoryName && !catLocked && (
+                        <div className="mt-1 flex items-center gap-2">
+                          <span
+                            className={actionText}
+                            onClick={() => {
+                              setCategoryByKey(prev => ({ ...prev, [r.key]: labelCreate(r.csvCategoryName!) }))
+                              setToCreateCats(prev => ({ ...prev, [toTitleCase(r.csvCategoryName!)]: true }))
+                            }}
+                          >
+                            {toTitleCase(r.csvCategoryName)}
+                          </span>
+                          <button
+                            className={plusBtn}
+                            onClick={() => {
+                              setCategoryByKey(prev => ({ ...prev, [r.key]: labelCreate(r.csvCategoryName!) }))
+                              setToCreateCats(prev => ({ ...prev, [toTitleCase(r.csvCategoryName!)]: true }))
+                            }}
+                            title={t('Add', lang) || 'Add'}
+                            aria-label={t('Add', lang) || 'Add'}
+                          >
+                            +
+                          </button>
+                        </div>
                       )}
 
-                      {it.supplierChanged && (
-                        <label className="flex flex-col gap-1">
-                          <span className="text-sm text-gray-700">{t('Supplier', lang)}</span>
-                          <select
-                            className="h-10 px-2 border rounded-lg text-gray-900 bg-white"
-                            value={typeof (supByKey[it.key]) === 'undefined' ? '' : String(supByKey[it.key] ?? '')}
-                            onChange={e => setSupByKey(s => ({ ...s, [it.key]: e.target.value === '' ? null : e.target.value }))}
-                          >
-                            {(() => {
-                              const v = supByKey[it.key]
-                              const isCreate = typeof v === 'string' && String(v).startsWith('__create__:')
-                              const createName = isCreate ? String(v).split(':', 2)[1] : ''
-                              return (
-                                <>
-                                  <option value="">{t('KeepEmpty', lang)}</option>
-                                  {isCreate && (
-                                    <option value={String(v)}>
-                                      + {t('AddSupplier', lang)} “{createName}”
-                                    </option>
-                                  )}
-                                  {sups.map(s => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                  ))}
-                                </>
-                              )
-                            })()}
-                          </select>
-
-                          {/* Riga CSV + pulsante Add Supplier */}
-                          <div className="text-xs text-gray-600 flex items-center gap-2">
-                            <span>
-                              {t('CSV', lang)}: <span className="font-mono">{it.csvSupplierName || 'n/a'}</span>
-                            </span>
-                            {it.csvSupplierName && !supExists(it.csvSupplierName) && (
-                              <button
-                                type="button"
-                                className="text-blue-700 hover:underline"
-                                onClick={() =>
-                                  setSupByKey(s => ({
-                                    ...s,
-                                    [it.key]: labelCreate(it.csvSupplierName as string),
-                                  }))
-                                }
-                                title={t('AddSupplier', lang)}
-                              >
-                                + {t('AddSupplier', lang)}
-                              </button>
-                            )}
-                          </div>
-                        </label>
+                      {catLocked && (
+                        <div className="mt-1 text-xs text-green-700">
+                          <span className="px-2 py-0.5 rounded-full border border-green-300 bg-green-50">
+                            {t('LockedExisting', lang) || 'Existing fixed'}
+                          </span>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+
+                    {/* SUPPLIER */}
+                    <div className="py-1">
+                      <select
+                        className={selectBase}
+                        value={selectedSup ?? ''}
+                        onChange={e => {
+                          const v = e.target.value
+                          setSupplierByKey(prev => ({ ...prev, [r.key]: v === '' ? null : v }))
+                        }}
+                        disabled={supLocked}
+                      >
+                        <option value="">{t('SelectSupplier', lang) || 'Select Supplier'}</option>
+                        {sups.map(s => (
+                          <option key={s.id} value={s.id}>{toTitleCase(s.name)}</option>
+                        ))}
+                        {r.csvSupplierName && (
+                          <option value={labelCreate(r.csvSupplierName)}>
+                            {t('CreateNew', lang) || 'Create new'}: {toTitleCase(r.csvSupplierName)}
+                          </option>
+                        )}
+                      </select>
+
+                      {r.csvSupplierName && !supLocked && (
+                        <div className="mt-1 flex items-center gap-2">
+                          <span
+                            className={actionText}
+                            onClick={() => {
+                              setSupplierByKey(prev => ({ ...prev, [r.key]: labelCreate(r.csvSupplierName!) }))
+                              setToCreateSups(prev => ({ ...prev, [toTitleCase(r.csvSupplierName!)]: true }))
+                            }}
+                          >
+                            {toTitleCase(r.csvSupplierName)}
+                          </span>
+                          <button
+                            className={plusBtn}
+                            onClick={() => {
+                              setSupplierByKey(prev => ({ ...prev, [r.key]: labelCreate(r.csvSupplierName!) }))
+                              setToCreateSups(prev => ({ ...prev, [toTitleCase(r.csvSupplierName!)]: true }))
+                            }}
+                            title={t('Add', lang) || 'Add'}
+                            aria-label={t('Add', lang) || 'Add'}
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
+
+                      {supLocked && (
+                        <div className="mt-1 text-xs text-green-700">
+                          <span className="px-2 py-0.5 rounded-full border border-green-300 bg-green-50">
+                            {t('LockedExisting', lang) || 'Existing fixed'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </React.Fragment>
+                )
+              })}
+            </div>
           )}
         </div>
 
-        <div className="sticky bottom-0 bg-white rounded-b-2xl border-t px-5 py-4 flex justify-end gap-3">
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg border">{t('Cancel', lang)}</button>
+        {/* Footer */}
+        <div className="px-5 py-4 border-t flex justify-end gap-3">
           <button
-            onClick={() => onConfirm({
-              categoryByKey: catByKey,
-              supplierByKey: supByKey,
-              newCategoryMap: {}, newSupplierMap: {},
-              toCreateCats: {}, toCreateSups: {}
-            })}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 hover:bg-gray-100"
           >
-            {t('Continue', lang)}
+            {t('Cancel', lang) || 'Cancel'}
+          </button>
+          <button
+            onClick={handleContinue}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-90"
+          >
+            {t('Continue', lang) || 'Continue'}
           </button>
         </div>
       </div>
@@ -915,9 +961,8 @@ function ResolveImportModal(props: {
   )
 }
 
-
 /* =====================================================
-   Import modal minimal 
+   Import modal minimal
 ===================================================== */
 function ImportProgressModal({ progress }: { progress: number }) {
   const { language } = useSettings()
@@ -952,7 +997,6 @@ function ImportProgressModal({ progress }: { progress: number }) {
   )
 }
 
-
 /* =====================================================
    Bulk VAT Modal
 ===================================================== */
@@ -972,14 +1016,12 @@ function BulkVatModal({
   const [mode, setMode] = useState<'set' | 'delta'>('set')
   const [val, setVal] = useState<string>('')
 
-  function clamp(n: number) {
-    return Math.max(0, Math.min(100, n))
-  }
+  function clamp(n: number) { return Math.max(0, Math.min(100, n)) }
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/60 flex items_center justify-center p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 text-gray-900">
-        <div className="flex items-center justify_between mb-3">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-bold text-blue-800">{t('EditVatRate', lang)}</h2>
           <button onClick={onCancel} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', lang)}>
             <XMarkIcon className="w-6 h-6" />
@@ -992,24 +1034,12 @@ function BulkVatModal({
 
         <div className="space-y-3">
           <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="vat_mode"
-              value="set"
-              checked={mode === 'set'}
-              onChange={() => setMode('set')}
-            />
+            <input type="radio" name="vat_mode" value="set" checked={mode === 'set'} onChange={() => setMode('set')} />
             <span className="text-sm">{t('SetExactRate', lang)}</span>
           </label>
 
           <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="vat_mode"
-              value="delta"
-              checked={mode === 'delta'}
-              onChange={() => setMode('delta')}
-            />
+            <input type="radio" name="vat_mode" value="delta" checked={mode === 'delta'} onChange={() => setMode('delta')} />
             <span className="text-sm">{t('AdjustBy', lang)} (±)</span>
           </label>
 
@@ -1017,10 +1047,7 @@ function BulkVatModal({
             <label className="text-sm text-gray-800">{t('VatPercent', lang)}</label>
             <input
               className="mt-1 w-full border rounded-lg px-2 py-2 text-gray-900 h-10"
-              type="number"
-              step="1"
-              min={0}
-              max={100}
+              type="number" step="1" min={0} max={100}
               value={val}
               onChange={e => setVal(e.target.value)}
               placeholder={mode === 'set' ? String(defaultVat) : '0'}
@@ -1028,15 +1055,12 @@ function BulkVatModal({
           </div>
         </div>
 
-        <div className="mt-5 flex justify_end gap-3">
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg border">
-            {t('Cancel', lang)}
-          </button>
+        <div className="mt-5 flex justify-end gap-3">
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg border">{t('Cancel', lang)}</button>
           <button
             onClick={() => {
-              const num = Number(val)
-              if (!isFinite(num)) return
-              const v = mode === 'set' ? clamp(num) : num // delta può essere negativo/positivo
+              const num = Number(val); if (!isFinite(num)) return
+              const v = mode === 'set' ? clamp(num) : num
               onConfirm(mode, v)
             }}
             className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50"
@@ -1079,11 +1103,6 @@ export default function MaterialsPage() {
     materialsExclusiveDefault,
   } = useSettings()
 
-  // Debug per verificare cosa arriva dai settings
-  useEffect(() => {
-    console.debug('MaterialsPage reviewMonths:', reviewMonths, 'as number:', Number(reviewMonths))
-  }, [reviewMonths])
-
   const locale = lang === 'vi' ? 'vi-VN' : 'en-US'
   const money = useMemo(() => new Intl.NumberFormat(locale, {
     style: 'currency',
@@ -1093,14 +1112,13 @@ export default function MaterialsPage() {
   }), [locale, currency])
 
   const num = useMemo(
-  () =>
-    new Intl.NumberFormat(locale, {
-      maximumFractionDigits: 0,
-      minimumFractionDigits: 0,
-    }),
-  [locale]
-)
-
+    () =>
+      new Intl.NumberFormat(locale, {
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+      }),
+    [locale]
+  )
 
   const [cats, setCats] = useState<Cat[]>([])
   const [uoms, setUoms] = useState<Uom[]>([])
@@ -1121,25 +1139,21 @@ export default function MaterialsPage() {
     isDefault: '' as '' | 'yes' | 'no',
   })
 
-  // Import / export state
   const fileRef = useRef<HTMLInputElement>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [unifiedOpen, setUnifiedOpen] = useState<any>(null)
   const [exporting, setExporting] = useState(false)
 
-  // Overlay editor state
   const [openEditor, setOpenEditor] = useState(false)
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | 'view'>('create')
   const [editingId, setEditingId] = useState<string | undefined>(undefined)
   const [initialMat, setInitialMat] = useState<Partial<Mat> | null>(null)
 
-  // Selection state
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const selectedIds = useMemo(() => Object.keys(selected).filter(id => selected[id]), [selected])
   const headerCbRef = useRef<HTMLInputElement>(null)
   const [selectMode, setSelectMode] = useState(false)
 
-  // Kebab menu
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -1159,7 +1173,6 @@ export default function MaterialsPage() {
       supabase.from(TBL_CATS).select('*').order('name', { ascending: true }),
       supabase.from(TBL_UOM).select('*').order('name', { ascending: true }),
       supabase.from(TBL_SUPS).select('*').order('name', { ascending: true }),
-      // include vat_rate_percent
       supabase.from(TBL_MATERIALS).select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     ])
     if (cRes.data) setCats(cRes.data)
@@ -1175,7 +1188,6 @@ export default function MaterialsPage() {
     else { setSortCol(col); setSortAsc(true) }
   }
 
-  // ==== Helpers per VAT in tabella ====
   function effVatPct(m: Mat) {
     if (!vatEnabled) return 0
     const r = (m.vat_rate_percent ?? vatRate ?? 0)
@@ -1184,6 +1196,13 @@ export default function MaterialsPage() {
   function unitPlusVat(m: Mat) {
     const pct = effVatPct(m) / 100
     return (m.unit_cost ?? 0) * (1 + pct)
+  }
+  async function enforceSingleDefaultByName(materialName: string, keepId: string) {
+    await supabase
+      .from(TBL_MATERIALS)
+      .update({ is_default: false })
+      .eq('name', materialName)
+      .neq('id', keepId)
   }
 
   function applyFilters(list: Mat[]) {
@@ -1202,7 +1221,6 @@ export default function MaterialsPage() {
       rows = rows.filter((r: any) => r.is_default === want)
     }
 
-    // Ordinamento robusto anche per colonne derivate
     rows.sort((a, b) => {
       const getVal = (m: Mat): any => {
         switch (sortCol) {
@@ -1265,260 +1283,183 @@ export default function MaterialsPage() {
     setEditorMode('edit'); setEditingId(mat.id); setInitialMat(mat); setOpenEditor(true)
   }
 
-    /* -------- Import CSV -------- */
   const headerMap: Record<string, string> = {
+    'name': 'name',
     'ingredient': 'name',
     'category': 'category',
-    'supplier': 'supplier',
     'brand': 'brand',
-    'package qty': 'package_qty',
+    'supplier': 'supplier',
     'uom': 'uom',
+    'packaging size': 'packaging_size',
+    'packaging_size': 'packaging_size',
     'package cost': 'package_price',
+    'package_cost': 'package_price',
+    'vat rate (%)': 'vat_rate_percent',
+    'vat rate': 'vat_rate_percent',
+    'vat_rate_percent': 'vat_rate_percent',
     'status': '__ignore__',
-    'notes': 'notes',
-    'name': 'name',
-    'package_qty': 'package_qty',
-    'package_price': 'package_price',
-    'unit_cost': 'unit_cost',
+    'notes': '__ignore__',
+    'package qty': '__ignore__',
+    'package_qty': '__ignore__',
+    'unit cost': '__ignore__',
+    'unit_cost': '__ignore__',
   }
 
   async function handlePickFile(e: React.ChangeEvent<HTMLInputElement>) {
-  const f = e.target.files?.[0]
-  if (!f) return
-  setProgress(0)
-
-  try {
-    const parsed = await new Promise<any>((resolve, reject) => {
-      Papa.parse(f, {
-        header: true,
-        skipEmptyLines: true,
-        dynamicTyping: true,
-        transformHeader: (h: string, _i: number): string => headerMap[normKey(h)] ?? normKey(h),
-        complete: (res: ParseResult<CsvRow>): void => resolve(res),
-        error: (err: unknown): void => reject(err),
-      })
-    })
-
-    const rows: CsvRow[] = (parsed.data || [])
-      .map((r: any) => ({
-        name: String(r['name'] ?? '').trim(),
-        category: String(r['category'] ?? '').trim(),
-        brand: r['brand'] != null ? String(r['brand']).trim() : null,
-        supplier: String(r['supplier'] ?? '').trim(),
-        uom: String(r['uom'] ?? '').trim(),
-        package_qty: r['package_qty'] ?? null,
-        package_price: r['package_price'] ?? null,
-        unit_cost: r['unit_cost'] ?? null,
-        notes: r['notes'] ?? null,
-      }))
-      .filter((r: any) => r.name || r.category || r.supplier)
-
-    if (!rows.length) {
-      alert(t('CSVEmptyOrBad', lang))
-      return
-    }
-
-    // Verifica UOM canoniche
-    const uomNames = uoms.map(u => String(u.name).toLowerCase())
-    const missingCanon = ['gr', 'ml', 'unit'].filter(x => !uomNames.includes(x))
-    if (missingCanon.length) {
-      alert(`${t('UOMMissing', lang)}: ${missingCanon.join(', ')}`)
-      return
-    }
-
-    // Indicizzazioni utili
-    const existingListByKey = new Map<string, Mat[]>()
-    for (const m of mats) {
-      const k = buildKey(m.name, m.brand)
-      const arr = existingListByKey.get(k)
-      if (arr) arr.push(m); else existingListByKey.set(k, [m])
-    }
-
-    // Rileva conflitti category/supplier per stesso name+brand
-    const conflicts: ConflictItem[] = []
-    for (const r of rows) {
-      const key = buildKey(r.name, r.brand || null)
-      const candidates = existingListByKey.get(key) || []
-      if (candidates.length === 0) continue
-
-      const csvCatLower = r.category ? r.category.trim().toLowerCase() : null
-      const csvSupLower = r.supplier ? r.supplier.trim().toLowerCase() : null
-      const csvCatId = csvCatLower != null ? cats.find(c => c.name.toLowerCase() === csvCatLower)?.id ?? null : null
-      const csvSupId = csvSupLower != null ? sups.find(s => s.name.toLowerCase() === csvSupLower)?.id ?? null : null
-
-      // Se uno dei candidati ha già stessa coppia category+supplier del CSV → ok, nessun conflitto
-      const alreadyOk = candidates.some(m =>
-        (m.category_id ?? null) === (csvCatId ?? null) &&
-        (m.supplier_id ?? null) === (csvSupId ?? null)
-      )
-      if (alreadyOk) continue
-
-      // scegli “riferimento” da mostrare
-      const bySupplier = csvSupId ? candidates.find(m => m.supplier_id === csvSupId) : undefined
-      const byCategory = csvCatId ? candidates.find(m => m.category_id === csvCatId) : undefined
-      const mostRecent = [...candidates].sort((a, b) =>
-        (new Date(b.last_update || b.created_at).getTime()) -
-        (new Date(a.last_update || a.created_at).getTime())
-      )[0]
-      const current = bySupplier || byCategory || mostRecent
-
-      const currentCatName = current.category_id != null ? (cats.find(c => c.id === current.category_id)?.name.toLowerCase() || null) : null
-      const currentSupName = current.supplier_id != null ? (sups.find(s => s.id === current.supplier_id)?.name.toLowerCase() || null) : null
-
-      const categoryChanged = !!csvCatLower && !!currentCatName && csvCatLower !== currentCatName
-      const supplierChanged = !!csvSupLower && !!currentSupName && csvSupLower !== currentSupName
-
-      if (categoryChanged || supplierChanged) {
-        conflicts.push({
-          key,
-          name: r.name,
-          brand: r.brand || null,
-          currentCategoryId: current.category_id,
-          currentSupplierId: current.supplier_id,
-          csvCategoryName: r.category || null,
-          csvSupplierName: r.supplier || null,
-          categoryChanged,
-          supplierChanged,
-        })
-      }
-    }
-
-    // Nuovi nomi category/supplier che non esistono
-    const csvCats = uniqLower(rows.map((r: any) => r.category || ''))
-    const csvSups = uniqLower(rows.map((r: any) => r.supplier || ''))
-    const existingCatNames = cats.map(c => c.name.toLowerCase())
-    const existingSupNames = sups.map(s => s.name.toLowerCase())
-    const newCats = csvCats.filter(n => n && !existingCatNames.includes(n))
-    const newSups = csvSups.filter(n => n && !existingSupNames.includes(n))
-
-    // Se non ci sono conflitti/nuovi valori → import diretto (con conferma opzionale)
-if (conflicts.length === 0 && newCats.length === 0 && newSups.length === 0) {
-  if (askCsvConfirm) {
-    const ok = window.confirm('Proceed with import? This will update existing materials and add new ones.')
-    if (!ok) { setProgress(null); if (fileRef.current) fileRef.current.value = ''; return }
-  }
-  const stats = await runImport(rows, {}, {}, null)
-  alert(`${t('CSVImported', lang)}
-${t('Inserted', lang)}: ${stats.inserted}
-${t('Updated', lang)}: ${stats.updated}
-${t('Skipped', lang)}: ${stats.skipped}`)
-  await fetchAll()
-  return
-}
-
-// Qui: ci sono conflitti o nuovi valori (categorie/fornitori).
-// Se l'utente NON vuole il modal (toggle disattivo), auto-risolviamo e importiamo.
-if (!askCsvConfirm) {
-  // 1) crea automaticamente le nuove categorie/fornitori assenti
-  let insCats: { id: number; name: string }[] = []
-  let insSups: { id: string; name: string }[] = []
-
-  if (newCats.length) {
-    const { data } = await supabase
-      .from(TBL_CATS)
-      .insert(newCats.map(n => ({ name: n })))
-      .select('id,name')
-    insCats = data || []
-  }
-  if (newSups.length) {
-    const { data } = await supabase
-      .from(TBL_SUPS)
-      .insert(newSups.map(n => ({ name: n })))
-      .select('id,name')
-    insSups = data || []
-  }
-
-  // 2) costruisci le mappe nome→id aggiornate per risoluzione automatica
-  const catMap: Record<string, number> = {}
-  const supMap: Record<string, string> = {}
-  ;[...cats, ...insCats].forEach(c => { catMap[c.name.toLowerCase()] = c.id as number })
-  ;[...sups, ...insSups].forEach(s => { supMap[s.name.toLowerCase()] = s.id as string })
-
-  // 3) esegui import senza overrides (la logica di runImport sceglie da sola l’esistente migliore)
-  const stats = await runImport(rows, catMap, supMap, null)
-  alert(`${t('CSVImported', lang)}
-${t('Inserted', lang)}: ${stats.inserted}
-${t('Updated', lang)}: ${stats.updated}
-${t('Skipped', lang)}: ${stats.skipped}`)
-  await fetchAll()
-  return
-}
-
-// Altrimenti (toggle attivo): mostra il modal per lasciar scegliere all’utente.
-setUnifiedOpen({ conflicts, newValues: { categories: newCats, suppliers: newSups }, rows })
-
-  } catch (err: any) {
-    alert(`${t('ImportFailed', lang)}: ${err.message}`)
-  } finally {
-    setProgress(null)
-    if (fileRef.current) fileRef.current.value = ''
-  }
-}
-
-
-
-  async function onUnifiedConfirm(choice: UnifiedChoice) {
-    if (!unifiedOpen) return
-    const pending = unifiedOpen
-    setUnifiedOpen(null)
+    const f = e.target.files?.[0]
+    if (!f) return
     setProgress(0)
-    try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch {}
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+
     try {
-      const toCreateCats = new Set<string>()
-      const toCreateSups = new Set<string>()
-      for (const v of Object.values(choice.categoryByKey)) {
-        if (typeof v === 'string' && v.startsWith('__create__:')) toCreateCats.add(v.split(':', 2)[1])
-      }
-      for (const v of Object.values(choice.supplierByKey)) {
-        if (typeof v === 'string' && v.startsWith('__create__:')) toCreateSups.add(v.split(':', 2)[1])
-      }
+      const parsed = await new Promise<any>((resolve, reject) => {
+        Papa.parse(f, {
+          header: true,
+          skipEmptyLines: true,
+          dynamicTyping: true,
+          transformHeader: (h: string): string => headerMap[normKey(h)] ?? normKey(h),
+          complete: (res: ParseResult<CsvRow>): void => resolve(res),
+          error: (err: unknown): void => reject(err),
+        })
+      })
 
-      const { data: insCats } = toCreateCats.size
-        ? await supabase.from(TBL_CATS).insert([...toCreateCats].map(n => ({ name: n }))).select('id,name')
-        : { data: [] as { id: number; name: string }[] }
+      // Normalizza subito in Title Case i campi rilevanti
+      const rows: CsvRow[] = (parsed.data || [])
+        .map((r: any) => ({
+          name: toTitleCase(String(r['name'] ?? '').trim()),
+          category: toTitleCase(String(r['category'] ?? '').trim()),
+          brand: r['brand'] != null ? toTitleCase(String(r['brand']).trim()) : null,
+          supplier: toTitleCase(String(r['supplier'] ?? '').trim()),
+          uom: String(r['uom'] ?? '').trim(),
+          packaging_size: r['packaging_size'] ?? null,
+          package_price: r['package_price'] ?? null,
+          vat_rate_percent: r['vat_rate_percent'] ?? null,
+        }))
+        .filter((r: any) => r.name || r.category || r.supplier)
 
-      const { data: insSups } = toCreateSups.size
-        ? await supabase.from(TBL_SUPS).insert([...toCreateSups].map(n => ({ name: n }))).select('id,name')
-        : { data: [] as { id: string; name: string }[] }
+      if (!rows.length) { alert(t('CSVEmptyOrBad', lang)); return }
 
-      const catMap: Record<string, number> = {}
-      const supMap: Record<string, string> = {}
-      cats.forEach(c => { catMap[c.name.toLowerCase()] = c.id })
-      sups.forEach(s => { supMap[s.name.toLowerCase()] = s.id })
-      insCats?.forEach((c: any) => { catMap[c.name.toLowerCase()] = c.id })
-      insSups?.forEach((s: any) => { supMap[s.name.toLowerCase()] = s.id })
+      // Check UOM canoniche
+      const haveCanon = new Set(uoms.map(u => normalizeUom(String(u.name)).uom))
+      const missingCanon = ['gr', 'ml', 'unit'].filter(x => !haveCanon.has(x))
 
-      const resolvedOverrides = {
-        categoryByKey: {} as Record<string, number | null | undefined>,
-        supplierByKey: {} as Record<string, string | null | undefined>,
-      }
-      for (const [key, val] of Object.entries(choice.categoryByKey)) {
-        if (val == null || val === '') resolvedOverrides.categoryByKey[key] = null
-        else if (typeof val === 'string' && val.startsWith('__create__:')) {
-          const name = val.split(':', 2)[1].toLowerCase()
-          resolvedOverrides.categoryByKey[key] = catMap[name]
-        } else resolvedOverrides.categoryByKey[key] = Number(val)
-      }
-      for (const [key, val] of Object.entries(choice.supplierByKey)) {
-        if (val == null || val === '') resolvedOverrides.supplierByKey[key] = null
-        else if (typeof val === 'string' && val.startsWith('__create__:')) {
-          const name = val.split(':', 2)[1].toLowerCase()
-          resolvedOverrides.supplierByKey[key] = supMap[name]
-        } else resolvedOverrides.supplierByKey[key] = val
+      if (missingCanon.length) {
+        const { error } = await supabase.from(TBL_UOM).insert(missingCanon.map(n => ({ name: n })))
+        if (error) { alert(`${t('UOMMissing', lang)}: ${missingCanon.join(', ')}`); return }
+        const uRes = await supabase.from(TBL_UOM).select('*').order('name', { ascending: true })
+        if (uRes.data) setUoms(uRes.data)
       }
 
-      const stats = await runImport(pending.rows, catMap, supMap, resolvedOverrides)
-      await new Promise(r => setTimeout(r, 150))
-      alert(`${t('CSVImported', lang)}
+      const existingListByKey = new Map<string, Mat[]>()
+      for (const m of mats) {
+        const k = buildKey(m.name, m.brand)
+        const arr = existingListByKey.get(k)
+        if (arr) arr.push(m); else existingListByKey.set(k, [m])
+      }
+
+      const conflicts: ConflictItem[] = []
+      for (const r of rows) {
+        const key = buildKey(r.name, r.brand || null)
+        const candidates = existingListByKey.get(key) || []
+        if (candidates.length === 0) continue
+
+        const csvCatLower = r.category ? r.category.trim().toLowerCase() : null
+        const csvSupLower = r.supplier ? r.supplier.trim().toLowerCase() : null
+        const csvCatId = csvCatLower != null ? cats.find(c => c.name.toLowerCase() === csvCatLower)?.id ?? null : null
+        const csvSupId = csvSupLower != null ? sups.find(s => s.name.toLowerCase() === csvSupLower)?.id ?? null : null
+
+        const alreadyOk = candidates.some(m =>
+          (m.category_id ?? null) === (csvCatId ?? null) &&
+          (m.supplier_id ?? null) === (csvSupId ?? null)
+        )
+        if (alreadyOk) continue
+
+        const bySupplier = csvSupId ? candidates.find(m => m.supplier_id === csvSupId) : undefined
+        const byCategory = csvCatId ? candidates.find(m => m.category_id === csvCatId) : undefined
+        const mostRecent = [...candidates].sort((a, b) =>
+          (new Date(b.last_update || b.created_at).getTime()) -
+          (new Date(a.last_update || a.created_at).getTime())
+        )[0]
+        const current = bySupplier || byCategory || mostRecent
+
+        const currentCatName = current.category_id != null ? (cats.find(c => c.id === current.category_id)?.name.toLowerCase() || null) : null
+        const currentSupName = current.supplier_id != null ? (sups.find(s => s.id === current.supplier_id)?.name.toLowerCase() || null) : null
+
+        const categoryChanged = !!csvCatLower && !!currentCatName && csvCatLower !== currentCatName
+        const supplierChanged = !!csvSupLower && !!currentSupName && csvSupLower !== currentSupName
+
+        if (categoryChanged || supplierChanged) {
+          conflicts.push({
+            key,
+            name: r.name,
+            brand: r.brand || null,
+            currentCategoryId: current.category_id,
+            currentSupplierId: current.supplier_id,
+            csvCategoryName: r.category || null,
+            csvSupplierName: r.supplier || null,
+            categoryChanged,
+            supplierChanged,
+          })
+        }
+      }
+
+      const csvCats = uniqLower(rows.map((r: any) => r.category || ''))
+      const csvSups = uniqLower(rows.map((r: any) => r.supplier || ''))
+      const existingCatNames = cats.map(c => c.name.toLowerCase())
+      const existingSupNames = sups.map(s => s.name.toLowerCase())
+      const newCats = csvCats.filter(n => n && !existingCatNames.includes(n))
+      const newSups = csvSups.filter(n => n && !existingSupNames.includes(n))
+
+      if (conflicts.length === 0 && newCats.length === 0 && newSups.length === 0) {
+        if (askCsvConfirm) {
+          const ok = window.confirm('Proceed with import? This will update existing materials and add new ones.')
+          if (!ok) { setProgress(null); if (fileRef.current) fileRef.current.value = ''; return }
+        }
+        const stats = await runImport(rows, {}, {}, null)
+        alert(`${t('CSVImported', lang)}
 ${t('Inserted', lang)}: ${stats.inserted}
 ${t('Updated', lang)}: ${stats.updated}
 ${t('Skipped', lang)}: ${stats.skipped}`)
-      await fetchAll()
+        await fetchAll()
+        return
+      }
+
+      if (!askCsvConfirm) {
+        let insCats: { id: number; name: string }[] = []
+        let insSups: { id: string; name: string }[] = []
+
+        if (newCats.length) {
+          const { data } = await supabase
+            .from(TBL_CATS)
+            .insert(newCats.map(n => ({ name: toTitleCase(n) })))
+            .select('id,name')
+          insCats = data || []
+        }
+        if (newSups.length) {
+          const { data } = await supabase
+            .from(TBL_SUPS)
+            .insert(newSups.map(n => ({ name: toTitleCase(n) })))
+            .select('id,name')
+          insSups = data || []
+        }
+
+        const catMap: Record<string, number> = {}
+        const supMap: Record<string, string> = {}
+        ;[...cats, ...insCats].forEach(c => { catMap[c.name.toLowerCase()] = c.id as number })
+        ;[...sups, ...insSups].forEach(s => { supMap[s.name.toLowerCase()] = s.id as string })
+        const stats = await runImport(rows, catMap, supMap, null)
+        alert(`${t('CSVImported', lang)}
+${t('Inserted', lang)}: ${stats.inserted}
+${t('Updated', lang)}: ${stats.updated}
+${t('Skipped', lang)}: ${stats.skipped}`)
+        await fetchAll()
+        return
+      }
+
+      // Chiedi conferma/risoluzione
+      setUnifiedOpen({ conflicts, newValues: { categories: newCats, suppliers: newSups }, rows })
     } catch (err: any) {
       alert(`${t('ImportFailed', lang)}: ${err.message}`)
     } finally {
-      await new Promise(r => setTimeout(r, 200))
       setProgress(null)
       if (fileRef.current) fileRef.current.value = ''
     }
@@ -1530,19 +1471,122 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  // usata sia in editor che in import per garantire un solo default per name
-  async function enforceSingleDefaultByName(materialName: string, keepId: string) {
-    await supabase
-      .from(TBL_MATERIALS)
-      .update({ is_default: false })
-      .eq('name', materialName)
-      .neq('id', keepId)
+  async function onUnifiedConfirm(choice: UnifiedChoice) {
+    if (!unifiedOpen) return
+    const pending = unifiedOpen
+    setUnifiedOpen(null)
+    setProgress(0)
+
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch {}
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+
+    try {
+      // 1) Colleziona i nomi da creare
+      const createCats = new Set<string>()
+      const createSups = new Set<string>()
+
+      Object.values(choice.categoryByKey).forEach(v => {
+        if (typeof v === 'string' && v.startsWith('__create__:')) {
+          createCats.add(toTitleCase(v.split(':', 2)[1]))
+        }
+      })
+      Object.values(choice.supplierByKey).forEach(v => {
+        if (typeof v === 'string' && v.startsWith('__create__:')) {
+          createSups.add(toTitleCase(v.split(':', 2)[1]))
+        }
+      })
+      Object.entries(choice.newCategoryMap || {}).forEach(([name, v]) => {
+        if (typeof v === 'string' && v.startsWith('__create__:')) createCats.add(toTitleCase(name))
+      })
+      Object.entries(choice.newSupplierMap || {}).forEach(([name, v]) => {
+        if (typeof v === 'string' && v.startsWith('__create__:')) createSups.add(toTitleCase(name))
+      })
+
+      // 2) Crea solo quelli marcati
+      const { data: insCats } =
+        createCats.size
+          ? await supabase.from(TBL_CATS).insert([...createCats].map(n => ({ name: toTitleCase(n) }))).select('id,name')
+          : { data: [] as { id: number; name: string }[] }
+
+      const { data: insSups } =
+        createSups.size
+          ? await supabase.from(TBL_SUPS).insert([...createSups].map(n => ({ name: toTitleCase(n) }))).select('id,name')
+          : { data: [] as { id: string; name: string }[] }
+
+      // 3) Mappe nome→id complete
+      const catMap: Record<string, number> = {}
+      const supMap: Record<string, string> = {}
+
+      cats.forEach(c => { catMap[c.name.toLowerCase()] = c.id })
+      sups.forEach(s => { supMap[s.name.toLowerCase()] = s.id })
+      insCats?.forEach(c => { catMap[c.name.toLowerCase()] = c.id })
+      insSups?.forEach(s => { supMap[s.name.toLowerCase()] = s.id })
+
+      // 4) Applica override per i "nuovi" nomi
+      Object.entries(choice.newCategoryMap || {}).forEach(([name, v]) => {
+        const lower = name.toLowerCase()
+        if (typeof v === 'string' && v.startsWith('__create__:')) {
+          // creato sopra
+        } else if (v != null && v !== '') {
+          catMap[lower] = Number(v)
+        }
+      })
+      Object.entries(choice.newSupplierMap || {}).forEach(([name, v]) => {
+        const lower = name.toLowerCase()
+        if (typeof v === 'string' && v.startsWith('__create__:')) {
+          // creato sopra
+        } else if (v != null && v !== '') {
+          supMap[lower] = String(v)
+        }
+      })
+
+      // 5) Risolvi override per riga
+      const resolvedOverrides = {
+        categoryByKey: {} as Record<string, number | null | undefined>,
+        supplierByKey: {} as Record<string, string | null | undefined>,
+      }
+
+      Object.entries(choice.categoryByKey).forEach(([key, val]) => {
+        if (val == null || val === '') resolvedOverrides.categoryByKey[key] = null
+        else if (typeof val === 'string' && val.startsWith('__create__:')) {
+          const name = val.split(':', 2)[1].toLowerCase()
+          resolvedOverrides.categoryByKey[key] = catMap[name]
+        } else {
+          resolvedOverrides.categoryByKey[key] = Number(val)
+        }
+      })
+
+      Object.entries(choice.supplierByKey).forEach(([key, val]) => {
+        if (val == null || val === '') resolvedOverrides.supplierByKey[key] = null
+        else if (typeof val === 'string' && val.startsWith('__create__:')) {
+          const name = val.split(':', 2)[1].toLowerCase()
+          resolvedOverrides.supplierByKey[key] = supMap[name]
+        } else {
+          resolvedOverrides.supplierByKey[key] = String(val)
+        }
+      })
+
+      // 6) Import finale
+      const stats = await runImport(pending.rows, catMap, supMap, resolvedOverrides)
+      await new Promise(r => setTimeout(r, 150))
+
+      alert(`${t('CSVImported', lang)}
+${t('Inserted', lang)}: ${stats.inserted}
+${t('Updated', lang)}: ${stats.updated}
+${t('Skipped', lang)}: ${stats.skipped}`)
+
+      await fetchAll()
+    } catch (err: any) {
+      alert(`${t('ImportFailed', lang)}: ${err.message}`)
+    } finally {
+      await new Promise(r => setTimeout(r, 200))
+      setProgress(null)
+      if (fileRef.current) fileRef.current.value = ''
+    }
   }
 
-  // =========================
-  // NUOVA LOGICA DI IMPORT
-  // =========================
-    async function runImport(
+  // ===== Import core con normalizzazione UOM + Title Case =====
+  async function runImport(
     rows: CsvRow[],
     catMap: Record<string, number>,
     supMap: Record<string, string>,
@@ -1551,8 +1595,22 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
       supplierByKey: Record<string, string | null | undefined>
     } | null
   ) {
-    // indicizzazione UOM e lista esistenti per key name+brand
-    const uomByName = new Map(uoms.map(u => [String(u.name).toLowerCase(), u.id]))
+    // alias UOM presenti in DB
+    const uomByAlias = new Map<'gr' | 'ml' | 'unit', number>()
+    for (const u of uoms) {
+      const { uom } = normalizeUom(String(u.name))
+      if (!uomByAlias.has(uom)) uomByAlias.set(uom, u.id)
+    }
+    async function ensureUom(uom: 'gr' | 'ml' | 'unit') {
+      if (uomByAlias.has(uom)) return uomByAlias.get(uom)!
+      const { data, error } = await supabase.from(TBL_UOM).insert({ name: uom }).select('id').single()
+      if (!error && data?.id) {
+        uomByAlias.set(uom, data.id as number)
+        return data.id as number
+      }
+      throw new Error(`UOM non trovata o non creabile: ${uom}`)
+    }
+
     const listByKey = new Map<string, Mat[]>()
     for (const m of mats) {
       const k = buildKey(m.name, m.brand)
@@ -1564,30 +1622,25 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i]
-      const name = (r.name || '').trim()
-      const brand = (r.brand || '')?.toString().trim() || null
-      const supplierName = (r.supplier || '').trim().toLowerCase()
-      const categoryName = (r.category || '').trim().toLowerCase()
+      const name = toTitleCase((r.name || '').trim())
+      const brand = r.brand ? toTitleCase(r.brand.toString().trim()) : null
+      const supplierName = toTitleCase((r.supplier || '').trim())
+      const categoryName = toTitleCase((r.category || '').trim())
 
       if (!name || !supplierName || !categoryName) {
         skipped++; setProgress(Math.round(((i + 1) / rows.length) * 100)); continue
       }
 
       const norm = normalizeUom(String(r.uom || 'unit'))
-      const uomId = uomByName.get(norm.uom)
-      if (!uomId) {
-        skipped++; setProgress(Math.round(((i + 1) / rows.length) * 100)); continue
-      }
+      const uomId = uomByAlias.get(norm.uom) ?? await ensureUom(norm.uom)
 
-      // risoluzione ID da nomi (case-insensitive) + map passate
       let category_id: number | null | undefined =
-        catMap[categoryName] ?? cats.find(c => c.name.toLowerCase() === categoryName)?.id ?? null
+        catMap[categoryName.toLowerCase()] ?? cats.find(c => c.name.toLowerCase() === categoryName.toLowerCase())?.id ?? null
       let supplier_id: string | null | undefined =
-        supMap[supplierName] ?? sups.find(s => s.name.toLowerCase() === supplierName)?.id ?? null
+        supMap[supplierName.toLowerCase()] ?? sups.find(s => s.name.toLowerCase() === supplierName.toLowerCase())?.id ?? null
 
       const key = buildKey(name, brand)
 
-      // applica override dal modal (undefined = lasciare com’è l’esistente che sceglieremo)
       if (overrides) {
         if (Object.prototype.hasOwnProperty.call(overrides.categoryByKey, key)) {
           const ov = overrides.categoryByKey[key]
@@ -1603,28 +1656,22 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
         skipped++; setProgress(Math.round(((i + 1) / rows.length) * 100)); continue
       }
 
-      // calcoli economici
-      const pkgQtyRaw = r.package_qty != null ? Number(r.package_qty) : null
+      const raw_packaging_size = moneyToNumber(r.packaging_size)
+      const packaging_size = raw_packaging_size != null ? raw_packaging_size * norm.factor : null
       const package_price = moneyToNumber(r.package_price)
-      const packaging_size = pkgQtyRaw != null ? pkgQtyRaw * norm.factor : null
-      let unit_cost = moneyToNumber(r.unit_cost)
-      if (unit_cost == null && package_price != null && pkgQtyRaw != null && pkgQtyRaw > 0) {
-        const denom = pkgQtyRaw * norm.factor
-        unit_cost = denom > 0 ? package_price / denom : null
+      const vat_rate_percent = moneyToNumber(r.vat_rate_percent)
+
+      let unit_cost: number | null = null
+      if (package_price != null && packaging_size != null && packaging_size > 0) {
+        unit_cost = package_price / packaging_size
       }
 
       const proposed = {
-        name,
-        brand,
-        supplier_id,
-        category_id,
-        uom_id: uomId,
-        packaging_size,
-        package_price,
-        unit_cost,
-        notes: r.notes || null,
-        is_food_drink: true,
-        is_default: true,
+        name, brand, supplier_id, category_id, uom_id: uomId,
+        packaging_size, package_price, unit_cost,
+        vat_rate_percent: vat_rate_percent != null ? Math.max(0, Math.min(100, vat_rate_percent)) : null,
+        is_food_drink: true, is_default: true,
+        last_update: new Date().toISOString(),
       }
 
       // selezione esistente: priorità supplier → category → più recente
@@ -1643,16 +1690,16 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
 
       if (existing) {
         const changed =
-          (existing.category_id ?? null) !== (proposed.category_id ?? null) ||
-          (existing.supplier_id ?? null) !== (proposed.supplier_id ?? null) ||
-          (existing.uom_id ?? null) !== (proposed.uom_id ?? null) ||
+          ((existing.category_id ?? null) !== (proposed.category_id ?? null)) ||
+          ((existing.supplier_id ?? null) !== (proposed.supplier_id ?? null)) ||
+          ((existing.uom_id ?? null) !== (proposed.uom_id ?? null)) ||
           !sameNum(existing.packaging_size as number | null, proposed.packaging_size) ||
           !sameNum(existing.package_price as number | null, proposed.package_price) ||
           !sameNum(existing.unit_cost as number | null, proposed.unit_cost) ||
-          (existing.notes ?? null) !== (proposed.notes ?? null) ||
-          (existing.brand ?? null) !== (proposed.brand ?? null) ||
-          existing.is_food_drink !== proposed.is_food_drink ||
-          existing.is_default !== proposed.is_default
+          ((existing.notes ?? null) !== ((proposed as any).notes ?? null)) ||
+          ((existing.brand ?? null) !== (proposed.brand ?? null)) ||
+          (existing.is_food_drink !== proposed.is_food_drink) ||
+          (existing.is_default !== proposed.is_default)
 
         if (!changed) {
           skipped++
@@ -1661,7 +1708,12 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
             .from(TBL_MATERIALS)
             .update({ ...proposed, last_update: new Date().toISOString() })
             .eq('id', existing.id)
-          if (error) { skipped++ } else { updated++; currentId = existing.id }
+          if (error) {
+            skipped++
+          } else {
+            updated++
+            currentId = existing.id
+          }
         }
       } else {
         const { data: ins, error } = await supabase
@@ -1669,7 +1721,12 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
           .insert({ ...proposed, last_update: new Date().toISOString() })
           .select('id')
           .single()
-        if (error || !ins?.id) { skipped++ } else { inserted++; currentId = ins.id as string }
+        if (error || !ins?.id) {
+          skipped++
+        } else {
+          inserted++
+          currentId = ins.id as string
+        }
       }
 
       if (currentId && materialsExclusiveDefault && proposed.is_default) {
@@ -1693,10 +1750,10 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
         const effVat = vatEnabled ? ((m.vat_rate_percent ?? vatRate ?? 0) / 100) : 0
         const unitPlusVatVal = (m.unit_cost ?? 0) * (1 + effVat)
         return {
-          Name: m.name,
-          Category: catName,
-          Brand: m.brand || '',
-          Supplier: supName,
+          Name: toTitleCase(m.name),
+          Category: toTitleCase(catName),
+          Brand: m.brand ? toTitleCase(m.brand) : '',
+          Supplier: toTitleCase(supName),
           UOM: uomName,
           PackSize: m.packaging_size ?? null,
           PackPrice: m.package_price ?? null,
@@ -1774,28 +1831,21 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
     }
   }
 
-  // ==== Bulk actions ====
+  // ==== Bulk actions / selezione ====
   const filtered = applyFilters(mats)
   const allVisibleSelected = filtered.length > 0 && filtered.every(m => !!selected[m.id])
   const someVisibleSelected = filtered.some(m => !!selected[m.id]) && !allVisibleSelected
 
   useEffect(() => {
-    if (headerCbRef.current) {
-      headerCbRef.current.indeterminate = someVisibleSelected
-    }
+    if (headerCbRef.current) headerCbRef.current.indeterminate = someVisibleSelected
   }, [someVisibleSelected, allVisibleSelected, filtered.length])
 
-  useEffect(() => {
-    if (!selectMode) setSelected({})
-  }, [selectMode])
+  useEffect(() => { if (!selectMode) setSelected({}) }, [selectMode])
 
   function toggleSelectAllVisible() {
     const next: Record<string, boolean> = { ...selected }
-    if (allVisibleSelected) {
-      for (const m of filtered) next[m.id] = false
-    } else {
-      for (const m of filtered) next[m.id] = true
-    }
+    if (allVisibleSelected) { for (const m of filtered) next[m.id] = false }
+    else { for (const m of filtered) next[m.id] = true }
     setSelected(next)
   }
 
@@ -1851,9 +1901,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
     if (lang !== 'vi') return <span>{t('UnitCostPlusVat', lang)}</span>
     return (
       <div className="flex flex-col items-center leading-tight">
-        <span>Đơn</span>
-        <span>giá</span>
-        <span>+ VAT</span>
+        <span>Đơn</span><span>giá</span><span>+ VAT</span>
       </div>
     )
   }
@@ -1955,7 +2003,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
           </button>
 
           <button
-            onClick={() => { setOpenEditor(true); openCreate() }}
+            onClick={openCreate}
             className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
           >
             <PlusIcon className="w-5 h-5" /> {t('NewMaterial', lang)}
@@ -1979,14 +2027,14 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
             className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[160px]"
           >
             <option value="">{t('AllCategories', lang)}</option>
-            {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {cats.map(c => <option key={c.id} value={c.id}>{toTitleCase(c.name)}</option>)}
           </select>
           <input
             type="text"
             placeholder={t('FilterByBrand', lang)}
             value={filters.brand}
             onChange={e => setFilters(s => ({ ...s, brand: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm text-gray-900 placeholder-gray-600 w_[160px]"
+            className="border rounded-lg px-2 h-9 text-sm text-gray-900 placeholder-gray-600 w-[160px]"
           />
           <select
             value={filters.supplierId}
@@ -1994,12 +2042,12 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
             className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[160px]"
           >
             <option value="">{t('AllSuppliers', lang)}</option>
-            {sups.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {sups.map(s => <option key={s.id} value={s.id}>{toTitleCase(s.name)}</option>)}
           </select>
           <select
             value={filters.uomId}
             onChange={e => setFilters(s => ({ ...s, uomId: (e.target.value === "" ? "" : Number(e.target.value)) }))}
-            className="border rounded-lg px-2 h-9 text-sm bg_white text-gray-900 w-[110px]"
+            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[110px]"
           >
             <option value="">{t('AllUOM', lang)}</option>
             {uoms.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -2028,15 +2076,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
           <button
             type="button"
             onClick={() =>
-              setFilters({
-                name: '',
-                brand: '',
-                categoryId: '',
-                supplierId: '',
-                uomId: '',
-                foodDrink: '',
-                isDefault: '',
-              })
+              setFilters({ name: '', brand: '', categoryId: '', supplierId: '', uomId: '', foodDrink: '', isDefault: '' })
             }
             className="inline-flex items-center gap-1 px-3 h-9 rounded-lg
              border border-blue-600 text-blue-700 hover:bg-blue-50
@@ -2050,15 +2090,11 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
         </div>
       </div>
 
-      {/* Table */}
+      {/* Tabella */}
       <div className="bg-white rounded-2xl shadow p-3">
-        <table
-          key={vatEnabled ? 'vat-on' : 'vat-off'}
-          className="w-full table-auto text-sm text-gray-900"
-        >
+        <table key={vatEnabled ? 'vat-on' : 'vat-off'} className="w-full table-auto text-sm text-gray-900">
           <thead>
             <tr>
-              {/* Checkbox header */}
               <th className="p-2 w-7">
                 {selectMode ? (
                   <input
@@ -2169,9 +2205,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
               <th className="p-2 w-12 min-w-[3rem]">
                 <button type="button" onClick={() => toggleSort('is_food_drink')} className="w-full cursor-pointer">
                   <div className="flex flex-col items-center justify-center leading-tight font-semibold text-center">
-                    <span>{t('Food', lang)}</span>
-                    <span>/</span>
-                    <span>{t('Drink', lang)}</span>
+                    <span>{t('Food', lang)}</span><span>/</span><span>{t('Drink', lang)}</span>
                   </div>
                 </button>
               </th>
@@ -2204,9 +2238,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
               const effPct = effVatPct(m)
 
               const overdue =
-                Number(reviewMonths) <= 0
-                  ? true
-                  : isOlderThanMonths(m.last_update, Number(reviewMonths))
+                Number(reviewMonths) <= 0 ? true : isOlderThanMonths(m.last_update, Number(reviewMonths))
 
               return (
                 <tr
@@ -2221,18 +2253,16 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
                         type="checkbox"
                         className="h-4 w-4"
                         checked={!!selected[m.id]}
-                        onChange={e =>
-                          setSelected(prev => ({ ...prev, [m.id]: e.target.checked }))
-                        }
+                        onChange={e => setSelected(prev => ({ ...prev, [m.id]: e.target.checked }))}
                         title={t('SelectRow', lang)}
                       />
                     ) : null}
                   </td>
 
-                  <td className="p-2 max-w-[12rem] truncate">{m.name}</td>
-                  <td className="p-2 max-w-[10rem] truncate">{catName || '-'}</td>
-                  <td className="p-2 max-w-[8rem] truncate">{m.brand || '-'}</td>
-                  <td className="p-2 max-w-[10rem] truncate">{supName || '-'}</td>
+                  <td className="p-2 max-w-[12rem] truncate">{toTitleCase(m.name)}</td>
+                  <td className="p-2 max-w-[10rem] truncate">{toTitleCase(catName) || '-'}</td>
+                  <td className="p-2 max-w-[8rem] truncate">{m.brand ? toTitleCase(m.brand) : '-'}</td>
+                  <td className="p-2 max-w-[10rem] truncate">{toTitleCase(supName) || '-'}</td>
 
                   <td className="p-2 w-14 min-w-[3.25rem] text-center">{uomName || '-'}</td>
 
@@ -2245,47 +2275,70 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
 
                   {vatEnabled && (
                     <td className="p-2 w-16 min-w-[4rem] text-center tabular-nums whitespace-nowrap">
-                      {num.format(effPct)}
+                      {num.format(effPct)}%
                     </td>
                   )}
 
                   <td className="p-2 w-24 min-w-[6rem] text-center tabular-nums whitespace-nowrap">
-                    {m.unit_cost != null ? num.format(m.unit_cost) : '--'}
+                    {m.unit_cost != null ? num.format(m.unit_cost) : '-'}
                   </td>
 
                   {vatEnabled && (
                     <td className="p-2 w-28 min-w-[7rem] text-center tabular-nums whitespace-nowrap">
-                      {m.unit_cost != null ? num.format(unitPlusVat(m)) : '--'}
+                      {num.format(unitPlusVat(m))}
                     </td>
                   )}
 
                   <td className="p-2 w-12 min-w-[3rem] text-center">
                     {m.is_food_drink ? t('Yes', lang) : t('No', lang)}
                   </td>
+
                   <td className="p-2 w-12 min-w-[3rem] text-center">
                     {m.is_default ? t('Yes', lang) : t('No', lang)}
                   </td>
 
-                  <td className="p-2 w-24 min-w-[6rem] text-center tabular-nums whitespace-nowrap">
-                    <span className={overdue ? 'text-red-600' : ''}>
-                      {fmtDate(m.last_update)}
-                    </span>
+                  <td
+                    className={`p-2 w-24 min-w-[6rem] text-center tabular-nums whitespace-nowrap ${overdue ? 'text-red-600 font-semibold' : ''}`}
+                    title={m.last_update || ''}
+                  >
+                    {fmtDate(m.last_update)}
                   </td>
                 </tr>
               )
             })}
-            {applyFilters(mats).length === 0 && (
-              <tr>
-                <td className="p-3 text-gray-500" colSpan={vatEnabled ? 14 : 12}>
-                  {t('NoMaterials', lang)}
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
+
+        {applyFilters(mats).length === 0 && (
+          <div className="text-center text-sm text-gray-500 py-6">
+            {t('NoResults', lang) || 'Nessun risultato con i filtri attuali.'}
+          </div>
+        )}
       </div>
 
-      {/* EDITOR OVERLAY */}
+      {/* Modali & overlay */}
+      {progress != null && <ImportProgressModal progress={progress} />}
+
+      {unifiedOpen && (
+        <ResolveImportModal
+          pending={unifiedOpen}
+          cats={cats}
+          sups={sups}
+          onCancel={onUnifiedCancel}
+          onConfirm={onUnifiedConfirm}
+        />
+      )}
+
+      {showVatModal && (
+        <BulkVatModal
+          lang={lang}
+          count={selectedIds.length}
+          defaultVat={vatRate ?? 0}
+          onCancel={() => setShowVatModal(false)}
+          onConfirm={(mode, value) => bulkApplyVat(mode, value)}
+        />
+      )}
+
       {openEditor && (
         <MaterialEditor
           mode={editorMode}
@@ -2297,31 +2350,8 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
           onClose={() => setOpenEditor(false)}
           onSaved={async () => { setOpenEditor(false); await fetchAll() }}
           onDeleted={async () => { setOpenEditor(false); await fetchAll() }}
-          onCategoryCreated={(c) => setCats(prev => prev.some(x => x.id === c.id) ? prev : [...prev, c])}
-          onSupplierCreated={(s) => setSups(prev => prev.some(x => x.id === s.id) ? prev : [...prev, s])}
-        />
-      )}
-
-      {/* IMPORT MODALS */}
-      {unifiedOpen && (
-        <ResolveImportModal
-          pending={unifiedOpen}
-          cats={cats}
-          sups={sups}
-          onConfirm={onUnifiedConfirm}
-          onCancel={onUnifiedCancel}
-        />
-      )}
-      {progress != null && <ImportProgressModal progress={progress} />}
-
-      {/* BULK VAT MODAL */}
-      {showVatModal && (
-        <BulkVatModal
-          lang={lang}
-          count={selectedIds.length}
-          defaultVat={vatRate ?? 0}
-          onCancel={() => setShowVatModal(false)}
-          onConfirm={(mode, value) => bulkApplyVat(mode, value)}
+          onCategoryCreated={(c) => setCats((prev) => [...prev, c])}
+          onSupplierCreated={(s) => setSups((prev) => [...prev, s])}
         />
       )}
     </div>

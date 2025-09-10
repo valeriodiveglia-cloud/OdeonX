@@ -44,13 +44,18 @@ function DualIcon({
   return (
     <span className="relative inline-block w-5 h-5 shrink-0">
       <Icon className="absolute inset-0 w-5 h-5 text-white" />
-      <Icon className={`absolute inset-0 w-5 h-5 text-slate-900 ${open && active ? 'opacity-100' : 'opacity-0'} transition-opacity`} />
+      <Icon
+        className={`absolute inset-0 w-5 h-5 text-slate-900 ${
+          open && active ? 'opacity-100' : 'opacity-0'
+        } transition-opacity`}
+      />
     </span>
   )
 }
 
 /* Config */
-const ICON_RAIL_W = 80
+const COLLAPSED_W = 56 // px (w-14)
+const ICON_RAIL_W = COLLAPSED_W
 const CLOSE_DELAY_MS = 120
 const FLAG_SHAPE: 'circle' | 'square' = 'circle'
 
@@ -61,20 +66,22 @@ export default function LeftNav() {
   const pathname = usePathname()
   const { language, setLanguage } = useSettings()
 
-  // Stato apertura interno (solo per testi/colore; la larghezza la gestisce il CSS del parent aside)
   const [open, setOpen] = React.useState(false)
 
-  // Rileva input touch: su touch non apriamo mai, le icone navigano direttamente
+  // Rileva input touch
   const [isTouch, setIsTouch] = React.useState(false)
   React.useEffect(() => {
-    const mq = typeof window !== 'undefined' ? window.matchMedia('(pointer: coarse)') : null
+    const mq =
+      typeof window !== 'undefined'
+        ? window.matchMedia('(pointer: coarse)')
+        : null
     const update = () => setIsTouch(!!mq?.matches)
     update()
     mq?.addEventListener?.('change', update)
     return () => mq?.removeEventListener?.('change', update)
   }, [])
 
-  // Flag interni per la chiusura
+  // Flag interni
   const hoverInsideRef = React.useRef(false)
   const focusInsideRef = React.useRef(false)
 
@@ -100,25 +107,6 @@ export default function LeftNav() {
 
   React.useEffect(() => () => clearCloseTimer(), [clearCloseTimer])
 
-  // Pointer events: su desktop aprono/chiudono il pannello testuale; su touch ignoriamo
-  const onPointerEnterContainer: React.PointerEventHandler<HTMLDivElement> = () => {
-    if (isTouch) return
-    hoverInsideRef.current = true
-    clearCloseTimer()
-    setOpen(true)
-  }
-  const onPointerLeaveContainer: React.PointerEventHandler<HTMLDivElement> = () => {
-    if (isTouch) return
-    hoverInsideRef.current = false
-    scheduleCloseIfNeeded()
-  }
-  const onPointerDownContainer: React.PointerEventHandler<HTMLDivElement> = () => {
-    if (isTouch) return
-    hoverInsideRef.current = true
-    clearCloseTimer()
-    setOpen(true)
-  }
-
   // Focus tastiera
   const handleFocusWithin: React.FocusEventHandler<HTMLDivElement> = () => {
     focusInsideRef.current = true
@@ -131,10 +119,10 @@ export default function LeftNav() {
     if (!stillInside) scheduleCloseIfNeeded()
   }
 
-  // Overlay rail: solo desktop; su touch lo disattiviamo per non bloccare i tap
+  // Overlay rail: dietro, combacia con larghezza chiusa
   const IconRailOverlay = () => (
     <div
-      className="absolute left-0 top-0 h-full"
+      className="absolute left-0 top-0 h-full z-0"
       style={{ width: ICON_RAIL_W, pointerEvents: 'auto' }}
       onPointerEnter={() => {
         if (isTouch) return
@@ -147,16 +135,10 @@ export default function LeftNav() {
         hoverInsideRef.current = false
         scheduleCloseIfNeeded()
       }}
-      onPointerDown={() => {
-        if (isTouch) return
-        hoverInsideRef.current = true
-        clearCloseTimer()
-        setOpen(true)
-      }}
     />
   )
 
-  // Tooltip kill switch quando chiusa
+  // Tooltip kill switch
   React.useEffect(() => {
     const body = document.body
     if (!open) body.classList.add('no-tooltips')
@@ -165,7 +147,7 @@ export default function LeftNav() {
   }, [open])
 
   const homeTitle = 'Home'
-  const appName = 'OdeonX'
+  const appName = 'OddsOff'
 
   const isEN = language === 'en'
   const countryCode = isEN ? 'GB' : 'VN'
@@ -177,11 +159,10 @@ export default function LeftNav() {
 
   return (
     <div
-      className={`relative z-20 h-full flex flex-col text-white transition-[width] duration-150 ease-out ${open ? 'w-64' : 'w-14'} ${stateClass}`}
+      className={`relative z-10 h-full flex flex-col text-white transition-[width] duration-150 ease-out ${
+        open ? 'w-64' : 'w-14'
+      } ${stateClass}`}
       aria-expanded={open}
-      onPointerEnter={onPointerEnterContainer}
-      onPointerLeave={onPointerLeaveContainer}
-      onPointerDown={onPointerDownContainer}
       onFocus={handleFocusWithin}
       onBlur={handleBlurWithin}
     >
@@ -194,7 +175,12 @@ export default function LeftNav() {
           href="/dashboard"
           aria-label={homeTitle}
           title={homeTitle}
-          className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`}
+          className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${
+            open ? '' : 'mx-auto'
+          }`}
+          onPointerEnter={() => {
+            if (!isTouch) setOpen(true)
+          }}
         >
           <DualIcon Icon={HomeIcon} active={pathname === '/'} open={open} />
         </Link>
@@ -206,7 +192,8 @@ export default function LeftNav() {
       {/* Menu */}
       <nav className="p-2 space-y-1 clip-scope">
         {NAV.map(({ href, i18nKey, fallback, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/')
+          const active =
+            pathname === href || pathname.startsWith(href + '/')
           const labelTxt = i18nKey ? t(i18nKey, language) : fallback
 
           return (
@@ -220,36 +207,38 @@ export default function LeftNav() {
                 open ? 'gap-3 px-3' : 'justify-center px-0'
               }`}
               tabIndex={0}
-              onPointerDown={() => {
-                // su desktop apri per continuità visiva; su touch non aprire, lascia navigare
-                if (!isTouch) {
-                  hoverInsideRef.current = true
-                  clearCloseTimer()
-                  setOpen(true)
-                }
+              onPointerEnter={() => {
+                if (!isTouch) setOpen(true)
               }}
             >
-              {/* Indicatore attivo: barra se aperta, ring se chiusa */}
-              {active && (
-                open ? (
+              {active &&
+                (open ? (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r bg-blue-500" />
                 ) : (
-                  <span className="absolute inset-0 rounded-xl ring-1 ring-white/30" aria-hidden="true" />
-                )
-              )}
+                  <span
+                    className="absolute inset-0 rounded-xl ring-1 ring-white/30"
+                    aria-hidden="true"
+                  />
+                ))}
 
               <DualIcon Icon={Icon} active={active} open={open} />
 
               {open && (
-                <span className={`whitespace-nowrap overflow-hidden text-ellipsis font-medium nav-text ${
-                  active ? 'text-slate-900' : 'text-slate-100'
-                }`}>
+                <span
+                  className={`whitespace-nowrap overflow-hidden text-ellipsis font-medium nav-text ${
+                    active ? 'text-slate-900' : 'text-slate-100'
+                  }`}
+                >
                   {labelTxt}
                 </span>
               )}
 
               {open && (
-                <span className={`pointer-events-none absolute inset-0 -z-10 rounded-xl bg-blue-100 nav-active-bg ${active ? '' : 'opacity-0'}`} />
+                <span
+                  className={`pointer-events-none absolute inset-0 -z-10 rounded-xl bg-blue-100 nav-active-bg ${
+                    active ? '' : 'opacity-0'
+                  }`}
+                />
               )}
             </Link>
           )
@@ -257,29 +246,39 @@ export default function LeftNav() {
       </nav>
 
       {/* Footer */}
-      <div className={`mt-auto p-3 flex items-center justify-between footer-wrap clip-scope ${open ? 'opacity-100' : 'opacity-0'}`}>
+      <div
+        className={`mt-auto p-3 flex items-center justify-between footer-wrap clip-scope ${
+          open ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
         <button
           type="button"
           onClick={toggleLang}
           aria-label={open ? label : undefined}
-          className={`w-8 h-8 flex items-center justify-center ${FLAG_SHAPE === 'circle' ? 'rounded-full' : 'rounded-none'} overflow-hidden border border-white/20 hover:bg-white/10`}
+          className={`w-8 h-8 flex items-center justify-center ${
+            FLAG_SHAPE === 'circle' ? 'rounded-full' : 'rounded-none'
+          } overflow-hidden border border-white/20 hover:bg-white/10`}
           tabIndex={open ? 0 : -1}
-          onPointerDown={() => {
-            if (isTouch) return
-            hoverInsideRef.current = true
-            clearCloseTimer()
-            setOpen(true)
+          onPointerEnter={() => {
+            if (!isTouch) setOpen(true)
           }}
         >
           {open && (
             <ReactCountryFlag
               countryCode={countryCode}
               svg
-              style={{ width: '110%', height: '110%', objectFit: 'cover', display: 'block' }}
+              style={{
+                width: '110%',
+                height: '110%',
+                objectFit: 'cover',
+                display: 'block',
+              }}
             />
           )}
         </button>
-        {open && <div className="text-xs text-slate-300 px-2">{appVersion}</div>}
+        {open && (
+          <div className="text-xs text-slate-300 px-2">{appVersion}</div>
+        )}
       </div>
     </div>
   )

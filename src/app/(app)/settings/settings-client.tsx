@@ -1,12 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CheckCircleIcon, PlusIcon, Cog6ToothIcon, XMarkIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { CheckCircleIcon, PlusIcon, Cog6ToothIcon, XMarkIcon, TrashIcon, Squares2X2Icon,WrenchScrewdriverIcon, BookOpenIcon, ClipboardDocumentListIcon  } from '@heroicons/react/24/outline'
 import { t, type Lang } from '@/lib/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
 import { supabase } from '@/lib/supabase_shim'
 import { useRouter } from 'next/navigation'
 import { toBool } from '@/lib/normalize'
+import TagManagerModal from '@/components/modals/TagManagerModal'
+
+
 
 export type Currency = 'VND' | 'USD' | 'EUR' | 'GBP'
 
@@ -151,7 +154,7 @@ async function sendAccessLink(email: string) {
     }),
   })
   const ct = r.headers.get('content-type') || ''
-  const data = ct.includes('application/json') ? await r.json() : { error: await r.text() }
+  const data = ct.includes('application/json') ? await r.json() : { error: await res.text() }
   if (!r.ok) throw new Error(data?.error || 'Send link failed')
   return data as { ok: true; mode: 'invite' | 'password_reset' }
 }
@@ -578,7 +581,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       }),
     })
     const ct = res.headers.get('content-type') || ''
-    const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
+    const data = ct.includes('application/json') ? await res.json() : { error: await r.text() }
     if (!res.ok) { showAccErr(data?.error || 'Add failed'); return null }
     const created = data.data as AccountRow
     setAcc(a => [...a, created])
@@ -772,9 +775,11 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   const canConfirmReset = confirmCheck && confirmText.trim().toUpperCase() === confirmPhrase
 
   const [catModalOpen, setCatModalOpen] = useState(false)
-  function goToCategories(kind: 'dish' | 'prep' | 'equipment') {
+  function goToCategories(kind: 'materials' | 'dish' | 'prep' | 'equipment') {
     setCatModalOpen(false); router.push(`/settings/categories/${encodeURIComponent(kind)}`)
   }
+
+  const [tagModalOpen, setTagModalOpen] = useState(false) // ⬅️ ADD
 
   return (
     <div key={revision} className="max-w-5xl mx-auto p-4 text-gray-100">
@@ -934,7 +939,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
             <div className="col-span-2">
               <div className="grid grid-cols-[1fr_auto] items-center gap-2">
                 <label className="text-sm text-gray-800">
-                  {/* Simbolo nel label, PRIMA del numero */}
                    {(t('DefaultImportMarkup', lang) || 'Default Import Markup')}{' '}
                    <span className="text-gray-500">(×)</span>
                 </label>
@@ -997,6 +1001,10 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setCatModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
                 {t('EditCategories', lang)}
+              </button>
+              {/* ⬇️ NEW: Manage Tags (coerente con gli altri pulsanti) */}
+              <button type="button" onClick={() => setTagModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+                {t('ManageTags', lang) || 'Manage tags'}
               </button>
               <button type="button" onClick={() => router.push('/trash')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
                 {t('Trash', lang)}
@@ -1106,29 +1114,71 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </Modal>
 
       {/* Categories chooser modal */}
-      <Modal open={catModalOpen} title={t('ChooseCategories', lang)} onClose={() => setCatModalOpen(false)} width="max-w-md">
-        <div className="space-y-3 text-gray-800">
-          <p className="text-sm">{t('ChooseCategoriesDesc', lang)}</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <button type="button" onClick={() => goToCategories('dish')} className="w-full inline-flex items-center justify-center px-3 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm">
-              {t('DishCategories', lang)}
-            </button>
-            <button type="button" onClick={() => goToCategories('prep')} className="w-full inline-flex items-center justify-center px-3 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm">
-              {t('PrepCategories', lang)}
-            </button>
-            <button type="button" onClick={() => goToCategories('equipment')} className="w-full inline-flex items-center justify-center px-3 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm sm:col-span-2">
-              {t('EquipmentCategories', lang)}
-            </button>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end">
-            <button type="button" onClick={() => setCatModalOpen(false)} className="px-4 h-9 rounded-lg border hover:bg-gray-50">
-              {t('Cancel', lang) || 'Cancel'}
-            </button>
-          </div>
+<Modal
+  open={catModalOpen}
+  title={t('ChooseCategories', lang)}
+  onClose={() => setCatModalOpen(false)}
+  width="max-w-md"
+>
+  <div className="space-y-4 text-gray-800">
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => goToCategories('materials')}
+        className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+      >
+        <div className="shrink-0 w-10 h-10 rounded-lg bg-blue-50 text-blue-700 grid place-items-center group-hover:bg-blue-100">
+          <Squares2X2Icon className="w-5 h-5" />
         </div>
-      </Modal>
+        <div className="font-medium">{t('MaterialCategories', lang)}</div>
+      </button>
 
+      <button
+        type="button"
+        onClick={() => goToCategories('dish')}
+        className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+      >
+        <div className="shrink-0 w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center group-hover:bg-emerald-100">
+          <BookOpenIcon className="w-5 h-5" />
+        </div>
+        <div className="font-medium">{t('DishCategories', lang)}</div>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => goToCategories('prep')}
+        className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+      >
+        <div className="shrink-0 w-10 h-10 rounded-lg bg-amber-50 text-amber-700 grid place-items-center group-hover:bg-amber-100">
+          <ClipboardDocumentListIcon className="w-5 h-5" />
+        </div>
+        <div className="font-medium">{t('PrepCategories', lang)}</div>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => goToCategories('equipment')}
+        className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+      >
+        <div className="shrink-0 w-10 h-10 rounded-lg bg-purple-50 text-purple-700 grid place-items-center group-hover:bg-purple-100">
+          <WrenchScrewdriverIcon className="w-5 h-5" />
+        </div>
+        <div className="font-medium">{t('EquipmentCategories', lang)}</div>
+      </button>
+    </div>
+
+    <div className="pt-2 flex items-center justify-end">
+      <button
+        type="button"
+        onClick={() => setCatModalOpen(false)}
+        className="px-4 h-9 rounded-lg border hover:bg-gray-50"
+      >
+        {t('Cancel', lang) || 'Cancel'}
+      </button>
+    </div>
+  </div>
+</Modal>
+        
       {/* Change password modal */}
       <Modal open={pwModalOpen} title={t('ChangePassword', lang) || 'Change password'} onClose={() => setPwModalOpen(false)} width="max-w-md">
         <div className="space-y-3 text-gray-800">
@@ -1233,7 +1283,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         </div>
       </Modal>
 
-      {/* Accounts: Manage */}
+            {/* Accounts: Manage */}
       <Modal open={manageOpen} title={t('ManageAccounts', lang) || 'Manage accounts'} onClose={() => setManageOpen(false)} width="max-w-3xl">
         <div className="space-y-3 text-gray-800">
           {accMsg && (
@@ -1296,7 +1346,6 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         </div>
       </Modal>
 
-      {/* Accounts: Edit */}
       {/* Accounts: Edit */}
       <Modal open={editOpen && !!formEdit} title={t('EditAccount', lang) || 'Edit account'} onClose={() => { setEditOpen(false); setSelected(null); setFormEdit(null) }} width="max-w-lg">
         {formEdit ? (
@@ -1385,6 +1434,13 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
           </div>
         </div>
       </Modal>
+
+        {canSeeAccounts && (
+  <TagManagerModal
+    open={tagModalOpen}
+    onClose={() => setTagModalOpen(false)}
+  />
+)}
     </div>
   )
 }

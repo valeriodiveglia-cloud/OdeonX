@@ -20,8 +20,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'OdeonX',
-  description: 'OdeonX — Food costing & operations',
+  title: 'OddsOff',
+  description: 'OddsOff — Food costing & operations',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

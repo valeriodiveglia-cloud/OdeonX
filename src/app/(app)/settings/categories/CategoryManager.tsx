@@ -8,14 +8,15 @@ import {
   TrashIcon,
   ArrowUturnLeftIcon
 } from '@heroicons/react/24/outline'
+import { supabase } from '@/lib/supabase_shim'
 
-type Kind = 'dish'|'prep'|'equipment'
+type Kind = 'materials' | 'dish' | 'prep' | 'equipment'
 type Category = {
   id: string | number
   name: string
 }
 
-async function api<T>(kind: Kind, path: 'list'|'upsert'|'delete', init?: RequestInit): Promise<T> {
+async function api<T>(kind: Exclude<Kind,'materials'>, path: 'list'|'upsert'|'delete', init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/categories/${kind}/${path}`, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
@@ -37,21 +38,38 @@ export default function CategoryManager({ kind }: { kind: Kind }) {
   const [msg, setMsg] = useState<string|null>(null)
 
   const titleByKind: Record<Kind,string> = {
+    materials: 'Material Categories',
     dish: 'Dish Categories',
     prep: 'Prep Categories',
     equipment: 'Equipment Categories',
   }
 
+  async function load() {
+    setLoading(true)
+    setMsg(null)
+    try {
+      if (kind === 'materials') {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('id, name')
+          .order('name', { ascending: true })
+        if (error) throw error
+        setRows(data || [])
+      } else {
+        const payload = await api<any>(kind, 'list')
+        const list: Category[] = payload?.data ?? payload?.rows ?? []
+        setRows(list)
+      }
+    } catch (e: any) {
+      setMsg(e.message || 'Error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     let alive = true
-    setLoading(true)
-    api<any>(kind, 'list')
-      .then(payload => {
-        const list: Category[] = payload?.data ?? payload?.rows ?? []
-        if (alive) setRows(list)
-      })
-      .catch(e => setMsg(e.message || 'Error'))
-      .finally(() => alive && setLoading(false))
+    ;(async () => { if (alive) await load() })()
     return () => { alive = false }
   }, [kind])
 
@@ -64,25 +82,46 @@ export default function CategoryManager({ kind }: { kind: Kind }) {
     setRows(optimistic)
 
     try {
-      const payload = await api<any>(kind, 'upsert', {
-        method: 'POST',
-        body: JSON.stringify({ row: editing ? { ...editing, ...row } : row }),
-      })
-      const saved: Category = payload?.data ?? payload
+      let saved: Category | null = null
+
+      if (kind === 'materials') {
+        if (editing) {
+          const { data, error } = await supabase
+            .from('categories')
+            .update({ name: String(row.name || '') })
+            .eq('id', editing.id)
+            .select('id, name')
+            .single()
+          if (error) throw error
+          saved = data as Category
+        } else {
+          const { data, error } = await supabase
+            .from('categories')
+            .insert({ name: String(row.name || '') })
+            .select('id, name')
+            .single()
+          if (error) throw error
+          saved = data as Category
+        }
+      } else {
+        const payload = await api<any>(kind, 'upsert', {
+          method: 'POST',
+          body: JSON.stringify({ row: editing ? { ...editing, ...row } : row }),
+        })
+        saved = (payload?.data ?? payload) as Category
+      }
+
       setRows(prev => {
         const idx = prev.findIndex(r => r.id === optimisticId || r.id === editing?.id)
         const next = [...prev]
-        if (idx >= 0) next[idx] = saved
-        else next.unshift(saved)
+        if (idx >= 0) next[idx] = saved!
+        else next.unshift(saved!)
         return next
       })
       setMsg('Saved')
     } catch (e:any) {
       setMsg(e.message || 'Error')
-      try {
-        const payload = await api<any>(kind, 'list')
-        setRows(payload?.data ?? payload?.rows ?? [])
-      } catch {}
+      await load() // rollback soft: ricarica
     } finally {
       setBusy(false)
       setModalOpen(false)
@@ -95,7 +134,12 @@ export default function CategoryManager({ kind }: { kind: Kind }) {
     const snapshot = rows
     setRows(prev => prev.filter(r => r.id !== row.id))
     try {
-      await api(kind, 'delete', { method: 'POST', body: JSON.stringify({ id: row.id }) })
+      if (kind === 'materials') {
+        const { error } = await supabase.from('categories').delete().eq('id', row.id)
+        if (error) throw error
+      } else {
+        await api(kind, 'delete', { method: 'POST', body: JSON.stringify({ id: row.id }) })
+      }
     } catch (e:any) {
       setMsg(e.message || 'Error')
       setRows(snapshot)

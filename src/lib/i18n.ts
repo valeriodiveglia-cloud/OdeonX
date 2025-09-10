@@ -465,7 +465,14 @@ const dict = {
     OrderMethod: 'Order Method',
     PaymentTerm: 'Payment Term',
     PaymentMethod: 'Payment Method',
-    SearchSuppliersPlaceholder: 'Search suppliers, contact, phone, email…'
+    SearchSuppliersPlaceholder: 'Search suppliers, contact, phone, email…',
+
+    // ---------- NEW KEYS FOR IMPORT RESOLVE ----------
+    AddAll: 'Add all',
+    SelectSupplier: 'Select Supplier',
+    CreateNew: 'Create new',
+    LockedExisting: 'Existing (locked)',
+    Add: 'Add',
   },
 
   vi: {
@@ -931,7 +938,14 @@ const dict = {
     OrderMethod: 'Phương thức đặt hàng',
     PaymentTerm: 'Điều khoản thanh toán',
     PaymentMethod: 'Phương thức thanh toán',
-    SearchSuppliersPlaceholder: 'Tìm nhà cung cấp, người liên hệ, điện thoại, email…'
+    SearchSuppliersPlaceholder: 'Tìm nhà cung cấp, người liên hệ, điện thoại, email…',
+
+    // ---------- NEW KEYS FOR IMPORT RESOLVE ----------
+    AddAll: 'Thêm tất cả',
+    SelectSupplier: 'Chọn nhà cung cấp',
+    CreateNew: 'Tạo mới',
+    LockedExisting: 'Đang dùng hiện có',
+    Add: 'Thêm',
   },
 } as const
 
