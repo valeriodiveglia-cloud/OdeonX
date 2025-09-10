@@ -1,8 +1,7 @@
-import Papa from 'papaparse'
-import type { ParseResult } from 'papaparse'
-
 'use client'
 
+import Papa from 'papaparse'
+import type { ParseResult } from 'papaparse'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { normalizeUom } from '@/lib/normalizeUom'
 
@@ -46,27 +45,27 @@ function normKey(k: string) {
 }
 
 const headerMap: Record<string, string> = {
-  'name': 'name',
-  'ingredient': 'name',
-  'category': 'category',
-  'brand': 'brand',
-  'supplier': 'supplier',
-  'uom': 'uom',
+  name: 'name',
+  ingredient: 'name',
+  category: 'category',
+  brand: 'brand',
+  supplier: 'supplier',
+  uom: 'uom',
   'packaging size': 'packaging_size',
-  'packaging_size': 'packaging_size',
+  packaging_size: 'packaging_size',
   'package cost': 'package_price',
-  'package_cost': 'package_price',
+  package_cost: 'package_price',
   'vat rate (%)': 'vat_rate_percent',
   'vat rate': 'vat_rate_percent',
-  'vat_rate_percent': 'vat_rate_percent',
+  vat_rate_percent: 'vat_rate_percent',
 
   // vecchi, da ignorare
-  'status': '__ignore__',
-  'notes': '__ignore__',
+  status: '__ignore__',
+  notes: '__ignore__',
   'package qty': '__ignore__',
-  'package_qty': '__ignore__',
+  package_qty: '__ignore__',
   'unit cost': '__ignore__',
-  'unit_cost': '__ignore__',
+  unit_cost: '__ignore__',
 }
 
 /** Assicura che nel DB esistano le canoniche 'gr','ml','unit' e
@@ -100,7 +99,7 @@ async function ensureCanonicalUoms(
   const uomByAlias = new Map<'gr' | 'ml' | 'unit', number>()
   for (const u of all) {
     const { uom } = normalizeUom(String(u.name))
-    // la prima occorrenza vince, ma in pratica tutte le alias di uno stesso gruppo convergono
+    // la prima occorrenza vince
     if (!uomByAlias.has(uom)) uomByAlias.set(uom, u.id)
   }
   return uomByAlias
@@ -115,15 +114,15 @@ export async function importMaterialsCsv(
 ): Promise<{ inserted: number; updated: number; skipped: number }> {
   const { categories, suppliers, uoms } = await getExisting()
 
-  // parse CSV
+    // parse CSV (niente generics su Papa.parse: cast nel complete)
   const parsed = await new Promise<ParseResult<CsvRow>>((resolve, reject) => {
-    Papa.parse(file, {
+    Papa.parse(file as any, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h) => headerMap[normKey(h)] ?? normKey(h),
-      complete: (res) => resolve(res),
-      error: (err) => reject(err),
-    })
+      transformHeader: (h: string) => headerMap[normKey(h)] ?? normKey(h),
+      complete: (res: any) => resolve(res as ParseResult<CsvRow>),
+      error: (err: any) => reject(err),
+    } as any)
   })
 
   const rows: CsvRow[] = (parsed.data || [])
@@ -137,7 +136,7 @@ export async function importMaterialsCsv(
       package_price: r['package_price'] ?? null,
       vat_rate_percent: r['vat_rate_percent'] ?? null,
     }))
-    .filter((r) => r.name || r.category || r.supplier)
+    .filter((r: CsvRow) => r.name || r.category || r.supplier)
 
   if (!rows.length) {
     throw new Error(
@@ -146,16 +145,16 @@ export async function importMaterialsCsv(
   }
 
   // pending nuovi category/supplier
-  const uniqLower = (a: string[]) => [...new Set(a.filter(Boolean).map((s) => s.trim().toLowerCase()))]
-  const csvCats = uniqLower(rows.map((r) => r.category || ''))
-  const csvSups = uniqLower(rows.map((r) => r.supplier || ''))
+  const uniqLower = (a: string[]) => [...new Set(a.filter(Boolean).map(s => s.trim().toLowerCase()))]
+  const csvCats = uniqLower(rows.map(r => r.category || ''))
+  const csvSups = uniqLower(rows.map(r => r.supplier || ''))
 
-  const existingCatNames = categories.map((c) => c.name.toLowerCase())
-  const existingSupNames = suppliers.map((s) => s.name.toLowerCase())
+  const existingCatNames = categories.map(c => c.name.toLowerCase())
+  const existingSupNames = suppliers.map(s => s.name.toLowerCase())
 
   const pending: PendingNew = {
-    categories: csvCats.filter((n) => n && !existingCatNames.includes(n)),
-    suppliers: csvSups.filter((n) => n && !existingSupNames.includes(n)),
+    categories: csvCats.filter(n => n && !existingCatNames.includes(n)),
+    suppliers: csvSups.filter(n => n && !existingSupNames.includes(n)),
   }
 
   const resolved = await resolveNewValues(pending, { categories, suppliers, uoms })
@@ -164,8 +163,8 @@ export async function importMaterialsCsv(
   const uomByAlias = await ensureCanonicalUoms(supabase, uoms)
 
   // lookup maps per category/supplier (inclusi quelli risolti)
-  const catByName = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]))
-  const supByName = new Map(suppliers.map((s) => [s.name.toLowerCase(), s.id]))
+  const catByName = new Map(categories.map(c => [c.name.toLowerCase(), c.id] as const))
+  const supByName = new Map(suppliers.map(s => [s.name.toLowerCase(), s.id] as const))
 
   Object.entries(resolved.categoryMap).forEach(([k, id]) => catByName.set(k.toLowerCase(), id))
   Object.entries(resolved.supplierMap).forEach(([k, id]) => supByName.set(k.toLowerCase(), id))

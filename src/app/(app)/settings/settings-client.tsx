@@ -154,7 +154,7 @@ async function sendAccessLink(email: string) {
     }),
   })
   const ct = r.headers.get('content-type') || ''
-  const data = ct.includes('application/json') ? await r.json() : { error: await res.text() }
+  const data = ct.includes('application/json') ? await r.json() : { error: await r.text() }
   if (!r.ok) throw new Error(data?.error || 'Send link failed')
   return data as { ok: true; mode: 'invite' | 'password_reset' }
 }
@@ -581,7 +581,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       }),
     })
     const ct = res.headers.get('content-type') || ''
-    const data = ct.includes('application/json') ? await res.json() : { error: await r.text() }
+    const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
     if (!res.ok) { showAccErr(data?.error || 'Add failed'); return null }
     const created = data.data as AccountRow
     setAcc(a => [...a, created])
@@ -1291,51 +1291,70 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
           )}
           <div className="overflow-auto border rounded-xl">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-gray-700">
-                <tr>
-                  <th className="text-left p-2">Email</th>
-                  <th className="text-left p-2">{t('Name', lang) || 'Name'}</th>
-                  <th className="text-left p-2">{t('Role', lang) || 'Role'}</th>
-                  <th className="text-left p-2">{t('Active', lang) || 'Active'}</th>
-                  <th className="text-right p-2">{t('Actions', lang) || 'Actions'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accLoading ? (
-                  <tr><td className="p-3" colSpan={5}>{t('Loading', lang) || 'Loading…'}</td></tr>
-                ) : acc.length === 0 ? (
-                  <tr><td className="p-3" colSpan={5}>{t('NoData', lang) || 'No data'}</td></tr>
-                ) : acc.map(u => (
-                  <tr key={u.id} className="border-t">
-                    <td className="p-2">{u.email}</td>
-                    <td className="p-2">{u.name || '-'}</td>
-                    <td className="p-2">{u.role}</td>
-                    <td className="p-2">{u.is_active ? '✓' : '✗'}</td>
-                    <td className="p-2">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => sendAuthLinkForRow(u)}
-                          className="px-2 h-8 rounded-lg border hover:bg-gray-50"
-                          disabled={!!sendingRow[u.id]}
-                          title={t('SendAccessLink', lang) || 'Send access link'}>
-                          {sendingRow[u.id] ? (t('Loading', lang) || 'Loading…') : (t('SendLink', lang) || 'Send link')}
-                        </button>
-                        <button
-                          onClick={() => openEdit(u)}
-                          className="px-2 h-8 rounded-lg border hover:bg-gray-50">
-                          {t('Edit', lang) || 'Edit'}
-                        </button>
-                        <button
-                          onClick={() => deleteAccount(u.id)}
-                          className="px-2 h-8 rounded-lg border border-red-300 text-red-600 hover:bg-red-50">
-                          {t('Delete', lang) || 'Delete'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+  <thead className="bg-gray-50 text-gray-700">
+    <tr>
+      <th className="text-left p-2">Email</th>
+      <th className="text-left p-2">{t('Name', lang) || 'Name'}</th>
+      <th className="text-left p-2">{t('Role', lang) || 'Role'}</th>
+      <th className="text-center p-2">{t('Active', lang) || 'Active'}</th>
+      <th className="text-center p-2">{t('Auth', lang) || 'Auth'}</th>
+      <th className="text-right p-2">{t('Actions', lang) || 'Actions'}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {accLoading ? (
+      <tr><td className="p-3" colSpan={6}>{t('Loading', lang) || 'Loading…'}</td></tr>
+    ) : acc.length === 0 ? (
+      <tr><td className="p-3" colSpan={6}>{t('NoData', lang) || 'No data'}</td></tr>
+    ) : acc.map(u => (
+      <tr key={u.id} className="border-t align-middle">
+        <td className="p-2">{u.email}</td>
+        <td className="p-2">{u.name || '-'}</td>
+        <td className="p-2">{u.role}</td>
+        <td className="p-2 text-center">
+          {u.is_active ? (
+            <span className="text-green-600 font-bold">✓</span>
+          ) : (
+            <span className="text-red-600 font-bold">✗</span>
+          )}
+        </td>
+        <td className="p-2 text-center">
+          {u.user_id ? (
+            <span className="text-green-600 font-bold">✓</span>
+          ) : (
+            <span className="text-red-600 font-bold">✗</span>
+          )}
+        </td>
+        <td className="p-2 text-right whitespace-nowrap">
+          <div className="inline-flex items-center gap-2">
+            <button
+              onClick={() => sendAuthLinkForRow(u)}
+              className="px-3 h-8 rounded-lg border hover:bg-gray-50 leading-none whitespace-nowrap"
+              disabled={!!sendingRow[u.id]}
+              title={t('SendAccessLink', lang) || 'Send access link'}
+            >
+              {sendingRow[u.id]
+                ? (t('Loading', lang) || 'Loading…')
+                : (t('SendLink', lang) || 'Send link')}
+            </button>
+            <button
+              onClick={() => openEdit(u)}
+              className="px-3 h-8 rounded-lg border hover:bg-gray-50 leading-none whitespace-nowrap"
+            >
+              {t('Edit', lang) || 'Edit'}
+            </button>
+            <button
+              onClick={() => deleteAccount(u.id)}
+              className="px-3 h-8 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 leading-none whitespace-nowrap"
+            >
+              {t('Delete', lang) || 'Delete'}
+            </button>
+          </div>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
           </div>
 
           <div className="pt-2 flex items-center justify-end">

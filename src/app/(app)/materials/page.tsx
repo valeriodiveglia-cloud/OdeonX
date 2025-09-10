@@ -643,18 +643,22 @@ function ResolveImportModal({
     }>()
 
     for (const it of (pending.conflicts || [])) {
-      bag.set(it.key, {
-        key: it.key,
-        titleName: toTitleCase(it.name),
-        brand: titleCaseIf(it.brand),
-        csvCategoryName: titleCaseIf(it.csvCategoryName),
-        csvSupplierName: titleCaseIf(it.csvSupplierName),
-        currentCategoryId: it.currentCategoryId,
-        currentSupplierId: it.currentSupplierId,
-        categoryChanged: !!it.categoryChanged,
-        supplierChanged: !!it.supplierChanged,
-      })
-    }
+  bag.set(it.key, {
+    key: it.key,
+    titleName: toTitleCase(it.name),
+    brand: titleCaseIf(it.brand) ?? null,
+    csvCategoryName: titleCaseIf(it.csvCategoryName) ?? null,
+    csvSupplierName: titleCaseIf(it.csvSupplierName) ?? null,
+
+    // 🔧 CAMPO MANCANTE (obbligatorio nel tipo di destinazione)
+    currentCategoryId: it.currentCategoryId ?? null,
+
+    currentSupplierId: it.currentSupplierId ?? null,
+    categoryChanged: !!it.categoryChanged,
+    supplierChanged: !!it.supplierChanged,
+  })
+}
+
 
     for (const r of (pending.rows || [])) {
       const name = toTitleCase(String(r.name || ''))
@@ -1339,8 +1343,9 @@ export default function MaterialsPage() {
       if (!rows.length) { alert(t('CSVEmptyOrBad', lang)); return }
 
       // Check UOM canoniche
-      const haveCanon = new Set(uoms.map(u => normalizeUom(String(u.name)).uom))
-      const missingCanon = ['gr', 'ml', 'unit'].filter(x => !haveCanon.has(x))
+      const haveCanon = new Set<'gr' | 'ml' | 'unit'>(uoms.map(u => normalizeUom(String(u.name)).uom as 'gr' | 'ml' | 'unit'))
+      const missingCanon = (['gr','ml','unit'] as const).filter(x => !haveCanon.has(x))
+
 
       if (missingCanon.length) {
         const { error } = await supabase.from(TBL_UOM).insert(missingCanon.map(n => ({ name: n })))

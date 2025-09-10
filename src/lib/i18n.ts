@@ -381,6 +381,7 @@ const dict = {
     ErrUnknown: 'Unexpected error',
     ErrProfileRead: 'Could not read your profile',
     ErrProfileSync: 'Could not sync your profile',
+    Auth: "Auth",
 
     // ---------- PROFILE / PASSWORD ----------
     Profile: 'Profile',
@@ -854,6 +855,7 @@ const dict = {
     ErrUnknown: 'Lỗi không xác định',
     ErrProfileRead: 'Không thể đọc hồ sơ của bạn',
     ErrProfileSync: 'Không thể đồng bộ hồ sơ của bạn',
+    Auth: "Xác thực",
 
     // ---------- PROFILE / PASSWORD ----------
     Profile: 'Hồ sơ',
