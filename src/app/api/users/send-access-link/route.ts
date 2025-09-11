@@ -1,17 +1,15 @@
-// src/app/api/users/send-access-link/route.ts
 import { NextResponse } from 'next/server'
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { supabaseAnonServer } from '@/lib/supabaseAnonServer'
-import { supabaseServer } from '@/lib/supabaseServer'
+import { createSupabaseServer } from '@/lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function POST(req: Request) {
-  // auth inline: cookie o bearer
-  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || ""
+  const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || ''
   const useBearer = /^Bearer\s+/.test(authHeader)
 
   const supabase = useBearer
@@ -20,21 +18,16 @@ export async function POST(req: Request) {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         { global: { headers: { Authorization: authHeader } } }
       )
-    : supabaseServer()
+    : createSupabaseServer()
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: isOwner } = await supabase.rpc("app_is_owner")
-  const { data: isAdmin } = await supabase.rpc("app_is_admin")
-  if (!isOwner && !isAdmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const { data: isOwner } = await supabase.rpc('app_is_owner')
+  const { data: isAdmin } = await supabase.rpc('app_is_admin')
+  if (!isOwner && !isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // DIAG TEMP: check env and caller role path
-  if (req.headers.get("x-diag") === "1") {
+  if (req.headers.get('x-diag') === '1') {
     return NextResponse.json({
       diag: {
         has_url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -55,30 +48,18 @@ export async function POST(req: Request) {
     }
 
     const site = redirectToBase || process.env.NEXT_PUBLIC_SITE_URL
-    if (!site) {
-      return NextResponse.json({ error: 'Missing NEXT_PUBLIC_SITE_URL' }, { status: 500 })
-    }
+    if (!site) return NextResponse.json({ error: 'Missing NEXT_PUBLIC_SITE_URL' }, { status: 500 })
 
     const redirectTo = `${site}/auth/callback?next=/login`
 
-    // 1) Prova invito come nuovo utente
-    console.log("DEBUG: calling inviteUserByEmail", email, redirectTo)
     const invite = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo })
-    console.log("DEBUG: invite result", invite)
-    if (!invite.error) {
-      return NextResponse.json({ ok: true, mode: 'invite' })
-    }
+    if (!invite.error) return NextResponse.json({ ok: true, mode: 'invite' })
 
-    // 2) Se esiste già, invia reset password con client anon lato server
     const msg = invite.error.message?.toLowerCase() || ''
     const already = msg.includes('already') || msg.includes('exists') || msg.includes('registered')
-    console.log("DEBUG: fallback resetPasswordForEmail", email)
     if (already) {
       const { error: resetErr } = await supabaseAnonServer.auth.resetPasswordForEmail(email, { redirectTo })
-      console.error("DEBUG: reset error", resetErr)
-      if (resetErr) {
-        return NextResponse.json({ error: resetErr.message }, { status: 400 })
-      }
+      if (resetErr) return NextResponse.json({ error: resetErr.message }, { status: 400 })
       return NextResponse.json({ ok: true, mode: 'password_reset' })
     }
 
