@@ -140,10 +140,12 @@ function toTitleCase(s: string) {
   if (!str) return ''
   return str.replace(/\b\p{L}+/gu, w => w[0].toUpperCase() + w.slice(1))
 }
-function titleCaseIf(v: string | null | undefined) {
-  if (v == null) return v
-  return toTitleCase(String(v))
+function titleCaseIf(v: string | null | undefined): string | null {
+  if (v == null) return null
+  const s = String(v).trim()
+  return s ? toTitleCase(s) : null
 }
+
 function parseCsvBool(raw: unknown): boolean | null {
   const s = String(raw ?? '').trim().toLowerCase()
   if (!s) return null
@@ -1482,8 +1484,9 @@ export default function MaterialsPage() {
       if (!rows.length) { alert(t('CSVEmptyOrBad', lang)); return }
 
       // Check UOM canoniche
-      const haveCanon = new Set(uoms.map(u => normalizeUom(String(u.name)).uom))
+      const haveCanon = new Set<string>(uoms.map(u => normalizeUom(String(u.name)).uom))
       const missingCanon = ['gr', 'ml', 'unit'].filter(x => !haveCanon.has(x))
+
 
       if (missingCanon.length) {
         const { error } = await supabase.from(TBL_UOM).insert(missingCanon.map(n => ({ name: n })))
