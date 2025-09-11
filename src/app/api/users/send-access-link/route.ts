@@ -1,10 +1,9 @@
 // src/app/api/users/send-access-link/route.ts
 import { NextResponse } from 'next/server'
-import { cookies } from "next/headers"
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { createClient } from "@supabase/supabase-js"
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { supabaseAnonServer } from '@/lib/supabaseAnonServer'
+import { supabaseServer } from '@/lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -14,14 +13,26 @@ export async function POST(req: Request) {
   // auth inline: cookie o bearer
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || ""
   const useBearer = /^Bearer\s+/.test(authHeader)
+
   const supabase = useBearer
-    ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { global: { headers: { Authorization: authHeader } } })
-    : createRouteHandlerClient({ cookies })
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    ? createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+    : supabaseServer()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const { data: isOwner } = await supabase.rpc("app_is_owner")
   const { data: isAdmin } = await supabase.rpc("app_is_admin")
-  if (!isOwner && !isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isOwner && !isAdmin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   // DIAG TEMP: check env and caller role path
   if (req.headers.get("x-diag") === "1") {
     return NextResponse.json({
@@ -29,11 +40,10 @@ export async function POST(req: Request) {
         has_url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
         has_anon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
         has_service: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-        site_url: process.env.NEXT_PUBLIC_SITE_URL || null
-      }
+        site_url: process.env.NEXT_PUBLIC_SITE_URL || null,
+      },
     })
   }
-  // Consenti solo a owner o admin
 
   try {
     const body = await req.json().catch(() => null)
@@ -59,13 +69,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, mode: 'invite' })
     }
 
-    // 2) Se esiste gia, invia reset password con client anon lato server
+    // 2) Se esiste già, invia reset password con client anon lato server
     const msg = invite.error.message?.toLowerCase() || ''
     const already = msg.includes('already') || msg.includes('exists') || msg.includes('registered')
-      console.log("DEBUG: fallback resetPasswordForEmail", email)
+    console.log("DEBUG: fallback resetPasswordForEmail", email)
     if (already) {
       const { error: resetErr } = await supabaseAnonServer.auth.resetPasswordForEmail(email, { redirectTo })
-        console.error("DEBUG: reset error", resetErr)
+      console.error("DEBUG: reset error", resetErr)
       if (resetErr) {
         return NextResponse.json({ error: resetErr.message }, { status: 400 })
       }
