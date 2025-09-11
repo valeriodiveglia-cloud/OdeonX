@@ -1,5 +1,15 @@
+// src/app/(app)/materials-history/page.tsx
 'use client'
 
+/* ╔══════════════════════════════════════════════════════════════════╗
+   ║                 MATERIALS HISTORY — Unit Cost Trend              ║
+   ╠══════════════════════════════════════════════════════════════════╣
+   ║  File riorganizzato a blocchi con intestazioni per refactor      ║
+   ╚══════════════════════════════════════════════════════════════════╝ */
+
+/* ────────────────────────────────────────
+   ▶️  IMPORTS
+   ──────────────────────────────────────── */
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
@@ -10,6 +20,9 @@ import {
 import { t } from '@/lib/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
 
+/* ────────────────────────────────────────
+   🧩  TIPI (lookup, dominio)
+   ──────────────────────────────────────── */
 type Cat = { id: number; name: string }
 type Sup = { id: string; name: string }
 type Uom = { id: number; name: string }
@@ -39,7 +52,9 @@ type HistoryRow = {
   new_unit_cost: number | null
 }
 
-/* ---------- Small UI helpers ---------- */
+/* ────────────────────────────────────────
+   🧩  UI HELPERS
+   ──────────────────────────────────────── */
 function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   if (!active) return <span className="inline-block w-4" />
   return asc ? (
@@ -49,7 +64,9 @@ function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   )
 }
 
-/* utils */
+/* ────────────────────────────────────────
+   🛠️  UTILS (date & format)
+   ──────────────────────────────────────── */
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x }
 function addDays(d: Date, days: number) { const x = new Date(d); x.setDate(x.getDate() + days); return x }
 function fmtDMY(d: Date | string) {
@@ -73,9 +90,18 @@ function unitFrom(packPrice: number | null | undefined, packSize: number | null 
 
 type ViewMode = 'detail' | 'list'
 
+/* ╔══════════════════════════════════════════════════════════════════╗
+   ║                           COMPONENTE                             ║
+   ╚══════════════════════════════════════════════════════════════════╝ */
 export default function MaterialsHistoryPage() {
+  /* ────────────────────────────────────────
+     🌐  SETTINGS / LINGUA
+     ──────────────────────────────────────── */
   const { language: lang } = useSettings()
 
+  /* ────────────────────────────────────────
+     📦  STATE — dati base, selezioni, view
+     ──────────────────────────────────────── */
   const [loading, setLoading] = useState(true)
   const [cats, setCats] = useState<Cat[]>([])
   const [sups, setSups] = useState<Sup[]>([])
@@ -89,9 +115,11 @@ export default function MaterialsHistoryPage() {
 
   const [view, setView] = useState<ViewMode>('detail')
 
+  // storico caricato per TUTTI i materials nel range
   const [rowsAll, setRowsAll] = useState<HistoryRow[]>([])
   const [loadingRows, setLoadingRows] = useState(false)
 
+  // LIST: filtro + sorting
   const [filterName, setFilterName] = useState('')
   type ListSortCol = 'name' | 'changed_at' | 'old_unit_cost' | 'new_unit_cost' | 'pct' | 'trend'
   const [listSortCol, setListSortCol] = useState<ListSortCol>('name')
@@ -101,6 +129,9 @@ export default function MaterialsHistoryPage() {
     else { setListSortCol(col); setListSortAsc(true) }
   }
 
+  /* ────────────────────────────────────────
+     🔌  FETCH — lookups + materials
+     ──────────────────────────────────────── */
   async function fetchLookups() {
     setLoading(true)
     const [cRes, sRes, uRes, mRes] = await Promise.all([
@@ -121,6 +152,9 @@ export default function MaterialsHistoryPage() {
     setLoading(false)
   }
 
+  /* ────────────────────────────────────────
+     🔌  FETCH — storico prezzi nel range
+     ──────────────────────────────────────── */
   async function fetchHistoryAll() {
     setLoadingRows(true)
 
@@ -153,34 +187,115 @@ export default function MaterialsHistoryPage() {
     setLoadingRows(false)
   }
 
+  /* ────────────────────────────────────────
+     ⏱️  EFFECTS — bootstrap & reload
+     ──────────────────────────────────────── */
   useEffect(() => { fetchLookups() }, [])
   useEffect(() => { fetchHistoryAll() }, [from, to])
 
+  /* ────────────────────────────────────────
+     🧮  SELECTORS — materiale corrente & righe dettaglio
+     ──────────────────────────────────────── */
   const currentMaterial = useMemo(() => mats.find(m => m.id === selMat) || null, [mats, selMat])
   const rowsDetail = useMemo(() => rowsAll.filter(r => r.material_id === selMat), [rowsAll, selMat])
 
+  /* ────────────────────────────────────────
+     📈  DERIVED — dati per il GRAFICO (serie)
+     ──────────────────────────────────────── */
   const chartData = useMemo(() => {
-    const list = rowsDetail.map(r => {
+    const fromTs = startOfDay(new Date(`${from}T00:00:00`)).getTime()
+    const toEndTs = addDays(startOfDay(new Date(`${to}T00:00:00`)), 1).getTime() - 1
+
+    const points: Array<{ ts: number; unit_cost: number }> = []
+
+    for (const r of rowsDetail) {
       const newUnit = r.new_unit_cost ?? unitFrom(r.new_package_price, r.new_packaging_size)
       const oldUnit = r.old_unit_cost ?? unitFrom(r.old_package_price, r.old_packaging_size)
-      const unit = newUnit ?? oldUnit ?? null
-      return { date: new Date(r.changed_at), unit_cost: unit }
-    }).filter(p => p.unit_cost != null)
+      const unit = newUnit ?? oldUnit
+      if (unit == null) continue
 
-    if (currentMaterial && currentMaterial.unit_cost != null) {
-      list.push({ date: startOfDay(new Date()), unit_cost: currentMaterial.unit_cost })
+      // usa il timestamp reale (NON startOfDay)
+      const ts = new Date(r.changed_at).getTime()
+      if (ts < fromTs || ts > toEndTs) continue
+      points.push({ ts, unit_cost: unit })
     }
 
-    const key = (d: Date) => d.toISOString().slice(0,10)
-    const seen = new Set<string>()
-    const uniq: Array<{date: Date; unit_cost: number}> = []
-    for (const p of list.sort((a,b) => a.date.getTime() - b.date.getTime())) {
-      const k = key(p.date)
-      if (!seen.has(k)) { uniq.push(p as any); seen.add(k) }
-    }
-    return uniq
-  }, [rowsDetail, currentMaterial])
+    // ordina cronologicamente (mantiene TUTTE le fluttuazioni, anche più volte nello stesso giorno)
+    points.sort((a, b) => a.ts - b.ts)
 
+    // nessun punto nel range: linea piatta a valore corrente, se disponibile
+    if (points.length === 0) {
+      const val = currentMaterial?.unit_cost
+      if (val != null) {
+        return [
+          { ts: fromTs, unit_cost: val },
+          { ts: toEndTs, unit_cost: val },
+        ]
+      }
+      return []
+    }
+
+    // pad ai bordi: forza i punti esatti su from e to
+    const firstVal = points[0].unit_cost
+    const lastVal  = points[points.length - 1].unit_cost
+    if (points[0].ts > fromTs) points.unshift({ ts: fromTs, unit_cost: firstVal })
+    if (points[points.length - 1].ts < toEndTs) points.push({ ts: toEndTs, unit_cost: lastVal })
+
+    return points
+  }, [rowsDetail, currentMaterial, from, to])
+
+  /* ────────────────────────────────────────
+     🧭  DERIVED — X DOMAIN con Auto-focus cambi
+         (centra la finestra sui cambi reali con padding,
+          senza toccare il filtro dati from→to)
+     ──────────────────────────────────────── */
+  const xDomain: [number, number] = useMemo(() => {
+    const rangeStart = startOfDay(new Date(`${from}T00:00:00`)).getTime()
+    const rangeEnd   = addDays(startOfDay(new Date(`${to}T00:00:00`)), 1).getTime() - 1
+    if (chartData.length === 0) return [rangeStart, rangeEnd]
+
+    // ignora i punti di padding ai bordi (== rangeStart / rangeEnd)
+    let firstIdx = 0
+    while (firstIdx < chartData.length - 1 && chartData[firstIdx].ts === rangeStart) firstIdx++
+    let lastIdx = chartData.length - 1
+    while (lastIdx > 0 && chartData[lastIdx].ts === rangeEnd) lastIdx--
+
+    // se non ci sono eventi interni, mostra tutto il range
+    if (firstIdx >= lastIdx) return [rangeStart, rangeEnd]
+
+    const first = chartData[firstIdx].ts
+    const last  = chartData[lastIdx].ts
+
+    const fullSpan   = rangeEnd - rangeStart
+    const signalSpan = Math.max(1, last - first)
+    const WEEK = 7 * 24 * 3600 * 1000
+
+    // padding minimo ai bordi dei cambi
+    const pad = Math.max(WEEK, signalSpan * 0.15)
+    let min = Math.max(rangeStart, first - pad)
+    let max = Math.min(rangeEnd,   last  + pad)
+
+    // se i cambi occupano <40% del periodo, allarga/centra la finestra
+    if (signalSpan / fullSpan < 0.4) {
+      const desired = Math.min(Math.max(signalSpan * 1.6, 60 * 24 * 3600 * 1000), fullSpan) // ≥ 60 giorni
+      const mid = (first + last) / 2
+      min = Math.max(rangeStart, mid - desired / 2)
+      max = Math.min(rangeEnd,   mid + desired / 2)
+    }
+
+    // finestra minima: 1 settimana
+    if (max - min < WEEK) {
+      const mid = (min + max) / 2
+      min = Math.max(rangeStart, mid - WEEK / 2)
+      max = Math.min(rangeEnd,   mid + WEEK / 2)
+    }
+
+    return [min, max]
+  }, [from, to, chartData])
+
+  /* ────────────────────────────────────────
+     📋  DERIVED — tabella dettaglio (diff/%)
+     ──────────────────────────────────────── */
   const tableRowsDetail = useMemo(() => {
     return rowsDetail.map(r => {
       const diffUnit = (r.new_unit_cost ?? 0) - (r.old_unit_cost ?? 0)
@@ -191,6 +306,9 @@ export default function MaterialsHistoryPage() {
     })
   }, [rowsDetail])
 
+  /* ────────────────────────────────────────
+     📋  DERIVED — LIST: ultimo cambio per materiale
+     ──────────────────────────────────────── */
   type ListRow = {
     material_id: string
     name: string
@@ -236,6 +354,9 @@ export default function MaterialsHistoryPage() {
     return out
   }, [rowsAll, mats])
 
+  /* ────────────────────────────────────────
+     🔎  FILTER & SORT — LIST
+     ──────────────────────────────────────── */
   const filteredList = useMemo(() => {
     let rows = [...listRows]
     if (filterName.trim()) rows = rows.filter(r => r.name.toLowerCase().includes(filterName.trim().toLowerCase()))
@@ -266,7 +387,7 @@ export default function MaterialsHistoryPage() {
       const av: any = (a as any)[col]
       const bv: any = (b as any)[col]
       const va = av == null ? '' : (typeof av === 'number' ? av : String(av))
-      const vb = bv == null ? '' : (typeof bv === 'number' ? bv : String(bv))
+      const vb = bv == null ? '' : (typeof vb === 'number' ? vb : String(bv))
 
       const cmp =
         typeof va === 'number' && typeof vb === 'number'
@@ -279,6 +400,9 @@ export default function MaterialsHistoryPage() {
     return rows
   }, [listRows, filterName, listSortCol, listSortAsc])
 
+  /* ────────────────────────────────────────
+     🔗  NAV — click lista → dettaglio
+     ──────────────────────────────────────── */
   function gotoDetailFromList(materialId: string) {
     const m = mats.find(x => x.id === materialId)
     const today0 = startOfDay(new Date())
@@ -290,13 +414,20 @@ export default function MaterialsHistoryPage() {
     setView('detail')
   }
 
+  /* ────────────────────────────────────────
+     🧪  LOADING
+     ──────────────────────────────────────── */
   if (loading) return <CircularLoader />
 
+  /* ────────────────────────────────────────
+     🎨  RENDER
+     ──────────────────────────────────────── */
   return (
     <div key={lang} lang={lang} className="max-w-5xl mx-auto p-4">
+      {/* ── TITOLO */}
       <h1 className="text-3xl font-bold mb-4">{t('MaterialsHistory', lang)}</h1>
 
-      {/* Toggle vista + search */}
+      {/* ── TOGGLE VIEW + SEARCH */}
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="inline-flex rounded-2xl overflow-hidden border shrink-0">
           <button
@@ -324,7 +455,7 @@ export default function MaterialsHistoryPage() {
         )}
       </div>
 
-      {/* Barra controlli */}
+      {/* ── BARRA CONTROLLI */}
       <div className="bg-white rounded-2xl shadow p-3 mb-6">
         {view === 'detail' ? (
           <div className="flex flex-col md:flex-row md:flex-nowrap md:items-end md:gap-3">
@@ -472,7 +603,7 @@ export default function MaterialsHistoryPage() {
 
       {view === 'detail' ? (
         <>
-          {/* Grafico */}
+          {/* ── GRAFICO UNIT COST (con dominio auto-focus) */}
           <div className="bg-white rounded-2xl shadow p-3 mb-6">
             <h2 className="text-xl font-bold mb-3 text-blue-800">{t('TrendUnitCost', lang)}</h2>
             <div className="h-72">
@@ -482,28 +613,36 @@ export default function MaterialsHistoryPage() {
                 <div className="h-full flex items-center justify-center text-gray-600">{t('NoDataInRange', lang)}</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
-                      dataKey="date"
-                      tickFormatter={(v: Date) => fmtDMY(v)}
+                      dataKey="ts"
                       type="number"
-                      domain={['auto', 'auto']}
                       scale="time"
+                      allowDataOverflow={true}
+                      domain={xDomain}
+                      tickFormatter={(ms: number) => fmtDMY(new Date(ms))}
+                      minTickGap={24}
+                      tickMargin={8}
                     />
-                    <YAxis />
+                    <YAxis
+                      width={54}
+                      tickMargin={8}
+                      allowDecimals
+                      tickFormatter={(v: number) => Number(v).toLocaleString()}
+                    />
                     <Tooltip
-                      labelFormatter={(l: any) => fmtDMY(new Date(l))}
+                      labelFormatter={(ms: any) => fmtDMY(new Date(Number(ms)))}
                       formatter={(v: any) => [Number(v).toLocaleString(), t('UnitCost', lang)]}
                     />
-                    <Line type="monotone" dataKey="unit_cost" dot />
+                    <Line type="monotone" dataKey="unit_cost" dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
 
-          {/* Tabella storico dettaglio */}
+          {/* ── TABELLA DETTAGLIO CAMBI */}
           <div className="bg-white rounded-2xl shadow p-3">
             <h2 className="text-xl font-bold mb-3 text-blue-800">{t('Changes', lang)}</h2>
             <div className="overflow-x-auto">
@@ -549,7 +688,7 @@ export default function MaterialsHistoryPage() {
           </div>
         </>
       ) : (
-        /* ===================== LIST VIEW ===================== */
+        /* ── LIST VIEW: ultimo cambio per materiale */
         <div className="bg-white rounded-2xl shadow p-3">
           <h2 className="text-xl font-bold mb-3 text-blue-800">{t('LastChangePerMaterial', lang)}</h2>
           <div className="overflow-x-auto">

@@ -61,6 +61,8 @@ type CsvRow = {
   packaging_size?: string | number | null
   package_price?: string | number | null
   vat_rate_percent?: string | number | null
+  is_food_drink?: boolean | null
+  is_default?: boolean | null
 }
 
 /* ---------- Small UI helpers ---------- */
@@ -142,6 +144,13 @@ function titleCaseIf(v: string | null | undefined) {
   if (v == null) return v
   return toTitleCase(String(v))
 }
+function parseCsvBool(raw: unknown): boolean | null {
+  const s = String(raw ?? '').trim().toLowerCase()
+  if (!s) return null
+  if (['1', 'true', 'yes', 'y', 'si', 's', 'vero', 'ok', '✓', 'x'].includes(s)) return true
+  if (['0', 'false', 'no', 'n', 'falso'].includes(s)) return false
+  return null
+}
 
 /* =====================================================
    Overlay + Section
@@ -166,7 +175,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
 }
 
 /* =====================================================
-   Material Editor — create/edit/view
+   Material Editor - create/edit/view
 ===================================================== */
 type MaterialEditorProps = {
   mode: 'create' | 'edit' | 'view'
@@ -343,7 +352,9 @@ function MaterialEditor(props: MaterialEditorProps) {
         {/* Top bar */}
         <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
           <div className="text-xl font-bold">
-            {mode === 'view' ? t('Materials', lang) : (id ? t('EditMaterial', lang) : t('NewMaterial', lang))}
+            {viewMode
+              ? t('Materials', lang)
+              : (id ? t('EditMaterial', lang) : t('NewMaterial', lang))}
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', lang)}>
             <XMarkIcon className="w-7 h-7" />
@@ -361,7 +372,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                   className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 disabled:bg-gray-50 h-10"
                   value={name}
                   onChange={e => setName(toTitleCase(e.target.value))}
-                  disabled={mode === 'view'}
+                  disabled={viewMode}
                 />
               </div>
 
@@ -376,7 +387,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                     if (v === '__add__') { await handleAddCategory(); return }
                     setCategoryId(v)
                   }}
-                  disabled={mode === 'view'}
+                  disabled={viewMode}
                 >
                   <option value="">{t('Select', lang)}</option>
                   {catsLocal.map(c => <option key={c.id} value={c.id}>{toTitleCase(c.name)}</option>)}
@@ -390,7 +401,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                   className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 disabled:bg-gray-50 h-10"
                   value={brand}
                   onChange={e => setBrand(toTitleCase(e.target.value))}
-                  disabled={mode === 'view'}
+                  disabled={viewMode}
                 />
               </div>
 
@@ -400,7 +411,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                   className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 disabled:bg-gray-50 h-10"
                   value={notes}
                   onChange={e => setNotes(toTitleCase(e.target.value))}
-                  disabled={mode === 'view'}
+                  disabled={viewMode}
                 />
               </div>
             </div>
@@ -420,7 +431,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                     if (v === '__add__') { await handleAddSupplier(); return }
                     setSupplierId(v)
                   }}
-                  disabled={mode === 'view'}
+                  disabled={viewMode}
                 >
                   <option value="">{t('Select', lang)}</option>
                   {supsLocal.map(s => <option key={s.id} value={s.id}>{toTitleCase(s.name)}</option>)}
@@ -434,7 +445,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                   className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10"
                   value={uomId}
                   onChange={e => setUomId(e.target.value)}
-                  disabled={mode === 'view'}
+                  disabled={viewMode}
                 >
                   <option value="">{t('Select', lang)}</option>
                   {uoms.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -449,7 +460,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                   step="any"
                   value={packSize}
                   onChange={e => setPackSize(e.target.value)}
-                  disabled={mode === 'view'}
+                  disabled={viewMode}
                 />
               </div>
 
@@ -461,7 +472,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                   step="any"
                   value={packPrice}
                   onChange={e => setPackPrice(e.target.value)}
-                  disabled={mode === 'view'}
+                  disabled={viewMode}
                 />
               </div>
 
@@ -477,7 +488,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                     value={vatRatePct}
                     onChange={e => setVatRatePct(e.target.value)}
                     placeholder={vatRate != null ? String(vatRate) : '0'}
-                    disabled={mode === 'view'}
+                    disabled={viewMode}
                   />
                 </div>
               )}
@@ -498,7 +509,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                     checked={isFoodDrink}
                     onChange={e => setIsFoodDrink(e.target.checked)}
                     className="sr-only peer"
-                    disabled={mode === 'view'}
+                    disabled={viewMode}
                   />
                   <div className="w-11 h-6 bg-gray-200 rounded-full peer-checked:bg-blue-600 relative transition-colors
                                   after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border
@@ -513,7 +524,7 @@ function MaterialEditor(props: MaterialEditorProps) {
                     checked={isDefault}
                     onChange={e => setIsDefault(e.target.checked)}
                     className="sr-only peer"
-                    disabled={mode === 'view'}
+                    disabled={viewMode}
                   />
                   <div className="w-11 h-6 bg-gray-200 rounded-full peer-checked:bg-blue-600 relative transition-colors
                                   after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border
@@ -527,11 +538,10 @@ function MaterialEditor(props: MaterialEditorProps) {
         {/* Footer */}
         <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {mode === 'view' ? (
+            {viewMode ? (
               <button
-                onClick={() => {}}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white opacity-40 cursor-not-allowed"
-                title="View mode"
+                onClick={() => setViewMode(false)}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95"
               >
                 {t('Edit', lang)}
               </button>
@@ -554,7 +564,8 @@ function MaterialEditor(props: MaterialEditorProps) {
             >
               {t('Close', lang)}
             </button>
-            {mode !== 'view' && (
+
+            {!viewMode && (
               <button
                 onClick={save}
                 disabled={!canSave}
@@ -567,11 +578,113 @@ function MaterialEditor(props: MaterialEditorProps) {
         </div>
 
         {/* Add Category Modal */}
-        {/* ... invariato come nel tuo codice precedente ... */}
+        {showAddCat && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddCat(false)} />
+            <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-lg font-semibold">{t('AddCategory', lang)}</div>
+                <button
+                  onClick={() => setShowAddCat(false)}
+                  className="p-1 rounded hover:bg-gray-100"
+                  aria-label={t('Close', lang)}
+                >
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+
+              <input
+                id="addCatInput"
+                autoFocus
+                className="w-full border rounded-lg px-2 py-1 text-gray-900 mb-4"
+                placeholder={t('CategoryNamePlaceholder', lang) || 'Category name'}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter') {
+                    const value = (e.target as HTMLInputElement).value.trim()
+                    if (value) await createCategory(value)
+                    setShowAddCat(false)
+                  }
+                }}
+              />
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowAddCat(false)}
+                  className="px-3 py-1.5 rounded-lg border"
+                >
+                  {t('Cancel', lang)}
+                </button>
+                <button
+                  onClick={async () => {
+                    const value = (document.querySelector<HTMLInputElement>('#addCatInput')?.value || '').trim()
+                    if (value) await createCategory(value)
+                    setShowAddCat(false)
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white"
+                >
+                  {t('AddCategory', lang)}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Supplier Modal */}
+        {showAddSup && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddSup(false)} />
+            <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-lg font-semibold">{t('AddSupplier', lang)}</div>
+                <button
+                  onClick={() => setShowAddSup(false)}
+                  className="p-1 rounded hover:bg-gray-100"
+                  aria-label={t('Close', lang)}
+                >
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+
+              <input
+                id="addSupInput"
+                autoFocus
+                className="w-full border rounded-lg px-2 py-1 text-gray-900 mb-4"
+                placeholder={t('SupplierName', lang) || 'Supplier name'}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter') {
+                    const value = (e.target as HTMLInputElement).value.trim()
+                    if (value) await createSupplier(value)
+                    setShowAddSup(false)
+                  }
+                }}
+              />
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowAddSup(false)}
+                  className="px-3 py-1.5 rounded-lg border"
+                >
+                  {t('Cancel', lang)}
+                </button>
+                <button
+                  onClick={async () => {
+                    const value = (document.querySelector<HTMLInputElement>('#addSupInput')?.value || '').trim()
+                    if (value) await createSupplier(value)
+                    setShowAddSup(false)
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white"
+                >
+                  {t('AddSupplier', lang)}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Overlay>
   )
 }
+
 
 /* =====================================================
    Import Resolve Modal — versione richiesta
@@ -643,22 +756,18 @@ function ResolveImportModal({
     }>()
 
     for (const it of (pending.conflicts || [])) {
-  bag.set(it.key, {
-    key: it.key,
-    titleName: toTitleCase(it.name),
-    brand: titleCaseIf(it.brand) ?? null,
-    csvCategoryName: titleCaseIf(it.csvCategoryName) ?? null,
-    csvSupplierName: titleCaseIf(it.csvSupplierName) ?? null,
-
-    // 🔧 CAMPO MANCANTE (obbligatorio nel tipo di destinazione)
-    currentCategoryId: it.currentCategoryId ?? null,
-
-    currentSupplierId: it.currentSupplierId ?? null,
-    categoryChanged: !!it.categoryChanged,
-    supplierChanged: !!it.supplierChanged,
-  })
-}
-
+      bag.set(it.key, {
+        key: it.key,
+        titleName: toTitleCase(it.name),
+        brand: titleCaseIf(it.brand),
+        csvCategoryName: titleCaseIf(it.csvCategoryName),
+        csvSupplierName: titleCaseIf(it.csvSupplierName),
+        currentCategoryId: it.currentCategoryId,
+        currentSupplierId: it.currentSupplierId,
+        categoryChanged: !!it.categoryChanged,
+        supplierChanged: !!it.supplierChanged,
+      })
+    }
 
     for (const r of (pending.rows || [])) {
       const name = toTitleCase(String(r.name || ''))
@@ -733,48 +842,60 @@ function ResolveImportModal({
   }, [rows])
 
   // Add all
-function handleAddAll() {
-  const nc: Record<string, boolean> = {}
-  const ns: Record<string, boolean> = {}
-  const ncm: Record<string, string> = {}
-  const nsm: Record<string, string> = {}
+  function handleAddAll() {
+    const nextCatByKey: Record<string, number | string | null> = { ...categoryByKey }
+    const nextSupByKey: Record<string, string | null> = { ...supplierByKey }
 
-  // pre-selezioni per ogni riga
-  const catBy: Record<string, number | string | null> = {}
-  const supBy: Record<string, string | null> = {}
+    const nc: Record<string, boolean> = { ...toCreateCats }
+    const ns: Record<string, boolean> = { ...toCreateSups }
+    const ncm: Record<string, number | string> = { ...newCategoryMap }
+    const nsm: Record<string, string> = { ...newSupplierMap }
 
-  // nuove categorie: marca e precompila le righe che le usano
-  newCatNames.forEach(n => {
-    nc[n] = true
-    ncm[n] = labelCreate(n)
-    rows.forEach(r => {
-      if (r.csvCategoryName && toTitleCase(r.csvCategoryName) === n) {
-        catBy[r.key] = labelCreate(n)
+  for (const r of rows) {
+    // ---- CATEGORY ----
+    const catLocked = !!r.currentCategoryId && !r.categoryChanged
+    if (!catLocked && r.csvCategoryName) {
+      const lower = r.csvCategoryName.toLowerCase()
+      const existing = catByLower.get(lower)
+      if (existing) {
+        // seleziona categoria esistente
+        nextCatByKey[r.key] = existing.id
+      } else {
+        // seleziona "Create new: ..."
+        const title = toTitleCase(r.csvCategoryName)
+        const label = labelCreate(title)
+        nextCatByKey[r.key] = label
+        nc[title] = true
+        ncm[title] = label
       }
-    })
-  })
+    }
 
-  // nuovi fornitori: marca e precompila le righe che li usano
-  newSupNames.forEach(n => {
-    ns[n] = true
-    nsm[n] = labelCreate(n)
-    rows.forEach(r => {
-      if (r.csvSupplierName && toTitleCase(r.csvSupplierName) === n) {
-        supBy[r.key] = labelCreate(n)
+    // ---- SUPPLIER ----
+    const supLocked = !!r.currentSupplierId && !r.supplierChanged
+    if (!supLocked && r.csvSupplierName) {
+      const lower = r.csvSupplierName.toLowerCase()
+      const existing = supByLower.get(lower)
+      if (existing) {
+        // seleziona supplier esistente
+        nextSupByKey[r.key] = String(existing.id)
+      } else {
+        // seleziona "Create new: ..."
+        const title = toTitleCase(r.csvSupplierName)
+        const label = labelCreate(title)
+        nextSupByKey[r.key] = label
+        ns[title] = true
+        nsm[title] = label
       }
-    })
-  })
+    }
+  }
 
+  setCategoryByKey(nextCatByKey)
+  setSupplierByKey(nextSupByKey)
   setToCreateCats(nc)
   setToCreateSups(ns)
   setNewCategoryMap(ncm)
   setNewSupplierMap(nsm)
-
-  // IMPORTANTISSIMO: aggiorna anche le scelte per riga
-  setCategoryByKey(prev => ({ ...prev, ...catBy }))
-  setSupplierByKey(prev => ({ ...prev, ...supBy }))
 }
-
 
   function handleContinue() {
     onConfirm({ categoryByKey, supplierByKey, newCategoryMap, newSupplierMap, toCreateCats, toCreateSups })
@@ -1301,12 +1422,27 @@ export default function MaterialsPage() {
     'vat rate (%)': 'vat_rate_percent',
     'vat rate': 'vat_rate_percent',
     'vat_rate_percent': 'vat_rate_percent',
+    vat: 'vat_rate_percent',
     'status': '__ignore__',
     'notes': '__ignore__',
     'package qty': '__ignore__',
     'package_qty': '__ignore__',
     'unit cost': '__ignore__',
     'unit_cost': '__ignore__',
+
+    // Food/Drink
+    'fooddrink': 'is_food_drink',
+    'food/drink': 'is_food_drink',
+    'food / drink': 'is_food_drink',
+    'food': 'is_food_drink',
+    'alimentare': 'is_food_drink',
+    'is_food_drink': 'is_food_drink',
+
+    // Default
+    'default': 'is_default',
+    'is default': 'is_default',
+    'predefinito': 'is_default',
+    'is_default': 'is_default',
   }
 
   async function handlePickFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1337,15 +1473,17 @@ export default function MaterialsPage() {
           packaging_size: r['packaging_size'] ?? null,
           package_price: r['package_price'] ?? null,
           vat_rate_percent: r['vat_rate_percent'] ?? null,
+      // NUOVI: letti dal CSV se presenti
+          is_food_drink: parseCsvBool(r['is_food_drink']),
+          is_default: parseCsvBool(r['is_default']),
         }))
         .filter((r: any) => r.name || r.category || r.supplier)
 
       if (!rows.length) { alert(t('CSVEmptyOrBad', lang)); return }
 
       // Check UOM canoniche
-      const haveCanon = new Set<'gr' | 'ml' | 'unit'>(uoms.map(u => normalizeUom(String(u.name)).uom as 'gr' | 'ml' | 'unit'))
-      const missingCanon = (['gr','ml','unit'] as const).filter(x => !haveCanon.has(x))
-
+      const haveCanon = new Set(uoms.map(u => normalizeUom(String(u.name)).uom))
+      const missingCanon = ['gr', 'ml', 'unit'].filter(x => !haveCanon.has(x))
 
       if (missingCanon.length) {
         const { error } = await supabase.from(TBL_UOM).insert(missingCanon.map(n => ({ name: n })))
@@ -1675,7 +1813,8 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
         name, brand, supplier_id, category_id, uom_id: uomId,
         packaging_size, package_price, unit_cost,
         vat_rate_percent: vat_rate_percent != null ? Math.max(0, Math.min(100, vat_rate_percent)) : null,
-        is_food_drink: true, is_default: true,
+        is_food_drink: (r as any).is_food_drink != null ? !!(r as any).is_food_drink : true,
+        is_default:    (r as any).is_default    != null ? !!(r as any).is_default    : true,
         last_update: new Date().toISOString(),
       }
 

@@ -14,12 +14,14 @@ export type CsvRow = {
   packaging_size?: string | number | null
   package_price?: string | number | null
   vat_rate_percent?: string | number | null
+  food_drink?: string | boolean | null
+  default?: string | boolean | null
 }
 
 export type ExistingSets = {
   categories: { id: number; name: string }[]
   suppliers: { id: string; name: string }[]
-  uoms: { id: number; name: string }[] // lasciamo string: in DB può essere "g", "pz", ecc.
+  uoms: { id: number; name: string }[]
 }
 
 export type PendingNew = { categories: string[]; suppliers: string[] }
@@ -28,10 +30,38 @@ export type ResolveResult = {
   supplierMap: Record<string, string>
 }
 
-function strToNumber(raw: string | number | null | undefined) {
+// Parse robusto per numeri con %/€/spazi e . o , come separatori
+function parseNumberLoose(raw: string | number | null | undefined): number | null {
   if (raw == null) return null
-  const s = String(raw).replace(/\s+/g, '').replace(/,/g, '')
+  let s = String(raw).trim()
   if (s === '') return null
+  // togli simboli comuni (% €) e qualsiasi altra lettera
+  s = s.replace(/[%€]/g, '')
+  s = s.replace(/[^\d.,\-]/g, '') // mantieni solo cifre, . , e -
+  if (s === '' || s === '-' || s === ','
+      || s === '.') return null
+
+  // Se ci sono sia . che , usa l'ultimo come separatore decimale
+  const hasDot = s.includes('.')
+  const hasComma = s.includes(',')
+  if (hasDot && hasComma) {
+    const lastSep = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','))
+    const intPart = s.slice(0, lastSep).replace(/[.,]/g, '')
+    const decPart = s.slice(lastSep + 1)
+    s = intPart + '.' + decPart
+  } else if (hasComma && !hasDot) {
+    // Solo virgola ⇒ probabile decimale italiano
+    s = s.replace(/\./g, '') // punti come separatori migliaia
+    s = s.replace(',', '.')
+  } else {
+    // Solo punto o solo cifre ⇒ già ok, togli eventuali separatori migliaia
+    const parts = s.split('.')
+    if (parts.length > 2) {
+      const dec = parts.pop()
+      s = parts.join('') + '.' + dec
+    }
+  }
+
   const n = Number(s)
   return Number.isFinite(n) ? n : null
 }
@@ -59,6 +89,13 @@ const headerMap: Record<string, string> = {
   'vat rate': 'vat_rate_percent',
   vat_rate_percent: 'vat_rate_percent',
 
+  // nuovi flag
+  'food drink': 'food_drink',
+  'food/drink': 'food_drink',
+  food_drink: 'food_drink',
+  default: 'default',
+  'is default': 'default',
+
   // vecchi, da ignorare
   status: '__ignore__',
   notes: '__ignore__',
@@ -68,14 +105,21 @@ const headerMap: Record<string, string> = {
   unit_cost: '__ignore__',
 }
 
-/** Assicura che nel DB esistano le canoniche 'gr','ml','unit' e
- *  costruisce una mappa tollerante alias→id basata su normalizeUom(nameDB).
+function parseYesNo(v: unknown): boolean | null {
+  if (v == null) return null
+  const s = String(v).trim().toLowerCase()
+  if (['yes', 'y', 'si', 's', 'true', '1'].includes(s)) return true
+  if (['no', 'n', 'false', '0'].includes(s)) return false
+  return null
+}
+
+/** Assicura che nel DB esistano le canoniche 'gr','ml','unit'
+ * e costruisce una mappa alias→id basata su normalizeUom(nameDB).
  */
 async function ensureCanonicalUoms(
   supabase: SupabaseClient,
   existingUoms: { id: number; name: string }[],
 ) {
-  // quali canoniche copriamo già con i nomi esistenti?
   const have = new Set<'gr' | 'ml' | 'unit'>()
   for (const u of existingUoms) {
     const { uom } = normalizeUom(String(u.name))
@@ -94,12 +138,9 @@ async function ensureCanonicalUoms(
   }
 
   const all = [...existingUoms, ...inserted]
-
-  // Mappa “alias” → id, usando normalizeUom anche sui nomi DB
   const uomByAlias = new Map<'gr' | 'ml' | 'unit', number>()
   for (const u of all) {
     const { uom } = normalizeUom(String(u.name))
-    // la prima occorrenza vince
     if (!uomByAlias.has(uom)) uomByAlias.set(uom, u.id)
   }
   return uomByAlias
@@ -114,7 +155,7 @@ export async function importMaterialsCsv(
 ): Promise<{ inserted: number; updated: number; skipped: number }> {
   const { categories, suppliers, uoms } = await getExisting()
 
-    // parse CSV (niente generics su Papa.parse: cast nel complete)
+  // parse CSV
   const parsed = await new Promise<ParseResult<CsvRow>>((resolve, reject) => {
     Papa.parse(file as any, {
       header: true,
@@ -135,12 +176,14 @@ export async function importMaterialsCsv(
       packaging_size: r['packaging_size'] ?? null,
       package_price: r['package_price'] ?? null,
       vat_rate_percent: r['vat_rate_percent'] ?? null,
+      food_drink: r['food_drink'] ?? null,
+      default: r['default'] ?? null,
     }))
     .filter((r: CsvRow) => r.name || r.category || r.supplier)
 
   if (!rows.length) {
     throw new Error(
-      'CSV vuoto o intestazioni non riconosciute. Attese: Name, Category, Brand, Supplier, UOM, Packaging Size, Package Cost, VAT Rate (%)'
+      'CSV vuoto o intestazioni non riconosciute. Attese: Name, Category, Brand, Supplier, UOM, Packaging Size, Package Cost, VAT Rate (%), Food/Drink, Default'
     )
   }
 
@@ -165,7 +208,6 @@ export async function importMaterialsCsv(
   // lookup maps per category/supplier (inclusi quelli risolti)
   const catByName = new Map(categories.map(c => [c.name.toLowerCase(), c.id] as const))
   const supByName = new Map(suppliers.map(s => [s.name.toLowerCase(), s.id] as const))
-
   Object.entries(resolved.categoryMap).forEach(([k, id]) => catByName.set(k.toLowerCase(), id))
   Object.entries(resolved.supplierMap).forEach(([k, id]) => supByName.set(k.toLowerCase(), id))
 
@@ -188,24 +230,57 @@ export async function importMaterialsCsv(
       continue
     }
 
-    // Normalizza UOM dal CSV e risolvi id canonico. Applica anche il factor al packaging_size.
-    const norm = normalizeUom(String(r.uom || 'unit')) // → { uom: 'gr'|'ml'|'unit', factor }
+    // Normalizza UOM e calcoli numerici
+    const norm = normalizeUom(String(r.uom || 'unit'))
     const uomId = uomByAlias.get(norm.uom)
-    if (!uomId) {
-      throw new Error(`UOM non trovata o non creabile: ${norm.uom}`)
-    }
+    if (!uomId) throw new Error(`UOM non trovata o non creabile: ${norm.uom}`)
 
     const category_id = catByName.get(categoryName)
     const supplier_id = supByName.get(supplierName)
     if (!category_id || !supplier_id) {
-      throw new Error(`Category/Supplier non risolti per riga: "${name}"`)
+      skipped++
+      done++
+      onProgress?.(Math.round((done / rows.length) * 100))
+      continue
     }
 
-    // Numerici + factor
-    const raw_pack_size = strToNumber(r.packaging_size)
+    const raw_pack_size = parseNumberLoose(r.packaging_size)
     const packaging_size = raw_pack_size != null ? raw_pack_size * norm.factor : null
-    const package_price = strToNumber(r.package_price)
-    const vat_rate_percent = strToNumber(r.vat_rate_percent)
+    const package_price = parseNumberLoose(r.package_price)
+    const csvVat = parseNumberLoose(r.vat_rate_percent) // <-- QUI ora gestiamo % e virgole
+
+    // Trova record esistente per supplier+category+name (best-match su brand)
+    const { data: candidates, error: selErr } = await supabase
+      .from('materials')
+      .select('id,name,brand,supplier_id,category_id,is_food_drink,is_default,vat_rate_percent')
+      .eq('supplier_id', supplier_id)
+      .eq('category_id', category_id)
+      .ilike('name', name)
+      .limit(10)
+
+    if (selErr) throw selErr
+
+    let existing = null as null | (typeof candidates extends (infer U)[] ? U : any)
+    if (candidates && candidates.length) {
+      if (brand == null || brand === '') {
+        existing = candidates.find(m => !m.brand || m.brand === '') ?? candidates[0]
+      } else {
+        existing =
+          candidates.find(m => (m.brand ?? '').toLowerCase() === brand.toLowerCase()) ??
+          candidates[0]
+      }
+    }
+
+    const csvFoodDrink = parseYesNo(r.food_drink)
+    const csvDefault = parseYesNo(r.default)
+
+    const final_is_food_drink =
+      csvFoodDrink != null ? csvFoodDrink : (existing?.is_food_drink ?? true)
+    const final_is_default =
+      csvDefault != null ? csvDefault : (existing?.is_default ?? true)
+
+    const final_vat =
+      csvVat != null ? Math.max(0, Math.min(100, csvVat)) : (existing?.vat_rate_percent ?? null)
 
     let unit_cost: number | null = null
     if (package_price != null && packaging_size != null && packaging_size > 0) {
@@ -218,34 +293,40 @@ export async function importMaterialsCsv(
       supplier_id,
       category_id,
       uom_id: uomId,
-      packaging_size, // ora nella base-unit corrispondente alla UOM canonica
+      packaging_size,
       package_price,
       unit_cost,
-      vat_rate_percent: vat_rate_percent != null ? Math.max(0, Math.min(100, vat_rate_percent)) : null,
+      vat_rate_percent: final_vat,
+      is_food_drink: final_is_food_drink,
+      is_default: final_is_default,
       last_update: new Date().toISOString(),
-      is_food_drink: true,
-      is_default: true,
     }
 
-    // match esistente per supplier+name+brand (case-insensitive); se brand è null usiamo stringa vuota
-    const { data: existing, error: selErr } = await supabase
-      .from('materials')
-      .select('id, name, brand, supplier_id')
-      .eq('supplier_id', supplier_id)
-      .ilike('name', name)
-      .ilike('brand', brand ?? '')
-      .maybeSingle()
-
-    if (selErr) throw selErr
+    let currentId: string | null = null
 
     if (existing) {
       const { error } = await supabase.from('materials').update(payload).eq('id', existing.id)
       if (error) throw error
       updated++
+      currentId = existing.id as unknown as string
     } else {
-      const { error } = await supabase.from('materials').insert(payload)
+      const { data: ins, error } = await supabase
+        .from('materials')
+        .insert(payload)
+        .select('id')
+        .single()
       if (error) throw error
       inserted++
+      currentId = ins?.id as unknown as string
+    }
+
+    // Enforce "un solo default per nome"
+    if (currentId && final_is_default) {
+      await supabase
+        .from('materials')
+        .update({ is_default: false })
+        .eq('name', name)
+        .neq('id', currentId)
     }
 
     done++

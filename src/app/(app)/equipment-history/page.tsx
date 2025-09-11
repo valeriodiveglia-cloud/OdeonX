@@ -1,23 +1,39 @@
 // src/app/(app)/equipment-history/page.tsx
 'use client'
 
+/* ╔══════════════════════════════════════════════════════════════════╗
+   ║                 EQUIPMENT HISTORY — Cost Trend & Log             ║
+   ╠══════════════════════════════════════════════════════════════════╣
+   ║  File riorganizzato a blocchi con titoli per refactor futuro     ║
+   ╚══════════════════════════════════════════════════════════════════╝ */
+
+/* ────────────────────────────────────────
+   ▶️  IMPORTS
+   ──────────────────────────────────────── */
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
 import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
 } from 'recharts'
 
 // i18n + settings
 import { t } from '@/lib/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
 
-/* ---------- Lookup types ---------- */
+/* ────────────────────────────────────────
+   🧩  TIPI (lookup, dominio, view-model)
+   ──────────────────────────────────────── */
 type Cat = { id: number; name: string }
 type Sup = { id: string; name: string }
 
-/* ---------- Equipment & History ---------- */
 type Equip = {
   id: string
   name: string
@@ -38,7 +54,11 @@ type EqHistoryRow = {
   new_final_price: number | null
 }
 
-/* ---------- Small UI helpers ---------- */
+type ViewMode = 'detail' | 'list'
+
+/* ────────────────────────────────────────
+   🧩  UI HELPERS
+   ──────────────────────────────────────── */
 function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   if (!active) return <span className="inline-block w-4" />
   return asc ? (
@@ -48,13 +68,19 @@ function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   )
 }
 
-/* utils */
-function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x }
-function addDays(d: Date, days: number) { const x = new Date(d); x.setDate(x.getDate() + days); return x }
+/* ────────────────────────────────────────
+   🛠️  UTILS (date & format)
+   ──────────────────────────────────────── */
+function startOfDay(d: Date) {
+  const x = new Date(d); x.setHours(0, 0, 0, 0); return x
+}
+function addDays(d: Date, days: number) {
+  const x = new Date(d); x.setDate(x.getDate() + days); return x
+}
 function fmtDMY(d: Date | string) {
   const x = typeof d === 'string' ? new Date(d) : d
   const dd = String(x.getDate()).padStart(2, '0')
-  const mm = String(x.getMonth()+1).padStart(2, '0')
+  const mm = String(x.getMonth() + 1).padStart(2, '0')
   const yy = x.getFullYear()
   return `${dd}/${mm}/${yy}`
 }
@@ -64,14 +90,18 @@ function toYMDLocal(d: Date) {
     .slice(0, 10)
 }
 
-type ViewMode = 'detail' | 'list'
-
-/* =====================================================
-   Page
-===================================================== */
+/* ╔══════════════════════════════════════════════════════════════════╗
+   ║                           COMPONENTE                             ║
+   ╚══════════════════════════════════════════════════════════════════╝ */
 export default function EquipmentHistoryPage() {
+  /* ────────────────────────────────────────
+     🌐  SETTINGS / LINGUA
+     ──────────────────────────────────────── */
   const { language } = useSettings()
 
+  /* ────────────────────────────────────────
+     📦  STATE — dati base, selezioni, view
+     ──────────────────────────────────────── */
   const [loading, setLoading] = useState(true)
   const [cats, setCats] = useState<Cat[]>([])
   const [sups, setSups] = useState<Sup[]>([])
@@ -84,7 +114,7 @@ export default function EquipmentHistoryPage() {
 
   const [view, setView] = useState<ViewMode>('detail')
 
-  // storico caricato per TUTTI gli equipment nel range
+  // storico (tutti gli equipment nel range)
   const [rowsAll, setRowsAll] = useState<EqHistoryRow[]>([])
   const [loadingRows, setLoadingRows] = useState(false)
 
@@ -98,7 +128,9 @@ export default function EquipmentHistoryPage() {
     else { setListSortCol(col); setListSortAsc(true) }
   }
 
-  /* ---------- Load data ---------- */
+  /* ────────────────────────────────────────
+     🔌  FETCH — lookups + equipment
+     ──────────────────────────────────────── */
   async function fetchLookups() {
     setLoading(true)
     const [cRes, sRes, eRes] = await Promise.all([
@@ -115,10 +147,12 @@ export default function EquipmentHistoryPage() {
     setLoading(false)
   }
 
+  /* ────────────────────────────────────────
+     🔌  FETCH — storico prezzi nel range
+     ──────────────────────────────────────── */
   async function fetchHistoryAll() {
     setLoadingRows(true)
 
-    // ✅ Guard: se una delle date è vuota (Clear), non fare query
     if (!from || !to) {
       setRowsAll([])
       setLoadingRows(false)
@@ -148,37 +182,112 @@ export default function EquipmentHistoryPage() {
     setLoadingRows(false)
   }
 
+  /* ────────────────────────────────────────
+     ⏱️  EFFECTS — bootstrap & reload
+     ──────────────────────────────────────── */
   useEffect(() => { fetchLookups() }, [])
   useEffect(() => { fetchHistoryAll() }, [from, to])
 
-  const currentEquipment = useMemo(() => equip.find(e => e.id === selEq) || null, [equip, selEq])
+  /* ────────────────────────────────────────
+     🧮  SELECTORS — equipment & righe dettaglio
+     ──────────────────────────────────────── */
+  const currentEquipment = useMemo(
+    () => equip.find(e => e.id === selEq) || null,
+    [equip, selEq]
+  )
+  const rowsDetail = useMemo(
+    () => rowsAll.filter(r => r.equipment_id === selEq),
+    [rowsAll, selEq]
+  )
 
-  // dettaglio: storico dell’equipment selezionato
-  const rowsDetail = useMemo(() => rowsAll.filter(r => r.equipment_id === selEq), [rowsAll, selEq])
-
-  // grafico: tracciamo il COST nel tempo (final_price è cost*1.5)
+  /* ────────────────────────────────────────
+     📈  DERIVED — dati per il GRAFICO (fix RANGE)
+         - asse X fisso da from (00:00) a to (23:59:59.999)
+         - usa timestamp reale di changed_at (fluttuazioni nello stesso giorno)
+         - padding ai bordi (from/to) per coprire tutta la larghezza
+         - se non ci sono punti: linea piatta al valore corrente
+     ──────────────────────────────────────── */
   const chartData = useMemo(() => {
-    const pts = rowsDetail.map(r => ({
-      date: new Date(r.changed_at),
-      cost: r.new_cost ?? r.old_cost ?? null,
-    })).filter(p => p.cost != null)
+    const fromTs = startOfDay(new Date(`${from}T00:00:00`)).getTime()
+    const toEndTs = addDays(startOfDay(new Date(`${to}T00:00:00`)), 1).getTime() - 1
 
-    if (currentEquipment && currentEquipment.cost != null) {
-      pts.push({ date: startOfDay(new Date()), cost: currentEquipment.cost })
+    const points: Array<{ ts: number; cost: number }> = []
+
+    for (const r of rowsDetail) {
+      const val = r.new_cost ?? r.old_cost
+      if (val == null) continue
+
+      const ts = new Date(r.changed_at).getTime() // timestamp reale
+      if (ts < fromTs || ts > toEndTs) continue
+      points.push({ ts, cost: val })
     }
 
-    // de-dup per giorno
-    const key = (d: Date) => d.toISOString().slice(0,10)
-    const seen = new Set<string>()
-    const uniq: Array<{date: Date; cost: number}> = []
-    for (const p of pts.sort((a,b) => a.date.getTime() - b.date.getTime())) {
-      const k = key(p.date)
-      if (!seen.has(k)) { uniq.push(p as any); seen.add(k) }
-    }
-    return uniq
-  }, [rowsDetail, currentEquipment])
+    points.sort((a, b) => a.ts - b.ts)
 
-  // tabella del dettaglio con diff e %
+    if (points.length === 0) {
+      const val = currentEquipment?.cost
+      if (val != null) return [{ ts: fromTs, cost: val }, { ts: toEndTs, cost: val }]
+      return []
+    }
+
+    const firstVal = points[0].cost
+    const lastVal  = points[points.length - 1].cost
+    if (points[0].ts > fromTs) points.unshift({ ts: fromTs, cost: firstVal })
+    if (points[points.length - 1].ts < toEndTs) points.push({ ts: toEndTs, cost: lastVal })
+
+    return points
+  }, [rowsDetail, currentEquipment, from, to])
+
+  /* ────────────────────────────────────────
+     🧭  DERIVED — X DOMAIN con Auto-focus cambi
+         (stessa logica usata nei materials)
+     ──────────────────────────────────────── */
+  const xDomain: [number, number] = useMemo(() => {
+    const rangeStart = startOfDay(new Date(`${from}T00:00:00`)).getTime()
+    const rangeEnd   = addDays(startOfDay(new Date(`${to}T00:00:00`)), 1).getTime() - 1
+    if (chartData.length === 0) return [rangeStart, rangeEnd]
+
+    // ignora eventuali punti di padding esattamente sui bordi
+    let firstIdx = 0
+    while (firstIdx < chartData.length - 1 && chartData[firstIdx].ts === rangeStart) firstIdx++
+    let lastIdx = chartData.length - 1
+    while (lastIdx > 0 && chartData[lastIdx].ts === rangeEnd) lastIdx--
+
+    if (firstIdx >= lastIdx) return [rangeStart, rangeEnd]
+
+    const first = chartData[firstIdx].ts
+    const last  = chartData[lastIdx].ts
+
+    const fullSpan   = rangeEnd - rangeStart
+    const signalSpan = Math.max(1, last - first)
+    const WEEK = 7 * 24 * 3600 * 1000
+
+    // padding minimo
+    const pad = Math.max(WEEK, signalSpan * 0.15)
+    let min = Math.max(rangeStart, first - pad)
+    let max = Math.min(rangeEnd,   last  + pad)
+
+    // se l'area di interesse è troppo piccola rispetto al range totale, allarga e centra
+    if (signalSpan / fullSpan < 0.4) {
+      const desired = Math.min(Math.max(signalSpan * 1.6, 60 * 24 * 3600 * 1000), fullSpan) // ≥60 giorni
+      const mid = (first + last) / 2
+      min = Math.max(rangeStart, mid - desired / 2)
+      max = Math.min(rangeEnd,   mid + desired / 2)
+    }
+
+    // finestra minima di 1 settimana
+    if (max - min < WEEK) {
+      const mid = (min + max) / 2
+      min = Math.max(rangeStart, mid - WEEK / 2)
+      max = Math.min(rangeEnd,   mid + WEEK / 2)
+    }
+
+    return [min, max]
+  }, [from, to, chartData])
+
+  /* ────────────────────────────────────────
+     📋  DERIVED — tabella dettaglio (diff/%)
+     ──────────────────────────────────────── */
   const tableRowsDetail = useMemo(() => {
     return rowsDetail.map(r => {
       const diff = (r.new_cost ?? 0) - (r.old_cost ?? 0)
@@ -187,7 +296,9 @@ export default function EquipmentHistoryPage() {
     })
   }, [rowsDetail])
 
-  // lista globale: ultimo cambio per equipment nel range
+  /* ────────────────────────────────────────
+     📋  DERIVED — LIST: ultimo cambio per equipment
+     ──────────────────────────────────────── */
   type ListRow = {
     equipment_id: string
     name: string
@@ -227,13 +338,14 @@ export default function EquipmentHistoryPage() {
     return out
   }, [rowsAll, equip])
 
-  // filtro e sorting lista
+  /* ────────────────────────────────────────
+     🔎  FILTER & SORT — LIST
+     ──────────────────────────────────────── */
   const filteredList = useMemo(() => {
     let rows = [...listRows]
     if (filterName.trim()) rows = rows.filter(r => r.name.toLowerCase().includes(filterName.trim().toLowerCase()))
 
     const col = listSortCol
-
     function trendCmp(a: ListRow, b: ListRow) {
       const ap = a.pct ?? 0
       const bp = b.pct ?? 0
@@ -246,14 +358,12 @@ export default function EquipmentHistoryPage() {
 
     rows.sort((a, b) => {
       if (col === 'trend') return trendCmp(a, b)
-
       if (col === 'changed_at') {
         const ta = a.changed_at ? new Date(a.changed_at).getTime() : -Infinity
         const tb = b.changed_at ? new Date(b.changed_at).getTime() : -Infinity
         const cmpDate = ta - tb
         return listSortAsc ? cmpDate : -cmpDate
       }
-
       const av: any = (a as any)[col]
       const bv: any = (b as any)[col]
       const va = av == null ? '' : (typeof av === 'number' ? av : String(av))
@@ -267,7 +377,9 @@ export default function EquipmentHistoryPage() {
     return rows
   }, [listRows, filterName, listSortCol, listSortAsc])
 
-  // click riga lista -> dettaglio
+  /* ────────────────────────────────────────
+     🔗  NAV — click lista → dettaglio
+     ──────────────────────────────────────── */
   function gotoDetailFromList(equipmentId: string) {
     const e = equip.find(x => x.id === equipmentId)
     const today0 = startOfDay(new Date())
@@ -279,13 +391,20 @@ export default function EquipmentHistoryPage() {
     setView('detail')
   }
 
+  /* ────────────────────────────────────────
+     🧪  LOADING
+     ──────────────────────────────────────── */
   if (loading) return <CircularLoader />
 
+  /* ────────────────────────────────────────
+     🎨  RENDER
+     ──────────────────────────────────────── */
   return (
     <div className="max-w-5xl mx-auto p-4" lang={language}>
+      {/* ── TITOLO */}
       <h1 className="text-3xl font-bold mb-4">{t('EquipmentCostHistory', language)}</h1>
 
-      {/* Toggle vista + search */}
+      {/* ── TOGGLE VIEW + SEARCH */}
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="inline-flex rounded-2xl overflow-hidden border shrink-0">
           <button
@@ -314,10 +433,11 @@ export default function EquipmentHistoryPage() {
         )}
       </div>
 
-      {/* Controls bar */}
+      {/* ── BARRA CONTROLLI */}
       <div className="bg-white rounded-2xl shadow p-3 mb-6">
         {view === 'detail' ? (
           <div className="flex flex-col md:flex-row md:flex-nowrap md:items-end md:gap-3">
+            {/* Equipment select */}
             <label className="flex flex-col gap-1 md:min-w-[230px] md:flex-[1.2]">
               <span className="text-sm text-gray-700">{t('Equipment', language)}</span>
               <select
@@ -332,6 +452,7 @@ export default function EquipmentHistoryPage() {
               </select>
             </label>
 
+            {/* From */}
             <label className="flex flex-col gap-1 md:min-w-[150px] md:flex-1">
               <span className="text-sm text-gray-700">{t('From', language)}</span>
               <input
@@ -345,6 +466,7 @@ export default function EquipmentHistoryPage() {
               />
             </label>
 
+            {/* To */}
             <label className="flex flex-col gap-1 md:min-w-[150px] md:flex-1">
               <span className="text-sm text-gray-700">{t('To', language)}</span>
               <input
@@ -358,6 +480,7 @@ export default function EquipmentHistoryPage() {
               />
             </label>
 
+            {/* Preset */}
             <div className="mt-2 md:mt-0 md:ml-auto flex gap-2">
               <button
                 onClick={() => { const now = startOfDay(new Date()); setTo(toYMDLocal(now)); setFrom(toYMDLocal(addDays(now, -182))) }}
@@ -380,6 +503,7 @@ export default function EquipmentHistoryPage() {
             </div>
           </div>
         ) : (
+          /* LIST controls */
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <label className="flex flex-col gap-1">
               <span className="text-sm text-gray-700">{t('From', language)}</span>
@@ -416,7 +540,7 @@ export default function EquipmentHistoryPage() {
 
       {view === 'detail' ? (
         <>
-          {/* Grafico COST */}
+          {/* ── GRAFICO COST */}
           <div className="bg-white rounded-2xl shadow p-3 mb-6">
             <h2 className="text-xl font-bold mb-3 text-blue-800">{t('TrendCost', language)}</h2>
             <div className="h-72">
@@ -426,22 +550,36 @@ export default function EquipmentHistoryPage() {
                 <div className="h-full flex items-center justify-center text-gray-600">{t('NoDataInSelectedRange', language)}</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tickFormatter={(v: Date) => fmtDMY(v)} type="number" domain={['auto','auto']} scale="time" />
-                    <YAxis />
+                    <XAxis
+                      dataKey="ts"
+                      type="number"
+                      scale="time"
+                      allowDataOverflow
+                      domain={xDomain}
+                      tickFormatter={(ms: number) => fmtDMY(new Date(ms))}
+                      minTickGap={24}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      width={54}
+                      tickMargin={8}
+                      allowDecimals
+                      tickFormatter={(v: number) => Number(v).toLocaleString()}
+                    />
                     <Tooltip
-                      labelFormatter={(l: any) => fmtDMY(new Date(l))}
+                      labelFormatter={(ms: any) => fmtDMY(new Date(Number(ms)))}
                       formatter={(v: any) => [Number(v).toLocaleString(), t('Cost', language)]}
                     />
-                    <Line type="monotone" dataKey="cost" dot />
+                    <Line type="monotone" dataKey="cost" dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
 
-          {/* Tabella storico dettaglio */}
+          {/* ── TABELLA DETTAGLIO CAMBI */}
           <div className="bg-white rounded-2xl shadow p-3">
             <h2 className="text-xl font-bold mb-3 text-blue-800">{t('Changes', language)}</h2>
             <div className="overflow-x-auto">
@@ -464,20 +602,17 @@ export default function EquipmentHistoryPage() {
                     tableRowsDetail.map(r => (
                       <tr key={r.id} className="border-t hover:bg-blue-50/40">
                         <td className="p-2">{fmtDMY(r.changed_at)}</td>
-
                         <td className="p-2 text-right tabular-nums whitespace-nowrap">
                           {r.old_cost != null ? Number(r.old_cost).toLocaleString() : '-'}
                         </td>
                         <td className="p-2 text-right tabular-nums whitespace-nowrap">
                           {r.new_cost != null ? Number(r.new_cost).toLocaleString() : '-'}
                         </td>
-
                         <td className="p-2 text-right tabular-nums whitespace-nowrap">
                           {(r.old_cost != null && r.new_cost != null)
                             ? `${((r as any).diff >= 0 ? '+' : '')}${Number((r as any).diff).toLocaleString()}`
                             : '-'}
                         </td>
-
                         <td className="p-2 text-right tabular-nums whitespace-nowrap">
                           {(r as any).pct == null
                             ? '-'
@@ -492,7 +627,7 @@ export default function EquipmentHistoryPage() {
           </div>
         </>
       ) : (
-        /* ===== LIST VIEW ===== */
+        /* ── LIST VIEW: ultimo cambio per equipment */
         <div className="bg-white rounded-2xl shadow p-3">
           <h2 className="text-xl font-bold mb-3 text-blue-800">{t('LastChangePerEquipment', language)}</h2>
           <div className="overflow-x-auto">

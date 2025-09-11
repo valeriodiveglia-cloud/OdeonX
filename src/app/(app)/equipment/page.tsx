@@ -52,6 +52,7 @@ type CsvRow = {
   supplier: string
   cost?: string | number | null
   notes?: string | null
+  vat_rate_percent?: string | number | null
 }
 
 /* ---------- Import resolve types (unica definizione) ---------- */
@@ -1248,22 +1249,21 @@ export default function EquipmentPage() {
 
   // Helpers VAT & Final
   function effVatPct(e: Equip) {
-    if (!vatEnabled) return 0
-    const r = (e.vat_rate_percent ?? vatRate ?? 0)
-    return Math.max(0, Math.min(100, Number(r)))
-  }
-  function vatAmount(e: Equip) {
-    const c = e.cost ?? 0
-    return c * (effVatPct(e) / 100)
-  }
-  const defaultMarkup = Number(defaultMarkupEquipmentPct ?? 1.5)
-  function finalCalc(e: Equip) {
-    if (e.final_price != null) return e.final_price
-    const c = e.cost ?? 0
-    const base = vatEnabled ? c + vatAmount(e) : c
-    const m = (e.markup_x ?? defaultMarkup)
-    return base * m
-  }
+  if (!vatEnabled) return 0
+  // se l’item non ha la VAT impostata, usa il default dei Settings
+  const raw = e.vat_rate_percent
+  const v = raw == null ? (vatRate ?? 0) : Number(raw)
+  return Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0))
+}
+
+const defaultMarkup = Number(defaultMarkupEquipmentPct ?? 1.5)
+
+function finalCalc(e: Equip) {
+  const c = e.cost ?? 0
+  const base = vatEnabled ? c * (1 + effVatPct(e) / 100) : c
+  const m = e.markup_x ?? defaultMarkup
+  return base * m
+}
 
   function applyFilters(list: Equip[]) {
   let r = [...list]
@@ -1338,6 +1338,11 @@ export default function EquipmentPage() {
     'last_update': '__ignore__',
     'giá cuối': '__ignore__',
     'cập nhật lần cuối': '__ignore__',
+    'vat': 'vat_rate_percent',
+    'vat rate': 'vat_rate_percent',
+    'vat rate (%)': 'vat_rate_percent',
+    'vatratepct': 'vat_rate_percent',
+    'vat_rate_percent': 'vat_rate_percent',
   }
   const toKey = (s: string) => s.normalize('NFKC').trim().toLowerCase()
 
@@ -1400,7 +1405,21 @@ export default function EquipmentPage() {
 
       const cost = moneyToNumber(r.cost)
 // ✅ Se VAT disattivo → null; se attivo → numero
-const vatPctNum = vatEnabled ? Number(vatRate ?? 0) : null
+// nuovo: se nel CSV c'è un VAT valido, usa quello; altrimenti fallback ai settings
+let vatPctNum: number | null = null
+if (vatEnabled) {
+  const fromCsv = r.vat_rate_percent
+  if (fromCsv == null || String(fromCsv).trim?.() === '') {
+    vatPctNum = Number(vatRate ?? 0)
+  } else {
+    const s = String(fromCsv).trim().replace('%', '').replace(/\s+/g, '').replace(',', '.')
+    const n = Number(s)
+    vatPctNum = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : Number(vatRate ?? 0)
+  }
+} else {
+  vatPctNum = null
+}
+
 
 // ✅ Nessun calcolo di final_price lato client: pensa a tutto il trigger in DB
 const proposed = {
@@ -1493,28 +1512,40 @@ ${t('Skipped', language)}: ${skipped}`)
       const bad: Bad[] = []
 
       const data: CsvRow[] = cleaned.map((r, idx) => {
-        const equipment = String(r['equipment'] ?? '').trim()
-        const category  = String(r['category'] ?? '').trim()
-        const supplier  = String(r['supplier'] ?? '').trim()
-        const rawCost   = r['cost']
-        const notes     = r['notes'] ?? null
+  const equipment = String(r['equipment'] ?? '').trim()
+  const category  = String(r['category'] ?? '').trim()
+  const supplier  = String(r['supplier'] ?? '').trim()
+  const rawCost   = r['cost']
+  const notes     = r['notes'] ?? null
 
-        const missing: string[] = []
-        if (!equipment) missing.push(t('Equipment', language))
-        if (!category)  missing.push(t('Category', language))
-        if (!supplier)  missing.push(t('Supplier', language))
-        if (rawCost == null || String(rawCost).trim() === '') missing.push(t('Cost', language))
+  // NEW: lettura/normalizzazione VAT (opzionale)
+  const rawVat = r['vat_rate_percent']
+  // accetta "21", "21.0", "21,0" → clamp 0..100; se vuoto o non numerico → null
+  const vat_rate_percent =
+    rawVat == null || String(rawVat).trim() === ''
+      ? null
+      : (() => {
+          const n = Number(String(rawVat).replace(',', '.'))
+          return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null
+        })()
 
-        if (missing.length) bad.push({ row: idx + 2, missing })
+  const missing: string[] = []
+  if (!equipment) missing.push(t('Equipment', language))
+  if (!category)  missing.push(t('Category', language))
+  if (!supplier)  missing.push(t('Supplier', language))
+  if (rawCost == null || String(rawCost).trim() === '') missing.push(t('Cost', language))
 
-        return { equipment, category, supplier, cost: rawCost, notes }
-      })
-      .filter(r =>
-        r.equipment.length > 0 &&
-        r.category.length  > 0 &&
-        r.supplier.length  > 0 &&
-        r.cost !== null && String(r.cost).trim() !== ''
-      )
+  if (missing.length) bad.push({ row: idx + 2, missing })
+
+  return { equipment, category, supplier, cost: rawCost, notes, vat_rate_percent }
+})
+.filter(r =>
+  r.equipment.length > 0 &&
+  r.category.length  > 0 &&
+  r.supplier.length  > 0 &&
+  r.cost !== null && String(r.cost).trim() !== ''
+)
+
 
       if (!data.length) {
         const samples = bad.slice(0, 5).map(b => `r${b.row}: ${b.missing.join(', ')}`).join(' | ')
@@ -2114,7 +2145,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
         </div>
       </div>
 
-      {/* Table */}
+              {/* Table */}
       <div className="bg-white rounded-2xl shadow p-3">
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed text-sm text-gray-900">
@@ -2229,7 +2260,26 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                 return (
                   <tr
                     key={it.id}
-                    className={`border-t hover:bg-blue-50 ${isSelected ? 'bg-blue-100/70' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (selectMode) {
+                        setSelected(s => ({ ...s, [it.id]: !s[it.id] }))
+                      } else {
+                        openView(it)
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        if (selectMode) {
+                          setSelected(s => ({ ...s, [it.id]: !s[it.id] }))
+                        } else {
+                          openView(it)
+                        }
+                      }
+                    }}
+                    className={`border-t hover:bg-blue-50 cursor-pointer ${isSelected ? 'bg-blue-100/70' : ''}`}
                   >
                     <td className="p-2">
                       {selectMode && (
@@ -2237,13 +2287,13 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                           type="checkbox"
                           className="h-4 w-4"
                           checked={isSelected}
+                          onClick={e => e.stopPropagation()}
                           onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
                         />
                       )}
                     </td>
 
-                    <td className="p-2 font-medium cursor-pointer text-blue-700 hover:underline"
-                        onClick={() => openView(it)}>
+                    <td className="p-2 font-medium">
                       {it.name}
                     </td>
 
@@ -2298,6 +2348,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
       )}
 
       {progress != null && <ImportProgressModal progress={progress} />}
+
       {unifiedOpen && (
         <ResolveImportModal
           pending={unifiedOpen}
@@ -2307,6 +2358,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
           onCancel={() => setUnifiedOpen(null)}
         />
       )}
+
       {showVatModal && (
         <BulkVatModal
           lang={language}
@@ -2316,6 +2368,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
           onConfirm={bulkApplyVat}
         />
       )}
+
       {showMarkupModal && (
         <BulkMarkupModal
           lang={language}
@@ -2328,3 +2381,4 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
     </div>
   )
 }
+
