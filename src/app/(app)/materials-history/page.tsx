@@ -357,48 +357,57 @@ export default function MaterialsHistoryPage() {
   /* ────────────────────────────────────────
      🔎  FILTER & SORT — LIST
      ──────────────────────────────────────── */
-  const filteredList = useMemo(() => {
-    let rows = [...listRows]
-    if (filterName.trim()) rows = rows.filter(r => r.name.toLowerCase().includes(filterName.trim().toLowerCase()))
+const filteredList = useMemo(() => {
+  let rows = [...listRows]
+  if (filterName.trim()) {
+    rows = rows.filter(r =>
+      r.name.toLowerCase().includes(filterName.trim().toLowerCase())
+    )
+  }
 
-    const col = listSortCol
+  const col = listSortCol
 
-    function trendCmp(a: ListRow, b: ListRow) {
-      const ap = a.pct ?? 0
-      const bp = b.pct ?? 0
-      const as = ap > 0 ? 1 : ap < 0 ? -1 : 0
-      const bs = bp > 0 ? 1 : bp < 0 ? -1 : 0
-      let cmp = as - bs
-      if (cmp === 0) {
-        cmp = Math.abs(bp) - Math.abs(ap)
-      }
-      return listSortAsc ? cmp : -cmp
+  function trendCmp(a: ListRow, b: ListRow) {
+    const ap = a.pct ?? 0
+    const bp = b.pct ?? 0
+    const as = ap > 0 ? 1 : ap < 0 ? -1 : 0
+    const bs = bp > 0 ? 1 : bp < 0 ? -1 : 0
+    let cmp = as - bs
+    if (cmp === 0) {
+      cmp = Math.abs(bp) - Math.abs(ap)
+    }
+    return listSortAsc ? cmp : -cmp
+  }
+
+  rows.sort((a, b) => {
+    if (col === 'trend') return trendCmp(a, b)
+    if (col === 'changed_at') {
+      const ta = a.changed_at ? new Date(a.changed_at).getTime() : -Infinity
+      const tb = b.changed_at ? new Date(b.changed_at).getTime() : -Infinity
+      const cmpDate = ta - tb
+      return listSortAsc ? cmpDate : -cmpDate
     }
 
-    rows.sort((a, b) => {
-      if (col === 'trend') return trendCmp(a, b)
-      if (col === 'changed_at') {
-        const ta = a.changed_at ? new Date(a.changed_at).getTime() : -Infinity
-        const tb = b.changed_at ? new Date(b.changed_at).getTime() : -Infinity
-        const cmpDate = ta - tb
-        return listSortAsc ? cmpDate : -cmpDate
-      }
+    const av: any = (a as any)[col]
+    const bv: any = (b as any)[col]
 
-      const av: any = (a as any)[col]
-      const bv: any = (b as any)[col]
-      const va = av == null ? '' : (typeof av === 'number' ? av : String(av))
-      const vb = bv == null ? '' : (typeof vb === 'number' ? vb : String(bv))
+    const va: number | string =
+      av == null ? '' : typeof av === 'number' ? av : String(av)
 
-      const cmp =
-        typeof va === 'number' && typeof vb === 'number'
-          ? (va as number) - (vb as number)
-          : String(va).localeCompare(String(vb), undefined, { numeric: true })
+    const vb: number | string =
+      bv == null ? '' : typeof bv === 'number' ? bv : String(bv)
 
-      return listSortAsc ? cmp : -cmp
-    })
+    const cmp =
+      typeof va === 'number' && typeof vb === 'number'
+        ? (va as number) - (vb as number)
+        : String(va).localeCompare(String(vb), undefined, { numeric: true })
 
-    return rows
-  }, [listRows, filterName, listSortCol, listSortAsc])
+    return listSortAsc ? cmp : -cmp
+  })
+
+  return rows
+}, [listRows, filterName, listSortCol, listSortAsc])
+
 
   /* ────────────────────────────────────────
      🔗  NAV — click lista → dettaglio
