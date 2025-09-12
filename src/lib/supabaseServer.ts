@@ -1,8 +1,11 @@
+// src/lib/supabaseServer.ts
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 
 export function createSupabaseServer() {
+  // Alcuni ambienti tipizzano diversamente cookies(); manteniamo API sincrona con cast esplicito.
   const cookieStore = cookies() as any
+
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
