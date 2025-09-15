@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing NEXT_PUBLIC_SITE_URL' }, { status: 500 })
     }
 
-    const redirectTo = `${site}/auth/callback?next=/login`
+    const redirectTo = `${site}/auth/update-password`
 
     // 1) Prova invito come nuovo utente
     console.log("DEBUG: calling inviteUserByEmail", email, redirectTo)
