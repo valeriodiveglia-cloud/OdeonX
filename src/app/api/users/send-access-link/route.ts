@@ -99,10 +99,10 @@ export async function POST(req: Request) {
 
     // best-effort: crea riga app_accounts se manca
     try {
-      await srv.from('app_accounts').insert(
-        { email },
-        { onConflict: 'email', ignoreDuplicates: true }
-    )
+      await srv.from('app_accounts').upsert(
+  { email },
+  { onConflict: 'email', ignoreDuplicates: true }
+)
     } catch {}
 
     // --- Se l’utente ESISTE in Authentication → set needs_onboarding, collega user_id, manda reset
