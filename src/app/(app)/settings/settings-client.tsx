@@ -995,8 +995,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
             </div>
           </div>
         </SectionCard>
-
-        {canSeeAccounts && (
+        
           <SectionCard title={t('Utilities', lang)}>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setCatModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
@@ -1014,7 +1013,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
               </button>
             </div>
           </SectionCard>
-        )}
+            
 
         {canSeeAccounts && (
           <SectionCard title={t('Accounts', lang) || 'Accounts'}>
@@ -1431,35 +1430,50 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </Modal>
 
       {/* Accounts: Post invite confirm */}
-      <Modal
-        open={postInviteOpen}
-        title={t('SendAccessLinkTitle', lang) || 'Send access link?'}
-        onClose={() => { setPostInviteOpen(false); setPostInviteEmail(null) }}
-        width="max-w-md"
+<Modal
+  open={postInviteOpen}
+  title={t('SendAccessLinkTitle', lang) || 'Send access link?'}
+  onClose={() => {
+    if (sendingLink) return; // evita chiusura mentre invia (opzionale)
+    setPostInviteOpen(false);
+    setPostInviteEmail(null);
+  }}
+  width="max-w-md"
+>
+  <div className="space-y-3 text-gray-800">
+    <p className="text-sm">
+      {postInviteEmail
+        ? (t('SendAccessLinkBodyKnown', lang) || 'Send a sign-in link to {{email}}?').replace('{{email}}', postInviteEmail!)
+        : (t('SendAccessLinkBodyGeneric', lang) || 'Do you want to send a sign-in link now?')}
+    </p>
+    <div className="pt-2 flex items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={skipInviteForNow}
+        disabled={sendingLink}
+        className={`px-3 h-9 rounded-lg border ${sendingLink ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
       >
-        <div className="space-y-3 text-gray-800">
-          <p className="text-sm">
-            {postInviteEmail
-              ? (t('SendAccessLinkBodyKnown', lang) || 'Send a sign-in link to {{email}}?').replace('{{email}}', postInviteEmail!)
-              : (t('SendAccessLinkBodyGeneric', lang) || 'Do you want to send a sign-in link now?')}
-          </p>
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button type="button" onClick={skipInviteForNow} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
-              {t('NotNow', lang) || 'Not now'}
-            </button>
-            <button type="button" onClick={confirmSendInviteNow} className="px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
-              {t('SendLink', lang) || 'Send link'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        {t('NotNow', lang) || 'Not now'}
+      </button>
+      <button
+        type="button"
+        onClick={confirmSendInviteNow}
+        disabled={sendingLink}
+        aria-busy={sendingLink}
+        className={`px-3 h-9 rounded-lg bg-blue-600 text-white ${sendingLink ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}
+      >
+        {sendingLink ? (t('Loading', lang) || 'Sending…') : (t('SendLink', lang) || 'Send link')}
+      </button>
+    </div>
+  </div>
+</Modal>
 
-        {canSeeAccounts && (
-  <TagManagerModal
+
+        
+      <TagManagerModal
     open={tagModalOpen}
     onClose={() => setTagModalOpen(false)}
   />
-)}
     </div>
   )
 }
