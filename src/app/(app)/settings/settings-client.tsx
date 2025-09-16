@@ -1319,7 +1319,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
           )}
         </td>
         <td className="p-2 text-center">
-          {u.user_id ? (
+          {u.first_login_at ? (
             <span className="text-green-600 font-bold">✓</span>
           ) : (
             <span className="text-red-600 font-bold">✗</span>
