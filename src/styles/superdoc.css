@@ -1,0 +1,32 @@
+/* src/styles/superdoc.css */
+
+/* 1) Usiamo i CSS Layers per tenere separato il vendor dai nostri ritocchi */
+@layer superdoc, app;
+
+/* 2) Carichiamo lo stile di SuperDoc nel suo layer (non toccare) */
+@import 'superdoc/style.css' layer(superdoc);
+
+/* 3) Piccoli ritocchi UI nel nostro layer (non invasivi) */
+@layer app {
+  /* Toolbar contenitore (se la usi in un box tuo) */
+  #sd-toolbar {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.08);
+  }
+
+  #sd-toolbar svg { width: 16px; height: 16px; }
+  #sd-editor { background: transparent; }
+
+  /* Anti-reset: non azzerare i controlli interni di SuperDoc */
+  #sd-toolbar *, #sd-editor * {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  /* Se vuoi nascondere le label “Format text / Editing” e lasciare solo l’icona */
+  .ct-icon-only { font-size: 0 !important; }
+  .ct-icon-only svg { width: 16px !important; height: 16px !important; }
+}

@@ -1,4 +1,3 @@
-// /src/app/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -7,7 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase_shim'
 import type { User } from '@supabase/supabase-js'
 import { t } from '@/lib/i18n'
-import { CalculatorIcon } from '@heroicons/react/24/outline'
+import { CalculatorIcon, BuildingOffice2Icon } from '@heroicons/react/24/outline'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
@@ -73,18 +72,29 @@ export default function HomeDashboard() {
               {t(language, 'DashboardSubtitle')}
             </p>
 
-            {/* Main Card (stile precedente) */}
+            {/* Main Card */}
             <div className="mt-8 rounded-2xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden">
               <div className="grid sm:grid-cols-[1fr,220px]">
-                {/* Left: solo CTA */}
+                {/* Left: CTA */}
                 <div className="p-6 sm:p-8">
-                  <Link
-                    href="/materials"
-                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-                  >
-                    <CalculatorIcon className="h-6 w-6" />
-                    <span>{t(language, 'Costing')}</span>
-                  </Link>
+                  <div className="flex flex-wrap gap-3">
+                    <Link
+                      href="/materials"
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+                    >
+                      <CalculatorIcon className="h-6 w-6" />
+                      <span>{t(language, 'Costing')}</span>
+                    </Link>
+
+                    {/* Nuovo tasto Catering */}
+                    <Link
+                      href="/catering"
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+                    >
+                      <BuildingOffice2Icon className="h-6 w-6" />
+                      <span>Catering</span>
+                    </Link>
+                  </div>
                 </div>
 
                 {/* Right: pattern */}

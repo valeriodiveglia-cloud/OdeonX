@@ -18,6 +18,7 @@ export const config = {
     '/trash/:path*',
     '/users/:path*',
     '/admin/:path*',
+    '/catering/:path*',
   ],
 }
 
@@ -181,6 +182,7 @@ const PROTECTED: string[] = [
   '/trash',
   '/users',
   '/admin',
+  '/catering',
 ]
 
 // ========== Middleware ==========
