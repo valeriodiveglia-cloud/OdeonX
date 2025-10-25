@@ -1,32 +1,69 @@
 /* src/styles/superdoc.css */
-
-/* 1) Usiamo i CSS Layers per tenere separato il vendor dai nostri ritocchi */
-@layer superdoc, app;
-
-/* 2) Carichiamo lo stile di SuperDoc nel suo layer (non toccare) */
 @import 'superdoc/style.css' layer(superdoc);
 
-/* 3) Piccoli ritocchi UI nel nostro layer (non invasivi) */
-@layer app {
-  /* Toolbar contenitore (se la usi in un box tuo) */
-  #sd-toolbar {
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 8px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.08);
+@layer superdoc {
+  /* --- A4 a schermo ------------------------------------------------------- */
+  #sd-editor .sd-page,
+  #sd-editor .page {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    height: auto !important;
+    margin: 12mm auto !important;     /* spazio tra pagine + centratura */
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    background: #fff;
   }
 
-  #sd-toolbar svg { width: 16px; height: 16px; }
+  /* Margini contenuto (simili ai "page margins") */
+  #sd-editor .sd-page .sd-content,
+  #sd-editor .page .sd-content,
+  #sd-editor .sd-frame {
+    padding: 18mm 14mm 18mm 14mm !important;
+  }
+
+  /* Rulers/viewport più docili */
   #sd-editor { background: transparent; }
-
-  /* Anti-reset: non azzerare i controlli interni di SuperDoc */
-  #sd-toolbar *, #sd-editor * {
-    text-transform: none;
-    letter-spacing: normal;
+  #sd-editor .sd-pages { margin: 0 auto; }
+  #sd-editor .sd-ruler-top,
+  #sd-editor .ruler-top {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 3 !important;
+    background: inherit !important;
   }
 
-  /* Se vuoi nascondere le label “Format text / Editing” e lasciare solo l’icona */
-  .ct-icon-only { font-size: 0 !important; }
-  .ct-icon-only svg { width: 16px !important; height: 16px !important; }
+  /* --- Header fisso (evita che il logo sballi la paginazione) ------------- */
+  #sd-editor .sd-header,
+  #sd-editor .page-header {
+    height: 28mm !important;          /* regola 26–32mm se serve */
+    overflow: hidden !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  #sd-editor .sd-header img,
+  #sd-editor .page-header img {
+    max-height: 26mm !important;      /* <= header - qualche mm */
+    height: auto !important;
+    width: auto !important;
+    object-fit: contain !important;
+    display: inline-block !important;
+  }
+
+  /* --- Divisori di pagina (riattivati e allineati all'A4) ----------------- */
+  #sd-editor .sd-page-break {
+    display: block !important;
+    height: 0 !important;
+    border: 0;
+    border-top: 1px dashed rgba(0,0,0,.15) !important;
+    margin: 12mm auto !important;     /* in fase di impaginazione “cade” tra le pagine */
+    width: 210mm !important;
+  }
+
+  /* (opzionale) nascondi eventuali overlay o controlli extra ai lati */
+  #sd-editor .sd-page-controls,
+  #sd-editor .sd-page-overlay {
+    display: none !important;
+  }
 }
+
+/* Stampa reale: A4 */
+@page { size: A4; margin: 18mm 14mm; }

@@ -2,15 +2,15 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 
-// SuperDoc
-import 'superdoc/style.css'
+// SuperDoc (solo JS; gli stili sono in src/styles/superdoc.css)
 import { SuperDoc } from 'superdoc'
 
 // Supabase
 import { supabase } from '@/lib/supabase_shim'
 
-// i18n (stesso hook usato nel resto dell’app)
+// i18n
 import { useECT } from '@/app/catering/_i18n'
 
 /* =================== CONFIG =================== */
@@ -19,7 +19,7 @@ const DEFAULT_KEY    = 'default'
 const LS_DOCX_PATH   = 'contractTpl:docx_path'
 const LS_HTML_FALL   = 'contractTpl:default'
 
-/* =================== STILI =================== */
+/* =================== STILI LOCALI (shell pagina) =================== */
 const styles = `
 .ct-wrap{
   --col-gap:24px; --sidebar-w:420px; --nav-safe-left:84px;
@@ -32,7 +32,8 @@ const styles = `
   column-gap:var(--col-gap); row-gap:10px; overflow:hidden;
 }
 .ct-actions{ grid-column:1/3; grid-row:1/2; display:flex; gap:8px; justify-content:flex-end; align-items:center; position:sticky; top:8px; z-index:6; }
-.tool-btn{ height:34px; min-width:36px; padding:0 10px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; color:#0f172a; display:inline-flex; align-items:center; justify-content:center; }
+.ct-actions .spacer{ flex:1 1 auto } /* per tenere Back a sinistra e i pulsanti a destra */
+.tool-btn{ height:34px; min-width:36px; padding:0 10px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; color:#0f172a; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; }
 .tool-btn.primary{ background:#2563eb; color:#fff; border-color:#2563eb }
 .tool-btn:hover{ background:#f3f4f6 }
 .status{ font-size:12px; color:#10b981 }
@@ -114,10 +115,8 @@ const EVENT_PLACEHOLDERS = [
   { key: 'event.time.start', label: 'Start time' },
   { key: 'event.time.end', label: 'End time' },
   { key: 'event.time.duration_hours', label: 'Duration (h)' },
-
   { key: 'contract.city_date.en', label: 'Contract city + date (EN)' },
   { key: 'contract.date.en', label: 'Contract date (EN)' },
-
   { key: 'client.full_name', label: 'Client full name' },
   { key: 'contract.items_html', label: 'Items (HTML)' },
   { key: 'docx_totals.full_html', label: 'Totals table (HTML)' },
@@ -167,13 +166,128 @@ function iconifyToolbarLabels() {
   })
 }
 
+/** Inserisce HTML nell’editor (fallback sicuro) */
+function setEditorHTML(editor: any, html: string) {
+  try {
+    if (editor?.commands?.insertContent) {
+      editor.commands.insertContent(html, { contentType: 'html' })
+      return
+    }
+  } catch {}
+  try {
+    const host = document.querySelector('#sd-editor [contenteditable="true"]') as HTMLElement | null
+    if (host) host.innerHTML = html
+  } catch {}
+}
+
+/* ==== Reflow dopo font + immagini (logo header) ==== */
+function waitEditorImages(): Promise<void> {
+  return new Promise((resolve) => {
+    const root = document.getElementById('sd-editor')
+    if (!root) return resolve()
+    const imgs = Array.from(root.querySelectorAll<HTMLImageElement>('.sd-header img, .page-header img, img'))
+    const pending = imgs.filter(img => !img.complete)
+    if (pending.length === 0) return resolve()
+    let left = pending.length
+    const done = () => { left -= 1; if (left <= 0) resolve() }
+    pending.forEach(img => {
+      img.addEventListener('load', done, { once: true })
+      img.addEventListener('error', done, { once: true })
+    })
+  })
+}
+async function reflowAfterAssets() {
+  try { await (document as any).fonts?.ready } catch {}
+  await waitEditorImages()
+  window.dispatchEvent(new Event('resize'))
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 80)
+}
+
+/* ==== Backspace guard ==== */
+function atBlockStart(sel: Selection): boolean {
+  if (!sel.rangeCount) return false
+  const r = sel.getRangeAt(0)
+  if (!r.collapsed) return false
+  let block: HTMLElement | null = null
+  let n: Node | null = r.startContainer
+  while (n && n.nodeType === Node.TEXT_NODE) n = n.parentElement
+  let el = n as HTMLElement | null
+  while (el && el !== document.body) {
+    const tag = (el.tagName || '').toUpperCase()
+    if (['P','DIV','LI','H1','H2','H3','H4','H5','H6','TD','TH'].includes(tag)) { block = el; break }
+    el = el.parentElement
+  }
+  if (!block) return false
+  const test = document.createRange()
+  try {
+    test.setStart(block, 0)
+    test.setEnd(r.startContainer, r.startOffset)
+    const txt = (test.cloneContents().textContent || '').replace(/\u200B|\s/g, '')
+    return txt.length === 0
+  } catch { return false }
+}
+
+function installBackspaceGuard() {
+  const host = document.querySelector('#sd-editor [contenteditable="true"]') as HTMLElement | null
+  if (!host) return () => {}
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Backspace') return
+    const sel = window.getSelection()
+    if (!sel) return
+    if (!atBlockStart(sel)) return
+    e.preventDefault()
+    const r = sel.rangeCount ? sel.getRangeAt(0) : null
+    if (!r) return
+    const block = (function findBlock(n: Node): HTMLElement | null {
+      let el: HTMLElement | null = n.nodeType === Node.ELEMENT_NODE ? (n as HTMLElement) : n.parentElement
+      while (el && el !== document.body) {
+        const t = el.tagName.toUpperCase()
+        if (['P','DIV','LI','H1','H2','H3','H4','H5','H6','TD','TH'].includes(t)) return el
+        el = el.parentElement
+      }
+      return null
+    })(r.startContainer)
+    if (!block) return
+    let firstText: Node | null = block.firstChild
+    while (firstText && firstText.nodeType !== Node.TEXT_NODE) firstText = firstText.firstChild
+    if (!firstText) {
+      firstText = document.createTextNode('\u200B')
+      block.insertBefore(firstText, block.firstChild)
+    } else {
+      const t = firstText as Text
+      if (!t.data || t.data[0] !== '\u200B') {
+        t.insertData(0, '\u200B')
+      }
+    }
+    const txt = firstText as Text
+    const nr = document.createRange()
+    nr.setStart(txt, 1)
+    nr.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(nr)
+    document.execCommand?.('delete')
+  }
+  host.addEventListener('keydown', onKey)
+  return () => host.removeEventListener('keydown', onKey)
+}
+
 /* ==== Host “immutabili” ==== */
 const SDToolbarHost = React.memo(() => <div id="sd-toolbar" />, () => true)
 const SDEditorHost  = React.memo(() => <div id="sd-editor" />,  () => true)
 
+/* =================== COMPONENTE =================== */
 export default function ContractTemplatePage() {
-  // i18n hook centralizzato
   const tEC = useECT()
+
+  // Wrapper “libero” per evitare errori di tipi sui key dinamici
+  const tLoose = (k: string, fb?: string) => {
+    try {
+      const v = (tEC as unknown as (kk: string) => string)(k)
+      return v ?? fb ?? k
+    } catch {
+      return fb ?? k
+    }
+  }
 
   const [status, setStatus] = useState('')
   const [saving, setSaving] = useState(false)
@@ -195,16 +309,6 @@ export default function ContractTemplatePage() {
     [activeTab, search],
   )
 
-  // helper “loose” per chiamare tEC con chiavi non presenti nella union tipizzata
-  const tLoose = (k: string, fb?: string) => {
-    try {
-      const v = (tEC as unknown as (kk: string) => string)(k)
-      return v ?? fb ?? k
-    } catch {
-      return fb ?? k
-    }
-  }
-
   /** ===== Boot SuperDoc ===== */
   const bootTickRef = useRef(0)
   const retryCountRef = useRef(0)
@@ -212,9 +316,10 @@ export default function ContractTemplatePage() {
 
   useEffect(() => {
     let cancelled = false
-    let mo: MutationObserver | null = null
+    let moToolbar: MutationObserver | null = null
     let watchdog: number | null = null
     let retryTO: number | null = null
+    let offBackspace: (() => void) | null = null
 
     const boot = async () => {
       setSdReady(false)
@@ -234,9 +339,9 @@ export default function ContractTemplatePage() {
         dbHTML     = data?.html || null
       } catch (e) { console.warn('[contract-template] read DB error:', errMsg(e)) }
 
-      let lsDocx = null
+      let lsDocx: string | null = null
       try { lsDocx = localStorage.getItem(LS_DOCX_PATH) } catch {}
-      let lsHTML = null
+      let lsHTML: string | null = null
       try { lsHTML = localStorage.getItem(LS_HTML_FALL) } catch {}
 
       // priorità sorgente
@@ -273,11 +378,18 @@ export default function ContractTemplatePage() {
         pagination: true,
         rulers: true,
         modules: { toolbar: { responsiveToContainer: true, hideButtons: false } },
+
         onReady: () => {
           if (cancelled) return
           setSdReady(true)
           flash('Editor ready')
           iconifyToolbarLabels()
+
+          // Backspace guard
+          offBackspace = installBackspaceGuard()
+
+          // prima ripaginazione soft
+          reflowAfterAssets()
 
           if (watchdog) window.clearTimeout(watchdog)
           watchdog = window.setTimeout(() => {
@@ -293,17 +405,19 @@ export default function ContractTemplatePage() {
             }
           }, 2000)
         },
+
         onEditorCreate: (ev: any) => {
           if (cancelled) return
           editorRef.current = ev?.editor || ev
           setSdReady(true)
+
           if (!signedUrl) {
             const html = dbHTML || lsHTML || DEFAULT_HTML
-            try {
-              editorRef.current?.commands?.insertContent?.(html, { contentType: 'html' })
-              flash('Loaded (HTML)')
-            } catch (e) { console.warn('insertContent failed:', errMsg(e)) }
+            setEditorHTML(editorRef.current, html)
           }
+
+          // ripaginazione forte dopo font+immagini (logo)
+          reflowAfterAssets()
         },
       }
 
@@ -311,21 +425,23 @@ export default function ContractTemplatePage() {
       const sd = new SuperDoc(cfg)
       sdRef.current = sd
 
+      // osserva toolbar per "iconify"
       const bar = document.getElementById('sd-toolbar')
       if (bar) {
-        mo = new MutationObserver(() => iconifyToolbarLabels())
-        mo.observe(bar, { subtree: true, childList: true, characterData: true })
+        moToolbar = new MutationObserver(() => iconifyToolbarLabels())
+        moToolbar.observe(bar, { subtree: true, childList: true, characterData: true })
       }
     }
 
     boot()
     return () => {
-      try { mo?.disconnect() } catch {}
+      try { moToolbar?.disconnect() } catch {}
       try { sdRef.current?.destroy?.() } catch {}
       sdRef.current = null
       editorRef.current = null
       if (watchdog) window.clearTimeout(watchdog)
       if (retryTO) window.clearTimeout(retryTO)
+      try { offBackspace?.() } catch {}
     }
   }, [bootTick])
 
@@ -358,6 +474,8 @@ export default function ContractTemplatePage() {
         setSdReady(true)
         flash('DOCX imported')
         iconifyToolbarLabels()
+        await reflowAfterAssets()
+        installBackspaceGuard()
       } else {
         try { sdRef.current?.destroy?.() } catch {}
         editorRef.current = null
@@ -370,10 +488,11 @@ export default function ContractTemplatePage() {
           pagination: true,
           rulers: true,
           modules: { toolbar: { responsiveToContainer: true, hideButtons: false } },
-          onReady: () => { setSdReady(true); flash('DOCX imported'); iconifyToolbarLabels() },
+          onReady: () => { setSdReady(true); flash('DOCX imported'); iconifyToolbarLabels(); installBackspaceGuard() },
           onEditorCreate: (ev: any) => { editorRef.current = ev?.editor || ev },
         })
         sdRef.current = sd
+        await reflowAfterAssets()
       }
     } catch (err) {
       console.error('Import error:', errMsg(err))
@@ -443,13 +562,22 @@ export default function ContractTemplatePage() {
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="ct-wrap">
         <div className="ct-actions">
+          {/* Back a sinistra */}
+          <Link href="/catering/eventsettings" className="tool-btn" aria-label={tLoose('common.back','Back')}>
+            <span aria-hidden>←</span> {tLoose('common.back','Back')}
+          </Link>
+
+          {/* Spacer per spingere i bottoni a destra */}
+          <div className="spacer" />
+
+          {/* Bottoni azione a destra */}
           <button className="tool-btn" onClick={() => document.getElementById('import-docx-input')?.click()}>
-            {tEC('contractTpl.importDocx','Import DOCX…')}
+            {tLoose('contractTpl.importDocx','Import DOCX…')}
           </button>
           <input id="import-docx-input" ref={importInputRef} type="file" accept=".docx" style={{display:'none'}} onChange={onImportDocx} />
 
           <button className="tool-btn primary" onClick={saveTemplate} disabled={!sdReady || saving}>
-            {saving ? tEC('common.saving','Saving…') : tEC('common.save','Save')}
+            {saving ? tLoose('common.saving','Saving…') : tLoose('common.save','Save')}
           </button>
 
           <span className="status">{status}</span>
@@ -470,14 +598,14 @@ export default function ContractTemplatePage() {
               aria-pressed={activeTab==='profile'}
               onClick={()=>setActiveTab('profile')}
             >
-              {tEC('common.profile','Profile')}
+              {tLoose('common.profile','Profile')}
             </button>
             <button
               className="tab-btn"
               aria-pressed={activeTab==='event'}
               onClick={()=>setActiveTab('event')}
             >
-              {tEC('common.event','Event')}
+              {tLoose('common.event','Event')}
             </button>
           </div>
           <input
@@ -495,7 +623,7 @@ export default function ContractTemplatePage() {
                   <div className="v">{item.key}</div>
                 </div>
                 <button className="tool-btn" onClick={()=>insertVar(item.key)} disabled={!sdReady}>
-                  {tEC('common.insert','Insert')}
+                  {tLoose('common.insert','Insert')}
                 </button>
               </div>
             ))}

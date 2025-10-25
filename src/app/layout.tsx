@@ -1,10 +1,9 @@
 // src/app/layout.tsx
 import type { Metadata } from 'next'
 import './globals.css'
-import 'superdoc/style.css'          // ⬅️ AGGIUNGI QUESTA RIGA
+import '@/styles/superdoc.css'        // ⬅️ lascia questa riga
 import { SettingsProvider } from '@/contexts/SettingsContext'
 
-// Font…
 import { Be_Vietnam_Pro, Geist_Mono } from 'next/font/google'
 import ClientErrorGuard from '@/app/dev-error-guard'
 
