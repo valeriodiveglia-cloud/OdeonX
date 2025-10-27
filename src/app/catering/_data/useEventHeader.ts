@@ -85,6 +85,13 @@ type Caps = {
   [k: string]: boolean
 }
 
+/** Normalizza l'ID: stringa non-vuota oppure null. */
+function normId(x: unknown): string | null {
+  if (x == null) return null
+  const s = String(x).trim()
+  return s === '' ? null : s
+}
+
 /**
  * Hook CRUD per `event_headers`:
  * - SELECT con `*` (mai errore per colonne mancanti).
@@ -99,15 +106,17 @@ export function useEventHeader(eventId: Id | null | undefined): State {
   const alive = useRef(true)
 
   const load = useCallback(async () => {
-    if (!eventId) {
-      setHeader(null); setLoading(false); setError(null); setCaps({}); return
+    const id = normId(eventId)
+    if (!id) {
+      setHeader(null); setLoading(false); setError(null); setCaps({}); 
+      return
     }
     setLoading(true); setError(null)
     try {
       const { data, error } = await supabase
         .from('event_headers')
         .select('*')
-        .eq('id', eventId)
+        .eq('id', id)
         .maybeSingle()
 
       if (error) throw error
@@ -119,7 +128,9 @@ export function useEventHeader(eventId: Id | null | undefined): State {
       setLoading(false)
     } catch (e: any) {
       if (!alive.current) return
-      setError(readableErr(e) || 'Failed to load event_headers')
+      const msg = readableErr(e) || 'Failed to load event_headers'
+      console.warn('[useEventHeader] load error:', msg, { eventId: eventId ?? null })
+      setError(msg)
       setHeader(null)
       setLoading(false)
     }
@@ -133,8 +144,8 @@ export function useEventHeader(eventId: Id | null | undefined): State {
 
   // Re-sync su focus/visibility
   useEffect(() => {
-    const onFocus = () => { load() }
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    const onFocus = () => { void load() }
+    const onVisible = () => { if (document.visibilityState === 'visible') void load() }
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
     return () => {
@@ -144,11 +155,11 @@ export function useEventHeader(eventId: Id | null | undefined): State {
   }, [load])
 
   const save = useCallback(async (patch: Partial<Omit<EventHeader, 'id'>> & { id?: Id }) => {
-    if (!eventId && !patch.id) {
+    const id = normId(patch.id ?? eventId)
+    if (!id) {
       setError('Missing eventId')
       return false
     }
-    const id = (patch.id ?? eventId) as Id
 
     // Normalizziamo la data evento: 'YYYY-MM-DD' → mezzanotte UTC (se serve). Pass-through se già ISO/tz.
     const eventDateIso =
@@ -217,7 +228,6 @@ export function useEventHeader(eventId: Id | null | undefined): State {
       payload,
       caps,
       'provider_branch_id',
-      // accetta sia patch.provider_branch_id sia (patch as any).provider_branch_id
       (patch as any).provider_branch_id ?? undefined,
       id,
       toNullStr

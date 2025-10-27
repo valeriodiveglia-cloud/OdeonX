@@ -959,12 +959,12 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
                         value={data.notes ?? ''} onChange={e => upd('notes', e.target.value ?? '')} />
             </label>
             {error && (
-  <div className="mt-2 text-xs text-red-600">
-    {typeof error === 'string'
-      ? error
-      : (error as any)?.message || JSON.stringify(error)}
-  </div>
-)}
+              <div className="mt-2 text-xs text-red-600">
+                {typeof error === 'string'
+                  ? error
+                  : (error as any)?.message || JSON.stringify(error)}
+              </div>
+            )}
           </div>
         </div>
       </div>

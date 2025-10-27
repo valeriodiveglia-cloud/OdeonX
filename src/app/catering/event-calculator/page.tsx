@@ -83,11 +83,12 @@ function useResolvedEventId(ctx: any) {
     return legacy || uuid()
   }, [searchParams, ctx?.draftEventId, ctx?.eventId])
 
-  // Propaga verso provider + legacy
+  // Propaga verso provider + legacy + draft key
   useEffect(() => {
     try {
       localStorage.setItem('event_current_id', resolved)
       localStorage.setItem('eventId', resolved)
+      localStorage.setItem('eventcalc.draftEventId', resolved)
     } catch {}
     try {
       if (ctx && ctx.eventId !== resolved) {
@@ -99,6 +100,31 @@ function useResolvedEventId(ctx: any) {
   }, [resolved, ctx])
 
   return resolved
+}
+
+// === Mantiene l’URL sempre con ?eventId e sincronizza LS <-> URL
+function EnsureEventIdParam() {
+  const router = useRouter()
+  const sp = useSearchParams()
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const fromUrl = (sp.get('eventId') || '').trim()
+    if (fromUrl) {
+      try { localStorage.setItem('eventcalc.draftEventId', fromUrl) } catch {}
+      return
+    }
+
+    const fromLS = (localStorage.getItem('eventcalc.draftEventId') || '').trim()
+    if (!fromLS) return
+
+    const url = new URL(window.location.href)
+    url.searchParams.set('eventId', fromLS)
+    router.replace(url.pathname + '?' + url.searchParams.toString() + url.hash)
+  }, [sp, router])
+
+  return null
 }
 
 function clearEventLocalCache(eventId: string | null | undefined) {
@@ -204,7 +230,12 @@ export default function EventCalculatorPageRoot() {
     prevRef.current = eventId
   }, [eventId])
 
-  return <EventBundleScene key={`scene:${eventId}`} eventId={eventId} />
+  return (
+    <>
+      <EnsureEventIdParam />
+      <EventBundleScene key={`scene:${eventId}`} eventId={eventId} />
+    </>
+  )
 }
 
 // ===================================================================
