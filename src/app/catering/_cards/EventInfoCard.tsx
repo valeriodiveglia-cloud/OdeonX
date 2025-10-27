@@ -958,7 +958,13 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
               <textarea className="mt-1 w-full border rounded-lg px-2 py-2 text-gray-900 bg-white min-h-[140px]"
                         value={data.notes ?? ''} onChange={e => upd('notes', e.target.value ?? '')} />
             </label>
-            {error && <div className="mt-2 text-xs text-red-600">{error}</div>}
+            {error && (
+  <div className="mt-2 text-xs text-red-600">
+    {typeof error === 'string'
+      ? error
+      : error?.message || JSON.stringify(error)}
+  </div>
+)}
           </div>
         </div>
       </div>
