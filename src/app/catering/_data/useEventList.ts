@@ -12,7 +12,7 @@ export type EventListRow = {
   event_date: string | null
   event_name: string | null
   host_name: string | null
-  total_vnd: number | null   // coerced to Number (no strings)
+  total_vnd: number | null
   updated_at: string | null
 
   // ---- Payment (from catering_event_pay_vw)
@@ -24,6 +24,9 @@ export type EventListRow = {
   next_due_kind: NextDueKind | null
   next_due_date: string | null
   is_overdue: boolean | null
+
+  // ---- Status (from catering_event_pay_vw)
+  status: 'inquiry' | 'pending' | 'confirmed' | 'done' | null
 }
 
 export function useEventList() {
@@ -31,14 +34,11 @@ export function useEventList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // piccolo debounce per evitare tempeste di refresh
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleRefresh = useCallback((reason: string) => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current)
     refreshTimer.current = setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        console.debug('[catering] list refresh:', reason)
-      }
+      if (typeof window !== 'undefined') console.debug('[catering] list refresh:', reason)
       void fetchRows()
     }, 150)
   }, [])
@@ -47,7 +47,6 @@ export function useEventList() {
     setLoading(true)
     setError(null)
 
-    // Nota: la view espone l'ID come "id" (alias di event_id)
     const { data, error } = await supabase
       .from('catering_event_pay_vw')
       .select(`
@@ -64,68 +63,58 @@ export function useEventList() {
         balance_due_date,
         next_due_kind,
         next_due_date,
-        is_overdue
+        is_overdue,
+        status
       `)
-      // Ordine: updated_at ↓ (nuovi in alto), event_date ↓, id ↑ come tie-breaker stabile
-      .order('updated_at', { ascending: false, nullsFirst: false })
-      .order('event_date', { ascending: false, nullsFirst: false })
+      .order('updated_at', { ascending: false })
+      .order('event_date', { ascending: false })
       .order('id', { ascending: true })
 
     if (error) {
       console.debug('[catering] useEventList error:', error.message)
       setError(error.message)
       setRows([])
-    } else {
-      const mapped: EventListRow[] = (data ?? []).map((r: any) => {
-        // Supabase ritorna NUMERIC come stringa: convertiamo in number qui
-        const totalNum =
-          r.total_vnd == null
-            ? null
-            : Number(typeof r.total_vnd === 'string' ? r.total_vnd : r.total_vnd)
-
-        return {
-          id: String(r.id ?? ''),
-          event_date: r.event_date ?? null,
-          event_name: r.event_name ?? null,
-          host_name: r.host_name ?? null,
-          total_vnd: Number.isFinite(totalNum as number) ? (totalNum as number) : null,
-          updated_at: r.updated_at ?? null,
-
-          payment_plan: (r.payment_plan ?? null) as EventListRow['payment_plan'],
-          deposit_percent_0_100: r.deposit_percent_0_100 ?? null,
-          deposit_due_date: r.deposit_due_date ?? null,
-          balance_percent_0_100: r.balance_percent_0_100 ?? null,
-          balance_due_date: r.balance_due_date ?? null,
-          next_due_kind: (r.next_due_kind ?? null) as EventListRow['next_due_kind'],
-          next_due_date: r.next_due_date ?? null,
-          is_overdue: typeof r.is_overdue === 'boolean' ? r.is_overdue : (r.is_overdue == null ? null : !!r.is_overdue),
-        }
-      })
-      if (typeof window !== 'undefined' && mapped[0]) {
-        // log diagnostico utile: controlla che sia number
-        console.debug('[catering] first row types:', {
-          total_vnd: mapped[0].total_vnd,
-          typeof_total: typeof mapped[0].total_vnd,
-          payment_plan: mapped[0].payment_plan,
-          next_due_kind: mapped[0].next_due_kind,
-          next_due_date: mapped[0].next_due_date,
-          is_overdue: mapped[0].is_overdue,
-        })
-      }
-      setRows(mapped)
+      setLoading(false)
+      return
     }
 
+    const mapped: EventListRow[] = (data ?? []).map((r: any) => {
+      const totalNum =
+        r.total_vnd == null
+          ? null
+          : Number(typeof r.total_vnd === 'string' ? r.total_vnd : r.total_vnd)
+
+      return {
+        id: String(r.id ?? ''),
+        event_date: r.event_date ?? null,
+        event_name: r.event_name ?? null,
+        host_name: r.host_name ?? null,
+        total_vnd: Number.isFinite(totalNum as number) ? (totalNum as number) : null,
+        updated_at: r.updated_at ?? null,
+
+        payment_plan: (r.payment_plan ?? null) as EventListRow['payment_plan'],
+        deposit_percent_0_100: r.deposit_percent_0_100 ?? null,
+        deposit_due_date: r.deposit_due_date ?? null,
+        balance_percent_0_100: r.balance_percent_0_100 ?? null,
+        balance_due_date: r.balance_due_date ?? null,
+        next_due_kind: (r.next_due_kind ?? null) as EventListRow['next_due_kind'],
+        next_due_date: r.next_due_date ?? null,
+        is_overdue: typeof r.is_overdue === 'boolean' ? r.is_overdue : (r.is_overdue == null ? null : !!r.is_overdue),
+
+        status: (r.status ?? null) as EventListRow['status'],
+      }
+    })
+
+    setRows(mapped)
     setLoading(false)
   }, [])
 
   useEffect(() => {
     fetchRows()
-    return () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current)
-    }
+    return () => { if (refreshTimer.current) clearTimeout(refreshTimer.current) }
   }, [fetchRows])
 
-  // Auto-refresh su focus/visibility (niente polling)
+  // Refresh su focus/visibility
   useEffect(() => {
     const onFocus = () => scheduleRefresh('window:focus')
     const onVisible = () => { if (document.visibilityState === 'visible') scheduleRefresh('visibility:visible') }
@@ -137,8 +126,7 @@ export function useEventList() {
     }
   }, [scheduleRefresh])
 
-  // Auto-refresh quando l’editor emette eventi custom
-  // (trigger utili quando premi “save” nelle varie card)
+  // Refresh sugli eventi custom dell’editor
   useEffect(() => {
     const onBundles   = () => scheduleRefresh('event:bundles:totals')
     const onHeader    = () => scheduleRefresh('event:eventinfo:changed')
@@ -173,7 +161,7 @@ export function useEventList() {
     }
   }, [scheduleRefresh])
 
-  // Auto-refresh cross-tab via storage (chiavi LS usate dall’editor)
+  // Refresh cross-tab via localStorage
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       const k = e.key || ''
@@ -191,7 +179,7 @@ export function useEventList() {
       }
     }
     window.addEventListener('storage', onStorage)
-    return () => { window.removeEventListener('storage', onStorage) }
+    return () => window.removeEventListener('storage', onStorage)
   }, [scheduleRefresh])
 
   return { rows, loading, error, refresh: fetchRows }
