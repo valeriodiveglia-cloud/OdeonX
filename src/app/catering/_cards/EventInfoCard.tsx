@@ -129,22 +129,28 @@ function diffHours(start: string, end: string) {
   return Math.max(0, Math.round((minutes / 60) * 100) / 100)
 }
 
-/* ---- datetime helpers ---- */
+/* ---- datetime helpers (UTC-safe) ---- */
 function toIsoOrNull(date: string, time: string): string | null {
   if (!date) return null
   const t = /^\d{2}:\d{2}$/.test(time) ? time : '00:00'
-  try { return new Date(`${date}T${t}:00Z`).toISOString() } catch { return null }
+  try {
+    const [y, m, d] = date.split('-').map(Number)
+    const [hh, mm] = t.split(':').map(Number)
+    return new Date(Date.UTC(y, m - 1, d, hh, mm, 0)).toISOString()
+  } catch {
+    return null
+  }
 }
 function pad2(n: number) { return n < 10 ? `0${n}` : String(n) }
 function fromIso(iso: string | null): { date: string; time: string } {
   if (!iso) return { date: '', time: '' }
   const d = new Date(iso)
   if (isNaN(d.getTime())) return { date: '', time: '' }
-  const yyyy = d.getFullYear()
-  const mm = pad2(d.getMonth() + 1)
-  const dd = pad2(d.getDate())
-  const hh = pad2(d.getHours())
-  const mi = pad2(d.getMinutes())
+  const yyyy = d.getUTCFullYear()
+  const mm = pad2(d.getUTCMonth() + 1)
+  const dd = pad2(d.getUTCDate())
+  const hh = pad2(d.getUTCHours())
+  const mi = pad2(d.getUTCMinutes())
   return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` }
 }
 
@@ -552,7 +558,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
   function emitSaveBarEvent(type: 'dirty' | 'saved', detail: any) {
     if (typeof window === 'undefined') return
     try {
-      // emetti sia come 'header' che come 'eventinfo'
       const payloadHeader = { ...detail, card: 'header' }
       const payloadEventInfo = { ...detail, card: 'eventinfo' }
       window.dispatchEvent(new CustomEvent(`eventcalc:${type}`, { detail: payloadHeader }))
@@ -581,9 +586,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     setAndProp(next)
   }
 
-  function nudgeSaveBar() {
-    announceDirty(true)
-  }
+  function nudgeSaveBar() { announceDirty(true) }
 
   function setPeople(v: string) {
     const people = clampPos(Number(v))
