@@ -40,9 +40,9 @@ export type EventInfo = {
   notes: string
 
   paymentPlan: PaymentPlan
-  depositPercent: number | null   // 0..100
+  depositPercent: number | null
   depositDueDate: string
-  balancePercent: number | null   // 0..100
+  balancePercent: number | null
   balanceDueDate: string
 
   providerBranchId: string | null
@@ -54,7 +54,6 @@ const clampPos = (n: number) => (Number.isFinite(n) ? Math.max(0, n) : 0)
 const clampPct = (n: number | null | undefined): number | null =>
   n == null ? null : Math.max(0, Math.min(100, Number(n)))
 
-/** 0..1 o 0..100 → 0..100 */
 const normDbPct = (v: any): number | null => {
   if (v == null) return null
   const n = Number(v)
@@ -64,13 +63,11 @@ const normDbPct = (v: any): number | null => {
   return null
 }
 
-/** percent string: fino a 8 decimali, senza zeri finali */
 function pctStr(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(Number(n))) return ''
   return Number(n).toFixed(8).replace(/\.?0+$/, '')
 }
 
-/** mostra tutti i decimali utili (max 8) */
 const formatPercent = (n: number | null | undefined) =>
   n == null ? '' : Number(n).toFixed(8).replace(/\.?0+$/, '')
 
@@ -128,7 +125,7 @@ function diffHours(start: string, end: string) {
   const a = hhmmToMinutes(start)
   const b = hhmmToMinutes(end)
   if (!Number.isFinite(a) || !Number.isFinite(b)) return 0
-  const minutes = b >= a ? b - a : (b + 24 * 60) - a
+  const minutes = b >= a ? b - a : b + 24 * 60 - a
   return Math.max(0, Math.round((minutes / 60) * 100) / 100)
 }
 
@@ -173,7 +170,7 @@ function draftKey(eventId: string | null) {
   return `eventcalc.eventinfo:${eventId || ''}`
 }
 
-/* ---- installments cache (per ripristino al toggle) ---- */
+/* ---- installments cache ---- */
 type InstallmentsSnap = { dep: number | null; bal: number | null; depDue: string; balDue: string }
 const installmentsKey = (eventId: string | null) => `eventcalc.installments:last:${eventId || ''}`
 
@@ -196,34 +193,25 @@ function writePaymentLS(eventId: string | null, patch: Record<string, any>) {
   } catch {}
 }
 
-/** Se LS contiene percentuali/importi, calcola percentuali “precise” e falle vincere sul DB */
+/** LS percentuali o importi vincono sul DB */
 function getPaymentFromLS(eventId: string | null): { plan?: PaymentPlan, depPct?: number | null, balPct?: number | null } {
   const ls = readPaymentLS(eventId)
   if (!ls) return {}
   const plan: PaymentPlan | undefined =
     ls?.plan === 'installments' || ls?.plan === 'full' ? ls.plan : undefined
 
-  // 1) priorità agli importi + totale (se presenti)
   const tot = Number(ls?.total_amount_vnd)
   const depAmt = Number(ls?.deposit_amount_vnd)
   const balAmt = Number(ls?.balance_amount_vnd)
   if (Number.isFinite(tot) && tot > 0 && (Number.isFinite(depAmt) || Number.isFinite(balAmt))) {
     const depPct = Number.isFinite(depAmt) ? (depAmt / tot) * 100 : undefined
     const balPct = Number.isFinite(balAmt) ? (balAmt / tot) * 100 : undefined
-    return {
-      plan,
-      depPct: depPct == null ? undefined : depPct,
-      balPct: balPct == null ? undefined : balPct,
-    }
+    return { plan, depPct: depPct == null ? undefined : depPct, balPct: balPct == null ? undefined : balPct }
   }
 
-  // 2) altrimenti usa le percentuali salvate in LS (non arrotondate)
   const depPct = normDbPct(ls?.deposit_percent)
   const balPct = normDbPct(ls?.balance_percent)
-  if (depPct != null || balPct != null) {
-    return { plan, depPct: depPct ?? undefined, balPct: balPct ?? undefined }
-  }
-
+  if (depPct != null || balPct != null) return { plan, depPct: depPct ?? undefined, balPct: balPct ?? undefined }
   return {}
 }
 
@@ -252,7 +240,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
 
   const [data, setData] = useState<EventInfo>(value ?? emptyEventInfo())
 
-  // 🔹 installments cache
   const lastInstallmentsRef = useRef<InstallmentsSnap | null>(null)
   const readLastInstallments = (): InstallmentsSnap | null => {
     if (lastInstallmentsRef.current) return lastInstallmentsRef.current
@@ -273,7 +260,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     try { if (typeof window !== 'undefined') localStorage.setItem(installmentsKey(eventId), JSON.stringify(snap)) } catch {}
   }
 
-  // 🔹 provider branches (select)
   const [branches, setBranches] = useState<ProviderBranch[]>([])
   const [branchesLoading, setBranchesLoading] = useState(false)
   useEffect(() => {
@@ -298,7 +284,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     return () => { active = false }
   }, [])
 
-  // reset cache on event change (and warm from LS)
   useEffect(() => {
     lastInstallmentsRef.current = null
     readLastInstallments()
@@ -308,14 +293,12 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
   const [hydrated, setHydrated] = useState(false)
   const [dirty, setDirty] = useState(false)
 
-  // evita echo loop quando applichiamo modifiche esterne
   const applyingExternalRef = useRef(false)
 
   useEffect(() => {
     if (value) setData(value)
   }, [value])
 
-  // 1) draft locale (NON blocca più l’idratazione DB)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const key = draftKey(eventId)
@@ -330,7 +313,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     } catch {}
   }, [eventId]) // eslint-disable-line
 
-  // 2) DB → UI (ma prima controllo LS per percentuali “precise”)
   useEffect(() => {
     if (!header) return
 
@@ -341,13 +323,11 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     const depositPctDB = normDbPct((header as any)?.deposit_percent)
     const balancePctDB = normDbPct((header as any)?.balance_percent)
 
-    // 🔸 override da LS (preciso)
     const lsPay = getPaymentFromLS(eventId)
     const planResolved: PaymentPlan =
       lsPay.plan
       ?? (planDb ? planDb : (depositPctDB != null || balancePctDB != null ? 'installments' : 'full'))
 
-    // calcolo percentuali finali con priorità: LS → DB → fallback
     const depFromLS = clampPct(lsPay.depPct)
     const balFromLS = clampPct(lsPay.balPct)
 
@@ -367,7 +347,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     const depDueDB = (header as any)?.deposit_due_date ?? ''
     const balDueDB = (header as any)?.balance_due_date ?? ''
 
-    // seed cache dagli effettivi valori (finali) per il toggle
     saveLastInstallments({
       dep: depFinal,
       bal: balFinal,
@@ -378,7 +357,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     setData(prev => {
       const next: EventInfo = {
         ...prev,
-        // campi generali
         eventName: (header.event_name ?? header.title ?? prev.eventName) || '',
         date: (header.event_date ?? startDate ?? prev.date) || '',
         startTime: startTime || prev.startTime,
@@ -400,7 +378,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         budgetTotal: header.budget_total_vnd ?? prev.budgetTotal,
         notes: header.notes ?? prev.notes,
 
-        // 🔴 payment: usa percentuali FINAL (LS vince, poi DB), senza arrotondare
         paymentPlan: planResolved,
         depositPercent: depFinal,
         depositDueDate: depDueDB || '',
@@ -433,7 +410,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     }
   }, [totalHours]) // eslint-disable-line
 
-  /* ---- persistenza DB ---- */
   function persistNow(current: EventInfo) {
     if (!eventId) return
     const start_at = toIsoOrNull(current.date, current.startTime)
@@ -524,7 +500,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     })()
   }
 
-  /* ---- draft + broadcast ---- */
   function persistDraft(next: EventInfo) {
     if (typeof window === 'undefined') return
     try { localStorage.setItem(draftKey(eventId), JSON.stringify(next)) } catch {}
@@ -559,7 +534,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
       const dep = next.paymentPlan === 'installments' ? clampPct(next.depositPercent) : null
       const bal = next.paymentPlan === 'full' ? 100 : clampPct(next.balancePercent ?? (dep != null ? 100 - dep : null))
 
-      // Merge non distruttivo: non sovrascrivo importi già presenti in LS
       writePaymentLS(eventId, {
         plan: next.paymentPlan,
         payment_term: makePaymentTerm(t, next.paymentPlan, dep, bal),
@@ -575,22 +549,23 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     } catch {}
   }
 
-  function announceDirty(v: boolean) {
+  function emitSaveBarEvent(type: 'dirty' | 'saved', detail: any) {
     if (typeof window === 'undefined') return
     try {
-      window.dispatchEvent(new CustomEvent('eventcalc:dirty', {
-        detail: { eventId: eventId || null, card: 'eventinfo', dirty: v }
-      }))
+      // emetti sia come 'header' che come 'eventinfo'
+      const payloadHeader = { ...detail, card: 'header' }
+      const payloadEventInfo = { ...detail, card: 'eventinfo' }
+      window.dispatchEvent(new CustomEvent(`eventcalc:${type}`, { detail: payloadHeader }))
+      window.dispatchEvent(new CustomEvent(`eventcalc:${type}`, { detail: payloadEventInfo }))
     } catch {}
   }
 
+  function announceDirty(v: boolean) {
+    emitSaveBarEvent('dirty', { eventId: eventId || null, dirty: v })
+  }
+
   function announceSaved() {
-    if (typeof window === 'undefined') return
-    try {
-      window.dispatchEvent(new CustomEvent('eventcalc:saved', {
-        detail: { eventId: eventId || null, card: 'eventinfo' }
-      })) }
-    catch {}
+    emitSaveBarEvent('saved', { eventId: eventId || null })
   }
 
   function setAndProp(next: EventInfo) {
@@ -599,6 +574,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     persistDraft(next)
     broadcastHeader(tAny, next)
     if (!dirty) setDirty(true)
+    announceDirty(true)
   }
   function upd<K extends keyof EventInfo>(key: K, val: EventInfo[K]) {
     const next = { ...data, [key]: val }
@@ -609,7 +585,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     announceDirty(true)
   }
 
-  // sync persone/budget
   function setPeople(v: string) {
     const people = clampPos(Number(v))
     const per = clampPos(data.budgetPerPerson)
@@ -629,7 +604,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     setAndProp({ ...data, budgetTotal, budgetPerPerson: per })
   }
 
-  // percent handlers (solo installments) — aggiornano anche la cache
   function setDepositPercent(v: string) {
     const dep = parsePercentStrict(v)
     if (data.paymentPlan !== 'installments') {
@@ -656,7 +630,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     nudgeSaveBar()
   }
 
-  // ---- DATE RULES ---- (aggiornano cache)
   function setDepositDueDate(v: string) {
     if (data.paymentPlan === 'installments') {
       const needsClamp = data.balanceDueDate && v && data.balanceDueDate < v
@@ -686,7 +659,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     nudgeSaveBar()
   }
 
-  // toggle pagamento
   function setPaymentPlan(plan: PaymentPlan) {
     if (plan === data.paymentPlan) return
     if (plan === 'full') {
@@ -720,12 +692,10 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     }
   }
 
-  // dirty flag
   useEffect(() => {
     announceDirty(dirty)
   }, [dirty]) // eslint-disable-line
 
-  // Save bar listener
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onGlobalSave = () => persistNow(data)
@@ -733,14 +703,12 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     return () => window.removeEventListener('eventcalc:save', onGlobalSave as EventListener)
   }, [data, eventId]) // eslint-disable-line
 
-  /* ======== sync da Totals → Info (payment:changed + storage) ======== */
   function applyExternalPayment(plan: PaymentPlan, depIn: number | null, balIn: number | null, amounts?: {dep?: number|null; bal?: number|null; total?: number|null}) {
     if (applyingExternalRef.current) return
     applyingExternalRef.current = true
 
     const snap = readLastInstallments()
 
-    // Se ho importi + totale uso quelli per calcolare la % con massima precisione
     let depFromAmt: number | null = null
     let balFromAmt: number | null = null
     if (amounts?.total && (amounts.dep != null || amounts.bal != null)) {
@@ -752,12 +720,8 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     }
 
     setData(prev => {
-      let d = plan === 'installments'
-        ? (depFromAmt ?? clampPct(depIn))
-        : null
-      let b = plan === 'full'
-        ? 100
-        : (balFromAmt ?? clampPct(balIn))
+      let d = plan === 'installments' ? (depFromAmt ?? clampPct(depIn)) : null
+      let b = plan === 'full' ? 100 : (balFromAmt ?? clampPct(balIn))
 
       if (plan === 'installments') {
         if (d == null && b == null) {
@@ -801,7 +765,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     setTimeout(() => { applyingExternalRef.current = false }, 0)
   }
 
-  // evento custom
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onPayment = (e: any) => {
@@ -820,7 +783,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     return () => window.removeEventListener('payment:changed', onPayment as EventListener)
   }, [eventId])
 
-  // storage (mount/refresh): preferisco LS alle % del DB
   useEffect(() => {
     if (typeof window === 'undefined') return
     const key = `eventcalc.payment:${eventId || ''}`
@@ -831,7 +793,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         const o = JSON.parse(raw)
         const plan: PaymentPlan = (o?.plan === 'installments' || o?.plan === 'full') ? o.plan : 'installments'
 
-        // Se ho importi e totale calcolo %; altrimenti uso le %
         let depPct: number | null = null
         let balPct: number | null = null
         const tot = Number.isFinite(Number(o?.total_amount_vnd)) ? Number(o.total_amount_vnd) : null
@@ -871,7 +832,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         <h2 className="text-lg font-semibold">{title ?? t('eventinfo.title')}</h2>
       </div>
 
-      {/* RIGA 1 — Evento */}
+      {/* RIGA 1 Evento */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 mb-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-end">
           <Field label={t('eventinfo.event')} value={data.eventName} onChange={v => upd('eventName', v)} className="md:flex-[2]" />
@@ -886,7 +847,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         </div>
       </div>
 
-      {/* RIGA 2 — Contatti */}
+      {/* RIGA 2 Contatti */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 mb-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-end">
           <Field label={t('eventinfo.host_poc')} value={data.hostOrPoc} onChange={v => upd('hostOrPoc', v)} className="md:flex-[2]" />
@@ -908,7 +869,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         </div>
       </div>
 
-      {/* RIGA 3 — Tipo cliente + azienda */}
+      {/* RIGA 3 Tipo cliente + azienda */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 mb-3">
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-800">{t('eventinfo.customer_type')}</span>
@@ -941,7 +902,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         )}
       </div>
 
-      {/* RIGA 4 — People/Budget + Notes */}
+      {/* RIGA 4 People/Budget + Notes */}
       <div className="bg-white rounded-xl border border-gray-200 p-3">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="md:col-span-2 order-1">
@@ -969,7 +930,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         </div>
       </div>
 
-      {/* RIGA 5 — Payment + Provider branch */}
+      {/* RIGA 5 Payment + Provider branch */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 mt-3">
         <div className="flex items-center gap-3 mb-3">
           <span className="text-sm text-gray-800">{t('eventinfo.payment')}</span>
@@ -1012,7 +973,6 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
           </div>
         )}
 
-        {/* 🔹 Branch provider */}
         <div className="mt-4">
           <Select
             label={`${t('eventinfo.provider_branch')}${branchesLoading ? ` (${t('eventinfo.loading')})` : ''}`}
