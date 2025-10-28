@@ -843,6 +843,26 @@ function downgradeTableHeadersInEditor() {
   })
 }
 
+/* =================== TIME HELPERS WITHOUT TZ DRIFT =================== */
+/** Estrae HH:mm direttamente dalla stringa ISO senza applicare offset di fuso */
+function hhmmFromIsoString(v: any): string | null {
+  const s = String(v || '').trim()
+  const m = s.match(/T(\d{2}):(\d{2})/)
+  if (m) return `${m[1]}:${m[2]}`
+  return null
+}
+function hhmmToMinutes(hhmm: string | null | undefined): number | null {
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return null
+  const [hh, mm] = hhmm.split(':').map(Number)
+  return hh * 60 + mm
+}
+function diffHoursFromHHmm(start: string | null, end: string | null): number | null {
+  const a = hhmmToMinutes(start), b = hhmmToMinutes(end)
+  if (a == null || b == null) return null
+  const minutes = b >= a ? b - a : b + 24 * 60 - a
+  return Math.max(0, Math.round((minutes / 60) * 100) / 100)
+}
+
 /* =================== PAGE =================== */
 export default function ContractPage() {
   const router = useRouter()
@@ -936,7 +956,7 @@ export default function ContractPage() {
         if (error) throw error
         const byId: Record<string, ProviderBranch> = {}
         const byName: Record<string, ProviderBranch> = {}
-        for (const row of data || []) {
+        for (const row of (data as any[]) || []) {
           const b: ProviderBranch = {
             id: String(row.id),
             name: row.name ?? '',
@@ -1120,23 +1140,12 @@ export default function ContractPage() {
       return n != null ? n : null
     })()
 
-    const timeHHmm = (v: any) => {
-      if (!v) return null
-      const t = Date.parse(v); if (!Number.isFinite(t)) return null
-      const d = new Date(t)
-      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-    }
-    const startHH = timeHHmm(getFrom(['start_at','event.start_at']))
-    const endHH   = timeHHmm(getFrom(['end_at','event.end_at']))
-    const duration = (() => {
-      const sa = getFrom(['start_at','event.start_at'])
-      const ea = getFrom(['end_at','event.end_at'])
-      if (!sa || !ea) return null
-      let h = (new Date(ea).getTime() - new Date(sa).getTime()) / 3_600_000
-      if (!Number.isFinite(h)) return null
-      if (h < 0) h += 24
-      return Math.max(0, Math.round(h * 100) / 100)
-    })()
+    // Nuova estrazione orari senza drift di fuso
+    const startRaw = getFrom(['start_at','event.start_at'])
+    const endRaw   = getFrom(['end_at','event.end_at'])
+    const startHH = hhmmFromIsoString(startRaw)
+    const endHH   = hhmmFromIsoString(endRaw)
+    const duration = diffHoursFromHHmm(startHH, endHH)
 
     const after = toNumberLoose(paris?.totals?.afterDiscounts ?? paris?.pricing?.totalAfterDiscount)
     const grand = toNumberLoose(paris?.totals?.grandPrice)
@@ -1546,7 +1555,7 @@ export default function ContractPage() {
         <div className="ct-actions">
           <div className="ct-title">
             <span>Service Contract</span>
-            <span className="ct-sub">— {(header?.title || header?.event_name) ? String(header?.title || header?.event_name) : ''}</span>
+            <span className="ct-sub"> — {(header?.title || header?.event_name) ? String(header?.title || header?.event_name) : ''}</span>
           </div>
 
           <div style={{ position: 'relative', display:'flex', gap:8, alignItems:'center' }}>
