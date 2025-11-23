@@ -7,7 +7,7 @@ import { SettingsProvider } from '@/contexts/SettingsContext'
 import { Be_Vietnam_Pro, Geist_Mono } from 'next/font/google'
 import ClientErrorGuard from '@/app/dev-error-guard'
 
-const beVietnam = Be_Vietnam_Pro({ subsets: ['vietnamese','latin'], weight: ['400','500','600','700','800'], display: 'swap' })
+const beVietnam = Be_Vietnam_Pro({ subsets: ['vietnamese', 'latin'], weight: ['400', '500', '600', '700', '800'], display: 'swap', variable: '--font-be-vietnam' })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
 export const metadata: Metadata = { title: 'OddsOff', description: 'OddsOff — Food costing & operations' }
@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en">
-      <body className={`${beVietnam.className} ${geistMono.variable} antialiased`}>
+      <body className={`${beVietnam.variable} ${geistMono.variable} antialiased font-sans`}>
         <ClientErrorGuard>
           <SettingsProvider>{children}</SettingsProvider>
         </ClientErrorGuard>

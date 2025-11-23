@@ -1,4 +1,4 @@
-// src/middleware.ts
+// src/proxy.ts
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
@@ -185,8 +185,8 @@ const PROTECTED: string[] = [
   '/catering',
 ]
 
-// ========== Middleware ==========
-export async function middleware(req: NextRequest) {
+// ========== Proxy (ex Middleware) ==========
+export async function proxy(req: NextRequest) {
   const DEBUG = process.env.NEXT_PUBLIC_DEBUG_AUTH === '1'
   const url = new URL(req.url)
   const { pathname, search } = url
