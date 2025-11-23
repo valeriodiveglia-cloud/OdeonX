@@ -345,9 +345,11 @@ async function fetchCurrentUserNameFromDB(): Promise<string> {
     const userId = String(user.id)
     const email = String(user.email || '')
     const { data, error } = await supabase.from(TBL_APP_ACCOUNTS).select('name,email').eq('user_id', userId).limit(1).single()
-    if (error) return email
+    if (error) return user.user_metadata?.full_name || user.user_metadata?.name || email
     const dbName = String(data?.name || '').trim()
     if (dbName) return dbName
+    const metaName = user.user_metadata?.full_name || user.user_metadata?.name
+    if (metaName) return metaName
     const dbEmail = String(data?.email || '').trim()
     return dbEmail || email
   } catch {

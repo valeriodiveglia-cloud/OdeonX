@@ -266,9 +266,11 @@ async function fetchCurrentUserNameFromDB(): Promise<string> {
       .eq('user_id', userId)
       .limit(1)
       .single()
-    if (error) return email
+    if (error) return user.user_metadata?.full_name || user.user_metadata?.name || email
     const dbName = String(data?.name || '').trim()
     if (dbName) return dbName
+    const metaName = user.user_metadata?.full_name || user.user_metadata?.name
+    if (metaName) return metaName
     const dbEmail = String(data?.email || '').trim()
     return dbEmail || email
   } catch {
@@ -1019,8 +1021,8 @@ export default function InitialInfoCard(props: {
                 <button
                   type="button"
                   className={`px-3 py-1 ${!liveMode
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   onClick={handleSavedClick}
                 >
@@ -1029,8 +1031,8 @@ export default function InitialInfoCard(props: {
                 <button
                   type="button"
                   className={`px-3 py-1 border-l border-gray-300 ${liveMode
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   onClick={handleLiveClick}
                 >

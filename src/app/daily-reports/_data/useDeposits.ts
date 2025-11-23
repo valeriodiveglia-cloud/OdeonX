@@ -266,14 +266,15 @@ export function useDeposits() {
           .eq('user_id', user.id)
           .maybeSingle()
 
-        if (error || !data || cancelled) return
+        if (cancelled) return
 
         const anyData = data as any
         const name =
-          anyData.short_name ||
-          anyData.full_name ||
-          anyData.name ||
+          anyData?.short_name ||
+          anyData?.full_name ||
+          anyData?.name ||
           user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
           user.email ||
           ''
         if (!cancelled && name) setCurrentUserName(name)
@@ -318,7 +319,7 @@ export function useDeposits() {
           detail: { count },
         }),
       )
-    } catch {}
+    } catch { }
   }
 
   /* ---------- Public API ---------- */
@@ -380,7 +381,7 @@ export function useDeposits() {
       window.dispatchEvent(
         new CustomEvent('deposits:changed', { detail: { isNew, id: row.id } }),
       )
-    } catch {}
+    } catch { }
 
     return row
   }

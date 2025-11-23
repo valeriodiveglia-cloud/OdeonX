@@ -42,7 +42,7 @@ function loadSelectedBranch(): SelectedBranch | null {
       }
       const name = String(raw).trim()
       if (name) return { name }
-    } catch {}
+    } catch { }
   }
   return null
 }
@@ -230,7 +230,7 @@ export default function ClosingListPage() {
   const deletePlaceholder = t.modal.placeholder.replace('{word}', REQUIRED_WORD)
 
   return (
-    <div className="max-w-7xl mx-auto p-4 text-gray-100">
+    <div className="max-w-none mx-auto p-4 text-gray-100">
       {/* Header con kebab + branch pill + search + add */}
       <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
@@ -286,11 +286,10 @@ export default function ClosingListPage() {
           {/* Toggle Select */}
           <button
             onClick={() => { setSelectMode(s => !s); setMenuOpen(false); setSelected({}) }}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-              selectMode
+            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-            }`}
+              }`}
             title={selectMode ? t.select.exitTitle : t.select.enterTitle}
           >
             <CheckCircleIcon className="w-5 h-5" />
@@ -451,11 +450,10 @@ export default function ClosingListPage() {
               <button
                 onClick={performDeleteSelected}
                 disabled={confirmText.trim() !== REQUIRED_WORD}
-                className={`px-4 py-2 rounded-lg ${
-                  confirmText.trim() === REQUIRED_WORD
+                className={`px-4 py-2 rounded-lg ${confirmText.trim() === REQUIRED_WORD
                     ? 'bg-red-600 text-white hover:opacity-90'
                     : 'bg-red-600/40 text-white/80 cursor-not-allowed'
-                }`}
+                  }`}
               >
                 {t.modal.confirm}
               </button>
@@ -517,7 +515,7 @@ function dow3(isoDate: string) { return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri
 function sortValue(r: ClosingRow, key: SortKey) {
   switch (key) {
     case 'date': return new Date(r.date).getTime()
-    case 'dow': return ['sun','mon','tue','wed','thu','fri','sat'].indexOf(dow3(r.date))
+    case 'dow': return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(dow3(r.date))
     case 'time': return Number(r.time.replace(':', ''))
     case 'branch': return r.branch.toLowerCase()
     case 'revenue': return r.revenue
