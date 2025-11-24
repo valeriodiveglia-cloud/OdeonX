@@ -1,12 +1,12 @@
 // src/app/auth/signout/route.ts
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 
-async function doSignOut(): Promise<NextResponse> {
+async function doSignOut(request: NextRequest): Promise<NextResponse> {
   const jar = await cookies()
 
   const supabase = createServerClient(
@@ -18,19 +18,20 @@ async function doSignOut(): Promise<NextResponse> {
           return jar.get(name)?.value
         },
         set(name: string, value: string, options?: any) {
-          try { jar.set({ name, value, ...(options || {}) }) } catch {}
+          try { jar.set({ name, value, ...(options || {}) }) } catch { }
         },
         remove(name: string, options?: any) {
-          try { jar.set({ name, value: '', ...(options || {}) }) } catch {}
+          try { jar.set({ name, value: '', ...(options || {}) }) } catch { }
         },
       },
     }
   ) as unknown as SupabaseClient
 
   await supabase.auth.signOut()
-  const res = NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'))
-  return res
+
+  // Use request.url to ensure we redirect to the correct origin (e.g. localhost:3000, localhost:3001, production domain)
+  return NextResponse.redirect(new URL('/login', request.url))
 }
 
-export async function POST() { return doSignOut() }
-export async function GET()  { return doSignOut() }
+export async function POST(request: NextRequest) { return doSignOut(request) }
+export async function GET(request: NextRequest) { return doSignOut(request) }

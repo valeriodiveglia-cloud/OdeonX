@@ -72,12 +72,12 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     let mounted = true
-    ;(async () => {
-      const { data } = await supabase.auth.getUser()
-      if (!mounted) return
-      setUser(data.user ?? null)
-      setLoading(false)
-    })()
+      ; (async () => {
+        const { data } = await supabase.auth.getUser()
+        if (!mounted) return
+        setUser(data.user ?? null)
+        setLoading(false)
+      })()
 
     const { data: sub } = supabase.auth.onAuthStateChange((_evt: any, session: any) => {
       setUser(session?.user ?? null)
@@ -86,9 +86,9 @@ export default function HomeDashboard() {
     return () => sub?.subscription.unsubscribe()
   }, [router])
 
-  async function handleLogout() {
-    try { await supabase.auth.signOut() } catch {}
-    router.replace('/login')
+  function handleLogout() {
+    // Navigate to server-side signout route which handles cookie clearing and redirect
+    window.location.href = '/auth/signout'
   }
 
   if (loading) {
@@ -110,7 +110,7 @@ export default function HomeDashboard() {
         </div>
 
         <section className="relative max-w-6xl mx-auto px-4 py-16">
-        <div className="mx-auto max-w-4xl">
+          <div className="mx-auto max-w-4xl">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-gray-600 bg-white/60 backdrop-blur">
               <span className="h-2 w-2 rounded-full bg-green-500" />
               {t(language, 'DashboardReady')}
@@ -207,57 +207,57 @@ function BranchPickerModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     let ignore = false
-    ;(async () => {
-      setLoading(true)
-      setErr(null)
-      try {
-        const { data, error } = await supabase
-          .from('provider_branches')
-          .select('id,name,address')
-        if (error) throw error
+      ; (async () => {
+        setLoading(true)
+        setErr(null)
+        try {
+          const { data, error } = await supabase
+            .from('provider_branches')
+            .select('id,name,address')
+          if (error) throw error
 
-        let rows: ProviderBranch[] =
-          (data || []).map(r => ({
-            id: String(r.id),
-            name: r.name || '',
-            address: r.address || '',
-          }))
+          let rows: ProviderBranch[] =
+            (data || []).map(r => ({
+              id: String(r.id),
+              name: r.name || '',
+              address: r.address || '',
+            }))
 
-        const order = loadProviderOrder()
-        if (order && order.length > 0) {
-          const orderMap = new Map<string, number>()
-          order.forEach((id, idx) => { orderMap.set(id, idx) })
+          const order = loadProviderOrder()
+          if (order && order.length > 0) {
+            const orderMap = new Map<string, number>()
+            order.forEach((id, idx) => { orderMap.set(id, idx) })
 
-          rows = [...rows].sort((a, b) => {
-            const ia = orderMap.has(a.id) ? orderMap.get(a.id)! : Number.POSITIVE_INFINITY
-            const ib = orderMap.has(b.id) ? orderMap.get(b.id)! : Number.POSITIVE_INFINITY
-            if (ia === ib) {
-              return (a.name || '').localeCompare(b.name || '')
-            }
-            return ia - ib
-          })
-        } else {
-          // fallback: alfabetico se non c'è ordine salvato
-          rows = [...rows].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-        }
-
-        if (!ignore) {
-          setBranches(rows)
-        }
-      } catch {
-        if (!ignore) {
-          const snap = loadProviderSnapshotFromLS()
-          if (snap && snap.length > 0) {
-            setBranches(snap)
-            setErr(null)
+            rows = [...rows].sort((a, b) => {
+              const ia = orderMap.has(a.id) ? orderMap.get(a.id)! : Number.POSITIVE_INFINITY
+              const ib = orderMap.has(b.id) ? orderMap.get(b.id)! : Number.POSITIVE_INFINITY
+              if (ia === ib) {
+                return (a.name || '').localeCompare(b.name || '')
+              }
+              return ia - ib
+            })
           } else {
-            setErr(t(language, 'DashboardBranchesLoadFailed'))
+            // fallback: alfabetico se non c'è ordine salvato
+            rows = [...rows].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
           }
+
+          if (!ignore) {
+            setBranches(rows)
+          }
+        } catch {
+          if (!ignore) {
+            const snap = loadProviderSnapshotFromLS()
+            if (snap && snap.length > 0) {
+              setBranches(snap)
+              setErr(null)
+            } else {
+              setErr(t(language, 'DashboardBranchesLoadFailed'))
+            }
+          }
+        } finally {
+          if (!ignore) setLoading(false)
         }
-      } finally {
-        if (!ignore) setLoading(false)
-      }
-    })()
+      })()
     return () => { ignore = true }
   }, [])
 
@@ -266,7 +266,7 @@ function BranchPickerModal({ onClose }: { onClose: () => void }) {
       const payload = JSON.stringify({ id: b.id, name: b.name, address: b.address || '' })
       localStorage.setItem(LS_BRANCH_JSON, payload)     // nuovo formato
       localStorage.setItem(LS_BRANCH_LEGACY, b.name)    // legacy nome semplice
-    } catch {}
+    } catch { }
     onClose()
     // Qui andiamo direttamente alla lista dei closing
     router.push('/daily-reports/closinglist')

@@ -1,9 +1,10 @@
-'use client'
-
 import LeftNavEvent from '@/components/LeftNavEvent'
 import { EventCalcProvider } from './_state/EventCalcProvider'
+import { requireAuth } from '@/lib/auth-check'
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default async function Layout({ children }: { children: React.ReactNode }) {
+  await requireAuth()
+
   return (
     <EventCalcProvider>
       <div className="min-h-screen flex">

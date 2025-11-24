@@ -520,6 +520,7 @@ declare
   owners_count int;
   default_role text := 'staff';
   _updated int;
+  _name text;
 begin
   -- Se è il primo owner del sistema, promuovi a owner
   select count(*) into owners_count from public.app_accounts where role = 'owner';
@@ -527,10 +528,17 @@ begin
     default_role := 'owner';
   end if;
 
+  -- Extract name from metadata
+  _name := new.raw_user_meta_data->>'full_name';
+  if _name is null or _name = '' then
+    _name := new.raw_user_meta_data->>'name';
+  end if;
+
   -- 1) prova ad AGGANCIARSI ad una riga invito già esistente per email (case-insensitive)
   update public.app_accounts a
      set user_id  = new.id,
-         is_active = true
+         is_active = true,
+         name = coalesce(a.name, _name)
    where a.user_id is null
      and lower(a.email) = lower(coalesce(new.email, ''))
   returning 1 into _updated;
@@ -540,9 +548,10 @@ begin
   end if;
 
   -- 2) altrimenti inserisci una nuova riga per questo user_id
-  insert into public.app_accounts (user_id, email, role, is_active)
-  values (new.id, coalesce(new.email, ''), default_role, true)
-  on conflict (user_id) do nothing;
+  insert into public.app_accounts (user_id, email, role, is_active, name)
+  values (new.id, coalesce(new.email, ''), default_role, true, _name)
+  on conflict (user_id) do update
+  set name = excluded.name where app_accounts.name is null;
 
   return new;
 end;
