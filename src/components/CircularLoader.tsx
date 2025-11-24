@@ -1,9 +1,9 @@
 // src/components/CircularLoader.tsx
-export default function CircularLoader() {
+export default function CircularLoader({ label }: { label?: string }) {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+    <div className="fixed inset-0 flex flex-col items-center justify-center bg-black/50 z-50">
       <svg
-        className="animate-spin h-16 w-16 text-blue-500"
+        className="animate-spin h-16 w-16 text-blue-500 mb-4"
         viewBox="0 0 50 50"
       >
         <circle
@@ -28,6 +28,7 @@ export default function CircularLoader() {
           fill="none"
         />
       </svg>
+      {label && <span className="text-white text-lg font-medium">{label}</span>}
     </div>
   )
 }

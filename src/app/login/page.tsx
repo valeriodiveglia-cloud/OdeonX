@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
 import { t, type Lang } from '@/lib/i18n'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 
 export default function LoginPage() {
   const { language: lang, setLanguage } = useSettings()
@@ -27,8 +28,8 @@ export default function LoginPage() {
 
     const { error } = await supabase.auth.signInWithPassword({ email, password })
 
-    setSubmitting(false)
     if (error) {
+      setSubmitting(false)
       setMessage(error.message)
       return
     }
@@ -43,11 +44,10 @@ export default function LoginPage() {
       <button
         type="button"
         onClick={() => setLanguage(code)}
-        className={`px-2 py-1 rounded-lg text-sm border ${
-          active
+        className={`px-2 py-1 rounded-lg text-sm border ${active
             ? 'bg-blue-600 text-white border-blue-700'
             : 'bg-white text-blue-700 border-blue-400 hover:bg-blue-50'
-        }`}
+          }`}
         aria-pressed={active}
       >
         {label}
@@ -116,6 +116,7 @@ export default function LoginPage() {
           </div>
         )}
       </div>
+      {submitting && <CircularLoader label={t(lang, 'LoggingIn') + '...'} />}
     </div>
   )
 }
