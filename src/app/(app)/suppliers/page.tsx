@@ -12,7 +12,9 @@ import {
   PlusIcon,
   TrashIcon,
   XMarkIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 import ExcelJS from 'exceljs'
 
 /* ---------- DB ---------- */
@@ -167,18 +169,18 @@ function SupplierEditor(props: {
               <div>
                 <label className="text-sm text-gray-800">{t('PointOfContact', lang)}</label>
                 <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
-                       value={poc} onChange={e => setPoc(e.target.value)} disabled={viewMode} />
+                  value={poc} onChange={e => setPoc(e.target.value)} disabled={viewMode} />
               </div>
               <div>
                 <label className="text-sm text-gray-800">{t('Phone', lang)}</label>
                 <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
-                       value={phone} onChange={e => setPhone(e.target.value)} disabled={viewMode} />
+                  value={phone} onChange={e => setPhone(e.target.value)} disabled={viewMode} />
               </div>
 
               <div className="col-span-2">
                 <label className="text-sm text-gray-800">{t('Email', lang)}</label>
                 <input type="email" className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
-                       value={email} onChange={e => setEmail(e.target.value)} disabled={viewMode} />
+                  value={email} onChange={e => setEmail(e.target.value)} disabled={viewMode} />
               </div>
             </div>
           </SectionCard>
@@ -188,23 +190,23 @@ function SupplierEditor(props: {
               <div>
                 <label className="text-sm text-gray-800">{t('OrderMethod', lang)}</label>
                 <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
-                       value={orderMethod} onChange={e => setOrderMethod(e.target.value)} disabled={viewMode} />
+                  value={orderMethod} onChange={e => setOrderMethod(e.target.value)} disabled={viewMode} />
               </div>
               <div>
                 <label className="text-sm text-gray-800">{t('PaymentTerm', lang)}</label>
                 <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
-                       value={paymentTerm} onChange={e => setPaymentTerm(e.target.value)} disabled={viewMode} />
+                  value={paymentTerm} onChange={e => setPaymentTerm(e.target.value)} disabled={viewMode} />
               </div>
               <div className="col-span-2">
                 <label className="text-sm text-gray-800">{t('PaymentMethod', lang)}</label>
                 <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
-                       value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} disabled={viewMode} />
+                  value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} disabled={viewMode} />
               </div>
 
               <div className="col-span-2">
                 <label className="text-sm text-gray-800">{t('Notes', lang)}</label>
                 <input className="mt-1 w-full border rounded-lg px-2 py-1 h-10"
-                       value={notes} onChange={e => setNotes(e.target.value)} disabled={viewMode} />
+                  value={notes} onChange={e => setNotes(e.target.value)} disabled={viewMode} />
               </div>
             </div>
           </SectionCard>
@@ -413,7 +415,7 @@ export default function SuppliersPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `suppliers_${new Date().toISOString().slice(0,10)}.xlsx`
+      a.download = `suppliers_${new Date().toISOString().slice(0, 10)}.xlsx`
       document.body.appendChild(a); a.click(); a.remove()
       URL.revokeObjectURL(url)
     } catch (err: any) {
@@ -421,7 +423,7 @@ export default function SuppliersPage() {
     }
   }
 
-  if (loading) return <div className="p-6">{t('Loading', language)}</div>
+  if (loading) return <CircularLoader />
 
   return (
     <div className="max-w-7xl mx-auto p-4 text-gray-100">
@@ -476,11 +478,10 @@ export default function SuppliersPage() {
 
           <button
             onClick={() => setSelectMode(s => !s)}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-              selectMode
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-            }`}
+            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+              }`}
             title={selectMode ? (t('ExitSelection', language) || 'Exit selection') : (t('EnterSelection', language) || 'Select')}
           >
             <CheckCircleIcon className="w-5 h-5" />
@@ -597,7 +598,7 @@ export default function SuppliersPage() {
                     <button type="button" onClick={() => toggleSort(key)} className="w-full cursor-pointer">
                       <div className="flex items-center gap-1 justify-start font-semibold">
                         <span>{t(label as any, language) || label}</span>
-                        <SortIcon active={sortCol===key} asc={sortAsc} />
+                        <SortIcon active={sortCol === key} asc={sortAsc} />
                       </div>
                     </button>
                   </th>
@@ -606,50 +607,50 @@ export default function SuppliersPage() {
             </thead>
 
             <tbody>
-  {filtered.map(it => {
-    const isSelected = !!selected[it.id]
-    return (
-      <tr
-        key={it.id}
-        className={`border-t hover:bg-blue-50/40 cursor-pointer ${isSelected ? 'bg-blue-100/70' : ''}`}
-        onClick={() => openView(it)}
-        onDoubleClick={() => openEdit(it)}
-      >
-        {/* checkbox: non propagare il click */}
-        <td
-          className="p-2"
-          onClick={e => e.stopPropagation()}
-          onDoubleClick={e => e.stopPropagation()}
-        >
-          {selectMode && (
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={isSelected}
-              onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
-            />
-          )}
-        </td>
+              {filtered.map(it => {
+                const isSelected = !!selected[it.id]
+                return (
+                  <tr
+                    key={it.id}
+                    className={`border-t hover:bg-blue-50/40 cursor-pointer ${isSelected ? 'bg-blue-100/70' : ''}`}
+                    onClick={() => openView(it)}
+                    onDoubleClick={() => openEdit(it)}
+                  >
+                    {/* checkbox: non propagare il click */}
+                    <td
+                      className="p-2"
+                      onClick={e => e.stopPropagation()}
+                      onDoubleClick={e => e.stopPropagation()}
+                    >
+                      {selectMode && (
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={isSelected}
+                          onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
+                        />
+                      )}
+                    </td>
 
-        {/* niente link blu: il click è sulla riga */}
-        <td className="p-2 font-medium">{it.name}</td>
-        <td className="p-2">{it.poc}</td>
-        <td className="p-2 truncate">{it.email}</td>
-        <td className="p-2">{it.phone}</td>
-        <td className="p-2">{it.order_method}</td>
-        <td className="p-2">{it.payment_term}</td>
-        <td className="p-2">{it.payment_method}</td>
-        <td className="p-2 truncate">{it.notes}</td>
-      </tr>
-    )
-  })}
-</tbody>
+                    {/* niente link blu: il click è sulla riga */}
+                    <td className="p-2 font-medium">{it.name}</td>
+                    <td className="p-2">{it.poc}</td>
+                    <td className="p-2 truncate">{it.email}</td>
+                    <td className="p-2">{it.phone}</td>
+                    <td className="p-2">{it.order_method}</td>
+                    <td className="p-2">{it.payment_term}</td>
+                    <td className="p-2">{it.payment_method}</td>
+                    <td className="p-2 truncate">{it.notes}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
 
           </table>
         </div>
       </div>
 
-     {openEditor && (
+      {openEditor && (
         <SupplierEditor
           mode={editorMode}
           id={editingId}
@@ -665,6 +666,6 @@ export default function SuppliersPage() {
           }}
         />
       )}
-    </div>        
-  )               
+    </div>
+  )
 }

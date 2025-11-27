@@ -14,7 +14,9 @@ import {
   PlusIcon,
   EllipsisVerticalIcon,
   CheckCircleIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 import Papa from 'papaparse'
 import ExcelJS from 'exceljs'
 
@@ -488,7 +490,7 @@ function EquipmentEditor(props: EditorProps) {
 
   const [addType, setAddType] = useState<null | 'category' | 'supplier'>(null)
 
-    useEffect(() => {
+  useEffect(() => {
     if (mode === 'edit' || mode === 'view') {
       const h = initial || {}
       setName(h.name || '')
@@ -534,7 +536,7 @@ function EquipmentEditor(props: EditorProps) {
     return (withVat * markupNum).toFixed(2)
   }, [cost, vatEnabled, vatRatePct, vatRate, markupNum])
 
-    const costOk = useMemo(() => {
+  const costOk = useMemo(() => {
     const n = Number(cost)
     return cost.trim() !== '' && Number.isFinite(n) && n > 0
   }, [cost])
@@ -546,7 +548,7 @@ function EquipmentEditor(props: EditorProps) {
     && costOk
 
 
-    async function save() {
+  async function save() {
     if (viewMode) return
 
     const cNum = cost ? Number(cost) : null
@@ -889,7 +891,7 @@ function ResolveImportModal({
   }, [rows])
 
   // Add all: marca tutte le nuove categorie/fornitori da creare
-   // Add all: marca tutte le nuove categorie/fornitori da creare
+  // Add all: marca tutte le nuove categorie/fornitori da creare
   function handleAddAll() {
     const nc: Record<string, boolean> = {}
     const ns: Record<string, boolean> = {}
@@ -1249,56 +1251,56 @@ export default function EquipmentPage() {
 
   // Helpers VAT & Final
   function effVatPct(e: Equip) {
-  if (!vatEnabled) return 0
-  // se l’item non ha la VAT impostata, usa il default dei Settings
-  const raw = e.vat_rate_percent
-  const v = raw == null ? (vatRate ?? 0) : Number(raw)
-  return Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0))
-}
+    if (!vatEnabled) return 0
+    // se l’item non ha la VAT impostata, usa il default dei Settings
+    const raw = e.vat_rate_percent
+    const v = raw == null ? (vatRate ?? 0) : Number(raw)
+    return Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0))
+  }
 
-const defaultMarkup = Number(defaultMarkupEquipmentPct ?? 1.5)
+  const defaultMarkup = Number(defaultMarkupEquipmentPct ?? 1.5)
 
-function finalCalc(e: Equip) {
-  const c = e.cost ?? 0
-  const base = vatEnabled ? c * (1 + effVatPct(e) / 100) : c
-  const m = e.markup_x ?? defaultMarkup
-  return base * m
-}
+  function finalCalc(e: Equip) {
+    const c = e.cost ?? 0
+    const base = vatEnabled ? c * (1 + effVatPct(e) / 100) : c
+    const m = e.markup_x ?? defaultMarkup
+    return base * m
+  }
 
   function applyFilters(list: Equip[]) {
-  let r = [...list]
+    let r = [...list]
 
-  if (filters.name.trim()) {
-    r = r.filter(x => x.name.toLowerCase().includes(filters.name.trim().toLowerCase()))
-  }
-  if (filters.categoryId !== '') {
-    r = r.filter(x => x.category_id === Number(filters.categoryId))
-  }
-  if (filters.supplierId !== '') {
-    r = r.filter(x => x.supplier_id === String(filters.supplierId))
-  }
-
-  r.sort((a, b) => {
-    const getVal = (it: Equip): any => {
-      switch (sortCol) {
-        case 'category_id': return it.category_id ?? -Infinity
-        case 'supplier_id': return it.supplier_id ?? ''
-        case 'cost':       return it.cost ?? -Infinity
-        case 'vat_rate':   return effVatPct(it)
-        case 'final_calc': return finalCalc(it)
-        case 'last_update':return it.last_update ? new Date(it.last_update).getTime() : 0
-        case 'notes':      return (it.notes ?? '').toLowerCase()
-        case 'name':
-        default:           return (it.name ?? '').toLowerCase()
-      }
+    if (filters.name.trim()) {
+      r = r.filter(x => x.name.toLowerCase().includes(filters.name.trim().toLowerCase()))
     }
-    const av = getVal(a)
-    const bv = getVal(b)
-    const cmp = (typeof av === 'number' && typeof bv === 'number')
-      ? av - bv
-      : String(av).localeCompare(String(bv), undefined, { numeric: true })
-    return sortAsc ? cmp : -cmp
-  })
+    if (filters.categoryId !== '') {
+      r = r.filter(x => x.category_id === Number(filters.categoryId))
+    }
+    if (filters.supplierId !== '') {
+      r = r.filter(x => x.supplier_id === String(filters.supplierId))
+    }
+
+    r.sort((a, b) => {
+      const getVal = (it: Equip): any => {
+        switch (sortCol) {
+          case 'category_id': return it.category_id ?? -Infinity
+          case 'supplier_id': return it.supplier_id ?? ''
+          case 'cost': return it.cost ?? -Infinity
+          case 'vat_rate': return effVatPct(it)
+          case 'final_calc': return finalCalc(it)
+          case 'last_update': return it.last_update ? new Date(it.last_update).getTime() : 0
+          case 'notes': return (it.notes ?? '').toLowerCase()
+          case 'name':
+          default: return (it.name ?? '').toLowerCase()
+        }
+      }
+      const av = getVal(a)
+      const bv = getVal(b)
+      const cmp = (typeof av === 'number' && typeof bv === 'number')
+        ? av - bv
+        : String(av).localeCompare(String(bv), undefined, { numeric: true })
+      return sortAsc ? cmp : -cmp
+    })
 
     return r
   }
@@ -1404,53 +1406,53 @@ function finalCalc(e: Equip) {
       }
 
       const cost = moneyToNumber(r.cost)
-// ✅ Se VAT disattivo → null; se attivo → numero
-// nuovo: se nel CSV c'è un VAT valido, usa quello; altrimenti fallback ai settings
-let vatPctNum: number | null = null
-if (vatEnabled) {
-  const fromCsv = r.vat_rate_percent
-  if (fromCsv == null || String(fromCsv).trim?.() === '') {
-    vatPctNum = Number(vatRate ?? 0)
-  } else {
-    const s = String(fromCsv).trim().replace('%', '').replace(/\s+/g, '').replace(',', '.')
-    const n = Number(s)
-    vatPctNum = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : Number(vatRate ?? 0)
-  }
-} else {
-  vatPctNum = null
-}
+      // ✅ Se VAT disattivo → null; se attivo → numero
+      // nuovo: se nel CSV c'è un VAT valido, usa quello; altrimenti fallback ai settings
+      let vatPctNum: number | null = null
+      if (vatEnabled) {
+        const fromCsv = r.vat_rate_percent
+        if (fromCsv == null || String(fromCsv).trim?.() === '') {
+          vatPctNum = Number(vatRate ?? 0)
+        } else {
+          const s = String(fromCsv).trim().replace('%', '').replace(/\s+/g, '').replace(',', '.')
+          const n = Number(s)
+          vatPctNum = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : Number(vatRate ?? 0)
+        }
+      } else {
+        vatPctNum = null
+      }
 
 
-// ✅ Nessun calcolo di final_price lato client: pensa a tutto il trigger in DB
-const proposed = {
-  name,
-  category_id,
-  supplier_id,
-  cost,
-  markup_x: defaultMarkup,
-  vat_rate_percent: vatPctNum,
-  notes: r.notes || null,
-}
+      // ✅ Nessun calcolo di final_price lato client: pensa a tutto il trigger in DB
+      const proposed = {
+        name,
+        category_id,
+        supplier_id,
+        cost,
+        markup_x: defaultMarkup,
+        vat_rate_percent: vatPctNum,
+        notes: r.notes || null,
+      }
 
       const candidates = listByKey.get(key) || []
       const bySupplier = candidates.find(m => m.supplier_id === supplier_id)
       const byCategory = candidates.find(m => m.category_id === category_id)
       const mostRecent = candidates.length
         ? [...candidates].sort((a, b) =>
-            (new Date(b.last_update || b.created_at).getTime()) -
-            (new Date(a.last_update || a.created_at).getTime())
-          )[0]
+          (new Date(b.last_update || b.created_at).getTime()) -
+          (new Date(a.last_update || a.created_at).getTime())
+        )[0]
         : null
       const existing = bySupplier || byCategory || mostRecent || null
 
       if (existing) {
         const changed =
-          (existing.category_id ?? null)       !== (proposed.category_id ?? null) ||
-          (existing.supplier_id ?? null)       !== (proposed.supplier_id ?? null) ||
-          (existing.cost ?? null)              !== (proposed.cost ?? null) ||
-          (existing.vat_rate_percent ?? null)  !== (proposed.vat_rate_percent ?? null) ||
-          (existing.markup_x ?? null)          !== (proposed.markup_x ?? null) ||
-          (existing.notes ?? null)             !== (proposed.notes ?? null)
+          (existing.category_id ?? null) !== (proposed.category_id ?? null) ||
+          (existing.supplier_id ?? null) !== (proposed.supplier_id ?? null) ||
+          (existing.cost ?? null) !== (proposed.cost ?? null) ||
+          (existing.vat_rate_percent ?? null) !== (proposed.vat_rate_percent ?? null) ||
+          (existing.markup_x ?? null) !== (proposed.markup_x ?? null) ||
+          (existing.notes ?? null) !== (proposed.notes ?? null)
 
 
         if (!changed) {
@@ -1512,39 +1514,39 @@ ${t('Skipped', language)}: ${skipped}`)
       const bad: Bad[] = []
 
       const data: CsvRow[] = cleaned.map((r, idx) => {
-  const equipment = String(r['equipment'] ?? '').trim()
-  const category  = String(r['category'] ?? '').trim()
-  const supplier  = String(r['supplier'] ?? '').trim()
-  const rawCost   = r['cost']
-  const notes     = r['notes'] ?? null
+        const equipment = String(r['equipment'] ?? '').trim()
+        const category = String(r['category'] ?? '').trim()
+        const supplier = String(r['supplier'] ?? '').trim()
+        const rawCost = r['cost']
+        const notes = r['notes'] ?? null
 
-  // NEW: lettura/normalizzazione VAT (opzionale)
-  const rawVat = r['vat_rate_percent']
-  // accetta "21", "21.0", "21,0" → clamp 0..100; se vuoto o non numerico → null
-  const vat_rate_percent =
-    rawVat == null || String(rawVat).trim() === ''
-      ? null
-      : (() => {
-          const n = Number(String(rawVat).replace(',', '.'))
-          return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null
-        })()
+        // NEW: lettura/normalizzazione VAT (opzionale)
+        const rawVat = r['vat_rate_percent']
+        // accetta "21", "21.0", "21,0" → clamp 0..100; se vuoto o non numerico → null
+        const vat_rate_percent =
+          rawVat == null || String(rawVat).trim() === ''
+            ? null
+            : (() => {
+              const n = Number(String(rawVat).replace(',', '.'))
+              return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null
+            })()
 
-  const missing: string[] = []
-  if (!equipment) missing.push(t('Equipment', language))
-  if (!category)  missing.push(t('Category', language))
-  if (!supplier)  missing.push(t('Supplier', language))
-  if (rawCost == null || String(rawCost).trim() === '') missing.push(t('Cost', language))
+        const missing: string[] = []
+        if (!equipment) missing.push(t('Equipment', language))
+        if (!category) missing.push(t('Category', language))
+        if (!supplier) missing.push(t('Supplier', language))
+        if (rawCost == null || String(rawCost).trim() === '') missing.push(t('Cost', language))
 
-  if (missing.length) bad.push({ row: idx + 2, missing })
+        if (missing.length) bad.push({ row: idx + 2, missing })
 
-  return { equipment, category, supplier, cost: rawCost, notes, vat_rate_percent }
-})
-.filter(r =>
-  r.equipment.length > 0 &&
-  r.category.length  > 0 &&
-  r.supplier.length  > 0 &&
-  r.cost !== null && String(r.cost).trim() !== ''
-)
+        return { equipment, category, supplier, cost: rawCost, notes, vat_rate_percent }
+      })
+        .filter(r =>
+          r.equipment.length > 0 &&
+          r.category.length > 0 &&
+          r.supplier.length > 0 &&
+          r.cost !== null && String(r.cost).trim() !== ''
+        )
 
 
       if (!data.length) {
@@ -1591,7 +1593,7 @@ ${t('Skipped', language)}: ${skipped}`)
           (m.category_id ?? null) === (csvCatId ?? null) &&
           (m.supplier_id ?? null) === (csvSupId ?? null)
         )
-                if (alreadyOk) continue
+        if (alreadyOk) continue
 
         const bySupplier = csvSupId ? candidates.find(m => m.supplier_id === csvSupId) : undefined
         const byCategory = csvCatId ? candidates.find(m => m.category_id === csvCatId) : undefined
@@ -1663,8 +1665,8 @@ ${t('Skipped', language)}: ${skipped}`)
 
           const catMap2: Record<string, number> = {}
           const supMap2: Record<string, string> = {}
-          ;(cRes2.data || cats).forEach((c: any) => { catMap2[toKey(c.name)] = c.id })
-          ;(sRes2.data || sups).forEach((s: any) => { supMap2[toKey(s.name)] = s.id })
+            ; (cRes2.data || cats).forEach((c: any) => { catMap2[toKey(c.name)] = c.id })
+            ; (sRes2.data || sups).forEach((s: any) => { supMap2[toKey(s.name)] = s.id })
 
           await runImport(data, catMap2, supMap2, null)
           return
@@ -1677,38 +1679,38 @@ ${t('Skipped', language)}: ${skipped}`)
       }
 
       // Se serve conferma ma NON ci sono conflitti né nuove entità → importa direttamente
-if (needConfirm) {
-  if (conflicts.length === 0 && newCats.length === 0 && newSups.length === 0) {
-    // mappe attuali (niente inserimenti)
-    const catMap2: Record<string, number> = {}
-    const supMap2: Record<string, string> = {}
-    cats.forEach((c: any) => { catMap2[toKey(c.name)] = c.id })
-    sups.forEach((s: any) => { supMap2[toKey(s.name)] = s.id })
+      if (needConfirm) {
+        if (conflicts.length === 0 && newCats.length === 0 && newSups.length === 0) {
+          // mappe attuali (niente inserimenti)
+          const catMap2: Record<string, number> = {}
+          const supMap2: Record<string, string> = {}
+          cats.forEach((c: any) => { catMap2[toKey(c.name)] = c.id })
+          sups.forEach((s: any) => { supMap2[toKey(s.name)] = s.id })
 
-    await runImport(data, catMap2, supMap2, null)
-    return
-  }
-}
+          await runImport(data, catMap2, supMap2, null)
+          return
+        }
+      }
 
-// Apri il modal SOLO se ci sono conflitti o nuove entità
-if (conflicts.length > 0 || newCats.length > 0 || newSups.length > 0) {
-  setUnifiedOpen({
-    conflicts,
-    rows: data,
-    newValues: { categories: newCats, suppliers: newSups },
-  })
-  return
-}
+      // Apri il modal SOLO se ci sono conflitti o nuove entità
+      if (conflicts.length > 0 || newCats.length > 0 || newSups.length > 0) {
+        setUnifiedOpen({
+          conflicts,
+          rows: data,
+          newValues: { categories: newCats, suppliers: newSups },
+        })
+        return
+      }
 
-// Caso residuale: nessun conflitto e nessuna nuova entità, e (stranamente) needConfirm==false
-{
-  const catMap2: Record<string, number> = {}
-  const supMap2: Record<string, string> = {}
-  cats.forEach((c: any) => { catMap2[toKey(c.name)] = c.id })
-  sups.forEach((s: any) => { supMap2[toKey(s.name)] = s.id })
-  await runImport(data, catMap2, supMap2, null)
-  return
-}
+      // Caso residuale: nessun conflitto e nessuna nuova entità, e (stranamente) needConfirm==false
+      {
+        const catMap2: Record<string, number> = {}
+        const supMap2: Record<string, string> = {}
+        cats.forEach((c: any) => { catMap2[toKey(c.name)] = c.id })
+        sups.forEach((s: any) => { supMap2[toKey(s.name)] = s.id })
+        await runImport(data, catMap2, supMap2, null)
+        return
+      }
 
 
     } catch (err: any) {
@@ -1810,103 +1812,103 @@ if (conflicts.length > 0 || newCats.length > 0 || newSups.length > 0) {
 
   useEffect(() => { if (!selectMode) setSelected({}) }, [selectMode])
 
-    // === Conferma dal ResolveImportModal ===
-const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
-  if (!unifiedOpen) return
-  const pending = unifiedOpen
-  setUnifiedOpen(null)
-  setProgress(0)
+  // === Conferma dal ResolveImportModal ===
+  const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
+    if (!unifiedOpen) return
+    const pending = unifiedOpen
+    setUnifiedOpen(null)
+    setProgress(0)
 
-  try {
-    try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch {}
-    await new Promise<void>(r => requestAnimationFrame(() => r()))
+    try {
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch { }
+      await new Promise<void>(r => requestAnimationFrame(() => r()))
 
-    // Raccogli le nuove entità da creare
-    const toCreateCats = new Set<string>()
-    const toCreateSups = new Set<string>()
+      // Raccogli le nuove entità da creare
+      const toCreateCats = new Set<string>()
+      const toCreateSups = new Set<string>()
 
-    for (const v of Object.values(choice.categoryByKey || {}))
-      if (typeof v === 'string' && v.startsWith('__create__:'))
-        toCreateCats.add(v.split(':', 2)[1])
+      for (const v of Object.values(choice.categoryByKey || {}))
+        if (typeof v === 'string' && v.startsWith('__create__:'))
+          toCreateCats.add(v.split(':', 2)[1])
 
-    for (const v of Object.values(choice.supplierByKey || {}))
-      if (typeof v === 'string' && v.startsWith('__create__:'))
-        toCreateSups.add(v.split(':', 2)[1])
+      for (const v of Object.values(choice.supplierByKey || {}))
+        if (typeof v === 'string' && v.startsWith('__create__:'))
+          toCreateSups.add(v.split(':', 2)[1])
 
-    for (const [name, label] of Object.entries(choice.newCategoryMap || {}))
-      if (label && String(label).startsWith('__create__:')) toCreateCats.add(name)
+      for (const [name, label] of Object.entries(choice.newCategoryMap || {}))
+        if (label && String(label).startsWith('__create__:')) toCreateCats.add(name)
 
-    for (const [name, label] of Object.entries(choice.newSupplierMap || {}))
-      if (label && String(label).startsWith('__create__:')) toCreateSups.add(name)
+      for (const [name, label] of Object.entries(choice.newSupplierMap || {}))
+        if (label && String(label).startsWith('__create__:')) toCreateSups.add(name)
 
-    for (const [name, yes] of Object.entries(choice.toCreateCats || {}))
-      if (yes) toCreateCats.add(name)
+      for (const [name, yes] of Object.entries(choice.toCreateCats || {}))
+        if (yes) toCreateCats.add(name)
 
-    for (const [name, yes] of Object.entries(choice.toCreateSups || {}))
-      if (yes) toCreateSups.add(name)
+      for (const [name, yes] of Object.entries(choice.toCreateSups || {}))
+        if (yes) toCreateSups.add(name)
 
-    // Crea nuove categorie/fornitori se richiesti
-    const { data: insCats, error: insCatsErr } = toCreateCats.size
-      ? await supabase.from(TBL_EQ_CATS).insert([...toCreateCats].map(n => ({ name: capitalizeFirst(n) }))).select()
-      : { data: [] as { id: number; name: string }[], error: null as any }
+      // Crea nuove categorie/fornitori se richiesti
+      const { data: insCats, error: insCatsErr } = toCreateCats.size
+        ? await supabase.from(TBL_EQ_CATS).insert([...toCreateCats].map(n => ({ name: capitalizeFirst(n) }))).select()
+        : { data: [] as { id: number; name: string }[], error: null as any }
 
-    const { data: insSups, error: insSupsErr } = toCreateSups.size
-      ? await supabase.from(TBL_SUPS).insert([...toCreateSups].map(n => ({ name: capitalizeFirst(n) }))).select()
-      : { data: [] as { id: string; name: string }[], error: null as any }
+      const { data: insSups, error: insSupsErr } = toCreateSups.size
+        ? await supabase.from(TBL_SUPS).insert([...toCreateSups].map(n => ({ name: capitalizeFirst(n) }))).select()
+        : { data: [] as { id: string; name: string }[], error: null as any }
 
-    if (insCatsErr || insSupsErr) throw (insCatsErr || insSupsErr)
+      if (insCatsErr || insSupsErr) throw (insCatsErr || insSupsErr)
 
-    // Map nome normalizzato -> id (esistenti + nuovi)
-    const catMap: Record<string, number> = {}
-    const supMap: Record<string, string> = {}
-    cats.forEach(c => { catMap[normKey(c.name)] = c.id })
-    sups.forEach(s => { supMap[normKey(s.name)] = s.id })
-    insCats?.forEach(c => { catMap[normKey(c.name)] = c.id })
-    insSups?.forEach(s => { supMap[normKey(s.name)] = s.id })
+      // Map nome normalizzato -> id (esistenti + nuovi)
+      const catMap: Record<string, number> = {}
+      const supMap: Record<string, string> = {}
+      cats.forEach(c => { catMap[normKey(c.name)] = c.id })
+      sups.forEach(s => { supMap[normKey(s.name)] = s.id })
+      insCats?.forEach(c => { catMap[normKey(c.name)] = c.id })
+      insSups?.forEach(s => { supMap[normKey(s.name)] = s.id })
 
-    // Risolvi override del modal
-    const resolvedOverrides: UnifiedChoice = {
-      categoryByKey: {},
-      supplierByKey: {},
-      newCategoryMap: {},
-      newSupplierMap: {},
-      toCreateCats: {},
-      toCreateSups: {},
-    }
-
-    for (const [k, v] of Object.entries(choice.categoryByKey || {})) {
-      if (v == null || v === '') resolvedOverrides.categoryByKey[k] = null
-      else if (typeof v === 'string' && v.startsWith('__create__:')) {
-        const name = normKey(v.split(':', 2)[1])
-        resolvedOverrides.categoryByKey[k] = catMap[name]
-      } else {
-        resolvedOverrides.categoryByKey[k] = Number(v)
+      // Risolvi override del modal
+      const resolvedOverrides: UnifiedChoice = {
+        categoryByKey: {},
+        supplierByKey: {},
+        newCategoryMap: {},
+        newSupplierMap: {},
+        toCreateCats: {},
+        toCreateSups: {},
       }
-    }
 
-    for (const [k, v] of Object.entries(choice.supplierByKey || {})) {
-      if (v == null || v === '') resolvedOverrides.supplierByKey[k] = null
-      else if (typeof v === 'string' && v.startsWith('__create__:')) {
-        const name = normKey(v.split(':', 2)[1])
-        resolvedOverrides.supplierByKey[k] = supMap[name]
-      } else {
-        resolvedOverrides.supplierByKey[k] = v
+      for (const [k, v] of Object.entries(choice.categoryByKey || {})) {
+        if (v == null || v === '') resolvedOverrides.categoryByKey[k] = null
+        else if (typeof v === 'string' && v.startsWith('__create__:')) {
+          const name = normKey(v.split(':', 2)[1])
+          resolvedOverrides.categoryByKey[k] = catMap[name]
+        } else {
+          resolvedOverrides.categoryByKey[k] = Number(v)
+        }
       }
+
+      for (const [k, v] of Object.entries(choice.supplierByKey || {})) {
+        if (v == null || v === '') resolvedOverrides.supplierByKey[k] = null
+        else if (typeof v === 'string' && v.startsWith('__create__:')) {
+          const name = normKey(v.split(':', 2)[1])
+          resolvedOverrides.supplierByKey[k] = supMap[name]
+        } else {
+          resolvedOverrides.supplierByKey[k] = v
+        }
+      }
+
+      // Esegui l’import
+      await runImport(pending.rows, catMap, supMap, resolvedOverrides)
+    } catch (err: any) {
+      alert(`${t('ImportFailed', language)}: ${err?.message || String(err)}`)
+    } finally {
+      await new Promise(r => setTimeout(r, 200))
+      setProgress(null)
+      if (fileRef.current) fileRef.current.value = ''
     }
+  }, [unifiedOpen, cats, sups, language])
 
-    // Esegui l’import
-    await runImport(pending.rows, catMap, supMap, resolvedOverrides)
-  } catch (err: any) {
-    alert(`${t('ImportFailed', language)}: ${err?.message || String(err)}`)
-  } finally {
-    await new Promise(r => setTimeout(r, 200))
-    setProgress(null)
-    if (fileRef.current) fileRef.current.value = ''
-  }
-}, [unifiedOpen, cats, sups, language])
-  
 
-    function toggleSelectAllVisible() {
+  function toggleSelectAllVisible() {
     const next: Record<string, boolean> = { ...selected }
     if (allVisibleSelected) {
       for (const m of filtered) next[m.id] = false
@@ -1960,7 +1962,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
     }
   }
 
-    // === Bulk edit MARKUP ===
+  // === Bulk edit MARKUP ===
   async function bulkApplyMarkup(mode: 'set' | 'delta', value: number) {
     if (selectedIds.length === 0) { setShowMarkupModal(false); return }
     try {
@@ -1990,7 +1992,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
     }
   }
 
-  if (loading) return <div className="p-6">{t('Loading', language)}</div>
+  if (loading) return <CircularLoader />
 
   return (
     <div className="max-w-7xl mx-auto p-4 text-gray-100">
@@ -2085,11 +2087,10 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
 
           <button
             onClick={() => setSelectMode(s => !s)}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-              selectMode
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-            }`}
+            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+              }`}
             title={selectMode ? t('ExitSelection', language) : t('EnterSelection', language)}
           >
             <CheckCircleIcon className="w-5 h-5" />
@@ -2145,7 +2146,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
         </div>
       </div>
 
-              {/* Table */}
+      {/* Table */}
       <div className="bg-white rounded-2xl shadow p-3">
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed text-sm text-gray-900">
@@ -2182,7 +2183,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                   <button type="button" onClick={() => toggleSort('name')} className="w-full cursor-pointer">
                     <div className="flex items-center gap-1 justify-start font-semibold">
                       <span>{t('Equipment', language)}</span>
-                      <SortIcon active={sortCol==='name'} asc={sortAsc} />
+                      <SortIcon active={sortCol === 'name'} asc={sortAsc} />
                     </div>
                   </button>
                 </th>
@@ -2191,7 +2192,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                   <button type="button" onClick={() => toggleSort('category_id')} className="w-full cursor-pointer">
                     <div className="flex items-center gap-1 justify-start font-semibold">
                       <span>{t('Category', language)}</span>
-                      <SortIcon active={sortCol==='category_id'} asc={sortAsc} />
+                      <SortIcon active={sortCol === 'category_id'} asc={sortAsc} />
                     </div>
                   </button>
                 </th>
@@ -2200,7 +2201,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                   <button type="button" onClick={() => toggleSort('supplier_id')} className="w-full cursor-pointer">
                     <div className="flex items-center gap-1 justify-start font-semibold">
                       <span>{t('Supplier', language)}</span>
-                      <SortIcon active={sortCol==='supplier_id'} asc={sortAsc} />
+                      <SortIcon active={sortCol === 'supplier_id'} asc={sortAsc} />
                     </div>
                   </button>
                 </th>
@@ -2208,7 +2209,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                 <th className="p-2 text-right">
                   <button type="button" onClick={() => toggleSort('cost')} className="w-full cursor-pointer">
                     <div className="flex items-center gap-1 justify-end font-semibold">
-                      <SortIcon active={sortCol==='cost'} asc={sortAsc} />
+                      <SortIcon active={sortCol === 'cost'} asc={sortAsc} />
                       <span>{t('Cost', language)}</span>
                     </div>
                   </button>
@@ -2218,7 +2219,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                   <th className="p-2 text-right">
                     <button type="button" onClick={() => toggleSort('vat_rate')} className="w-full cursor-pointer">
                       <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortCol==='vat_rate'} asc={sortAsc} />
+                        <SortIcon active={sortCol === 'vat_rate'} asc={sortAsc} />
                         <span>{t('VatRatePct', language)}</span>
                       </div>
                     </button>
@@ -2228,7 +2229,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                 <th className="p-2 text-right">
                   <button type="button" onClick={() => toggleSort('final_calc')} className="w-full cursor-pointer">
                     <div className="flex items-center gap-1 justify-end font-semibold">
-                      <SortIcon active={sortCol==='final_calc'} asc={sortAsc} />
+                      <SortIcon active={sortCol === 'final_calc'} asc={sortAsc} />
                       <span>{t('FinalPrice', language)}</span>
                     </div>
                   </button>
@@ -2237,7 +2238,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                 <th className="p-2 text-right">
                   <button type="button" onClick={() => toggleSort('last_update')} className="w-full cursor-pointer">
                     <div className="flex items-center gap-1 justify-end font-semibold">
-                      <SortIcon active={sortCol==='last_update'} asc={sortAsc} />
+                      <SortIcon active={sortCol === 'last_update'} asc={sortAsc} />
                       <span>{t('LastUpdate', language)}</span>
                     </div>
                   </button>
@@ -2247,7 +2248,7 @@ const onUnifiedConfirm = useCallback(async (choice: UnifiedChoice) => {
                   <button type="button" onClick={() => toggleSort('notes')} className="w-full cursor-pointer">
                     <div className="flex items-center gap-1 justify-start font-semibold">
                       <span>{t('Notes', language)}</span>
-                      <SortIcon active={sortCol==='notes'} asc={sortAsc} />
+                      <SortIcon active={sortCol === 'notes'} asc={sortAsc} />
                     </div>
                   </button>
                 </th>

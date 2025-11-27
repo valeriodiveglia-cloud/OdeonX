@@ -186,7 +186,7 @@ function computeTotalsForRow(row: DepositRow, allPayments: PaymentItem[]): Total
 
 /* ---------- Hook main ---------- */
 
-export function useDeposits() {
+export function useDeposits(params?: { year?: number; month?: number; branchName?: string | null }) {
   const [rows, setRows] = useState<DepositRow[]>([])
   const [payments, setPayments] = useState<PaymentItem[]>([])
   const [totalsMap, setTotalsMap] = useState<Record<string, Totals>>({})
@@ -201,13 +201,25 @@ export function useDeposits() {
     async function loadAll() {
       setLoading(true)
       try {
-        const [depRes, payRes] = await Promise.all([
-          supabase.from('deposits').select('*'),
-          supabase.from('deposit_payments').select('*'),
-        ])
+        let qDep = supabase.from('deposits').select('*')
 
-        if (!cancelled && !depRes.error && depRes.data) {
-          const mapped: DepositRow[] = depRes.data.map((r: any) => ({
+        if (params?.year != null && params?.month != null) {
+          const start = new Date(params.year, params.month, 1)
+          const end = new Date(params.year, params.month + 1, 1)
+          const p = (n: number) => String(n).padStart(2, '0')
+          const startISO = `${start.getFullYear()}-${p(start.getMonth() + 1)}-${p(start.getDate())}`
+          const endISO = `${end.getFullYear()}-${p(end.getMonth() + 1)}-${p(end.getDate())}`
+          qDep = qDep.gte('date', startISO).lt('date', endISO)
+        }
+
+        if (params?.branchName) {
+          qDep = qDep.eq('branch', params.branchName)
+        }
+
+        const { data: depData, error: depErr } = await qDep
+
+        if (!cancelled && !depErr && depData) {
+          const mapped: DepositRow[] = depData.map((r: any) => ({
             id: String(r.id),
             branch: r.branch ?? null,
             date: r.date || new Date().toISOString().slice(0, 10),
@@ -223,18 +235,29 @@ export function useDeposits() {
             note: r.note ?? null,
           }))
           setRows(mapped)
-        }
 
-        if (!cancelled && !payRes.error && payRes.data) {
-          const mappedPay: PaymentItem[] = payRes.data.map((p: any) => ({
-            id: String(p.id),
-            deposit_id: String(p.deposit_id),
-            amount: Number(p.amount || 0),
-            date: p.date || new Date().toISOString(),
-            note: p.note ?? null,
-            endedBy: p.ended_by ?? null,
-          }))
-          setPayments(mappedPay)
+          // Fetch payments only for these deposits
+          const depIds = mapped.map(d => d.id)
+          if (depIds.length > 0) {
+            const { data: payData, error: payErr } = await supabase
+              .from('deposit_payments')
+              .select('*')
+              .in('deposit_id', depIds)
+
+            if (!cancelled && !payErr && payData) {
+              const mappedPay: PaymentItem[] = payData.map((p: any) => ({
+                id: String(p.id),
+                deposit_id: String(p.deposit_id),
+                amount: Number(p.amount || 0),
+                date: p.date || new Date().toISOString(),
+                note: p.note ?? null,
+                endedBy: p.ended_by ?? null,
+              }))
+              setPayments(mappedPay)
+            }
+          } else {
+            setPayments([])
+          }
         }
       } finally {
         if (!cancelled) setLoading(false)

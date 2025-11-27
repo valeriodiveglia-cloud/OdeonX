@@ -23,6 +23,7 @@ import {
   WalletIcon,
   BuildingLibraryIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 
 import { supabase } from '@/lib/supabase_shim'
 import { useDRBranch } from '../_data/useDRBranch'
@@ -2328,7 +2329,7 @@ export default function DepositsPage() {
       <Card>
         <div className="p-3 overflow-x-auto">
           {showLoading && rows.length === 0 && (
-            <div className="text-sm text-gray-500 py-2">{t.table.loading}</div>
+            <CircularLoader />
           )}
           <DepositsTable
             rows={rows}

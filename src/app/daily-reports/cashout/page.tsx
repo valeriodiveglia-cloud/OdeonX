@@ -61,7 +61,7 @@ function PageHeader({
 
 function SectionCard({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border p-4 bg-white shadow-sm h-full">
+    <div className="rounded-2xl border p-4 bg-white shadow-sm min-h-full">
       {title ? <div className="text-sm font-semibold text-gray-800 mb-3">{title}</div> : null}
       {children}
     </div>
@@ -703,8 +703,8 @@ export default function CashoutPage() {
             <button
               onClick={() => { setSelectMode(s => !s); setMenuOpen(false) }}
               className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
                 }`}
               title={selectMode ? t.select.exitTitle : t.select.enterTitle}
             >

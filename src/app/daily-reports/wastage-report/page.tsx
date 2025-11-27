@@ -20,7 +20,9 @@ import {
   EllipsisVerticalIcon,
   CheckCircleIcon,
   TrashIcon,
+  ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 
 import {
   useWastage,
@@ -1119,7 +1121,7 @@ export default function WastageReportPage() {
 
       <Card>
         <div className="p-3">
-          {loading && <div className="text-sm text-gray-500 py-2">{t.table.loading}</div>}
+          {loading && <CircularLoader />}
 
           <table className="w-full table-auto text-sm text-gray-900">
             <thead>

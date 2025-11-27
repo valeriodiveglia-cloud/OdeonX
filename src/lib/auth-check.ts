@@ -36,3 +36,24 @@ export async function requireAuth() {
 
     return user
 }
+
+export async function requireRole(allowedRoles: string[]) {
+    const user = await requireAuth()
+
+    // Check role in app_accounts
+    const { supaService } = await import('@/lib/server/auth')
+
+    const { data: account } = await supaService
+        .from('app_accounts')
+        .select('role')
+        .eq('user_id', user.id)
+        .single()
+
+    const role = account?.role || 'staff'
+
+    if (!allowedRoles.includes(role)) {
+        redirect('/dashboard')
+    }
+
+    return { user, role }
+}

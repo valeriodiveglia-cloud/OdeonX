@@ -19,7 +19,7 @@ function uuid() {
   try {
     // @ts-ignore
     if (globalThis?.crypto?.randomUUID) return globalThis.crypto.randomUUID()
-  } catch {}
+  } catch { }
   return `id-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
 }
 
@@ -59,7 +59,7 @@ function lsWrite(key: string, res: DistRes) {
   try {
     const payload = JSON.stringify({ v: DIST_CACHE_VER, t: Date.now(), km: Number(res.km || 0), minutes: Number(res.minutes || 0) })
     localStorage.setItem(DIST_LS_PREFIX + key, payload)
-  } catch {}
+  } catch { }
 }
 function cacheGet(country: string, from: string, to: string): { res: DistRes | null; fresh: boolean } {
   const key = mkKey(country, from, to)
@@ -102,7 +102,7 @@ function autoEventId(fallback?: string | null): string | null {
       const fromUrl = u.searchParams.get('eventId')
       if (fromUrl && fromUrl.trim()) return fromUrl.trim()
     }
-  } catch {}
+  } catch { }
   try {
     const ls: any = (globalThis as any)?.localStorage
     const ss: any = (globalThis as any)?.sessionStorage
@@ -125,7 +125,7 @@ function autoEventId(fallback?: string | null): string | null {
 type AddressInputProps = {
   value: string
   onChange: (next: string) => void
-  onCommit?: () => void
+  onCommit?: (val: string) => void
   placeholder?: string
   country?: string
 }
@@ -174,7 +174,7 @@ function AddressInput({ value, onChange, onCommit, placeholder, country = 'VN' }
         value={value ?? ''}
         onChange={e => { onChange(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
-        onBlur={() => { setTimeout(() => setOpen(false), 100); onCommit?.() }}
+        onBlur={() => { setTimeout(() => setOpen(false), 100); onCommit?.(value) }}
         placeholder={placeholder}
       />
       {open && (options.length > 0 || loading) && (
@@ -186,7 +186,7 @@ function AddressInput({ value, onChange, onCommit, placeholder, country = 'VN' }
               type="button"
               className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
               onMouseDown={e => e.preventDefault()}
-              onClick={() => { onChange(opt.label); setOpen(false); onCommit?.() }}
+              onClick={() => { onChange(opt.label); setOpen(false); onCommit?.(opt.label) }}
               title={opt.label}
             >
               {opt.label}
@@ -267,7 +267,7 @@ export default function EventTransportCard({ title }: { title?: string }) {
       await ts.setMarkupX(mx)
       await ts.replaceVehicleTypes(items)
       await ts.refresh()
-      try { localStorage.setItem('eventcalc.settings.bump', String(Date.now())) } catch {}
+      try { localStorage.setItem('eventcalc.settings.bump', String(Date.now())) } catch { }
     } catch (e) {
       console.warn('[transport] adopt global failed:', (e as any)?.message || e)
     } finally {
@@ -279,7 +279,7 @@ export default function EventTransportCard({ title }: { title?: string }) {
   useEffect(() => {
     function onStorage(e: StorageEvent) {
       if (e.key === 'eventcalc.settings.bump') {
-        try { ts?.refresh?.() } catch {}
+        try { ts?.refresh?.() } catch { }
       }
     }
     window.addEventListener('storage', onStorage)
@@ -288,7 +288,7 @@ export default function EventTransportCard({ title }: { title?: string }) {
   useEffect(() => {
     function onVis() {
       if (document.visibilityState === 'visible') {
-        try { ts?.refresh?.() } catch {}
+        try { ts?.refresh?.() } catch { }
       }
     }
     document.addEventListener('visibilitychange', onVis)
@@ -399,10 +399,12 @@ export default function EventTransportCard({ title }: { title?: string }) {
     }
   }, [rows])
 
-  function commitIfReady(rowId: string) {
+  function commitIfReady(rowId: string, overrides?: { from?: string; to?: string }) {
     const row = rows.find(r => r.id === rowId)
     if (!row) return
-    if (row.from && row.to) calcKmForRow(rowId, row.from, row.to)
+    const f = overrides?.from ?? row.from
+    const t = overrides?.to ?? row.to
+    if (f && t) calcKmForRow(rowId, f, t)
   }
 
   // Dirty bridge
@@ -412,7 +414,7 @@ export default function EventTransportCard({ title }: { title?: string }) {
     const dirty = sigDraftMemo !== sigDbMemo
     try {
       window.dispatchEvent(new CustomEvent('eventcalc:dirty', { detail: { card: 'transport', dirty } }))
-    } catch {}
+    } catch { }
   }, [sigDraftMemo, sigDbMemo])
 
   // Persistenza su "Save" globale
@@ -461,7 +463,7 @@ export default function EventTransportCard({ title }: { title?: string }) {
               (existing.notes || '') !== (r.notes || '') ||
               (costPerKm != null && Number(existing.cost_per_km || 0) !== Number(costPerKm)) ||
               (calc && (Number(existing.distance_km || 0) !== Number(calc.km || 0) ||
-                        Number(existing.eta_minutes || 0) !== Math.round(Number(calc.minutes || 0))))
+                Number(existing.eta_minutes || 0) !== Math.round(Number(calc.minutes || 0))))
             if (changed) {
               try {
                 await db.updateRow(r.id, {
@@ -526,10 +528,10 @@ export default function EventTransportCard({ title }: { title?: string }) {
     const price = Number(totals.totalPrice || 0)
     try {
       localStorage.setItem(key, JSON.stringify({ cost, price }))
-    } catch {}
+    } catch { }
     try {
       window.dispatchEvent(new CustomEvent('transport:totals', { detail: { eventId, cost, price } }))
-    } catch {}
+    } catch { }
   }, [eventId, totals.totalCost, totals.totalPrice])
 
   const loading = useDB ? (db.loading || ts.loading) : false
@@ -546,7 +548,7 @@ export default function EventTransportCard({ title }: { title?: string }) {
         <div className="flex items-center gap-3">
           {/* BADGE: markup read-only dal DB */}
           <span className="inline-flex items-center h-9 rounded-lg border border-gray-300 px-2 text-sm text-gray-700 bg-white">
-            {t('eventstaff.markup')} <b className="ml-1">×{dbMarkupX.toFixed(2).replace(/\.?0+$/,'')}</b>
+            {t('eventstaff.markup')} <b className="ml-1">×{dbMarkupX.toFixed(2).replace(/\.?0+$/, '')}</b>
           </span>
 
           {/* ICON BUTTON: adopt global settings */}
@@ -623,7 +625,7 @@ export default function EventTransportCard({ title }: { title?: string }) {
                     <AddressInput
                       value={row.from ?? ''}
                       onChange={v => updateRow(row.id, { from: v })}
-                      onCommit={() => commitIfReady(row.id)}
+                      onCommit={val => commitIfReady(row.id, { from: val })}
                       placeholder={t('eventtransport.ph.from')}
                       country="VN"
                     />
@@ -633,7 +635,7 @@ export default function EventTransportCard({ title }: { title?: string }) {
                     <AddressInput
                       value={row.to ?? ''}
                       onChange={v => updateRow(row.id, { to: v })}
-                      onCommit={() => commitIfReady(row.id)}
+                      onCommit={val => commitIfReady(row.id, { to: val })}
                       placeholder={t('eventtransport.ph.to')}
                       country="VN"
                     />

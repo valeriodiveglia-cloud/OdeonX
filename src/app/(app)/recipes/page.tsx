@@ -313,8 +313,8 @@ function IngredientsEditor({
             <col className="w-[26rem]" />
             <col className="w-[8rem]" />
             <col className="w-[8rem]" />
-            <col className="w-[10rem]" /> 
-            <col className="w-[10rem]" /> 
+            <col className="w-[10rem]" />
+            <col className="w-[10rem]" />
             <col className="w-[3rem]" />
           </colgroup>
           <thead>
@@ -345,8 +345,8 @@ function IngredientsEditor({
                         row.ref_type === 'material' && row.ref_id
                           ? `m:${row.ref_id}`
                           : row.ref_type === 'prep' && row.ref_id
-                          ? `p:${row.ref_id}`
-                          : ''
+                            ? `p:${row.ref_id}`
+                            : ''
                       }
                       onChange={e => applySelection(row.id, e.target.value)}
                       disabled={readOnly}
@@ -381,7 +381,7 @@ function IngredientsEditor({
                     <input
                       className="w-full border rounded-lg px-2 py-1"
                       value={row.uom}
-                      onChange={e => {/* keep readonly to avoid mismatch */}}
+                      onChange={e => {/* keep readonly to avoid mismatch */ }}
                       disabled={true}
                       aria-label={t('Uom', language)}
                     />
@@ -659,22 +659,22 @@ function PrepEditor(props: PrepEditorProps) {
     else onDeleted()
   }
 
-  const nameOk     = name.trim().length > 0
-const categoryOk = !!category
-const typeOk     = type === 'food' || type === 'beverage'
-const yieldOk    = Number(yieldQty) > 0
-const portionOk  = Number(portionSize) > 0
-const uomOk      = !!uomId
+  const nameOk = name.trim().length > 0
+  const categoryOk = !!category
+  const typeOk = type === 'food' || type === 'beverage'
+  const yieldOk = Number(yieldQty) > 0
+  const portionOk = Number(portionSize) > 0
+  const uomOk = !!uomId
 
-// 👇 Save abilitato solo se tutti gli obbligatori sono validi (wastePct NON richiesto)
-const canSave =
-  !viewMode &&
-  nameOk &&
-  categoryOk &&
-  typeOk &&
-  yieldOk &&
-  portionOk &&
-  uomOk
+  // 👇 Save abilitato solo se tutti gli obbligatori sono validi (wastePct NON richiesto)
+  const canSave =
+    !viewMode &&
+    nameOk &&
+    categoryOk &&
+    typeOk &&
+    yieldOk &&
+    portionOk &&
+    uomOk
 
   return (
     <Overlay onClose={onClose}>
@@ -684,8 +684,8 @@ const canSave =
             {viewMode
               ? t('PrepSheet', language)
               : id
-              ? t('EditPrepTitle', language)
-              : t('NewPrepTitle', language)}
+                ? t('EditPrepTitle', language)
+                : t('NewPrepTitle', language)}
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', language)}>
             <XMarkIcon className="w-7 h-7" />
@@ -1222,8 +1222,8 @@ function FinalEditor(props: FinalEditorProps) {
             {viewMode
               ? t('DishSheet', language)
               : id
-              ? t('EditDishTitle', language)
-              : t('NewDishTitle', language)}
+                ? t('EditDishTitle', language)
+                : t('NewDishTitle', language)}
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-gray-100" aria-label={t('Close', language)}>
             <XMarkIcon className="w-7 h-7" />
@@ -1346,57 +1346,57 @@ function FinalEditor(props: FinalEditorProps) {
               {/* Input box 1/3 (Enter per aggiungere) */}
               <div className="relative w-1/3">
                 <input
-  ref={inputRef}
-  className="w-full border rounded-lg px-2 h-10"
-  placeholder={t('AddTag', language) || 'Add tag'}
-  disabled={viewMode}
-  value={tagInput}
-  onChange={(e) => {
-    setTagInput(e.target.value)
-    setOpenSug(true)
-    setHighlight(-1)
-  }}
-  onFocus={() => setOpenSug(true)}
-  onKeyDown={async (e) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setHighlight(h => Math.min(h + 1, filteredSuggestions.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setHighlight(h => Math.max(h - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (highlight >= 0 && filteredSuggestions[highlight]) {
-        addTag(filteredSuggestions[highlight])
-      } else {
-        await createOrSelectByName(tagInput)
-      }
-    } else if (e.key === 'Escape') {
-      setOpenSug(false)
-    }
-  }}
-  onBlur={() => setTimeout(() => setOpenSug(false), 120)}
-/>
+                  ref={inputRef}
+                  className="w-full border rounded-lg px-2 h-10"
+                  placeholder={t('AddTag', language) || 'Add tag'}
+                  disabled={viewMode}
+                  value={tagInput}
+                  onChange={(e) => {
+                    setTagInput(e.target.value)
+                    setOpenSug(true)
+                    setHighlight(-1)
+                  }}
+                  onFocus={() => setOpenSug(true)}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      setHighlight(h => Math.min(h + 1, filteredSuggestions.length - 1))
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      setHighlight(h => Math.max(h - 1, 0))
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (highlight >= 0 && filteredSuggestions[highlight]) {
+                        addTag(filteredSuggestions[highlight])
+                      } else {
+                        await createOrSelectByName(tagInput)
+                      }
+                    } else if (e.key === 'Escape') {
+                      setOpenSug(false)
+                    }
+                  }}
+                  onBlur={() => setTimeout(() => setOpenSug(false), 120)}
+                />
 
-{/* Suggerimenti: solo se c’è query e match */}
-{openSug && tagInput.trim() !== '' && filteredSuggestions.length > 0 && selectedTags.length < MAX_TAGS && (
-  <div
-    ref={sugRef}
-    className="absolute z-10 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-56 overflow-auto"
-  >
-    {filteredSuggestions.map((s, idx) => (
-      <button
-        key={s.id}
-        type="button"
-        className={`w-full text-left px-3 py-2 hover:bg-blue-50 ${idx === highlight ? 'bg-blue-50' : ''}`}
-        onMouseEnter={() => setHighlight(idx)}
-        onMouseDown={(e) => { e.preventDefault(); addTag(s) }}
-      >
-        {s.name}
-      </button>
-    ))}
-  </div>
-)}
+                {/* Suggerimenti: solo se c’è query e match */}
+                {openSug && tagInput.trim() !== '' && filteredSuggestions.length > 0 && selectedTags.length < MAX_TAGS && (
+                  <div
+                    ref={sugRef}
+                    className="absolute z-10 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-56 overflow-auto"
+                  >
+                    {filteredSuggestions.map((s, idx) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={`w-full text-left px-3 py-2 hover:bg-blue-50 ${idx === highlight ? 'bg-blue-50' : ''}`}
+                        onMouseEnter={() => setHighlight(idx)}
+                        onMouseDown={(e) => { e.preventDefault(); addTag(s) }}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
               </div>
 
@@ -1658,94 +1658,94 @@ export default function Page() {
     setFinalTagsMap(out)
   }
 
- async function fetchIngredientSources() {
-  // UOM map
-  try {
-    const { data: uomsAll, error: uomsErr } = await supabase.from(TBL_UOM).select('id,name').order('name')
-    if (uomsErr) {
-      console.error('uom error', uomsErr)
-    }
-    const uomMap = new Map((uomsAll || []).map((u: any) => [String(u.id), u.name]))
+  async function fetchIngredientSources() {
+    // UOM map
+    try {
+      const { data: uomsAll, error: uomsErr } = await supabase.from(TBL_UOM).select('id,name').order('name')
+      if (uomsErr) {
+        console.error('uom error', uomsErr)
+      }
+      const uomMap = new Map((uomsAll || []).map((u: any) => [String(u.id), u.name]))
 
-    // 1) Probe minimal su materials per capire se è un problema di rete/RLS
-    const probe = await supabase.from(TBL_MAT).select('id,name').limit(1)
-    if (probe.error) {
-      console.error('materials probe error', probe.error)
-      setMatOptions([]) // non bloccare l’app
-    } else {
-      // 2) Fetch esteso ma con fallback colonne
-      //   Se alcune colonne non esistono o non sono accessibili, rifacciamo una select ridotta
-      let matsAll: any[] | null = null
-      let matsErr: any = null
-
-      const full = await supabase
-        .from(TBL_MAT)
-        .select('id,name,unit_cost,unit_cost_vat,vat_rate_percent,uom_id')
-        .order('name')
-
-      if (full.error) {
-        console.warn('materials full select failed, retrying lean select', full.error)
-        matsErr = full.error
-        const lean = await supabase
-          .from(TBL_MAT)
-          .select('id,name,unit_cost,uom_id')
-          .order('name')
-        if (lean.error) {
-          console.error('materials lean select error', lean.error)
-          setMatOptions([])
-        } else {
-          matsAll = lean.data || []
-        }
+      // 1) Probe minimal su materials per capire se è un problema di rete/RLS
+      const probe = await supabase.from(TBL_MAT).select('id,name').limit(1)
+      if (probe.error) {
+        console.error('materials probe error', probe.error)
+        setMatOptions([]) // non bloccare l’app
       } else {
-        matsAll = full.data || []
-      }
+        // 2) Fetch esteso ma con fallback colonne
+        //   Se alcune colonne non esistono o non sono accessibili, rifacciamo una select ridotta
+        let matsAll: any[] | null = null
+        let matsErr: any = null
 
-      if (matsAll) {
-        const num = (v: any) => {
-          const n = Number(v)
-          return Number.isFinite(n) ? n : null
-        }
-        const options = matsAll.map((m: any) => {
-          const netUnit = num(m.unit_cost)
-          const vatPct = num((m as any).vat_rate_percent) ?? 0
-          const grossUnit =
-            netUnit != null
-              ? Math.round(netUnit * (1 + vatPct / 100))
-              : num((m as any).unit_cost_vat)
-          return {
-            id: String(m.id),
-            label: m.name as string,
-            unit_cost: grossUnit ?? netUnit ?? null,
-            uom_name: String(uomMap.get(String(m.uom_id)) ?? ''),
+        const full = await supabase
+          .from(TBL_MAT)
+          .select('id,name,unit_cost,unit_cost_vat,vat_rate_percent,uom_id')
+          .order('name')
+
+        if (full.error) {
+          console.warn('materials full select failed, retrying lean select', full.error)
+          matsErr = full.error
+          const lean = await supabase
+            .from(TBL_MAT)
+            .select('id,name,unit_cost,uom_id')
+            .order('name')
+          if (lean.error) {
+            console.error('materials lean select error', lean.error)
+            setMatOptions([])
+          } else {
+            matsAll = lean.data || []
           }
-        })
-        setMatOptions(options)
-      }
-    }
+        } else {
+          matsAll = full.data || []
+        }
 
-    // PREPARATIONS
-    const { data: prepsAll, error: prepsErr } = await supabase
-      .from(VW_PREP_LIST)
-      .select('id,name,cost_unit_vnd,uom_name')
-      .order('name')
-    if (prepsErr) {
-      console.error('preps error', prepsErr)
+        if (matsAll) {
+          const num = (v: any) => {
+            const n = Number(v)
+            return Number.isFinite(n) ? n : null
+          }
+          const options = matsAll.map((m: any) => {
+            const netUnit = num(m.unit_cost)
+            const vatPct = num((m as any).vat_rate_percent) ?? 0
+            const grossUnit =
+              netUnit != null
+                ? Math.round(netUnit * (1 + vatPct / 100))
+                : num((m as any).unit_cost_vat)
+            return {
+              id: String(m.id),
+              label: m.name as string,
+              unit_cost: grossUnit ?? netUnit ?? null,
+              uom_name: String(uomMap.get(String(m.uom_id)) ?? ''),
+            }
+          })
+          setMatOptions(options)
+        }
+      }
+
+      // PREPARATIONS
+      const { data: prepsAll, error: prepsErr } = await supabase
+        .from(VW_PREP_LIST)
+        .select('id,name,cost_unit_vnd,uom_name')
+        .order('name')
+      if (prepsErr) {
+        console.error('preps error', prepsErr)
+        setPrepOptions([])
+      } else {
+        setPrepOptions((prepsAll || []).map((p: any) => ({
+          id: String(p.id),
+          label: p.name,
+          unit_cost: p.cost_unit_vnd ?? null,
+          uom_name: String(p.uom_name ?? ''),
+        })))
+      }
+    } catch (e) {
+      // Catch generale per intercettare “TypeError: Failed to fetch”
+      console.error('fetchIngredientSources fatal', e)
+      setMatOptions([])
       setPrepOptions([])
-    } else {
-      setPrepOptions((prepsAll || []).map((p: any) => ({
-        id: String(p.id),
-        label: p.name,
-        unit_cost: p.cost_unit_vnd ?? null,
-        uom_name: String(p.uom_name ?? ''),
-      })))
     }
-  } catch (e) {
-    // Catch generale per intercettare “TypeError: Failed to fetch”
-    console.error('fetchIngredientSources fatal', e)
-    setMatOptions([])
-    setPrepOptions([])
   }
-}
 
 
   function toggleSortFinal(col: keyof FinalRow) {
@@ -1785,14 +1785,14 @@ export default function Page() {
     } : {}
     const linesDraft: IngredientLine[] = items && !items.error && items.data && items.data.length
       ? items.data.map((r: any) => ({
-          id: r.id || uid(),
-          ref_type: r.ref_type,
-          ref_id: r.ref_id,
-          name: r.name ?? '',
-          qty: r.qty ?? '',
-          uom: r.uom ?? '',
-          cost: r.cost ?? '',
-        }))
+        id: r.id || uid(),
+        ref_type: r.ref_type,
+        ref_id: r.ref_id,
+        name: r.name ?? '',
+        qty: r.qty ?? '',
+        uom: r.uom ?? '',
+        cost: r.cost ?? '',
+      }))
       : [{ id: uid(), ref_type: null, ref_id: null, name: '', qty: '', uom: '', cost: '' }]
     setFinalInitialHeader(headerDraft)
     setFinalInitialLines(linesDraft)
@@ -1820,14 +1820,14 @@ export default function Page() {
 
     const linesDraft: IngredientLine[] = items && !items.error && items.data && items.data.length
       ? items.data.map((r: any) => ({
-          id: r.id || uid(),
-          ref_type: r.ref_type,
-          ref_id: r.ref_id,
-          name: r.name ?? '',
-          qty: r.qty ?? '',
-          uom: r.uom ?? '',
-          cost: r.cost ?? '',
-        }))
+        id: r.id || uid(),
+        ref_type: r.ref_type,
+        ref_id: r.ref_id,
+        name: r.name ?? '',
+        qty: r.qty ?? '',
+        uom: r.uom ?? '',
+        cost: r.cost ?? '',
+      }))
       : [{ id: uid(), ref_type: null, ref_id: null, name: '', qty: '', uom: '', cost: '' }]
 
     setPrepInitialHeader(headerDraft)
@@ -1849,14 +1849,14 @@ export default function Page() {
     } : {}
     const linesDraft: IngredientLine[] = items && !items.error && items.data && items.data.length
       ? items.data.map((r: any) => ({
-          id: r.id || uid(),
-          ref_type: r.ref_type,
-          ref_id: r.ref_id,
-          name: r.name ?? '',
-          qty: r.qty ?? '',
-          uom: r.uom ?? '',
-          cost: r.cost ?? '',
-        }))
+        id: r.id || uid(),
+        ref_type: r.ref_type,
+        ref_id: r.ref_id,
+        name: r.name ?? '',
+        qty: r.qty ?? '',
+        uom: r.uom ?? '',
+        cost: r.cost ?? '',
+      }))
       : [{ id: uid(), ref_type: null, ref_id: null, name: '', qty: '', uom: '', cost: '' }]
     setFinalInitialHeader(headerDraft)
     setFinalInitialLines(linesDraft)
@@ -1891,14 +1891,14 @@ export default function Page() {
 
     const linesDraft: IngredientLine[] = items && !items.error && items.data && items.data.length
       ? items.data.map((r: any) => ({
-          id: r.id || uid(),
-          ref_type: r.ref_type,
-          ref_id: r.ref_id,
-          name: r.name ?? '',
-          qty: r.qty ?? '',
-          uom: r.uom ?? '',
-          cost: r.cost ?? '',
-        }))
+        id: r.id || uid(),
+        ref_type: r.ref_type,
+        ref_id: r.ref_id,
+        name: r.name ?? '',
+        qty: r.qty ?? '',
+        uom: r.uom ?? '',
+        cost: r.cost ?? '',
+      }))
       : [{ id: uid(), ref_type: null, ref_id: null, name: '', qty: '', uom: '', cost: '' }]
 
     setPrepInitialHeader(headerDraft)
@@ -1910,30 +1910,42 @@ export default function Page() {
   /* --------- VIEW LISTS with filters + sorting --------- */
 
   const viewFinals = useMemo(() => {
-  const q = filterFinalName.toLowerCase().trim()
-  const cat = filterFinalCat.toLowerCase().trim()
-  const type = filterFinalType
+    const q = filterFinalName.toLowerCase().trim()
+    const cat = filterFinalCat.toLowerCase().trim()
+    const type = filterFinalType
 
-  const f = finals.filter(r => {
-    const tags = finalTagsMap[r.id] || []
-    const matchNameOrTag = q
-      ? r.name.toLowerCase().includes(q) || tags.some(tg => tg.toLowerCase().includes(q))
-      : true
+    const f = finals.filter(r => {
+      const tags = finalTagsMap[r.id] || []
+      const matchNameOrTag = q
+        ? r.name.toLowerCase().includes(q) || tags.some(tg => tg.toLowerCase().includes(q))
+        : true
 
-    const matchCat = cat ? (r.category ?? '').toLowerCase() === cat : true
-    const matchType = type ? r.type === type : true
+      const matchCat = cat ? (r.category ?? '').toLowerCase() === cat : true
+      const matchType = type ? r.type === type : true
 
-    return matchNameOrTag && matchCat && matchType
-  })
+      return matchNameOrTag && matchCat && matchType
+    })
 
-  return [...f].sort((a, b) => {
-    const av = String((a as any)[sortColFinal] ?? '')
-    const bv = String((b as any)[sortColFinal] ?? '')
-    return sortAscFinal
-      ? av.localeCompare(bv, undefined, { numeric: true })
-      : bv.localeCompare(av, undefined, { numeric: true })
-  })
-}, [finals, filterFinalName, filterFinalCat, filterFinalType, sortColFinal, sortAscFinal, finalTagsMap])
+    return [...f].sort((a, b) => {
+      const col = sortColFinal
+      const av = (a as any)[col]
+      const bv = (b as any)[col]
+
+      // Numeric sort for specific columns
+      if (['cost_unit_vnd', 'price_vnd', 'cost_ratio', 'suggested_price_vnd'].includes(col)) {
+        const an = Number(av || 0)
+        const bn = Number(bv || 0)
+        return sortAscFinal ? an - bn : bn - an
+      }
+
+      // Default string sort
+      const as = String(av ?? '')
+      const bs = String(bv ?? '')
+      return sortAscFinal
+        ? as.localeCompare(bs, undefined, { numeric: true })
+        : bs.localeCompare(as, undefined, { numeric: true })
+    })
+  }, [finals, filterFinalName, filterFinalCat, filterFinalType, sortColFinal, sortAscFinal, finalTagsMap])
 
 
   const viewPreps = useMemo(() => {
@@ -1950,11 +1962,22 @@ export default function Page() {
 
     return [...f].sort((a, b) => {
       const col = sortColPrep || 'name'
-      const va = String((a as any)[col] ?? '')
-      const vb = String((b as any)[col] ?? '')
+      const av = (a as any)[col]
+      const bv = (b as any)[col]
+
+      // Numeric sort for specific columns
+      if (['yield_qty', 'waste_pct', 'cost_unit_vnd'].includes(col)) {
+        const an = Number(av || 0)
+        const bn = Number(bv || 0)
+        return sortAscPrep ? an - bn : bn - an
+      }
+
+      // Default string sort
+      const as = String(av ?? '')
+      const bs = String(bv ?? '')
       return sortAscPrep
-        ? va.localeCompare(vb, undefined, { numeric: true })
-        : vb.localeCompare(va, undefined, { numeric: true })
+        ? as.localeCompare(bs, undefined, { numeric: true })
+        : bs.localeCompare(as, undefined, { numeric: true })
     })
   }, [preps, filterPrepName, filterPrepCat, filterPrepType, sortColPrep, sortAscPrep])
 
@@ -2028,7 +2051,7 @@ export default function Page() {
       rows,
     })
 
-    
+
     const stamp = new Date()
     const y = stamp.getFullYear()
     const m = String(stamp.getMonth() + 1).padStart(2, '0')
@@ -2098,7 +2121,7 @@ export default function Page() {
     }
     return ids
   }
-   async function actionMoveToTrash() {
+  async function actionMoveToTrash() {
     const ids = ensureAnySelected()
     if (!ids) return
     const ok = window.confirm(t('MoveToTrash', language))
@@ -2277,11 +2300,10 @@ export default function Page() {
               </button>
               <button
                 onClick={toggleSelectMode}
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${
-                showSelectDish
-                ? 'border-blue-600 text-blue-700 bg-blue-100'
-                : 'text-blue-700 hover:bg-blue-50 border-gray-300'
-                }`}
+                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${showSelectDish
+                    ? 'border-blue-600 text-blue-700 bg-blue-100'
+                    : 'text-blue-700 hover:bg-blue-50 border-gray-300'
+                  }`}
                 title={t('EnableSelectionTitle', language)}
               >
                 <CheckCircleIcon className="w-5 h-5" />
@@ -2490,17 +2512,16 @@ export default function Page() {
                 {t('Export', language)}
               </button>
               <button
-  onClick={toggleSelectMode}
-  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${
-    showSelectPrep
-      ? 'border-blue-600 text-blue-700 bg-blue-100'
-      : 'text-blue-700 hover:bg-blue-50 border-gray-300'
-  }`}
-  title={t('EnableSelectionTitle', language)}
->
-  <CheckCircleIcon className="w-5 h-5" />
-  <span>{showSelectPrep ? t('Selecting', language) : t('Select', language)}</span>
-</button>
+                onClick={toggleSelectMode}
+                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${showSelectPrep
+                    ? 'border-blue-600 text-blue-700 bg-blue-100'
+                    : 'text-blue-700 hover:bg-blue-50 border-gray-300'
+                  }`}
+                title={t('EnableSelectionTitle', language)}
+              >
+                <CheckCircleIcon className="w-5 h-5" />
+                <span>{showSelectPrep ? t('Selecting', language) : t('Select', language)}</span>
+              </button>
 
               <button
                 onClick={openCreatePrep}

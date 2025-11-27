@@ -22,7 +22,7 @@ export type PaymentItem = { id: string; credit_id: string; amount: number; date:
 export type Totals = { paid: number; remaining: number; status: 'Paid' | 'Unpaid' }
 
 export function todayISO() {
-  const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const day = String(d.getDate()).padStart(2,'0')
+  const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 function ymd(date: Date) { return date.toISOString().slice(0, 10) }
@@ -33,7 +33,7 @@ const BASE_COLUMNS = `
 `
 const uuid = () => (crypto?.randomUUID?.() || `rand-${Math.random().toString(36).slice(2)}`)
 
-export function useCredits() {
+export function useCredits(params?: { year?: number; month?: number; branchName?: string | null }) {
   const [rows, setRows] = useState<CreditRow[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [totalsMap, setTotalsMap] = useState<Record<string, Totals>>({})
@@ -88,7 +88,7 @@ export function useCredits() {
       const s = localStorage.getItem('dailyreports.currentShiftName') || localStorage.getItem('currentShiftName') || ''
       safeSetCurrentUserName(u || '')
       safeSetCurrentShiftName(s || '')
-    } catch {}
+    } catch { }
   }, [])
 
   const buildStaffOpts = useCallback((data: CreditRow[]) => {
@@ -105,16 +105,28 @@ export function useCredits() {
     }
     safeSetLoading(true)
     try {
-      const now = new Date()
-      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      const to = new Date(now.getFullYear(), now.getMonth() + 2, 1)
-
-      const { data, error } = await supabase
+      let q = supabase
         .from('credits')
         .select(BASE_COLUMNS)
-        .gte('date', ymd(from))
-        .lt('date', ymd(to))
         .order('date', { ascending: true })
+
+      if (params?.year != null && params?.month != null) {
+        const start = new Date(params.year, params.month, 1)
+        const end = new Date(params.year, params.month + 1, 1)
+        q = q.gte('date', ymd(start)).lt('date', ymd(end))
+      } else {
+        // Default behavior: current month +/- 1
+        const now = new Date()
+        const from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        const to = new Date(now.getFullYear(), now.getMonth() + 2, 1)
+        q = q.gte('date', ymd(from)).lt('date', ymd(to))
+      }
+
+      if (params?.branchName) {
+        q = q.eq('branch', params.branchName)
+      }
+
+      const { data, error } = await q
 
       if (!isActiveRef.current) return
 
@@ -204,7 +216,7 @@ export function useCredits() {
       safeSetLoading(false)
       pendingRefreshRef.current = false
     }
-  }, [buildStaffOpts])
+  }, [buildStaffOpts, params?.year, params?.month, params?.branchName])
 
   const fetchTotalsOne = useCallback(async (id: string): Promise<Totals | null> => {
     try {
@@ -313,7 +325,7 @@ export function useCredits() {
           detail: { creditId, branch: lastBranchRef.current, dateStr: lastDateRef.current },
         }))
         localStorage.setItem('credits_payments_last_emit_at', String(Date.now()))
-      } catch {}
+      } catch { }
       void refreshTotalsFor(creditId)
       return data as PaymentItem
     } catch (e: any) {
@@ -345,7 +357,7 @@ export function useCredits() {
           detail: { creditId, branch: lastBranchRef.current, dateStr: lastDateRef.current },
         }))
         localStorage.setItem('credits_payments_last_emit_at', String(Date.now()))
-      } catch {}
+      } catch { }
       void refreshTotalsFor(creditId)
       return data as PaymentItem
     } catch (e: any) {
@@ -379,7 +391,7 @@ export function useCredits() {
           detail: { creditId, branch: lastBranchRef.current, dateStr: lastDateRef.current },
         }))
         localStorage.setItem('credits_payments_last_emit_at', String(Date.now()))
-      } catch {}
+      } catch { }
       void refreshTotalsFor(creditId)
       return true
     } catch (e: any) {
@@ -435,7 +447,7 @@ export function useCredits() {
           detail: { id: (data as CreditRow).id, branch: lastBranchRef.current, dateStr: lastDateRef.current },
         }))
         localStorage.setItem('credits_last_emit_at', String(Date.now()))
-      } catch {}
+      } catch { }
       void refreshTotalsFor((data as CreditRow).id)
       return data as CreditRow
     } catch (e: any) {
@@ -462,7 +474,7 @@ export function useCredits() {
       try {
         window.dispatchEvent(new CustomEvent('credits:credits:changed', { detail: { id } }))
         localStorage.setItem('credits_last_emit_at', String(Date.now()))
-      } catch {}
+      } catch { }
       return true
     } catch (e: any) {
       console.error('deleteCredit error', {
@@ -493,7 +505,7 @@ export function useCredits() {
       try {
         window.dispatchEvent(new CustomEvent('credits:credits:changed', { detail: { ids } }))
         localStorage.setItem('credits_last_emit_at', String(Date.now()))
-      } catch {}
+      } catch { }
       return true
     } catch (e: any) {
       console.error('bulkDeleteCredits error', {
@@ -556,7 +568,7 @@ export function useCredits() {
     window.addEventListener('credits:editor:set', onEditor as any)
 
     return () => {
-      try { supabase.removeChannel(ch) } catch {}
+      try { supabase.removeChannel(ch) } catch { }
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('storage', onStorage)
       window.removeEventListener('dailyreports:branch:changed', onBranch as any)

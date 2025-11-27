@@ -14,7 +14,9 @@ import {
   PlusIcon,
   EllipsisVerticalIcon,
   CheckCircleIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 import Papa from 'papaparse'
 import ExcelJS from 'exceljs'
 
@@ -762,51 +764,51 @@ function ResolveImportModal({
     const ncm: Record<string, number | string> = { ...newCategoryMap }
     const nsm: Record<string, string> = { ...newSupplierMap }
 
-  for (const r of rows) {
-    // ---- CATEGORY ----
-    const catLocked = !!r.currentCategoryId && !r.categoryChanged
-    if (!catLocked && r.csvCategoryName) {
-      const lower = r.csvCategoryName.toLowerCase()
-      const existing = catByLower.get(lower)
-      if (existing) {
-        // seleziona categoria esistente
-        nextCatByKey[r.key] = existing.id
-      } else {
-        // seleziona "Create new: ..."
-        const title = toTitleCase(r.csvCategoryName)
-        const label = labelCreate(title)
-        nextCatByKey[r.key] = label
-        nc[title] = true
-        ncm[title] = label
+    for (const r of rows) {
+      // ---- CATEGORY ----
+      const catLocked = !!r.currentCategoryId && !r.categoryChanged
+      if (!catLocked && r.csvCategoryName) {
+        const lower = r.csvCategoryName.toLowerCase()
+        const existing = catByLower.get(lower)
+        if (existing) {
+          // seleziona categoria esistente
+          nextCatByKey[r.key] = existing.id
+        } else {
+          // seleziona "Create new: ..."
+          const title = toTitleCase(r.csvCategoryName)
+          const label = labelCreate(title)
+          nextCatByKey[r.key] = label
+          nc[title] = true
+          ncm[title] = label
+        }
+      }
+
+      // ---- SUPPLIER ----
+      const supLocked = !!r.currentSupplierId && !r.supplierChanged
+      if (!supLocked && r.csvSupplierName) {
+        const lower = r.csvSupplierName.toLowerCase()
+        const existing = supByLower.get(lower)
+        if (existing) {
+          // seleziona supplier esistente
+          nextSupByKey[r.key] = String(existing.id)
+        } else {
+          // seleziona "Create new: ..."
+          const title = toTitleCase(r.csvSupplierName)
+          const label = labelCreate(title)
+          nextSupByKey[r.key] = label
+          ns[title] = true
+          nsm[title] = label
+        }
       }
     }
 
-    // ---- SUPPLIER ----
-    const supLocked = !!r.currentSupplierId && !r.supplierChanged
-    if (!supLocked && r.csvSupplierName) {
-      const lower = r.csvSupplierName.toLowerCase()
-      const existing = supByLower.get(lower)
-      if (existing) {
-        // seleziona supplier esistente
-        nextSupByKey[r.key] = String(existing.id)
-      } else {
-        // seleziona "Create new: ..."
-        const title = toTitleCase(r.csvSupplierName)
-        const label = labelCreate(title)
-        nextSupByKey[r.key] = label
-        ns[title] = true
-        nsm[title] = label
-      }
-    }
+    setCategoryByKey(nextCatByKey)
+    setSupplierByKey(nextSupByKey)
+    setToCreateCats(nc)
+    setToCreateSups(ns)
+    setNewCategoryMap(ncm)
+    setNewSupplierMap(nsm)
   }
-
-  setCategoryByKey(nextCatByKey)
-  setSupplierByKey(nextSupByKey)
-  setToCreateCats(nc)
-  setToCreateSups(ns)
-  setNewCategoryMap(ncm)
-  setNewSupplierMap(nsm)
-}
 
   function handleContinue() {
     onConfirm({ categoryByKey, supplierByKey, newCategoryMap, newSupplierMap, toCreateCats, toCreateSups })
@@ -1384,7 +1386,7 @@ export default function MaterialsPage() {
           packaging_size: r['packaging_size'] ?? null,
           package_price: r['package_price'] ?? null,
           vat_rate_percent: r['vat_rate_percent'] ?? null,
-      // NUOVI: letti dal CSV se presenti
+          // NUOVI: letti dal CSV se presenti
           is_food_drink: parseCsvBool(r['is_food_drink']),
           is_default: parseCsvBool(r['is_default']),
         }))
@@ -1499,8 +1501,8 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
 
         const catMap: Record<string, number> = {}
         const supMap: Record<string, string> = {}
-        ;[...cats, ...insCats].forEach(c => { catMap[c.name.toLowerCase()] = c.id as number })
-        ;[...sups, ...insSups].forEach(s => { supMap[s.name.toLowerCase()] = s.id as string })
+          ;[...cats, ...insCats].forEach(c => { catMap[c.name.toLowerCase()] = c.id as number })
+          ;[...sups, ...insSups].forEach(s => { supMap[s.name.toLowerCase()] = s.id as string })
         const stats = await runImport(rows, catMap, supMap, null)
         alert(`${t('CSVImported', lang)}
 ${t('Inserted', lang)}: ${stats.inserted}
@@ -1532,7 +1534,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
     setUnifiedOpen(null)
     setProgress(0)
 
-    try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch {}
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch { }
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
 
     try {
@@ -1726,7 +1728,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
         packaging_size, package_price, unit_cost,
         vat_rate_percent: vat_rate_percent != null ? Math.max(0, Math.min(100, vat_rate_percent)) : null,
         is_food_drink: (r as any).is_food_drink != null ? !!(r as any).is_food_drink : true,
-        is_default:    (r as any).is_default    != null ? !!(r as any).is_default    : true,
+        is_default: (r as any).is_default != null ? !!(r as any).is_default : true,
         last_update: new Date().toISOString(),
       }
 
@@ -1736,9 +1738,9 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
       const byCategory = candidates.find(m => m.category_id === category_id)
       const mostRecent = candidates.length
         ? [...candidates].sort((a, b) =>
-            (new Date(b.last_update || b.created_at).getTime()) -
-            (new Date(a.last_update || a.created_at).getTime())
-          )[0]
+          (new Date(b.last_update || b.created_at).getTime()) -
+          (new Date(a.last_update || a.created_at).getTime())
+        )[0]
         : null
       const existing = bySupplier || byCategory || mostRecent || null
 
@@ -1950,7 +1952,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
     }
   }
 
-  if (loading) return <div className="p-6">{t('Loading', lang)}</div>
+  if (loading) return <CircularLoader />
 
   // Header helper per UnitCostPlusVat su 3 righe in vietnamita
   const UnitPlusVatHeader = () => {
@@ -2047,11 +2049,10 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
 
           <button
             onClick={() => setSelectMode(s => !s)}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-              selectMode
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-            }`}
+            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+              }`}
             title={selectMode ? t('ExitSelection', lang) : t('EnterSelection', lang)}
           >
             <CheckCircleIcon className="w-5 h-5" />

@@ -48,14 +48,18 @@ function resolveBranchName(branchFromDR: string | undefined | null): string {
   return ''
 }
 
-export function useBankTransfers(): UseBankTransfersResult {
+export function useBankTransfers(params?: { year?: number; month?: number; branchName?: string | null }): UseBankTransfersResult {
   const { branch } = useDRBranch({ validate: false })
 
   // branch risolto: prima da useDRBranch, poi da DR_BRANCH_NAME
-  const selectedBranchName = useMemo(
+  const drBranchName = useMemo(
     () => resolveBranchName(branch?.name),
     [branch?.name],
   )
+
+  // Se params.branchName è definito (anche null), usiamo quello. Altrimenti fallback su drBranchName.
+  // params.branchName === null significa "Tutti i branch"
+  const effectiveBranchName = params && 'branchName' in params ? params.branchName : drBranchName
 
   const [rows, setRows] = useState<BankTransferRow[]>([])
   const [loading, setLoading] = useState<boolean>(false)
@@ -65,9 +69,10 @@ export function useBankTransfers(): UseBankTransfersResult {
   const wakeSyncAtRef = useRef<number>(0)
 
   const refresh = useCallback(async () => {
-    // Se per qualche motivo non abbiamo branch, non facciamo query
-    // e soprattutto non restiamo mai in loading infinito.
-    if (!selectedBranchName) {
+    // Se siamo in modalità "Daily Reports" (no params), serve un branch selezionato.
+    // Se siamo in modalità "Monthly Reports" (params defined), branchName può essere null (tutti).
+    const isDailyMode = !params
+    if (isDailyMode && !effectiveBranchName) {
       setRows([])
       setError(null)
       setLoading(false)
@@ -78,12 +83,26 @@ export function useBankTransfers(): UseBankTransfersResult {
     setError(null)
 
     try {
-      const { data, error: err } = await supabase
+      let q = supabase
         .from('daily_report_bank_transfers')
         .select('*')
-        .eq('branch', selectedBranchName)
         .order('date', { ascending: true })
         .order('created_at', { ascending: true })
+
+      if (effectiveBranchName) {
+        q = q.eq('branch', effectiveBranchName)
+      }
+
+      if (params?.year != null && params?.month != null) {
+        const start = new Date(params.year, params.month, 1)
+        const end = new Date(params.year, params.month + 1, 1)
+        const p = (n: number) => String(n).padStart(2, '0')
+        const startISO = `${start.getFullYear()}-${p(start.getMonth() + 1)}-${p(start.getDate())}`
+        const endISO = `${end.getFullYear()}-${p(end.getMonth() + 1)}-${p(end.getDate())}`
+        q = q.gte('date', startISO).lt('date', endISO)
+      }
+
+      const { data, error: err } = await q
 
       if (err) {
         console.error('fetch bank transfers error', err)
@@ -106,22 +125,22 @@ export function useBankTransfers(): UseBankTransfersResult {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchName])
+  }, [effectiveBranchName, params?.year, params?.month])
 
   useEffect(() => {
     // se il branch cambia o diventa disponibile, rifacciamo il fetch
-    refresh().catch(() => {})
+    refresh().catch(() => { })
   }, [refresh])
 
   // Wake / tab-focus / back-online: prova a riallineare i dati
   useEffect(() => {
     const maybeSync = () => {
-      if (!selectedBranchName) return
+      if (!effectiveBranchName) return
       const now = Date.now()
       // throttle 3 secondi per sicurezza
       if (now - wakeSyncAtRef.current < 3000) return
       wakeSyncAtRef.current = now
-      refresh().catch(() => {})
+      refresh().catch(() => { })
     }
 
     const onVisibility = () => {
@@ -139,17 +158,17 @@ export function useBankTransfers(): UseBankTransfersResult {
       window.removeEventListener('focus', onFocus)
       window.removeEventListener('online', onOnline)
     }
-  }, [refresh, selectedBranchName])
+  }, [refresh, effectiveBranchName])
 
   async function createTransfer(input: Omit<UpsertInput, 'id'>): Promise<BankTransferRow | null> {
     // Se non ho branch, non creo righe orfane
-    if (!selectedBranchName) {
+    if (!effectiveBranchName) {
       console.warn('createTransfer called without selectedBranchName')
       return null
     }
 
     const payload = {
-      branch: selectedBranchName,
+      branch: effectiveBranchName,
       date: input.date,
       amount: Math.round(input.amount || 0),
       note: input.note ?? null,
@@ -190,8 +209,8 @@ export function useBankTransfers(): UseBankTransfersResult {
     }
 
     // teniamo il branch allineato al branch selezionato
-    if (selectedBranchName) {
-      payload.branch = selectedBranchName
+    if (effectiveBranchName) {
+      payload.branch = effectiveBranchName
     }
 
     const { data, error: err } = await supabase
@@ -241,7 +260,7 @@ export function useBankTransfers(): UseBankTransfersResult {
     rows,
     loading,
     error,
-    selectedBranchName,
+    selectedBranchName: effectiveBranchName || '',
     refresh,
     createTransfer,
     updateTransfer,

@@ -13,7 +13,10 @@ import {
   Cog6ToothIcon,
   XMarkIcon,
   MapPinIcon,
+  ArrowRightStartOnRectangleIcon,
 } from '@heroicons/react/24/outline'
+import { LayoutDashboard } from 'lucide-react'
+import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
@@ -66,6 +69,7 @@ function loadProviderSnapshotFromLS(): ProviderBranch[] | null {
 
 export default function HomeDashboard() {
   const [user, setUser] = useState<User | null>(null)
+  const [role, setRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const { language } = useSettings()
@@ -76,6 +80,16 @@ export default function HomeDashboard() {
         const { data } = await supabase.auth.getUser()
         if (!mounted) return
         setUser(data.user ?? null)
+
+        if (data.user) {
+          const { data: acc } = await supabase
+            .from('app_accounts')
+            .select('role')
+            .eq('user_id', data.user.id)
+            .single()
+          setRole(acc?.role || null)
+        }
+
         setLoading(false)
       })()
 
@@ -93,8 +107,8 @@ export default function HomeDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white">
-        <div className="text-blue-700 text-xl font-bold">{t(language, 'Loading')}</div>
+      <div className="flex h-screen w-full items-center justify-center bg-blue-50">
+        <CircularLoader />
       </div>
     )
   }
@@ -127,6 +141,22 @@ export default function HomeDashboard() {
                 {/* Left: CTA */}
                 <div className="p-6 sm:p-8">
                   <div className="flex flex-wrap gap-3">
+                    {/* Daily Reports → apre modale branch picker */}
+                    <BranchPickerCTA />
+
+                    <BranchPickerCTA />
+
+                    {/* Monthly Reports - Only for Owner/Admin */}
+                    {role && ['owner', 'admin'].includes(role) && (
+                      <Link
+                        href="/monthly-reports"
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+                      >
+                        <LayoutDashboard className="h-6 w-6" />
+                        <span>Monthly Reports</span>
+                      </Link>
+                    )}
+
                     <Link
                       href="/materials"
                       className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
@@ -142,9 +172,6 @@ export default function HomeDashboard() {
                       <BuildingOffice2Icon className="h-6 w-6" />
                       <span>{t(language, 'Catering')}</span>
                     </Link>
-
-                    {/* Daily Reports → apre modale branch picker */}
-                    <BranchPickerCTA />
 
                     {/* App Settings → /general-settings */}
                     <Link
@@ -300,7 +327,7 @@ function BranchPickerModal({ onClose }: { onClose: () => void }) {
 
           {/* Body */}
           <div className="p-5">
-            {loading && <div className="text-sm text-gray-600">{t(language, 'Loading')}</div>}
+            {loading && <CircularLoader />}
             {!loading && err && <div className="text-sm text-red-600">{err}</div>}
 
             {!loading && !err && branches.length === 0 && (

@@ -219,7 +219,7 @@ async function fetchCurrentUserNameFromDB(): Promise<string> {
 }
 
 /* ---------- Hook ---------- */
-export function useCashout() {
+export function useCashout(params?: { year?: number; month?: number; branchName?: string | null }) {
   // Protezione wake/unmount: evitiamo setState su hook smontato
   const isActiveRef = useRef(true)
   useEffect(() => {
@@ -301,13 +301,28 @@ export function useCashout() {
     safeSetLoading(true)
     safeSetError(null)
     try {
+      let q = supabase
+        .from(TBL_CASHOUT)
+        .select('*')
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+
+      if (params?.year != null && params?.month != null) {
+        const start = new Date(params.year, params.month, 1)
+        const end = new Date(params.year, params.month + 1, 1)
+        const p = (n: number) => String(n).padStart(2, '0')
+        const startISO = `${start.getFullYear()}-${p(start.getMonth() + 1)}-${p(start.getDate())}`
+        const endISO = `${end.getFullYear()}-${p(end.getMonth() + 1)}-${p(end.getDate())}`
+        q = q.gte('date', startISO).lt('date', endISO)
+      }
+
+      if (params?.branchName) {
+        q = q.eq('branch', params.branchName)
+      }
+
       const [{ data: sups, error: supErr }, { data: cash, error: cashErr }] = await Promise.all([
         supabase.from(TBL_SUPS).select('id,name').order('name', { ascending: true }),
-        supabase
-          .from(TBL_CASHOUT)
-          .select('*')
-          .order('date', { ascending: false })
-          .order('created_at', { ascending: false }),
+        q
       ])
 
       if (!isActiveRef.current) return
@@ -330,7 +345,7 @@ export function useCashout() {
     } finally {
       safeSetLoading(false)
     }
-  }, [])
+  }, [params?.year, params?.month, params?.branchName])
 
   /* ---------- Supplier CRUD ---------- */
   const createSupplier = useCallback(

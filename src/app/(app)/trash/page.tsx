@@ -10,7 +10,9 @@ import {
   TrashIcon,
   EllipsisVerticalIcon,
   CheckCircleIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 
 /* ---------- DB tables ---------- */
 const TBL_MATERIALS = 'materials'
@@ -410,14 +412,14 @@ export default function TrashPage() {
      Renders
   ====================================================== */
 
-  if (loading) return <div className="p-6">{t('Loading', lang) || 'Loading…'}</div>
+  if (loading) return <CircularLoader />
 
   // Helpers current tab states
   const selectedCount =
     tab === 'Materials' ? selectedMatIds.length
-    : tab === 'Dishes' ? selectedDishIds.length
-    : tab === 'Preps' ? selectedPrepIds.length
-    : selectedEqIds.length
+      : tab === 'Dishes' ? selectedDishIds.length
+        : tab === 'Preps' ? selectedPrepIds.length
+          : selectedEqIds.length
 
   return (
     <div className="max-w-none mx-auto p-4 text-gray-100">
@@ -614,11 +616,10 @@ export default function TrashPage() {
                 setSelectModeMat(s => !s)
                 setMenuOpenMat(false)
               }}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-                selectModeMat
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-              }`}
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectModeMat
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                }`}
               title={selectModeMat ? (t('ExitSelection', lang) || 'Exit selection') : (t('EnterSelection', lang) || 'Select')}
             >
               <CheckCircleIcon className="w-5 h-5" />
@@ -631,11 +632,10 @@ export default function TrashPage() {
                 setSelectModeDish(s => !s)
                 setMenuOpenDish(false)
               }}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-                selectModeDish
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-              }`}
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectModeDish
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                }`}
               title={selectModeDish ? (t('ExitSelection', lang) || 'Exit selection') : (t('EnterSelection', lang) || 'Select')}
             >
               <CheckCircleIcon className="w-5 h-5" />
@@ -648,11 +648,10 @@ export default function TrashPage() {
                 setSelectModePrep(s => !s)
                 setMenuOpenPrep(false)
               }}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-                selectModePrep
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-              }`}
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectModePrep
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                }`}
               title={selectModePrep ? (t('ExitSelection', lang) || 'Exit selection') : (t('EnterSelection', lang) || 'Select')}
             >
               <CheckCircleIcon className="w-5 h-5" />
@@ -665,11 +664,10 @@ export default function TrashPage() {
                 setSelectModeEq(s => !s)
                 setMenuOpenEq(false)
               }}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-                selectModeEq
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-              }`}
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectModeEq
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                }`}
               title={selectModeEq ? (t('ExitSelection', lang) || 'Exit selection') : (t('EnterSelection', lang) || 'Select')}
             >
               <CheckCircleIcon className="w-5 h-5" />

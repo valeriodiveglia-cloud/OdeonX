@@ -25,6 +25,7 @@ export type WastageRow = {
   reason?: string | null
   responsible?: string | null
   enteredBy?: string | null
+  branchName?: string | null
 }
 
 export type Category = { id: string; name: string }
@@ -344,6 +345,7 @@ export function useWastage(params: {
         reason: r.reason ? String(r.reason) : null,
         responsible: r.responsible ? String(r.responsible) : null,
         enteredBy: r.entered_by ? String(r.entered_by) : null,
+        branchName: r.branch_name ? String(r.branch_name) : null,
       }))
 
       setRows(mapped)
@@ -472,6 +474,7 @@ export function useWastage(params: {
         reason: data.reason ? String(data.reason) : null,
         responsible: data.responsible ? String(data.responsible) : null,
         enteredBy: data.entered_by ? String(data.entered_by) : null,
+        branchName: data.branch_name ? String(data.branch_name) : null,
       }
 
       setRows(prev => [mapped, ...prev])

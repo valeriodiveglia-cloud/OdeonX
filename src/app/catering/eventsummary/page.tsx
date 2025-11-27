@@ -11,6 +11,7 @@ import {
   XMarkIcon,
   ChevronLeftIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 
 import { useEventCalc } from '@/app/catering/_state/EventCalcProvider'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -377,12 +378,12 @@ function publishParisSummary(eventId: string | null, payload: any) {
   if (!eventId) return
   try {
     localStorage.setItem(`paris:summary:${eventId}`, JSON.stringify(payload))
-  } catch {}
+  } catch { }
   try {
     window.dispatchEvent(
       new CustomEvent('paris:summary', { detail: { eventId, payload } })
     )
-  } catch {}
+  } catch { }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -575,8 +576,8 @@ function renderTotalsHTML(opts: {
     <tr>
       <td style="${footTd} text-align:right;">${escHtml(L.totalAfter)}</td>
       ${showCosts
-        ? `<td style="${footTd} text-align:right;">${escHtml(fmtC(round0(grandCost)))}</td>`
-        : '<td style="padding:8px 8px;border-top:1px solid #e5e7eb;background:#f9fafb;color:#9ca3af;text-align:right;">-</td>'}
+      ? `<td style="${footTd} text-align:right;">${escHtml(fmtC(round0(grandCost)))}</td>`
+      : '<td style="padding:8px 8px;border-top:1px solid #e5e7eb;background:#f9fafb;color:#9ca3af;text-align:right;">-</td>'}
       <td style="${footTd} text-align:right;">${escHtml(fmtC(round0(priceAfterDiscounts)))}</td>
     </tr>
   </tfoot>
@@ -595,14 +596,14 @@ function publishDocxTotals(
   try {
     localStorage.setItem(`paris:docxTotals:${eventId}:full`, htmlFull)
     localStorage.setItem(`paris:docxTotals:${eventId}:noCosts`, htmlNoCosts)
-  } catch {}
+  } catch { }
   try {
     window.dispatchEvent(
       new CustomEvent('paris:docxTotals', {
         detail: { eventId, htmlFull, htmlNoCosts },
       })
     )
-  } catch {}
+  } catch { }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -708,15 +709,15 @@ function computePaymentPlan(args: {
     isFull
       ? 100
       : hasExplicitDeposit || depPctNorm != null || balPctNorm != null
-      ? pctFromAmount(depositAmount, Math.max(0, totalAfterDiscounts))
-      : null
+        ? pctFromAmount(depositAmount, Math.max(0, totalAfterDiscounts))
+        : null
 
   const balancePercent =
     isFull
       ? 0
       : hasExplicitDeposit || depPctNorm != null || balPctNorm != null
-      ? Math.max(0, 100 - (depositPercent ?? 0))
-      : null
+        ? Math.max(0, 100 - (depositPercent ?? 0))
+        : null
 
   return {
     isFull,
@@ -808,7 +809,7 @@ export default function EventSummaryPage() {
       localStorage.setItem('eventcalc.draftEventId', id)
       localStorage.setItem('event_current_id', id)
       localStorage.setItem('eventId', id)
-    } catch {}
+    } catch { }
     hardNavigate(`/catering/event-calculator?eventId=${encodeURIComponent(id)}`)
   }
 
@@ -962,7 +963,7 @@ export default function EventSummaryPage() {
         setBundleSettings(map)
         try {
           localStorage.setItem(LS_BUNDLE_SETTINGS_KEY, JSON.stringify(map))
-        } catch {}
+        } catch { }
       }
     }
     hydrate()
@@ -1007,7 +1008,7 @@ export default function EventSummaryPage() {
       const limit = Math.max(
         0,
         cfg?.maxModifiers ??
-          (Array.isArray(cfg?.modifierSlots) ? cfg!.modifierSlots.length : 0)
+        (Array.isArray(cfg?.modifierSlots) ? cfg!.modifierSlots.length : 0)
       )
       const markup = Number(cfg?.markupX ?? 1) > 0 ? Number(cfg?.markupX) : 1
 
@@ -1330,11 +1331,11 @@ export default function EventSummaryPage() {
 
   const { language } = useSettings()
 
-// prima era: useMemo(() => loadTotalsLabelMap(), [])
-const totalsLabelMap = useMemo(
-  () => loadTotalsLabelMapWithLang(language),
-  [language]
-)
+  // prima era: useMemo(() => loadTotalsLabelMap(), [])
+  const totalsLabelMap = useMemo(
+    () => loadTotalsLabelMapWithLang(language),
+    [language]
+  )
   const labelUi = useCallback(
     (raw: string) =>
       totalsLabelMap[raw] ??
@@ -1353,12 +1354,12 @@ const totalsLabelMap = useMemo(
 
   const totalsSections = useMemo(
     () => [
-      { label: 'Bundles',        cost: bundlesTotals.cost,   price: bundlesTotals.price },
-      { label: 'Equipment',      cost: equipmentTotals.cost, price: equipmentTotals.price },
-      { label: 'Staff',          cost: staffTotals.cost,     price: staffTotals.price },
-      { label: 'Transport',      cost: transportTotals.cost, price: transportTotals.price },
-      { label: 'Company assets', cost: 0,                    price: assetsPrice },
-      { label: 'Extra fee',      cost: extraFeeTotals.cost,  price: extraFeeTotals.price },
+      { label: 'Bundles', cost: bundlesTotals.cost, price: bundlesTotals.price },
+      { label: 'Equipment', cost: equipmentTotals.cost, price: equipmentTotals.price },
+      { label: 'Staff', cost: staffTotals.cost, price: staffTotals.price },
+      { label: 'Transport', cost: transportTotals.cost, price: transportTotals.price },
+      { label: 'Company assets', cost: 0, price: assetsPrice },
+      { label: 'Extra fee', cost: extraFeeTotals.cost, price: extraFeeTotals.price },
     ],
     [bundlesTotals, equipmentTotals, staffTotals, transportTotals, assetsPrice, extraFeeTotals]
   )
@@ -1489,7 +1490,7 @@ const totalsLabelMap = useMemo(
     transportSettings.refresh?.()
     discountsHook.refresh?.()
     staffSettings.refresh?.()
-    ;(staffHook as any).refresh?.()
+      ; (staffHook as any).refresh?.()
   }, [
     refreshHeader,
     refreshBundles,
@@ -1558,6 +1559,8 @@ const totalsLabelMap = useMemo(
     !!transportSettings.loading ||
     !!(discountsHook as any)?.loading ||
     !!staffSettings.loading
+
+  if (anyLoading) return <CircularLoader />
 
   return (
     <div className="max-w-6xl mx-auto p-4">
@@ -2158,7 +2161,7 @@ function EventInfoDoc({
 
     async function resolveFromDb(id: string) {
       const tables = [
-        'branches','branch_providers','provider_branches','company_branches','providers','locations',
+        'branches', 'branch_providers', 'provider_branches', 'company_branches', 'providers', 'locations',
       ]
       for (const tname of tables) {
         try {
@@ -2172,7 +2175,7 @@ function EventInfoDoc({
               return
             }
           }
-        } catch {}
+        } catch { }
       }
       setBranchProviderName('—')
     }
@@ -2205,12 +2208,12 @@ function EventInfoDoc({
     if (!raw) return '—'
 
     const COMPANY_SYNONYMS = [
-      'company','enterprise','business','firm','firma','società',
-      'cong ty','công ty','cty','doanh nghiệp'
+      'company', 'enterprise', 'business', 'firm', 'firma', 'società',
+      'cong ty', 'công ty', 'cty', 'doanh nghiệp'
     ]
     const PRIVATE_SYNONYMS = [
-      'private','individual','personal','privato',
-      'ca nhan','cá nhân','canhan'
+      'private', 'individual', 'personal', 'privato',
+      'ca nhan', 'cá nhân', 'canhan'
     ]
 
     if (COMPANY_SYNONYMS.includes(raw)) {
@@ -2346,7 +2349,7 @@ function BundlesBlock({
         const limit = Math.max(
           0,
           cfg?.maxModifiers ??
-            (Array.isArray(cfg?.modifierSlots) ? cfg!.modifierSlots.length : 0)
+          (Array.isArray(cfg?.modifierSlots) ? cfg!.modifierSlots.length : 0)
         )
         const markup = Number(cfg?.markupX ?? 1) > 0 ? Number(cfg?.markupX) : 1
         let subCost = 0, subPrice = 0
@@ -2960,10 +2963,10 @@ function DiscountsBlock({
   const labelFromLS = (scope?: PctScopeLS) => {
     switch (scope) {
       case 'bundles_all': return t('discounts.scope.bundles_all', 'BUNDLES (all)')
-      case 'equipment':  return t('discounts.scope.equipment', 'EQUIPMENT')
-      case 'staff':      return t('discounts.scope.staff', 'STAFF')
-      case 'transport':  return t('discounts.scope.transport', 'TRANSPORT')
-      case 'assets':     return t('discounts.scope.assets', 'COMPANY ASSETS')
+      case 'equipment': return t('discounts.scope.equipment', 'EQUIPMENT')
+      case 'staff': return t('discounts.scope.staff', 'STAFF')
+      case 'transport': return t('discounts.scope.transport', 'TRANSPORT')
+      case 'assets': return t('discounts.scope.assets', 'COMPANY ASSETS')
       case 'total_excl_extrafee':
         return t('discounts.scope.total_excl_extrafee', 'TOTALS (exclude extra fees)')
       case 'total_incl_extrafee':
@@ -2983,12 +2986,12 @@ function DiscountsBlock({
         return t('discounts.scope.total_incl_extrafee', 'TOTALS (include extra fees)')
       case 'total_excl':
         return t('discounts.scope.total_excl_extrafee', 'TOTALS (exclude extra fees)')
-      case 'bundles':   return t('discounts.scope.bundles_all', 'BUNDLES (all)')
+      case 'bundles': return t('discounts.scope.bundles_all', 'BUNDLES (all)')
       case 'equipment': return t('discounts.scope.equipment', 'EQUIPMENT')
-      case 'staff':     return t('discounts.scope.staff', 'STAFF')
+      case 'staff': return t('discounts.scope.staff', 'STAFF')
       case 'transport': return t('discounts.scope.transport', 'TRANSPORT')
-      case 'assets':    return t('discounts.scope.assets', 'COMPANY ASSETS')
-      default:          return t('Totals', 'Totals')
+      case 'assets': return t('discounts.scope.assets', 'COMPANY ASSETS')
+      default: return t('Totals', 'Totals')
     }
   }
 
@@ -3280,24 +3283,24 @@ function Kpis({
           !budgetTotal || budgetTotal <= 0
             ? 'text-gray-800'
             : priceAfterDiscounts - (budgetTotal || 0) > 0
-            ? 'text-red-700'
-            : priceAfterDiscounts - (budgetTotal || 0) < 0
-            ? 'text-green-700'
-            : 'text-gray-800'
+              ? 'text-red-700'
+              : priceAfterDiscounts - (budgetTotal || 0) < 0
+                ? 'text-green-700'
+                : 'text-gray-800'
         }
         value={
           budgetTotal && budgetTotal > 0
             ? `${priceAfterDiscounts - budgetTotal > 0 ? '+' : ''}${fmtC(
-                priceAfterDiscounts - budgetTotal
-              )}`
+              priceAfterDiscounts - budgetTotal
+            )}`
             : '-'
         }
         sub={
           budgetTotal && budgetTotal > 0
             ? (() => {
-                const pct = ((priceAfterDiscounts - budgetTotal) / budgetTotal) * 100
-                return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`
-              })()
+              const pct = ((priceAfterDiscounts - budgetTotal) / budgetTotal) * 100
+              return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`
+            })()
             : undefined
         }
       />

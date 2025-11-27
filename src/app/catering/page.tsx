@@ -23,6 +23,7 @@ import {
   TrashIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 import { Dialog } from '@headlessui/react'
 import { supabase } from '@/lib/supabase_shim'
 import useEventList from '@/app/catering/_data/useEventList'
@@ -40,10 +41,10 @@ type PaymentDraft = {
 /* ====== Status (senza "unpaid") ====== */
 type StatusKey = 'inquiry' | 'pending' | 'confirmed' | 'done'
 const STATUS_META: Record<StatusKey, { label: string; cls: string }> = {
-  inquiry:   { label: 'Inquiry',   cls: 'bg-slate-100 text-slate-800 ring-1 ring-slate-200' },
-  pending:   { label: 'Pending',   cls: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200' },
+  inquiry: { label: 'Inquiry', cls: 'bg-slate-100 text-slate-800 ring-1 ring-slate-200' },
+  pending: { label: 'Pending', cls: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200' },
   confirmed: { label: 'Confirmed', cls: 'bg-blue-100 text-blue-800 ring-1 ring-blue-200' },
-  done:      { label: 'Done',      cls: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200' },
+  done: { label: 'Done', cls: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200' },
 }
 const STATUS_ORDER: StatusKey[] = ['inquiry', 'pending', 'confirmed', 'done']
 
@@ -119,34 +120,34 @@ export default function CateringIndexPage() {
       return
     }
     const ids = events.map(r => r.id)
-    ;(async () => {
-      const { data, error } = await supabase
-        .from('event_headers')
-        .select('id, status, deposit_paid_at, balance_paid_at, deposit_due_date, balance_due_date, deposit_percent, balance_percent, payment_plan')
-        .in('id', ids)
-      if (error || !data) return
+      ; (async () => {
+        const { data, error } = await supabase
+          .from('event_headers')
+          .select('id, status, deposit_paid_at, balance_paid_at, deposit_due_date, balance_due_date, deposit_percent, balance_percent, payment_plan')
+          .in('id', ids)
+        if (error || !data) return
 
-      const sMap: Record<string, StatusKey | null> = {}
-      const pMap: Record<string, { deposit: boolean; balance: boolean }> = {}
-      const dMap: Record<string, { depDue: string | null; balDue: string | null }> = {}
-      const pctMap: Record<string, { plan: 'full' | 'installments' | null; depPct: number | null; balPct: number | null }> = {}
+        const sMap: Record<string, StatusKey | null> = {}
+        const pMap: Record<string, { deposit: boolean; balance: boolean }> = {}
+        const dMap: Record<string, { depDue: string | null; balDue: string | null }> = {}
+        const pctMap: Record<string, { plan: 'full' | 'installments' | null; depPct: number | null; balPct: number | null }> = {}
 
-      for (const row of data) {
-        const id = (row as any).id as string
-        sMap[id] = asStatusKey((row as any).status)
-        pMap[id] = { deposit: !!(row as any).deposit_paid_at, balance: !!(row as any).balance_paid_at }
-        dMap[id] = { depDue: (row as any).deposit_due_date ?? null, balDue: (row as any).balance_due_date ?? null }
-        pctMap[id] = {
-          plan: (row as any).payment_plan ?? null,
-          depPct: normDbPct((row as any).deposit_percent),
-          balPct: normDbPct((row as any).balance_percent),
+        for (const row of data) {
+          const id = (row as any).id as string
+          sMap[id] = asStatusKey((row as any).status)
+          pMap[id] = { deposit: !!(row as any).deposit_paid_at, balance: !!(row as any).balance_paid_at }
+          dMap[id] = { depDue: (row as any).deposit_due_date ?? null, balDue: (row as any).balance_due_date ?? null }
+          pctMap[id] = {
+            plan: (row as any).payment_plan ?? null,
+            depPct: normDbPct((row as any).deposit_percent),
+            balPct: normDbPct((row as any).balance_percent),
+          }
         }
-      }
-      setDbStatusMap(sMap)
-      setDbPaidMap(pMap)
-      setDbDueMap(dMap)
-      setDbPlanPctMap(pctMap)
-    })()
+        setDbStatusMap(sMap)
+        setDbPaidMap(pMap)
+        setDbDueMap(dMap)
+        setDbPlanPctMap(pctMap)
+      })()
   }, [events])
 
   // Totals change listeners
@@ -186,16 +187,16 @@ export default function CateringIndexPage() {
     try {
       localStorage.removeItem(`eventcalc.bundles.totals:${eventId}`)
       localStorage.removeItem(`eventcalc.total.afterDiscounts:${eventId}`)
-    } catch {}
+    } catch { }
   }
   function getCurrentEventIdLS(): string | null {
     try { return localStorage.getItem('event_current_id') || localStorage.getItem('eventId') || null } catch { return null }
   }
   const onRowActivate = (id: string) => {
     if (selectMode) { setSelected(s => ({ ...s, [id]: !s[id] })); return }
-    try { localStorage.removeItem('eventcalc.draftEventId') } catch {}
+    try { localStorage.removeItem('eventcalc.draftEventId') } catch { }
     const prev = getCurrentEventIdLS(); if (prev && prev !== id) clearPerEventLocalCache(prev)
-    try { localStorage.setItem('event_current_id', id); localStorage.setItem('eventId', id) } catch {}
+    try { localStorage.setItem('event_current_id', id); localStorage.setItem('eventId', id) } catch { }
     hardNavigate(`/catering/event-calculator?eventId=${encodeURIComponent(id)}`)
   }
   const onNewEvent = () => {
@@ -205,7 +206,7 @@ export default function CateringIndexPage() {
       clearPerEventLocalCache(id)
       localStorage.setItem('event_current_id', id)
       localStorage.setItem('eventId', id)
-    } catch {}
+    } catch { }
     hardNavigate(`/catering/event-calculator?eventId=${encodeURIComponent(id)}`)
   }
 
@@ -252,14 +253,14 @@ export default function CateringIndexPage() {
     const nextDraftDue =
       d
         ? (!paidDeposit && d.deposit.dueDate
-            ? dateToSortable(d.deposit.dueDate)
-            : (!paidBalance && d.balance.dueDate ? dateToSortable(d.balance.dueDate) : Number.POSITIVE_INFINITY))
+          ? dateToSortable(d.deposit.dueDate)
+          : (!paidBalance && d.balance.dueDate ? dateToSortable(d.balance.dueDate) : Number.POSITIVE_INFINITY))
         : Number.POSITIVE_INFINITY
     if (Number.isFinite(nextDraftDue)) return nextDraftDue
 
     const nextDbDue =
       !paidDeposit && depDue ? dateToSortable(depDue)
-      : (!paidBalance && balDue ? dateToSortable(balDue) : Number.POSITIVE_INFINITY)
+        : (!paidBalance && balDue ? dateToSortable(balDue) : Number.POSITIVE_INFINITY)
 
     if (Number.isFinite(nextDbDue)) return nextDbDue
     return dateToSortable(row?.next_due_date ?? null)
@@ -278,12 +279,12 @@ export default function CateringIndexPage() {
       }
       switch (sort.key) {
         case 'payment': cmp = paymentSortValue(A.row, paymentDrafts) - paymentSortValue(B.row, paymentDrafts); break
-        case 'total':   cmp = readTotalForSort(A.row) - readTotalForSort(B.row); break
-        case 'date':    cmp = dateToSortable(A.row.event_date) - dateToSortable(B.row.event_date); break
-        case 'event':   cmp = strCmp(A.row.event_name, B.row.event_name); break
-        case 'host':    cmp = strCmp(A.row.host_name, B.row.host_name); break
+        case 'total': cmp = readTotalForSort(A.row) - readTotalForSort(B.row); break
+        case 'date': cmp = dateToSortable(A.row.event_date) - dateToSortable(B.row.event_date); break
+        case 'event': cmp = strCmp(A.row.event_name, B.row.event_name); break
+        case 'host': cmp = strCmp(A.row.host_name, B.row.host_name); break
         case 'id':
-        default:        cmp = strCmp(A.row.id, B.row.id)
+        default: cmp = strCmp(A.row.id, B.row.id)
       }
       if (sort.dir === 'desc') cmp = -cmp
       if (cmp !== 0) return cmp
@@ -321,7 +322,7 @@ export default function CateringIndexPage() {
           localStorage.removeItem('eventId')
           localStorage.removeItem('eventcalc.draftEventId')
         }
-      } catch {}
+      } catch { }
       await refresh()
       setSelected({})
       setSelectMode(false)
@@ -339,41 +340,41 @@ export default function CateringIndexPage() {
     if (!rowMenuOpen) return
     const rowId = rowMenuOpen
     setCheckingManageMap(m => ({ ...m, [rowId]: true }))
-    ;(async () => {
-      try {
-        const totalEff = readLSAfterDiscounts(rowId) ?? (events.find(r => r.id === rowId)?.total_vnd ?? null)
-        const totalOk = Number.isFinite(Number(totalEff)) && Number(totalEff) > 0
-        if (!totalOk) { setCanManagePaymentMap(m => ({ ...m, [rowId]: false })); setManageHintMap(m => ({ ...m, [rowId]: tt('pay.hint_missing_total', 'Missing or zero Total') })); return }
+      ; (async () => {
+        try {
+          const totalEff = readLSAfterDiscounts(rowId) ?? (events.find(r => r.id === rowId)?.total_vnd ?? null)
+          const totalOk = Number.isFinite(Number(totalEff)) && Number(totalEff) > 0
+          if (!totalOk) { setCanManagePaymentMap(m => ({ ...m, [rowId]: false })); setManageHintMap(m => ({ ...m, [rowId]: tt('pay.hint_missing_total', 'Missing or zero Total') })); return }
 
-        const planPct = dbPlanPctMap[rowId]
-        const due = dbDueMap[rowId]
-        if (!planPct || !due) {
-          setCanManagePaymentMap(m => ({ ...m, [rowId]: false }))
-          setManageHintMap(m => ({ ...m, [rowId]: tt('pay.hint_missing_data', 'Missing payment data') }))
-          return
+          const planPct = dbPlanPctMap[rowId]
+          const due = dbDueMap[rowId]
+          if (!planPct || !due) {
+            setCanManagePaymentMap(m => ({ ...m, [rowId]: false }))
+            setManageHintMap(m => ({ ...m, [rowId]: tt('pay.hint_missing_data', 'Missing payment data') }))
+            return
+          }
+
+          const plan = planPct.plan
+          const depPct = planPct.depPct
+          const balPct = planPct.balPct
+          const depDue = due.depDue
+          const balDue = due.balDue
+
+          let can = false, hint = ''
+          if (plan === 'full') { can = !!balDue; if (!can) hint = tt('pay.hint_missing_bal_due', 'Missing balance due date') }
+          else {
+            const haveDates = !!depDue && !!balDue
+            const havePct = depPct != null || balPct != null
+            can = haveDates && havePct
+            if (!haveDates) hint = tt('pay.hint_missing_dates', 'Missing deposit/balance due date')
+            else if (!havePct) hint = tt('pay.hint_missing_pct', 'Missing deposit% or balance%')
+          }
+          setCanManagePaymentMap(m => ({ ...m, [rowId]: can }))
+          setManageHintMap(m => ({ ...m, [rowId]: hint }))
+        } finally {
+          setCheckingManageMap(m => ({ ...m, [rowId]: false }))
         }
-
-        const plan = planPct.plan
-        const depPct = planPct.depPct
-        const balPct = planPct.balPct
-        const depDue = due.depDue
-        const balDue = due.balDue
-
-        let can = false, hint = ''
-        if (plan === 'full') { can = !!balDue; if (!can) hint = tt('pay.hint_missing_bal_due', 'Missing balance due date') }
-        else {
-          const haveDates = !!depDue && !!balDue
-          const havePct = depPct != null || balPct != null
-          can = haveDates && havePct
-          if (!haveDates) hint = tt('pay.hint_missing_dates', 'Missing deposit/balance due date')
-          else if (!havePct) hint = tt('pay.hint_missing_pct', 'Missing deposit% or balance%')
-        }
-        setCanManagePaymentMap(m => ({ ...m, [rowId]: can }))
-        setManageHintMap(m => ({ ...m, [rowId]: hint }))
-      } finally {
-        setCheckingManageMap(m => ({ ...m, [rowId]: false }))
-      }
-    })()
+      })()
   }, [rowMenuOpen, events, dbPlanPctMap, dbDueMap])
 
   // ------- Modals logic -------
@@ -460,11 +461,10 @@ export default function CateringIndexPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSelectMode(s => { const next = !s; if (!next) setSelected({}); setMenuOpen(false); return next })}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${
-              selectMode
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-            }`}
+            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+              }`}
             title={selectMode ? tt('select.exit', 'Exit selecting') : tt('select.enter', 'Enter selecting')}
             disabled={deleting}
           >
@@ -538,40 +538,48 @@ export default function CateringIndexPage() {
                   </th>
 
                   {/* Date */}
-                  {(() => { const { active, ariaSort } = thSortProps('date'); return (
-                    <th className="p-2 text-left text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort('date')} title={tt('table.sort.date', 'Sort by date')} disabled={deleting}>
-                        <span>{tt('table.col.date', 'Date')}</span><SortIndicator active={active} dir={sort.dir} />
-                      </button>
-                    </th>
-                  )})()}
+                  {(() => {
+                    const { active, ariaSort } = thSortProps('date'); return (
+                      <th className="p-2 text-left text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
+                        <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort('date')} title={tt('table.sort.date', 'Sort by date')} disabled={deleting}>
+                          <span>{tt('table.col.date', 'Date')}</span><SortIndicator active={active} dir={sort.dir} />
+                        </button>
+                      </th>
+                    )
+                  })()}
 
                   {/* Event */}
-                  {(() => { const { active, ariaSort } = thSortProps('event'); return (
-                    <th className="p-2 text-left text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort('event')} title={tt('table.sort.event', 'Sort by event title')} disabled={deleting}>
-                        <span>{tt('table.col.event', 'Event')}</span><SortIndicator active={active} dir={sort.dir} />
-                      </button>
-                    </th>
-                  )})()}
+                  {(() => {
+                    const { active, ariaSort } = thSortProps('event'); return (
+                      <th className="p-2 text-left text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
+                        <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort('event')} title={tt('table.sort.event', 'Sort by event title')} disabled={deleting}>
+                          <span>{tt('table.col.event', 'Event')}</span><SortIndicator active={active} dir={sort.dir} />
+                        </button>
+                      </th>
+                    )
+                  })()}
 
                   {/* Host */}
-                  {(() => { const { active, ariaSort } = thSortProps('host'); return (
-                    <th className="p-2 text-left text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort('host')} title={tt('table.sort.host', 'Sort by host')} disabled={deleting}>
-                        <span>{tt('table.col.host', 'Host')}</span><SortIndicator active={active} dir={sort.dir} />
-                      </button>
-                    </th>
-                  )})()}
+                  {(() => {
+                    const { active, ariaSort } = thSortProps('host'); return (
+                      <th className="p-2 text-left text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
+                        <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort('host')} title={tt('table.sort.host', 'Sort by host')} disabled={deleting}>
+                          <span>{tt('table.col.host', 'Host')}</span><SortIndicator active={active} dir={sort.dir} />
+                        </button>
+                      </th>
+                    )
+                  })()}
 
                   {/* Payment */}
-                  {(() => { const { active, ariaSort } = thSortProps('payment'); return (
-                    <th className="p-2 text-left text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort('payment')} title={tt('table.sort.payment', 'Sort by payment')} disabled={deleting}>
-                        <span>{tt('table.col.payment', 'Payment')}</span><SortIndicator active={active} dir={sort.dir} />
-                      </button>
-                    </th>
-                  )})()}
+                  {(() => {
+                    const { active, ariaSort } = thSortProps('payment'); return (
+                      <th className="p-2 text-left text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
+                        <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort('payment')} title={tt('table.sort.payment', 'Sort by payment')} disabled={deleting}>
+                          <span>{tt('table.col.payment', 'Payment')}</span><SortIndicator active={active} dir={sort.dir} />
+                        </button>
+                      </th>
+                    )
+                  })()}
 
                   {/* Status (ciclo gruppi) */}
                   {(() => {
@@ -600,13 +608,15 @@ export default function CateringIndexPage() {
                   })()}
 
                   {/* Total (VND) */}
-                  {(() => { const { active, ariaSort } = thSortProps('total'); return (
-                    <th className="p-2 text-right text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
-                      <button type="button" className="inline-flex items-center gap-1 float-right" onClick={() => toggleSort('total')} title={tt('table.sort.total', 'Sort by total')} disabled={deleting}>
-                        <span>{tt('table.col.total_vnd', 'Total (VND)')}</span><SortIndicator active={active} dir={sort.dir} />
-                      </button>
-                    </th>
-                  )})()}
+                  {(() => {
+                    const { active, ariaSort } = thSortProps('total'); return (
+                      <th className="p-2 text-right text-xs font-semibold uppercase tracking-wide" aria-sort={ariaSort as any}>
+                        <button type="button" className="inline-flex items-center gap-1 float-right" onClick={() => toggleSort('total')} title={tt('table.sort.total', 'Sort by total')} disabled={deleting}>
+                          <span>{tt('table.col.total_vnd', 'Total (VND)')}</span><SortIndicator active={active} dir={sort.dir} />
+                        </button>
+                      </th>
+                    )
+                  })()}
 
                   <th className="p-2"></th>
                 </tr>
@@ -614,21 +624,11 @@ export default function CateringIndexPage() {
 
               <tbody>
                 {loading ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={`sk-${i}`} className="border-t">
-                      <td className="p-2">{selectMode ? <div className="h-4 w-4 bg-gray-100 rounded" /> : null}</td>
-                      <td className="p-2"><div className="h-3 w-24 bg-gray-100 rounded animate-pulse" /></td>
-                      <td className="p-2">
-                        <div className="h-3 w-56 bg-gray-100 rounded animate-pulse mb-2" />
-                        <div className="h-2 w-40 bg-gray-100 rounded animate-pulse" />
-                      </td>
-                      <td className="p-2"><div className="h-3 w-36 bg-gray-100 rounded animate-pulse" /></td>
-                      <td className="p-2"><div className="h-3 w-28 bg-gray-100 rounded animate-pulse" /></td>
-                      <td className="p-2"><div className="h-3 w-24 bg-gray-100 rounded animate-pulse" /></td>
-                      <td className="p-2 text-right"><div className="h-3 w-20 bg-gray-100 rounded animate-pulse ml-auto" /></td>
-                      <td className="p-2"><div className="h-4 w-4 bg-gray-100 rounded mx-auto" /></td>
-                    </tr>
-                  ))
+                  <tr>
+                    <td colSpan={8} className="p-4">
+                      <CircularLoader />
+                    </td>
+                  </tr>
                 ) : rowsSorted.length === 0 ? (
                   <tr className="border-t">
                     <td className="p-4 text-sm text-gray-500" colSpan={8}>
@@ -759,7 +759,7 @@ export default function CateringIndexPage() {
         effectiveTotal={
           paymentModalFor
             ? (readLSAfterDiscounts(paymentModalFor) ??
-               (events.find(r => r.id === paymentModalFor)?.total_vnd ?? null))
+              (events.find(r => r.id === paymentModalFor)?.total_vnd ?? null))
             : null
         }
         draft={paymentModalFor ? paymentDrafts[paymentModalFor] : undefined}
@@ -848,7 +848,7 @@ function paymentInfo(
   try {
     const ts = Date.parse(`${String(date).slice(0, 10)}T00:00:00Z`)
     overdue = Number.isFinite(ts) ? ts < Date.now() : false
-  } catch {}
+  } catch { }
   return { label, overdue }
 }
 
@@ -967,15 +967,15 @@ function ManagePaymentModal(props: {
         setLoc({
           deposit: {
             dueDate: draft?.deposit.dueDate ?? (toDateInput(depDue) || ''),
-            amount:  draft?.deposit.amount  ?? depAmt,
-            paid:    paidDeposit,
-            paidAt:  paidDeposit ? (depPaidAtLocal ?? nowLocalDT()) : null,
+            amount: draft?.deposit.amount ?? depAmt,
+            paid: paidDeposit,
+            paidAt: paidDeposit ? (depPaidAtLocal ?? nowLocalDT()) : null,
           },
           balance: {
             dueDate: draft?.balance.dueDate ?? (toDateInput(balDue) || ''),
-            amount:  draft?.balance.amount  ?? balAmt,
-            paid:    paidBalance,
-            paidAt:  paidBalance ? (balPaidAtLocal ?? nowLocalDT()) : null,
+            amount: draft?.balance.amount ?? balAmt,
+            paid: paidBalance,
+            paidAt: paidBalance ? (balPaidAtLocal ?? nowLocalDT()) : null,
           },
         })
       } finally {

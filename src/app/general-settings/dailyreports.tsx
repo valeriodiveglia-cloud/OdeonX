@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { PlusIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import { t } from '@/lib/i18n'
 
@@ -91,7 +92,7 @@ function uid() {
 function saveLS(map: Record<string, ProviderBranch>) {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(map))
-  } catch {}
+  } catch { }
 }
 function loadLS(): Record<string, ProviderBranch> | null {
   try {
@@ -107,7 +108,7 @@ function loadLS(): Record<string, ProviderBranch> | null {
 function saveOrderLS(order: string[]) {
   try {
     localStorage.setItem(LS_ORDER_KEY, JSON.stringify(order))
-  } catch {}
+  } catch { }
 }
 function loadOrderLS(): string[] | null {
   try {
@@ -339,13 +340,14 @@ export function DailyReportsCard() {
     }
   }
 
+  if (loading) return <CircularLoader />
+
   return (
     <Card>
       <CardHeader
         title={t(language, 'GeneralSettingsDRTitle')}
         right={
           <div className="flex items-center gap-2">
-            {loading && <span className="text-xs text-gray-600">{t(language, 'GeneralSettingsLoading')}</span>}
             {!loading && loadMsg && <span className="text-xs text-gray-600">{loadMsg}</span>}
             <button
               type="button"

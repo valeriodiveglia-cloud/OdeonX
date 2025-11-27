@@ -23,6 +23,7 @@ import {
   WalletIcon,
   BuildingLibraryIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 
 import {
   useCredits,
@@ -147,7 +148,7 @@ function PageHeader({ title, left, after, right }: { title: string; left?: React
 }
 function SectionCard({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border p-4 bg-white shadow-sm h-full">
+    <div className="rounded-2xl border p-4 bg-white shadow-sm min-h-full">
       {title ? <div className="text-sm font-semibold text-gray-800 mb-3">{title}</div> : null}
       {children}
     </div>
@@ -1130,7 +1131,7 @@ export default function CreditsPage() {
 
       <Card>
         <div className="p-3 overflow-x-auto">
-          {showLoading && rows.length === 0 && <div className="text-sm text-gray-500 py-2">{t.table.loading}</div>}
+          {showLoading && rows.length === 0 && <CircularLoader />}
           <CreditsTable
             rows={rows}
             sortedRows={sortedRows}

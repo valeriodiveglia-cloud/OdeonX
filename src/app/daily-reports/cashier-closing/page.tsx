@@ -6,6 +6,7 @@ import {
   ArrowPathIcon,
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
+import CircularLoader from '@/components/CircularLoader'
 
 import InitialInfoCard, { type Header as HeaderInfo, type PaymentBreakdown } from './_cards/InitialInfoCard'
 import CashCountCard from './_cards/CashCountCard'
@@ -714,6 +715,8 @@ export default function CashierClosingPage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [onSaveAll])
+
+  if (lukeLoading) return <CircularLoader />
 
   if (!activeBranchName && !validating) {
     return (

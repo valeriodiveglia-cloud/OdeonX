@@ -21,6 +21,7 @@ import {
 import useMaterials, { type MaterialItem } from '@/app/catering/_data/useMaterials'
 import { supabase } from '@/lib/supabase_shim'
 import { useECT } from '@/app/catering/_i18n' // 👈 i18n
+import CircularLoader from '@/components/CircularLoader'
 
 // Cards
 import EventInfoCard, { type EventInfo } from '@/app/catering/_cards/EventInfoCard'
@@ -39,13 +40,13 @@ type BundleRow = { id: string; dish_id: Id | ''; qty: number; modifiers: Id[] }
 type BundleFromDB = { id: string; type_key: string; label: string; rows: BundleRow[] }
 
 const LS_BUNDLE_SETTINGS_KEY = 'eventcalc.bundleSettings'
-const savedSigKey   = (eventId?: string | null) => `eventcalc.savedSig.bundles:${eventId || ''}`
-const lastSavedKey  = (eventId?: string | null) => `eventcalc.lastSavedAt:${eventId || ''}`
+const savedSigKey = (eventId?: string | null) => `eventcalc.savedSig.bundles:${eventId || ''}`
+const lastSavedKey = (eventId?: string | null) => `eventcalc.lastSavedAt:${eventId || ''}`
 
 type SelectableItem = { id: string; name: string; category_name: string | null; unit_cost: number | null }
 
 function uuid() {
-  try { if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID() } catch {}
+  try { if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID() } catch { }
   return `id-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
 }
 function toNum(v: string, fallback = 0) { if (v === '') return fallback; const n = Number(v); return Number.isFinite(n) ? n : fallback }
@@ -74,12 +75,12 @@ function useResolvedEventId(ctx: any) {
   const resolved = useMemo(() => {
     const q = (searchParams?.get('eventId') || '').trim()
     if (q) return q
-    let draft = ''; try { draft = (localStorage.getItem('eventcalc.draftEventId') || '').trim() } catch {}
+    let draft = ''; try { draft = (localStorage.getItem('eventcalc.draftEventId') || '').trim() } catch { }
     if (draft) return draft
     const ctxId = (ctx?.draftEventId || ctx?.eventId || '').trim()
     if (ctxId) return ctxId
     let legacy = ''
-    try { legacy = (localStorage.getItem('event_current_id') || localStorage.getItem('eventId') || '').trim() } catch {}
+    try { legacy = (localStorage.getItem('event_current_id') || localStorage.getItem('eventId') || '').trim() } catch { }
     return legacy || uuid()
   }, [searchParams, ctx?.draftEventId, ctx?.eventId])
 
@@ -89,14 +90,14 @@ function useResolvedEventId(ctx: any) {
       localStorage.setItem('event_current_id', resolved)
       localStorage.setItem('eventId', resolved)
       localStorage.setItem('eventcalc.draftEventId', resolved)
-    } catch {}
+    } catch { }
     try {
       if (ctx && ctx.eventId !== resolved) {
         if (typeof ctx.setEventId === 'function') ctx.setEventId(resolved)
         else if (typeof ctx.setCurrentEventId === 'function') ctx.setCurrentEventId(resolved)
         else if (typeof ctx.set === 'function') ctx.set({ eventId: resolved })
       }
-    } catch {}
+    } catch { }
   }, [resolved, ctx])
 
   return resolved
@@ -112,7 +113,7 @@ function EnsureEventIdParam() {
 
     const fromUrl = (sp.get('eventId') || '').trim()
     if (fromUrl) {
-      try { localStorage.setItem('eventcalc.draftEventId', fromUrl) } catch {}
+      try { localStorage.setItem('eventcalc.draftEventId', fromUrl) } catch { }
       return
     }
 
@@ -132,7 +133,7 @@ function clearEventLocalCache(eventId: string | null | undefined) {
   try {
     localStorage.removeItem(`eventcalc.bundles.totals:${eventId}`)
     localStorage.removeItem(`eventcalc.total.afterDiscounts:${eventId}`)
-  } catch {}
+  } catch { }
 }
 
 // === Firma contenuti (no ID!) per confronto server/bozza ===
@@ -178,38 +179,38 @@ function readTotalsSnap(eid: string): TotalsSnap | null {
 function hasCompleteSnap(s: any): s is TotalsSnap {
   if (!s || typeof s !== 'object') return false
   const req: (keyof TotalsSnap)[] = [
-    'bundlesCost','bundlesPrice',
-    'equipmentCost','equipmentPrice',
-    'staffCost','staffPrice',
-    'transportCost','transportPrice',
+    'bundlesCost', 'bundlesPrice',
+    'equipmentCost', 'equipmentPrice',
+    'staffCost', 'staffPrice',
+    'transportCost', 'transportPrice',
     'assetsPrice',
-    'extraFeeCost','extraFeePrice',
+    'extraFeeCost', 'extraFeePrice',
     'discountsTotal',
-    'grandCost','grandPrice','priceAfterDiscounts',
+    'grandCost', 'grandPrice', 'priceAfterDiscounts',
   ]
   return req.every(k => Number.isFinite(Number((s as any)[k])))
 }
 function mapSnapToRpcPayload(s: TotalsSnap) {
   return {
-    bundles_cost:          toI(s.bundlesCost),
-    bundles_price:         toI(s.bundlesPrice),
-    equipment_cost:        toI(s.equipmentCost),
-    equipment_price:       toI(s.equipmentPrice),
-    staff_cost:            toI(s.staffCost),
-    staff_price:           toI(s.staffPrice),
-    transport_cost:        toI(s.transportCost),
-    transport_price:       toI(s.transportPrice),
-    assets_price:          toI(s.assetsPrice),
-    extrafee_cost:         toI(s.extraFeeCost),
-    extrafee_price:        toI(s.extraFeePrice),
-    discounts_total:       toI(s.discountsTotal),
-    grand_cost:            toI(s.grandCost),
-    grand_price:           toI(s.grandPrice),
+    bundles_cost: toI(s.bundlesCost),
+    bundles_price: toI(s.bundlesPrice),
+    equipment_cost: toI(s.equipmentCost),
+    equipment_price: toI(s.equipmentPrice),
+    staff_cost: toI(s.staffCost),
+    staff_price: toI(s.staffPrice),
+    transport_cost: toI(s.transportCost),
+    transport_price: toI(s.transportPrice),
+    assets_price: toI(s.assetsPrice),
+    extrafee_cost: toI(s.extraFeeCost),
+    extrafee_price: toI(s.extraFeePrice),
+    discounts_total: toI(s.discountsTotal),
+    grand_cost: toI(s.grandCost),
+    grand_price: toI(s.grandPrice),
     price_after_discounts: toI(s.priceAfterDiscounts),
-    people_count:       Number.isFinite(Number(s.peopleCount)) ? Math.round(Number(s.peopleCount)) : null,
-    budget_per_person:  s.budgetPerPerson != null ? toI(s.budgetPerPerson) : null,
-    budget_total:       s.budgetTotal      != null ? toI(s.budgetTotal)      : null,
-    service_hours:      s.serviceHours     != null ? Number(s.serviceHours)   : null,
+    people_count: Number.isFinite(Number(s.peopleCount)) ? Math.round(Number(s.peopleCount)) : null,
+    budget_per_person: s.budgetPerPerson != null ? toI(s.budgetPerPerson) : null,
+    budget_total: s.budgetTotal != null ? toI(s.budgetTotal) : null,
+    service_hours: s.serviceHours != null ? Number(s.serviceHours) : null,
   }
 }
 
@@ -225,7 +226,7 @@ export default function EventCalculatorPageRoot() {
     const prev = prevRef.current
     if (prev && prev !== eventId) {
       clearEventLocalCache(prev)
-      try { window.dispatchEvent(new CustomEvent('event:changed', { detail: { from: prev, to: eventId } })) } catch {}
+      try { window.dispatchEvent(new CustomEvent('event:changed', { detail: { from: prev, to: eventId } })) } catch { }
     }
     prevRef.current = eventId
   }, [eventId])
@@ -255,7 +256,7 @@ function lastSavedLabel(ts: number | null, t: any) {
   if (!ts) return t('eventcalc.savebar.never_saved')
   const d = new Date(ts)
   let time = ''
-  try { time = d.toLocaleTimeString() } catch {}
+  try { time = d.toLocaleTimeString() } catch { }
   const msg = i18nFmt(t, 'eventcalc.savebar.saved_at', { time })
   return msg || `Saved at ${time}`
 }
@@ -300,7 +301,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
       }
       if (!cancelled && Object.keys(map).length) {
         setBundleSettings(map)
-        try { localStorage.setItem(LS_BUNDLE_SETTINGS_KEY, JSON.stringify(map)) } catch {}
+        try { localStorage.setItem(LS_BUNDLE_SETTINGS_KEY, JSON.stringify(map)) } catch { }
       }
     }
     hydrate()
@@ -351,10 +352,10 @@ function EventBundleScene({ eventId }: { eventId: string }) {
     const draft = qtyDrafts[row.id]
     return clampQty(draft === undefined ? (row.qty || 0) : clampPos(toNum(draft, row.qty || 0)))
   }
-  const onQtyFocus  = (row: BundleRow) => setQtyDrafts(d => (d[row.id] === undefined ? { ...d, [row.id]: String(row.qty ?? 0) } : d))
+  const onQtyFocus = (row: BundleRow) => setQtyDrafts(d => (d[row.id] === undefined ? { ...d, [row.id]: String(row.qty ?? 0) } : d))
   const onQtyChange = (row: BundleRow, nextStr: string) => setQtyDrafts(d => ({ ...d, [row.id]: nextStr }))
-  const commitQty   = (_: string, row: BundleRow) => { const next = computeQty(row); setQtyDrafts(d => { const c = { ...d }; delete c[row.id]; return c }); changeRowLocal('', row.id, { qty: next }) }
-  const cancelQty   = (row: BundleRow) => setQtyDrafts(d => { const c = { ...d }; delete c[row.id]; return c })
+  const commitQty = (_: string, row: BundleRow) => { const next = computeQty(row); setQtyDrafts(d => { const c = { ...d }; delete c[row.id]; return c }); changeRowLocal('', row.id, { qty: next }) }
+  const cancelQty = (row: BundleRow) => setQtyDrafts(d => { const c = { ...d }; delete c[row.id]; return c })
 
   // ==== Firme (server vs bozza) + override ottimistico dopo save
   const sigServerRaw = useMemo(
@@ -363,7 +364,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
   )
   const [serverSigOverride, setServerSigOverride] = useState<string | null>(null)
   const sigServer = serverSigOverride ?? sigServerRaw
-  const sigDraft  = useMemo(
+  const sigDraft = useMemo(
     () => signatureOf(bundleDrafts as DraftBundle[], qtyDrafts, bundleSettings),
     [bundleDrafts, qtyDrafts, bundleSettings]
   )
@@ -476,14 +477,14 @@ function EventBundleScene({ eventId }: { eventId: string }) {
       const cfg = bundleSettings[b.type_key]
       const limit = effectiveLimit(cfg)
       for (const r of (b.rows || [])) {
-               const q = computeQty(r)
+        const q = computeQty(r)
         const base = r.dish_id ? items.find(d => d.id === r.dish_id) : undefined
-        cost  += (base?.unit_cost || 0) * q
+        cost += (base?.unit_cost || 0) * q
         price += sellPriceFor(base, cfg) * q
         for (let i = 0; i < limit; i++) {
           const mid = r.modifiers?.[i]; if (!mid) continue
           const md = items.find(d => d.id === mid)
-          cost  += (md?.unit_cost || 0) * q
+          cost += (md?.unit_cost || 0) * q
           price += sellPriceFor(md, cfg) * q
         }
         qty += q
@@ -496,8 +497,8 @@ function EventBundleScene({ eventId }: { eventId: string }) {
   useEffect(() => {
     const key = `eventcalc.bundles.totals:${eventId || ''}`
     const payload = { cost: Math.round(bundlesGrandTotals.cost || 0), price: Math.round(bundlesGrandTotals.price || 0) }
-    try { localStorage.setItem(key, JSON.stringify(payload)) } catch {}
-    try { window.dispatchEvent(new CustomEvent('bundles:totals', { detail: { eventId, ...payload } })) } catch {}
+    try { localStorage.setItem(key, JSON.stringify(payload)) } catch { }
+    try { window.dispatchEvent(new CustomEvent('bundles:totals', { detail: { eventId, ...payload } })) } catch { }
   }, [eventId, bundlesGrandTotals.cost, bundlesGrandTotals.price])
 
   // ====== Dirty bridge Bundles ======
@@ -520,7 +521,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
     if (postSaveSilenceRef.current && sigDraft !== sigServer) return
     if (postSaveSilenceRef.current && sigDraft === sigServer) postSaveSilenceRef.current = false
     const dirty = sigDraft !== sigServer
-    try { window.dispatchEvent(new CustomEvent('eventcalc:dirty', { detail: { card: 'bundles', dirty } })) } catch {}
+    try { window.dispatchEvent(new CustomEvent('eventcalc:dirty', { detail: { card: 'bundles', dirty } })) } catch { }
   }, [sigDraft, sigServer, suppressingDirty, coldStartSilence])
 
   // ====== SaveBar state ======
@@ -547,7 +548,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
     const onSaved = () => {
       const now = Date.now()
       setLastSavedAtUI(now)
-      try { localStorage.setItem(lastSavedKey(eventId), String(now)) } catch {}
+      try { localStorage.setItem(lastSavedKey(eventId), String(now)) } catch { }
 
       setDirtyCards(prev => {
         const next: Record<string, boolean> = {}
@@ -574,7 +575,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
 
   // ====== Save All ======
   const onSaveAll = useCallback(async () => {
-    try { window.dispatchEvent(new CustomEvent('eventcalc:save')) } catch {}
+    try { window.dispatchEvent(new CustomEvent('eventcalc:save')) } catch { }
     await ec.saveAll()
   }, [ec])
 
@@ -672,7 +673,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
             try {
               window.dispatchEvent(new CustomEvent('event_totals:updated', { detail: { eventId: id, total: payload.price_after_discounts } }))
               window.dispatchEvent(new CustomEvent('events:refetch', { detail: { eventId: id, total: payload.price_after_discounts } }))
-            } catch {}
+            } catch { }
           }
         } else {
           console.warn('[save] skip event_totals_upsert: snapshot missing or incomplete')
@@ -688,13 +689,13 @@ function EventBundleScene({ eventId }: { eventId: string }) {
         window.dispatchEvent(new CustomEvent('eventcalc:saved'))
         window.dispatchEvent(new CustomEvent('eventcalc:saved-ok', { detail: { eventId: eid || eventId } }))
         window.dispatchEvent(new CustomEvent('eventcalc:dirty', { detail: { card: 'bundles', dirty: false } }))
-      } catch {}
+      } catch { }
 
       try {
         localStorage.setItem(savedSigKey(eid || eventId), sigDraft)
         const now = Date.now()
         localStorage.setItem(lastSavedKey(eid || eventId), String(now))
-      } catch {}
+      } catch { }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ec, eventId, bundleDrafts, qtyDrafts, bundleSettings, bundlesSafe, sigDraft])
@@ -705,7 +706,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
     const sKey = savedSigKey(eventId)
     const savedSig = typeof window !== 'undefined' ? localStorage.getItem(sKey) : null
     if (savedSig && savedSig === sigServerRaw) {
-      try { window.dispatchEvent(new CustomEvent('eventcalc:dirty', { detail: { card: 'bundles', dirty: false } })) } catch {}
+      try { window.dispatchEvent(new CustomEvent('eventcalc:dirty', { detail: { card: 'bundles', dirty: false } })) } catch { }
     }
   }, [eventId, sigServerRaw])
 
@@ -721,7 +722,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
     try {
       localStorage.removeItem(`eventcalc.bundles.totals:${id}`)
       localStorage.removeItem(`eventcalc.total.afterDiscounts:${id}`)
-    } catch {}
+    } catch { }
   }
   const newId = () =>
     (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
@@ -741,7 +742,7 @@ function EventBundleScene({ eventId }: { eventId: string }) {
       localStorage.setItem('event_current_id', id)
       localStorage.setItem('eventId', id)
       window.dispatchEvent(new CustomEvent('event:changed', { detail: { from: eventId, to: id } }))
-    } catch {}
+    } catch { }
     hardNavigate(`/catering/event-calculator?eventId=${encodeURIComponent(id)}`)
   }
 
@@ -749,6 +750,8 @@ function EventBundleScene({ eventId }: { eventId: string }) {
     const id = eventId || ''
     hardNavigate(`/catering/eventsummary?eventId=${encodeURIComponent(id)}`)
   }
+
+  if (loading || materialsLoading) return <CircularLoader />
 
   return (
     <div className="max-w-7xl mx-auto p-4 text-gray-100 pb-28">
@@ -893,10 +896,10 @@ function EventBundleScene({ eventId }: { eventId: string }) {
                         const dishOptions = withSelectedOption(baseOptionsRaw, r.dish_id, items)
 
                         const q = computeQty(r)
-                        const baseCost  = (baseItem?.unit_cost || 0) * q
+                        const baseCost = (baseItem?.unit_cost || 0) * q
                         const basePrice = sellPriceFor(baseItem, cfg) * q
 
-                        const modCosts  = Array.from({ length: usedCols }, (_, i) => {
+                        const modCosts = Array.from({ length: usedCols }, (_, i) => {
                           const mid = r.modifiers[i]; const md = mid ? items.find(d => d.id === mid) : undefined
                           return (md?.unit_cost || 0) * q
                         })
@@ -905,11 +908,11 @@ function EventBundleScene({ eventId }: { eventId: string }) {
                           return sellPriceFor(md, cfg) * q
                         })
 
-                        const rowCost  = baseCost  + modCosts.reduce((a, x) => a + x, 0)
+                        const rowCost = baseCost + modCosts.reduce((a, x) => a + x, 0)
                         const rowPrice = basePrice + modPrices.reduce((a, x) => a + x, 0)
 
-                        qtyTotal   += q
-                        costTotal  += rowCost
+                        qtyTotal += q
+                        costTotal += rowCost
                         priceTotal += rowPrice
 
                         const dishOutOfScope = !!(baseItem && cfg && !dishAllowedByCfg(cfg, baseItem))

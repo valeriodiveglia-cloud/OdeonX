@@ -5,6 +5,7 @@ export const runtime = 'edge'
 // Region hint (Vercel): Hong Kong, Singapore, Mumbai, fallback US West
 export const preferredRegion = ['hkg1', 'sin1', 'bom1', 'sfo1']
 
+const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY || ''
 const ORS_KEY = process.env.ORS_API_KEY
 const DEFAULT_COUNTRY = 'VN'
 
@@ -41,40 +42,110 @@ function dirKey(start: Coords, end: Coords, country: string) {
   return `${country.toUpperCase()}|${start.lon.toFixed(6)},${start.lat.toFixed(6)}|${end.lon.toFixed(6)},${end.lat.toFixed(6)}`
 }
 
-// === Geocode con cache SWR ===
+// === Google Geocode ===
+async function geocodeOneGoogle(text: string, country: string): Promise<Coords> {
+  const url = new URL('https://maps.googleapis.com/maps/api/geocode/json')
+  url.searchParams.set('address', text)
+  url.searchParams.set('key', GOOGLE_KEY)
+  if (country) url.searchParams.set('components', `country:${country}`)
+
+  const r = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS } })
+  if (!r.ok) throw new Error(`Google Geocode failed (${r.status})`)
+  const j = await r.json()
+  if (j.status !== 'OK') throw new Error(`Google Geocode status: ${j.status}`)
+
+  const loc = j.results?.[0]?.geometry?.location
+  if (!loc) throw new Error('No Google geocode result')
+
+  return { lon: loc.lng, lat: loc.lat }
+}
+
+// === Google Directions (Distance Matrix) ===
+async function getDirectionsGoogle(start: Coords, end: Coords): Promise<DirRes> {
+  const url = new URL('https://maps.googleapis.com/maps/api/distancematrix/json')
+  url.searchParams.set('origins', `${start.lat},${start.lon}`)
+  url.searchParams.set('destinations', `${end.lat},${end.lon}`)
+  url.searchParams.set('key', GOOGLE_KEY)
+
+  const r = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS } })
+  if (!r.ok) throw new Error(`Google Distance Matrix failed (${r.status})`)
+  const j = await r.json()
+  if (j.status !== 'OK') throw new Error(`Google Distance Matrix status: ${j.status}`)
+
+  const el = j.rows?.[0]?.elements?.[0]
+  if (!el || el.status !== 'OK') throw new Error(`Google Distance Matrix element status: ${el?.status}`)
+
+  return {
+    meters: el.distance.value,
+    seconds: el.duration.value
+  }
+}
+
+// === ORS Geocode (Fallback) ===
+async function geocodeOneORS(text: string, country: string): Promise<Coords> {
+  const url = new URL('https://api.openrouteservice.org/geocode/search')
+  url.searchParams.set('api_key', ORS_KEY || '')
+  url.searchParams.set('text', text)
+  url.searchParams.set('size', '1')
+  if (country) url.searchParams.set('boundary.country', country.toUpperCase())
+
+  const r = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS } })
+  if (!r.ok) throw new Error(`ORS Geocode failed for "${text}" (${r.status})`)
+  const j = await r.json()
+  const coords = j?.features?.[0]?.geometry?.coordinates
+  if (!Array.isArray(coords) || coords.length < 2) throw new Error(`No ORS geocode result for "${text}"`)
+  const [lon, lat] = coords
+  return { lon: Number(lon), lat: Number(lat) }
+}
+
+// === ORS Directions (Fallback) ===
+async function getDirectionsORS(start: Coords, end: Coords): Promise<DirRes> {
+  const url = new URL('https://api.openrouteservice.org/v2/directions/driving-car')
+  url.searchParams.set('api_key', ORS_KEY || '')
+  url.searchParams.set('start', `${start.lon},${start.lat}`)
+  url.searchParams.set('end', `${end.lon},${end.lat}`)
+
+  const r = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS } })
+  if (!r.ok) throw new Error(`ORS Directions failed (${r.status})`)
+  const j = await r.json()
+  const sum = j?.features?.[0]?.properties?.summary
+  if (!sum) throw new Error('ORS Directions summary missing')
+  return { meters: Number(sum.distance), seconds: Number(sum.duration) }
+}
+
+// === Wrapper with Cache & Fallback ===
 async function geocodeOne(text: string, country = DEFAULT_COUNTRY): Promise<Coords> {
   const key = geoKey(text, country)
   const cached = geoCache.get(key)
   if (fresh(cached, GEO_TTL_MS)) return cached!.value
 
-  // dedup concorrenti
   const infl = geoInflight.get(key)
   if (infl) return infl
 
   const p = (async () => {
-    const url = new URL('https://api.openrouteservice.org/geocode/search')
-    url.searchParams.set('api_key', ORS_KEY || '')
-    url.searchParams.set('text', text)
-    url.searchParams.set('size', '1')
-    if (country) url.searchParams.set('boundary.country', country.toUpperCase())
+    // Try Google first
+    try {
+      const res = await geocodeOneGoogle(text, country)
+      geoCache.set(key, { t: Date.now(), value: res })
+      return res
+    } catch (e) {
+      console.warn('Google Geocode failed, falling back to ORS', e)
+    }
 
-    // Edge-friendly caching
-    const r = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS } })
-    if (!r.ok) throw new Error(`Geocode failed for "${text}" (${r.status})`)
-    const j = await r.json()
-    const coords = j?.features?.[0]?.geometry?.coordinates
-    if (!Array.isArray(coords) || coords.length < 2) throw new Error(`No geocode result for "${text}"`)
-    const [lon, lat] = coords
-    const value: Coords = { lon: Number(lon), lat: Number(lat) }
-    geoCache.set(key, { t: Date.now(), value })
-    return value
+    // Fallback to ORS
+    if (ORS_KEY) {
+      const res = await geocodeOneORS(text, country)
+      geoCache.set(key, { t: Date.now(), value: res })
+      return res
+    }
+
+    throw new Error('All geocoding providers failed')
   })()
 
   geoInflight.set(key, p)
   try { return await p } finally { geoInflight.delete(key) }
 }
 
-// === Directions con cache SWR ===
 async function getDirections(start: Coords, end: Coords, country = DEFAULT_COUNTRY): Promise<DirRes> {
   const key = dirKey(start, end, country)
   const cached = dirCache.get(key)
@@ -84,19 +155,23 @@ async function getDirections(start: Coords, end: Coords, country = DEFAULT_COUNT
   if (infl) return infl
 
   const p = (async () => {
-    const url = new URL('https://api.openrouteservice.org/v2/directions/driving-car')
-    url.searchParams.set('api_key', ORS_KEY || '')
-    url.searchParams.set('start', `${start.lon},${start.lat}`)
-    url.searchParams.set('end', `${end.lon},${end.lat}`)
+    // Try Google first
+    try {
+      const res = await getDirectionsGoogle(start, end)
+      dirCache.set(key, { t: Date.now(), value: res })
+      return res
+    } catch (e) {
+      console.warn('Google Directions failed, falling back to ORS', e)
+    }
 
-    const r = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS } })
-    if (!r.ok) throw new Error(`Directions failed (${r.status})`)
-    const j = await r.json()
-    const sum = j?.features?.[0]?.properties?.summary
-    if (!sum) throw new Error('Directions summary missing')
-    const value: DirRes = { meters: Number(sum.distance), seconds: Number(sum.duration) }
-    dirCache.set(key, { t: Date.now(), value })
-    return value
+    // Fallback to ORS
+    if (ORS_KEY) {
+      const res = await getDirectionsORS(start, end)
+      dirCache.set(key, { t: Date.now(), value: res })
+      return res
+    }
+
+    throw new Error('All directions providers failed')
   })()
 
   dirInflight.set(key, p)
@@ -109,6 +184,7 @@ export async function GET() {
     expects: 'POST',
     default_country: DEFAULT_COUNTRY,
     has_ORS_API_KEY: Boolean(ORS_KEY),
+    has_GOOGLE_KEY: Boolean(GOOGLE_KEY),
     cache: {
       geo_ttl_ms: GEO_TTL_MS,
       dir_ttl_ms: DIR_TTL_MS,
@@ -121,18 +197,15 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!ORS_KEY) return bad('ORS_API_KEY missing on server', 500)
     const { from, to, country } = (await req.json()) as { from?: string; to?: string; country?: string }
     if (!from || !to) return bad('Body must be { from, to, country? }')
 
     const c = (country || DEFAULT_COUNTRY).toUpperCase()
 
-    // Geocode in parallelo (con cache + dedup)
+    // Geocode in parallelo
     const [start, end] = await Promise.all([geocodeOne(from, c), geocodeOne(to, c)])
     const { meters, seconds } = await getDirections(start, end, c)
 
-    // Nota: POST non è tipicamente cache-ato da proxy/CDN;
-    // forniamo comunque headers utili per layer intermedi.
     const res = NextResponse.json({
       from, to, country: c,
       start, end,
