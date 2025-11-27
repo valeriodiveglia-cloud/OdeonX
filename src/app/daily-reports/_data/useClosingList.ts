@@ -30,12 +30,12 @@ const DENOMS = [
   { key: 'd500k', face: 500_000 },
   { key: 'd200k', face: 200_000 },
   { key: 'd100k', face: 100_000 },
-  { key: 'd50k',  face:  50_000 },
-  { key: 'd20k',  face:  20_000 },
-  { key: 'd10k',  face:  10_000 },
-  { key: 'd5k',   face:   5_000 },
-  { key: 'd2k',   face:   2_000 },
-  { key: 'd1k',   face:   1_000 },
+  { key: 'd50k', face: 50_000 },
+  { key: 'd20k', face: 20_000 },
+  { key: 'd10k', face: 10_000 },
+  { key: 'd5k', face: 5_000 },
+  { key: 'd2k', face: 2_000 },
+  { key: 'd1k', face: 1_000 },
 ] as const
 
 type DenomKey = typeof DENOMS[number]['key']
@@ -121,7 +121,19 @@ export function useClosingList({ year, month, branchName }: UseClosingListArgs) 
   }, [startISO, endISO, branchName])
 
   useEffect(() => {
-    refresh().catch(() => {})
+    refresh().catch(() => { })
+
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') {
+        refresh().catch(() => { })
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
   }, [refresh])
 
   const insertClosing = useCallback(

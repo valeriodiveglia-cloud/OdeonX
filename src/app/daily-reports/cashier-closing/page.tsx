@@ -292,6 +292,20 @@ export default function CashierClosingPage() {
     setFloatPlan(res.floatPlan as CashShape)
   }, [lukeId, lukeLoad])
 
+  useEffect(() => {
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') {
+        handleReloadSaved()
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
+  }, [handleReloadSaved])
+
   /* ============================
       DERIVED TOTALS
      ============================ */

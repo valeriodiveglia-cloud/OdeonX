@@ -144,7 +144,7 @@ export default function HomeDashboard() {
                     {/* Daily Reports → apre modale branch picker */}
                     <BranchPickerCTA />
 
-                    <BranchPickerCTA />
+
 
                     {/* Monthly Reports - Only for Owner/Admin */}
                     {role && ['owner', 'admin'].includes(role) && (

@@ -1,7 +1,7 @@
 // src/app/daily-reports/_data/useDeposits.ts
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 
 /* ---------- Types ---------- */
@@ -196,83 +196,92 @@ export function useDeposits(params?: { year?: number; month?: number; branchName
   const [currentShiftName, setCurrentShiftName] = useState<string>('')
 
   // Initial load: deposits + payments
-  useEffect(() => {
-    let cancelled = false
-    async function loadAll() {
-      setLoading(true)
-      try {
-        let qDep = supabase.from('deposits').select('*')
+  // Initial load: deposits + payments
+  const refetch = useCallback(async () => {
+    setLoading(true)
+    try {
+      let qDep = supabase.from('deposits').select('*')
 
-        if (params?.year != null && params?.month != null) {
-          const start = new Date(params.year, params.month, 1)
-          const end = new Date(params.year, params.month + 1, 1)
-          const p = (n: number) => String(n).padStart(2, '0')
-          const startISO = `${start.getFullYear()}-${p(start.getMonth() + 1)}-${p(start.getDate())}`
-          const endISO = `${end.getFullYear()}-${p(end.getMonth() + 1)}-${p(end.getDate())}`
-          qDep = qDep.gte('date', startISO).lt('date', endISO)
-        }
-
-        if (params?.branchName) {
-          qDep = qDep.eq('branch', params.branchName)
-        }
-
-        const { data: depData, error: depErr } = await qDep
-
-        if (!cancelled && !depErr && depData) {
-          const mapped: DepositRow[] = depData.map((r: any) => ({
-            id: String(r.id),
-            branch: r.branch ?? null,
-            date: r.date || new Date().toISOString().slice(0, 10),
-            event_date: r.event_date ?? null,
-            customer_id: r.customer_id ?? null,
-            customer_name: r.customer_name ?? null,
-            customer_phone: r.customer_phone ?? null,
-            customer_email: r.customer_email ?? null,
-            amount: Number(r.amount || 0),
-            reference: r.reference ?? null,
-            shift: r.shift ?? null,
-            handledBy: r.handled_by ?? null,
-            note: r.note ?? null,
-          }))
-          setRows(mapped)
-
-          // Fetch payments only for these deposits
-          const depIds = mapped.map(d => d.id)
-          if (depIds.length > 0) {
-            const { data: payData, error: payErr } = await supabase
-              .from('deposit_payments')
-              .select('*')
-              .in('deposit_id', depIds)
-
-            if (!cancelled && !payErr && payData) {
-              const mappedPay: PaymentItem[] = payData.map((p: any) => ({
-                id: String(p.id),
-                deposit_id: String(p.deposit_id),
-                amount: Number(p.amount || 0),
-                date: p.date || new Date().toISOString(),
-                note: p.note ?? null,
-                endedBy: p.ended_by ?? null,
-              }))
-              setPayments(mappedPay)
-            }
-          } else {
-            setPayments([])
-          }
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
+      if (params?.year != null && params?.month != null) {
+        const start = new Date(params.year, params.month, 1)
+        const end = new Date(params.year, params.month + 1, 1)
+        const p = (n: number) => String(n).padStart(2, '0')
+        const startISO = `${start.getFullYear()}-${p(start.getMonth() + 1)}-${p(start.getDate())}`
+        const endISO = `${end.getFullYear()}-${p(end.getMonth() + 1)}-${p(end.getDate())}`
+        qDep = qDep.gte('date', startISO).lt('date', endISO)
       }
-    }
 
+      if (params?.branchName) {
+        qDep = qDep.eq('branch', params.branchName)
+      }
+
+      const { data: depData, error: depErr } = await qDep
+
+      if (depErr || !depData) return
+
+      const mapped: DepositRow[] = depData.map((r: any) => ({
+        id: String(r.id),
+        branch: r.branch ?? null,
+        date: r.date || new Date().toISOString().slice(0, 10),
+        event_date: r.event_date ?? null,
+        customer_id: r.customer_id ?? null,
+        customer_name: r.customer_name ?? null,
+        customer_phone: r.customer_phone ?? null,
+        customer_email: r.customer_email ?? null,
+        amount: Number(r.amount || 0),
+        reference: r.reference ?? null,
+        shift: r.shift ?? null,
+        handledBy: r.handled_by ?? null,
+        note: r.note ?? null,
+      }))
+      setRows(mapped)
+
+      // Fetch payments only for these deposits
+      const depIds = mapped.map(d => d.id)
+      if (depIds.length > 0) {
+        const { data: payData, error: payErr } = await supabase
+          .from('deposit_payments')
+          .select('*')
+          .in('deposit_id', depIds)
+
+        if (!payErr && payData) {
+          const mappedPay: PaymentItem[] = payData.map((p: any) => ({
+            id: String(p.id),
+            deposit_id: String(p.deposit_id),
+            amount: Number(p.amount || 0),
+            date: p.date || new Date().toISOString(),
+            note: p.note ?? null,
+            endedBy: p.ended_by ?? null,
+          }))
+          setPayments(mappedPay)
+        }
+      } else {
+        setPayments([])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [params?.year, params?.month, params?.branchName])
+
+  useEffect(() => {
     const staff = loadStaffOptions()
     setStaffOpts(staff)
     setCurrentShiftName(pickCurrentShiftName())
 
-    void loadAll()
-    return () => {
-      cancelled = true
+    void refetch()
+
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void refetch()
+      }
     }
-  }, [])
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
+  }, [refetch])
 
   // Current user name from auth + app_accounts
   useEffect(() => {

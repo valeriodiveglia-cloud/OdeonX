@@ -483,6 +483,18 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
   /* ---------- First fetch ---------- */
   useEffect(() => {
     refetch().catch(() => { })
+
+    const onFocus = () => {
+      if (isActiveRef.current && document.visibilityState === 'visible') {
+        refetch().catch(() => { })
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
   }, [refetch])
 
   /* ---------- localStorage listeners ---------- */
