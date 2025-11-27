@@ -12,9 +12,16 @@ async function searchGoogle(q: string, country: string, size: number) {
   // url.searchParams.set('types', 'geocode') // optional
 
   const r = await fetch(url, { next: { revalidate: 0 } })
-  if (!r.ok) throw new Error(`Google Places failed (${r.status})`)
+  if (!r.ok) {
+    const txt = await r.text()
+    console.error('Google Places HTTP Error:', r.status, txt)
+    throw new Error(`Google Places failed (${r.status})`)
+  }
   const j = await r.json()
-  if (j.status !== 'OK' && j.status !== 'ZERO_RESULTS') throw new Error(`Google Places status: ${j.status}`)
+  if (j.status !== 'OK' && j.status !== 'ZERO_RESULTS') {
+    console.error('Google Places API Error:', j.status, j.error_message)
+    throw new Error(`Google Places status: ${j.status}`)
+  }
 
   return (j.predictions || []).slice(0, size).map((p: any) => ({
     id: p.place_id,

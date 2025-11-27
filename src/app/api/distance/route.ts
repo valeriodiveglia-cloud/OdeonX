@@ -50,9 +50,16 @@ async function geocodeOneGoogle(text: string, country: string): Promise<Coords> 
   if (country) url.searchParams.set('components', `country:${country}`)
 
   const r = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS } })
-  if (!r.ok) throw new Error(`Google Geocode failed (${r.status})`)
+  if (!r.ok) {
+    const txt = await r.text()
+    console.error('Google Geocode HTTP Error:', r.status, txt)
+    throw new Error(`Google Geocode failed (${r.status})`)
+  }
   const j = await r.json()
-  if (j.status !== 'OK') throw new Error(`Google Geocode status: ${j.status}`)
+  if (j.status !== 'OK') {
+    console.error('Google Geocode API Error:', j.status, j.error_message)
+    throw new Error(`Google Geocode status: ${j.status}`)
+  }
 
   const loc = j.results?.[0]?.geometry?.location
   if (!loc) throw new Error('No Google geocode result')
@@ -68,9 +75,16 @@ async function getDirectionsGoogle(start: Coords, end: Coords): Promise<DirRes> 
   url.searchParams.set('key', GOOGLE_KEY)
 
   const r = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS } })
-  if (!r.ok) throw new Error(`Google Distance Matrix failed (${r.status})`)
+  if (!r.ok) {
+    const txt = await r.text()
+    console.error('Google Distance Matrix HTTP Error:', r.status, txt)
+    throw new Error(`Google Distance Matrix failed (${r.status})`)
+  }
   const j = await r.json()
-  if (j.status !== 'OK') throw new Error(`Google Distance Matrix status: ${j.status}`)
+  if (j.status !== 'OK') {
+    console.error('Google Distance Matrix API Error:', j.status, j.error_message)
+    throw new Error(`Google Distance Matrix status: ${j.status}`)
+  }
 
   const el = j.rows?.[0]?.elements?.[0]
   if (!el || el.status !== 'OK') throw new Error(`Google Distance Matrix element status: ${el?.status}`)
