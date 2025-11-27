@@ -15,7 +15,7 @@ const DIR_TTL_MS = 1000 * 60 * 60 * 24 * 30   // 30 giorni
 const REVALIDATE_SECONDS = 60 * 60 * 24       // 24h per la cache di Next fetch()
 
 type Coords = { lon: number; lat: number }
-type DirRes = { meters: number; seconds: number }
+type DirRes = { meters: number; seconds: number; provider?: string }
 type Timed<T> = { t: number; value: T }
 
 // In-memory caches (per istanza/edge isolate)
@@ -77,9 +77,12 @@ async function getDirectionsGoogle(start: Coords, end: Coords): Promise<DirRes> 
 
   return {
     meters: el.distance.value,
-    seconds: el.duration.value
+    seconds: el.duration.value,
+    provider: 'google'
   }
 }
+
+// ... (keep ORS code)
 
 // === ORS Geocode (Fallback) ===
 async function geocodeOneORS(text: string, country: string): Promise<Coords> {
@@ -110,9 +113,10 @@ async function getDirectionsORS(start: Coords, end: Coords): Promise<DirRes> {
   const j = await r.json()
   const sum = j?.features?.[0]?.properties?.summary
   if (!sum) throw new Error('ORS Directions summary missing')
-  return { meters: Number(sum.distance), seconds: Number(sum.duration) }
+  return { meters: Number(sum.distance), seconds: Number(sum.duration), provider: 'ors' }
 }
 
+// === Wrapper with Cache & Fallback ===
 // === Wrapper with Cache & Fallback ===
 async function geocodeOne(text: string, country = DEFAULT_COUNTRY): Promise<Coords> {
   const key = geoKey(text, country)
@@ -204,13 +208,14 @@ export async function POST(req: NextRequest) {
 
     // Geocode in parallelo
     const [start, end] = await Promise.all([geocodeOne(from, c), geocodeOne(to, c)])
-    const { meters, seconds } = await getDirections(start, end, c)
+    const { meters, seconds, provider } = await getDirections(start, end, c)
 
     const res = NextResponse.json({
       from, to, country: c,
       start, end,
       meters, km: meters / 1000,
       seconds, minutes: seconds / 60,
+      provider
     })
     res.headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=2592000')
     return res

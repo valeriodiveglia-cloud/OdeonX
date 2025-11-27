@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
     // Try Google first
     try {
       const items = await searchGoogle(q, country, size)
-      return NextResponse.json({ items })
+      return NextResponse.json({ items, provider: 'google' })
     } catch (e) {
       console.warn('Google Places failed, falling back to ORS', e)
     }
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     // Fallback to ORS
     if (process.env.ORS_API_KEY) {
       const items = await searchORS(q, country, size)
-      return NextResponse.json({ items })
+      return NextResponse.json({ items, provider: 'ors' })
     }
 
     throw new Error('All places providers failed')
