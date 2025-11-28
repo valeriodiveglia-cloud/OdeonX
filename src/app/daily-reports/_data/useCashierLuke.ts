@@ -159,6 +159,9 @@ export function useCashierLuke(initialId?: string | null) {
           capichi: num(row.capichi_vnd),
           bankTransferEwallet: num(row.bank_transfer_ewallet_vnd),
           cashOut: num(row.cash_out_vnd),
+          thirdPartyAmounts: Array.isArray(row.third_party_amounts_json)
+            ? row.third_party_amounts_json
+            : [], // Fallback to empty if null/invalid
         }
 
         const cash: CashShape = parseCashShape(row.cash_json)
@@ -248,6 +251,7 @@ export function useCashierLuke(initialId?: string | null) {
 
           cash_json: payload.cash || {},
           float_plan_json: payload.floatPlan || {},
+          third_party_amounts_json: payload.payments.thirdPartyAmounts || [],
           updated_at: new Date().toISOString(),
         }
 
