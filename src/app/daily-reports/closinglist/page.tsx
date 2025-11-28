@@ -287,8 +287,8 @@ export default function ClosingListPage() {
           <button
             onClick={() => { setSelectMode(s => !s); setMenuOpen(false); setSelected({}) }}
             className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
               }`}
             title={selectMode ? t.select.exitTitle : t.select.enterTitle}
           >
@@ -451,8 +451,8 @@ export default function ClosingListPage() {
                 onClick={performDeleteSelected}
                 disabled={confirmText.trim() !== REQUIRED_WORD}
                 className={`px-4 py-2 rounded-lg ${confirmText.trim() === REQUIRED_WORD
-                    ? 'bg-red-600 text-white hover:opacity-90'
-                    : 'bg-red-600/40 text-white/80 cursor-not-allowed'
+                  ? 'bg-red-600 text-white hover:opacity-90'
+                  : 'bg-red-600/40 text-white/80 cursor-not-allowed'
                   }`}
               >
                 {t.modal.confirm}
@@ -484,7 +484,7 @@ export default function ClosingListPage() {
 function Th({ label, active, asc, onClick, right }: { label: string; active: boolean; asc: boolean; onClick: () => void; right?: boolean }) {
   return (
     <th className={`p-2 ${right ? 'text-right' : ''}`}>
-      <button onClick={onClick} className="w-full flex items-center gap-1 font-semibold cursor-pointer">
+      <button onClick={onClick} className={`w-full flex items-center gap-1 font-semibold cursor-pointer ${right ? 'justify-end' : ''}`}>
         {!right && <SortIcon active={active} asc={asc} />}
         <span>{label}</span>
         {right && <SortIcon active={active} asc={asc} />}
