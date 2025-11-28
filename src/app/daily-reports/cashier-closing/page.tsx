@@ -283,9 +283,9 @@ export default function CashierClosingPage() {
   // Track dirty state for reload protection
   const isDirtyRef = useRef(false)
 
-  const handleReloadSaved = useCallback(async () => {
-    // If form is dirty (unsaved changes), do NOT reload from server
-    if (isDirtyRef.current) return
+  const handleReloadSaved = useCallback(async (force = false) => {
+    // If form is dirty (unsaved changes) AND NOT FORCED, do NOT reload from server
+    if (!force && isDirtyRef.current) return
 
     if (!lukeId) return
     const res = await lukeLoad(lukeId)
@@ -319,7 +319,7 @@ export default function CashierClosingPage() {
   // When switching from Live -> Saved, force reload to restore snapshot
   useEffect(() => {
     if (!liveMode) {
-      handleReloadSaved()
+      handleReloadSaved(true) // Force reload
     }
   }, [liveMode, handleReloadSaved])
 
