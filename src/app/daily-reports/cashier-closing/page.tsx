@@ -303,7 +303,8 @@ export default function CashierClosingPage() {
 
   useEffect(() => {
     const onFocus = () => {
-      if (document.visibilityState === 'visible') {
+      // Only reload if visible AND in Saved mode (not Live)
+      if (document.visibilityState === 'visible' && !liveMode) {
         handleReloadSaved()
       }
     }
@@ -313,7 +314,14 @@ export default function CashierClosingPage() {
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onFocus)
     }
-  }, [handleReloadSaved])
+  }, [handleReloadSaved, liveMode])
+
+  // When switching from Live -> Saved, force reload to restore snapshot
+  useEffect(() => {
+    if (!liveMode) {
+      handleReloadSaved()
+    }
+  }, [liveMode, handleReloadSaved])
 
   /* ============================
       DERIVED TOTALS
