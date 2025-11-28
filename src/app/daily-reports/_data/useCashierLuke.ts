@@ -20,6 +20,7 @@ export type LukeLoadResult = {
   cash: CashShape
   floatPlan: CashShape
   branchId: string | null
+  lastEditorName?: string
 }
 
 export type LukePayload = {
@@ -173,6 +174,20 @@ export function useCashierLuke(initialId?: string | null) {
           cash,
           floatPlan,
           branchId: row.branch_id ? String(row.branch_id) : null,
+          lastEditorName: '', // Will be filled below
+        }
+
+        // Resolve updated_by name
+        if (row.updated_by) {
+          const { data: userData } = await supabase
+            .from('app_accounts')
+            .select('name')
+            .eq('user_id', row.updated_by)
+            .maybeSingle()
+
+          if (userData?.name) {
+            result.lastEditorName = userData.name
+          }
         }
 
         safeSetId(result.id)

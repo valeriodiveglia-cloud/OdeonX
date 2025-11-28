@@ -416,6 +416,9 @@ export default function InitialInfoCard(props: {
 
   // Closed by: usa cache locale, poi fallback singolo su DB, poi scrivi in cache
   useEffect(() => {
+    // Se è un report esistente, NON sovrascrivere il nome (deve rimanere chi l'ha creato)
+    if (isExisting) return
+
     let alive = true
     const cached = readCachedDisplayName()
     if (cached && header.cashier !== cached) onChangeHeader({ cashier: cached })
@@ -430,7 +433,7 @@ export default function InitialInfoCard(props: {
     return () => {
       alive = false
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isExisting]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const v = (n: number | undefined) =>
     Number.isFinite(Number(n)) ? Number(n) : 0

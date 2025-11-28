@@ -254,6 +254,7 @@ export default function CashierClosingPage() {
 
   // Live / Saved mode
   const [liveMode, setLiveMode] = useState<boolean>(() => !initialIdFromUrl)
+  const [lastEditorName, setLastEditorName] = useState<string>('')
 
   useEffect(() => {
     if (initialIdFromUrl) setLiveMode(false)
@@ -274,11 +275,18 @@ export default function CashierClosingPage() {
         setDepositsCash(0) // verrà ricalcolato live da InitialInfoCard
         setCash(res.cash as CashShape)
         setFloatPlan(res.floatPlan as CashShape)
+        setLastEditorName(res.lastEditorName || '')
       })()
     return () => { cancelled = true }
   }, [lukeId, lukeLoad])
 
+  // Track dirty state for reload protection
+  const isDirtyRef = useRef(false)
+
   const handleReloadSaved = useCallback(async () => {
+    // If form is dirty (unsaved changes), do NOT reload from server
+    if (isDirtyRef.current) return
+
     if (!lukeId) return
     const res = await lukeLoad(lukeId)
     if (!res) return
@@ -290,6 +298,7 @@ export default function CashierClosingPage() {
     setDepositsCash(0)
     setCash(res.cash as CashShape)
     setFloatPlan(res.floatPlan as CashShape)
+    setLastEditorName(res.lastEditorName || '')
   }, [lukeId, lukeLoad])
 
   useEffect(() => {
@@ -609,6 +618,11 @@ export default function CashierClosingPage() {
   const displayDirty = !coldStartSilence && !suppressingDirty && sigDraft !== sigServer
   const disableSave = !displayDirty || lukeSaving
 
+  // Keep ref in sync for handleReloadSaved
+  useEffect(() => {
+    isDirtyRef.current = displayDirty
+  }, [displayDirty])
+
   useEffect(() => {
     if (suppressingDirty || coldStartSilence) return
     try {
@@ -813,7 +827,7 @@ export default function CashierClosingPage() {
               ? t.saveBar.saving
               : displayDirty
                 ? t.saveBar.dirty
-                : lastSavedLabel(lastSavedAtUI, t.saveBar)}
+                : lastSavedLabel(lastSavedAtUI, t.saveBar) + (lastEditorName ? ` • ${lastEditorName}` : '')}
           </div>
 
           <div className="flex items-center gap-2">
