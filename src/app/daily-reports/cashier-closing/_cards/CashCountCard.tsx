@@ -50,12 +50,12 @@ const DENOMS = [
   { key: 'd500k', face: 500_000 },
   { key: 'd200k', face: 200_000 },
   { key: 'd100k', face: 100_000 },
-  { key: 'd50k',  face:  50_000 },
-  { key: 'd20k',  face:  20_000 },
-  { key: 'd10k',  face:  10_000 },
-  { key: 'd5k',   face:   5_000 },
-  { key: 'd2k',   face:   2_000 },
-  { key: 'd1k',   face:   1_000 },
+  { key: 'd50k', face: 50_000 },
+  { key: 'd20k', face: 20_000 },
+  { key: 'd10k', face: 10_000 },
+  { key: 'd5k', face: 5_000 },
+  { key: 'd2k', face: 2_000 },
+  { key: 'd1k', face: 1_000 },
 ] as const
 const TAKE_ORDER = [...DENOMS]
 type DenomKey = typeof DENOMS[number]['key']
@@ -137,7 +137,7 @@ export default function CashCountCard(props: {
       const parsed = JSON.parse(raw || '{}')
       const v = Number(parsed?.cashFloatVND)
       if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-    } catch {}
+    } catch { }
   }, [])
 
   /* 1) stessa tab: CustomEvent */
@@ -160,7 +160,7 @@ export default function CashCountCard(props: {
         const parsed = JSON.parse(raw || '{}')
         const v = Number(parsed?.cashFloatVND)
         if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-      } catch {}
+      } catch { }
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
@@ -178,8 +178,8 @@ export default function CashCountCard(props: {
           if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
         }
       }
-    } catch {}
-    return () => { try { bc?.close() } catch {} }
+    } catch { }
+    return () => { try { bc?.close() } catch { } }
   }, [])
 
   /* Valore dal DB (supporta shape piatta o nidificata) */
@@ -210,6 +210,15 @@ export default function CashCountCard(props: {
 
   /* Plan logica */
   const [planActive, setPlanActive] = useState(false)
+
+  // Auto-activate plan if we receive non-empty floatPlan from parent (e.g. loaded from DB)
+  useEffect(() => {
+    const hasValues = DENOMS.some(d => (floatPlan[d.key] || 0) > 0)
+    if (hasValues) {
+      setPlanActive(true)
+    }
+  }, [floatPlan])
+
   const [edited, setEdited] = useState<Record<DenomKey, boolean>>({} as Record<DenomKey, boolean>)
 
   const effectivePlan = useMemo(() => {
@@ -267,13 +276,13 @@ export default function CashCountCard(props: {
 
   const diffCls =
     localCashDiff === 0 ? 'text-gray-700'
-    : localCashDiff > 0 ? 'text-emerald-700'
-    : 'text-red-700'
+      : localCashDiff > 0 ? 'text-emerald-700'
+        : 'text-red-700'
 
   const diffPillCls =
     localCashDiff === 0 ? 'bg-gray-100 text-gray-800 ring-1 ring-gray-200'
-    : localCashDiff > 0 ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200'
-    : 'bg-red-100 text-red-800 ring-1 ring-red-200'
+      : localCashDiff > 0 ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200'
+        : 'bg-red-100 text-red-800 ring-1 ring-red-200'
 
   const changeCash = (key: DenomKey, qty: number) => {
     onChangeCash({ ...cash, [key]: Number.isFinite(qty) ? qty : (cash[key] || 0) })
@@ -336,11 +345,10 @@ export default function CashCountCard(props: {
           rightActions ?? (
             <div className="flex items-center gap-2">
               <span
-                className={`text-xs px-2 py-0.5 rounded-full ${
-                  loading
+                className={`text-xs px-2 py-0.5 rounded-full ${loading
                     ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
                     : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
-                }`}
+                  }`}
                 title={t.floatTargetTitle}
               >
                 {t.floatTargetPrefix} {formatVND(floatTarget)} VND

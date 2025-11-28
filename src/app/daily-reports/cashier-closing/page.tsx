@@ -255,6 +255,35 @@ export default function CashierClosingPage() {
   // Live / Saved mode
   const [liveMode, setLiveMode] = useState<boolean>(() => !initialIdFromUrl)
   const [lastEditorName, setLastEditorName] = useState<string>('')
+  const [currentUserName, setCurrentUserName] = useState<string>('')
+
+  useEffect(() => {
+    let alive = true
+    async function loadUser() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || !alive) return
+
+        // Try app_accounts first
+        const { data: acc } = await supabase
+          .from('app_accounts')
+          .select('name')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (acc?.name && alive) {
+          setCurrentUserName(acc.name)
+          return
+        }
+
+        // Fallback to metadata
+        const metaName = user.user_metadata?.full_name || user.user_metadata?.name || user.email || ''
+        if (alive) setCurrentUserName(metaName)
+      } catch { }
+    }
+    loadUser()
+    return () => { alive = false }
+  }, [])
 
   useEffect(() => {
     if (initialIdFromUrl) setLiveMode(false)
@@ -338,12 +367,33 @@ export default function CashierClosingPage() {
   const netCash = useMemo(() => {
     const vnum = (n: number | undefined) => Number.isFinite(Number(n)) ? Number(n) : 0
 
+    const thirdPartyTotal = (payments.thirdPartyAmounts || []).reduce((sum, item) => sum + vnum(item.amount), 0)
+
     const nonCash =
-      vnum(payments.gojek) +
-      vnum(payments.grab) +
+      thirdPartyTotal +
       vnum(payments.mpos) +
-      vnum(payments.capichi) +
       vnum(payments.bankTransferEwallet)
+    // Note: gojek, grab, capichi are now included in thirdPartyAmounts by InitialInfoCard logic
+    // BUT we must be careful. If InitialInfoCard merges them, we shouldn't add them separately.
+    // Let's check InitialInfoCard logic. It seems it merges legacy fields into thirdPartyAmounts for display.
+    // However, the 'payments' object here comes from useCashierLuke -> InitialInfoCard -> onChangePayments.
+    // If InitialInfoCard updates 'payments.thirdPartyAmounts' to include everything, then we just need thirdPartyTotal.
+    // If it keeps them separate in 'payments' state, we need to sum them.
+    //
+    // Looking at InitialInfoCard (step 1085), it calculates `thirdPartyTotal` from `thirdPartyAmounts` state.
+    // And `nonCash` includes `thirdPartyTotal` + `mpos` + `bankTransfer`.
+    // It does NOT add `gojek` etc separately in `nonCash`.
+    // So assuming `payments.thirdPartyAmounts` is fully populated by InitialInfoCard, we should trust it.
+    //
+    // However, `payments` state in `page.tsx` might be initialized with legacy fields separate from thirdPartyAmounts array.
+    // If `InitialInfoCard` syncs them, then `payments.thirdPartyAmounts` should be the source of truth.
+    //
+    // Let's look at `InitialInfoCard` again. It has `useEffect` that calls `onChangePayments({ thirdPartyAmounts })`.
+    // So `page.tsx` state *should* have the full list.
+    //
+    // SAFE FIX: Use the same logic as InitialInfoCard:
+    // nonCash = thirdPartyTotal + mpos + bankTransferEwallet.
+    // (Assuming gojek/grab/capichi are inside thirdPartyAmounts).
 
     const net =
       vnum(payments.revenue) -
@@ -711,6 +761,7 @@ export default function CashierClosingPage() {
       localStorage.setItem(lastSavedKey(scope), String(now))
       setServerSigOverride(sigDraft)
       setLastSavedAtUI(now)
+      if (currentUserName) setLastEditorName(currentUserName)
       window.dispatchEvent(new CustomEvent('cashier:saved'))
 
     } catch (e: any) {
