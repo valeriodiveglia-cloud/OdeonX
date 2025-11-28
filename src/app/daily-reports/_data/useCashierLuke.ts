@@ -33,6 +33,7 @@ export type LukePayload = {
   cash: CashShape
   floatPlan: CashShape
   branchId?: string | null
+  userId?: string | null
 }
 
 /* ---------- Helpers ---------- */
@@ -253,6 +254,7 @@ export function useCashierLuke(initialId?: string | null) {
           float_plan_json: payload.floatPlan || {},
           third_party_amounts_json: payload.payments.thirdPartyAmounts || [],
           updated_at: new Date().toISOString(),
+          updated_by: payload.userId || null,
         }
 
         let newId = payload.id || id
@@ -279,9 +281,13 @@ export function useCashierLuke(initialId?: string | null) {
             return null
           }
         } else {
+          const insertRow = {
+            ...row,
+            created_by: payload.userId || null,
+          }
           const { data, error } = await supabase
             .from('cashier_closings')
-            .insert(row)
+            .insert(insertRow)
             .select('id')
             .single()
 

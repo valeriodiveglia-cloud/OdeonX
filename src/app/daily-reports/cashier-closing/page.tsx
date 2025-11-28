@@ -256,6 +256,7 @@ export default function CashierClosingPage() {
   const [liveMode, setLiveMode] = useState<boolean>(() => !initialIdFromUrl)
   const [lastEditorName, setLastEditorName] = useState<string>('')
   const [currentUserName, setCurrentUserName] = useState<string>('')
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -263,6 +264,8 @@ export default function CashierClosingPage() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user || !alive) return
+
+        setCurrentUserId(user.id)
 
         // Try app_accounts first
         const { data: acc } = await supabase
@@ -745,6 +748,7 @@ export default function CashierClosingPage() {
         floatPlan,
         // usare l'UUID reale della provider_branches
         branchId: providerBranch?.id ? String(providerBranch.id) : null,
+        userId: currentUserId,
       }
 
       const newId = await lukeSave(payload)
@@ -785,6 +789,7 @@ export default function CashierClosingPage() {
     activeBranchName,
     liveMode,
     providerBranch,
+    currentUserId,
     t.alerts.selectBranch,
     t.alerts.liveOverwrite,
     t.alerts.duplicate,
