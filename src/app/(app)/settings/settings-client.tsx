@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CheckCircleIcon, PlusIcon, Cog6ToothIcon, XMarkIcon, TrashIcon, Squares2X2Icon,WrenchScrewdriverIcon, BookOpenIcon, ClipboardDocumentListIcon  } from '@heroicons/react/24/outline'
+import { CheckCircleIcon, PlusIcon, Cog6ToothIcon, XMarkIcon, TrashIcon, Squares2X2Icon, WrenchScrewdriverIcon, BookOpenIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import { t, type Lang } from '@/lib/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
 import { supabase } from '@/lib/supabase_shim'
@@ -95,7 +95,7 @@ function Toggle({ id, checked, onChange, label, disabled, hint }: {
       <label htmlFor={id} className="flex items-center justify-between gap-4">
         <span className="text-gray-900">{label}</span>
         <div className="flex items-center gap-3">
-          <input id={id} type="checkbox" className="sr-only peer" checked={!!checked} onChange={e => onChange(e.target.checked)} disabled={disabled}/>
+          <input id={id} type="checkbox" className="sr-only peer" checked={!!checked} onChange={e => onChange(e.target.checked)} disabled={disabled} />
           <div className={`w-11 h-6 rounded-full relative transition-colors ${!!checked ? 'bg-blue-600' : 'bg-gray-200'} ${disabled ? 'opacity-50' : ''}`}>
             <div className={`absolute top-0.5 left-0.5 h-5 w-5 bg-white border rounded-full transition-transform ${!!checked ? 'translate-x-full' : ''}`} />
           </div>
@@ -228,31 +228,31 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   useEffect(() => {
     if (!authReady) return
     let cancelled = false
-    ;(async () => {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('*')
-        .eq('id', 'singleton')
-        .maybeSingle()
-      if (!error && data && !cancelled) {
-        // ⬇️ FIX: non forzare a 1.5 quando > 5
-        const rawDm = Number((data as any).default_markup_equipment_pct)
-        const normalizedDm = Number.isFinite(rawDm) && rawDm > 0 ? rawDm : 1.5
+      ; (async () => {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('*')
+          .eq('id', 'singleton')
+          .maybeSingle()
+        if (!error && data && !cancelled) {
+          // ⬇️ FIX: non forzare a 1.5 quando > 5
+          const rawDm = Number((data as any).default_markup_equipment_pct)
+          const normalizedDm = Number.isFinite(rawDm) && rawDm > 0 ? rawDm : 1.5
 
-        const normalized: AppSettingsUI = {
-          ...data,
-          default_markup_equipment_pct: normalizedDm,
-          vat_enabled: toBool(data.vat_enabled, false),
-          csv_require_confirm_refs: toBool(data.csv_require_confirm_refs, true),
-          materials_exclusive_default: toBool(data.materials_exclusive_default, true),
-          equipment_csv_require_confirm_refs: toBool(data.equipment_csv_require_confirm_refs, true),
-          materials_review_months: Number.isFinite(data.materials_review_months) ? data.materials_review_months : 4,
-          equipment_review_months: Number.isFinite(data.equipment_review_months) ? data.equipment_review_months : 4,
-          recipes_review_months: Number.isFinite(data.recipes_review_months) ? data.recipes_review_months : 4,
+          const normalized: AppSettingsUI = {
+            ...data,
+            default_markup_equipment_pct: normalizedDm,
+            vat_enabled: toBool(data.vat_enabled, false),
+            csv_require_confirm_refs: toBool(data.csv_require_confirm_refs, true),
+            materials_exclusive_default: toBool(data.materials_exclusive_default, true),
+            equipment_csv_require_confirm_refs: toBool(data.equipment_csv_require_confirm_refs, true),
+            materials_review_months: Number.isFinite(data.materials_review_months) ? data.materials_review_months : 4,
+            equipment_review_months: Number.isFinite(data.equipment_review_months) ? data.equipment_review_months : 4,
+            recipes_review_months: Number.isFinite(data.recipes_review_months) ? data.recipes_review_months : 4,
+          }
+          setS(prev => (dirty ? prev : normalized))
         }
-        setS(prev => (dirty ? prev : normalized))
-      }
-    })()
+      })()
     return () => { cancelled = true }
   }, [authReady, currentUser?.id])
 
@@ -263,7 +263,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   }, [initial])
 
   useEffect(() => {
-    ;(async () => { await refetchAppSettingsIntoState() })()
+    ; (async () => { await refetchAppSettingsIntoState() })()
   }, [revision])
 
   useEffect(() => {
@@ -272,14 +272,14 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       bc = new BroadcastChannel('app-events')
       bc.onmessage = (e) => {
         if (e?.data === 'data-reset') {
-          ;(async () => {
+          ; (async () => {
             await refetchAppSettingsIntoState()
             router.refresh()
           })()
         }
       }
-    } catch {}
-    return () => { try { bc?.close() } catch {} }
+    } catch { }
+    return () => { try { bc?.close() } catch { } }
   }, [router])
 
   function patch<K extends keyof AppSettingsUI>(key: K, val: AppSettingsUI[K]) {
@@ -300,7 +300,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   }
 
   useEffect(() => {
-    ;(async () => {
+    ; (async () => {
       const token = s.logo_data || ''
       if (token?.startsWith('storage:')) {
         const path = token.slice('storage:'.length)
@@ -391,7 +391,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         setVatEnabled(!!saved.vat_enabled)
         setVatRate(saved.vat_rate ?? 0)
         setLanguage(saved.language_code as Lang)
-      } catch {}
+      } catch { }
 
       router.refresh()
     } catch (err: any) {
@@ -434,8 +434,8 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   const legacyLogoDataUrl =
     s.logo_data && !s.logo_data.startsWith('storage:')
       ? (s.logo_data.startsWith('data:')
-          ? s.logo_data
-          : (s.logo_mime ? `data:${s.logo_mime};base64,${s.logo_data}` : null))
+        ? s.logo_data
+        : (s.logo_mime ? `data:${s.logo_mime};base64,${s.logo_data}` : null))
       : null
 
   const logoSrc = logoSignedUrl || legacyLogoDataUrl
@@ -468,14 +468,14 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
   useEffect(() => {
     if (!authReady || !currentUser?.id) return
-    ;(async () => {
-      const { data } = await supabase
-        .from('app_accounts')
-        .select('role')
-        .eq('user_id', currentUser.id)
-        .maybeSingle()
-      setMyRole((data?.role as AccountRole) ?? null)
-    })()
+      ; (async () => {
+        const { data } = await supabase
+          .from('app_accounts')
+          .select('role')
+          .eq('user_id', currentUser.id)
+          .maybeSingle()
+        setMyRole((data?.role as AccountRole) ?? null)
+      })()
   }, [authReady, currentUser?.id])
 
   const canSeeAccounts = myRole === 'owner' || myRole === 'admin'
@@ -550,7 +550,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
           .eq('id', row.id)
         if (markErr) console.warn('first_login_at update failed:', markErr.message)
       }
-    } catch {}
+    } catch { }
   }
 
   useEffect(() => { if (authReady) { (async () => { await ensureCurrentUserAccount() })() } }, [authReady, currentUser?.id])
@@ -614,6 +614,23 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     if (!res.ok) { showAccErr(data?.error || 'Update failed'); return }
     setAcc(list => list.map(x => (x.id === formEdit.id ? (data.data as AccountRow) : x)))
     setEditOpen(false); setSelected(null); setFormEdit(null)
+  }
+
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [accountToDelete, setAccountToDelete] = useState<AccountRow | null>(null)
+
+  function requestDelete(u: AccountRow) {
+    setAccountToDelete(u)
+    setDeleteConfirmOpen(true)
+  }
+
+  async function confirmDelete() {
+    if (!accountToDelete) return
+    const id = accountToDelete.id
+    setDeleteConfirmOpen(false)
+    setAccountToDelete(null)
+    await deleteAccount(id)
   }
 
   async function deleteAccount(id: string) {
@@ -752,7 +769,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
       if (!res.ok) throw new Error(data?.error || 'Reset failed')
 
-      try { new BroadcastChannel('app-events').postMessage('data-reset') } catch {}
+      try { new BroadcastChannel('app-events').postMessage('data-reset') } catch { }
 
       await reloadSettings()
       await refetchAppSettingsIntoState()
@@ -939,8 +956,8 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
             <div className="col-span-2">
               <div className="grid grid-cols-[1fr_auto] items-center gap-2">
                 <label className="text-sm text-gray-800">
-                   {(t('DefaultImportMarkup', lang) || 'Default Import Markup')}{' '}
-                   <span className="text-gray-500">(×)</span>
+                  {(t('DefaultImportMarkup', lang) || 'Default Import Markup')}{' '}
+                  <span className="text-gray-500">(×)</span>
                 </label>
                 <div className="w-24">
                   <input
@@ -995,25 +1012,25 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
             </div>
           </div>
         </SectionCard>
-        
-          <SectionCard title={t('Utilities', lang)}>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setCatModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
-                {t('EditCategories', lang)}
-              </button>
-              {/* ⬇️ NEW: Manage Tags (coerente con gli altri pulsanti) */}
-              <button type="button" onClick={() => setTagModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
-                {t('ManageTags', lang) || 'Manage tags'}
-              </button>
-              <button type="button" onClick={() => router.push('/trash')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
-                {t('Trash', lang)}
-              </button>
-              <button type="button" onClick={() => router.push('/archive')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
-                {t('Archive', lang)}
-              </button>
-            </div>
-          </SectionCard>
-            
+
+        <SectionCard title={t('Utilities', lang)}>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setCatModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+              {t('EditCategories', lang)}
+            </button>
+            {/* ⬇️ NEW: Manage Tags (coerente con gli altri pulsanti) */}
+            <button type="button" onClick={() => setTagModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+              {t('ManageTags', lang) || 'Manage tags'}
+            </button>
+            <button type="button" onClick={() => router.push('/trash')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+              {t('Trash', lang)}
+            </button>
+            <button type="button" onClick={() => router.push('/archive')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+              {t('Archive', lang)}
+            </button>
+          </div>
+        </SectionCard>
+
 
         {canSeeAccounts && (
           <SectionCard title={t('Accounts', lang) || 'Accounts'}>
@@ -1044,18 +1061,17 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                   { scope: 'equipment', key: 'ResetEquipment' as const },
                 ]).map(btn => (
                   <button key={btn.scope} type="button" onClick={() => openDataModal(btn.scope as any)}
-                          className="w-full inline-flex items-center justify-center px-3 py-2 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm whitespace-nowrap"
-                          title={t(btn.key, lang)}>
+                    className="w-full inline-flex items-center justify-center px-3 py-2 h-10 rounded-lg border hover:bg-gray-50 text-gray-800 text-sm whitespace-nowrap"
+                    title={t(btn.key, lang)}>
                     {t(btn.key, lang)}
                   </button>
                 ))}
 
                 <button type="button" onClick={() => { if (myRole !== 'owner') return; openDataModal('all') }}
-                        disabled={myRole !== 'owner'}
-                        className={`w-full inline-flex items-center justify-center px-3 py-2 h-10 rounded-lg text-sm whitespace-nowrap ${
-                          myRole !== 'owner' ? 'opacity-40 cursor-not-allowed border' : 'border hover:bg-red-50 text-red-600 border-red-300'
-                        }`}
-                        title={myRole !== 'owner' ? t('OnlyOwnerResetAll', lang) : t('ResetAll', lang)}>
+                  disabled={myRole !== 'owner'}
+                  className={`w-full inline-flex items-center justify-center px-3 py-2 h-10 rounded-lg text-sm whitespace-nowrap ${myRole !== 'owner' ? 'opacity-40 cursor-not-allowed border' : 'border hover:bg-red-50 text-red-600 border-red-300'
+                    }`}
+                  title={myRole !== 'owner' ? t('OnlyOwnerResetAll', lang) : t('ResetAll', lang)}>
                   {t('ResetAll', lang)}
                 </button>
               </div>
@@ -1091,7 +1107,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                 {t('Cancel', lang) || 'Cancel'}
               </button>
               <button type="button" onClick={() => callReset(dataScope)} disabled={!canConfirmReset || dataBusy}
-                      className={`px-3 h-9 rounded-lg bg-red-600 text-white ${!canConfirmReset || dataBusy ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}>
+                className={`px-3 h-9 rounded-lg bg-red-600 text-white ${!canConfirmReset || dataBusy ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}>
                 {dataBusy ? (t('Loading', lang) || 'Loading…') : `${t('Reset', lang)} ${t(scopeLabelKey[dataScope], lang)}`}
               </button>
             </div>
@@ -1113,71 +1129,71 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </Modal>
 
       {/* Categories chooser modal */}
-<Modal
-  open={catModalOpen}
-  title={t('ChooseCategories', lang)}
-  onClose={() => setCatModalOpen(false)}
-  width="max-w-md"
->
-  <div className="space-y-4 text-gray-800">
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={() => goToCategories('materials')}
-        className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+      <Modal
+        open={catModalOpen}
+        title={t('ChooseCategories', lang)}
+        onClose={() => setCatModalOpen(false)}
+        width="max-w-md"
       >
-        <div className="shrink-0 w-10 h-10 rounded-lg bg-blue-50 text-blue-700 grid place-items-center group-hover:bg-blue-100">
-          <Squares2X2Icon className="w-5 h-5" />
-        </div>
-        <div className="font-medium">{t('MaterialCategories', lang)}</div>
-      </button>
+        <div className="space-y-4 text-gray-800">
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => goToCategories('materials')}
+              className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-blue-50 text-blue-700 grid place-items-center group-hover:bg-blue-100">
+                <Squares2X2Icon className="w-5 h-5" />
+              </div>
+              <div className="font-medium">{t('MaterialCategories', lang)}</div>
+            </button>
 
-      <button
-        type="button"
-        onClick={() => goToCategories('dish')}
-        className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-      >
-        <div className="shrink-0 w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center group-hover:bg-emerald-100">
-          <BookOpenIcon className="w-5 h-5" />
-        </div>
-        <div className="font-medium">{t('DishCategories', lang)}</div>
-      </button>
+            <button
+              type="button"
+              onClick={() => goToCategories('dish')}
+              className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center group-hover:bg-emerald-100">
+                <BookOpenIcon className="w-5 h-5" />
+              </div>
+              <div className="font-medium">{t('DishCategories', lang)}</div>
+            </button>
 
-      <button
-        type="button"
-        onClick={() => goToCategories('prep')}
-        className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-      >
-        <div className="shrink-0 w-10 h-10 rounded-lg bg-amber-50 text-amber-700 grid place-items-center group-hover:bg-amber-100">
-          <ClipboardDocumentListIcon className="w-5 h-5" />
-        </div>
-        <div className="font-medium">{t('PrepCategories', lang)}</div>
-      </button>
+            <button
+              type="button"
+              onClick={() => goToCategories('prep')}
+              className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-amber-50 text-amber-700 grid place-items-center group-hover:bg-amber-100">
+                <ClipboardDocumentListIcon className="w-5 h-5" />
+              </div>
+              <div className="font-medium">{t('PrepCategories', lang)}</div>
+            </button>
 
-      <button
-        type="button"
-        onClick={() => goToCategories('equipment')}
-        className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-      >
-        <div className="shrink-0 w-10 h-10 rounded-lg bg-purple-50 text-purple-700 grid place-items-center group-hover:bg-purple-100">
-          <WrenchScrewdriverIcon className="w-5 h-5" />
-        </div>
-        <div className="font-medium">{t('EquipmentCategories', lang)}</div>
-      </button>
-    </div>
+            <button
+              type="button"
+              onClick={() => goToCategories('equipment')}
+              className="w-full group flex items-center gap-3 rounded-xl border px-3 py-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-purple-50 text-purple-700 grid place-items-center group-hover:bg-purple-100">
+                <WrenchScrewdriverIcon className="w-5 h-5" />
+              </div>
+              <div className="font-medium">{t('EquipmentCategories', lang)}</div>
+            </button>
+          </div>
 
-    <div className="pt-2 flex items-center justify-end">
-      <button
-        type="button"
-        onClick={() => setCatModalOpen(false)}
-        className="px-4 h-9 rounded-lg border hover:bg-gray-50"
-      >
-        {t('Cancel', lang) || 'Cancel'}
-      </button>
-    </div>
-  </div>
-</Modal>
-        
+          <div className="pt-2 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setCatModalOpen(false)}
+              className="px-4 h-9 rounded-lg border hover:bg-gray-50"
+            >
+              {t('Cancel', lang) || 'Cancel'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Change password modal */}
       <Modal open={pwModalOpen} title={t('ChangePassword', lang) || 'Change password'} onClose={() => setPwModalOpen(false)} width="max-w-md">
         <div className="space-y-3 text-gray-800">
@@ -1212,26 +1228,26 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
             <div className="col-span-2">
               <label className="text-sm">{t('Email', lang) || 'Email'}</label>
               <input type="email" value={formAdd.email}
-                     onChange={e => setFormAdd(v => ({ ...v, email: e.target.value }))}
-                     className="w-full border rounded-lg px-2 py-1 h-9" />
+                onChange={e => setFormAdd(v => ({ ...v, email: e.target.value }))}
+                className="w-full border rounded-lg px-2 py-1 h-9" />
             </div>
             <div>
               <label className="text-sm">{t('Phone', lang) || 'Phone'}</label>
               <input type="text" value={formAdd.phone}
-                     onChange={e => setFormAdd(v => ({ ...v, phone: e.target.value }))}
-                     className="w-full border rounded-lg px-2 py-1 h-9" />
+                onChange={e => setFormAdd(v => ({ ...v, phone: e.target.value }))}
+                className="w-full border rounded-lg px-2 py-1 h-9" />
             </div>
             <div>
               <label className="text-sm">{t('Name', lang) || 'Name'}</label>
               <input type="text" value={formAdd.name}
-                     onChange={e => setFormAdd(v => ({ ...v, name: e.target.value }))}
-                     className="w-full border rounded-lg px-2 py-1 h-9" />
+                onChange={e => setFormAdd(v => ({ ...v, name: e.target.value }))}
+                className="w-full border rounded-lg px-2 py-1 h-9" />
             </div>
             <div>
               <label className="text-sm">{t('Position', lang) || 'Position'}</label>
               <input type="text" value={formAdd.position}
-                     onChange={e => setFormAdd(v => ({ ...v, position: e.target.value }))}
-                     className="w-full border rounded-lg px-2 py-1 h-9" />
+                onChange={e => setFormAdd(v => ({ ...v, position: e.target.value }))}
+                className="w-full border rounded-lg px-2 py-1 h-9" />
             </div>
             <div>
               <label className="text-sm">{t('Role', lang) || 'Role'}</label>
@@ -1247,7 +1263,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
             <div className="flex items-end">
               <label className="inline-flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={formAdd.is_active}
-                       onChange={e => setFormAdd(v => ({ ...v, is_active: e.target.checked }))} />
+                  onChange={e => setFormAdd(v => ({ ...v, is_active: e.target.checked }))} />
                 {t('Active', lang) || 'Active'}
               </label>
             </div>
@@ -1282,78 +1298,78 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         </div>
       </Modal>
 
-            {/* Accounts: Manage */}
+      {/* Accounts: Manage */}
       <Modal open={manageOpen} title={t('ManageAccounts', lang) || 'Manage accounts'} onClose={() => setManageOpen(false)} width="max-w-3xl">
         <div className="space-y-3 text-gray-800">
           {accMsg && (
             <div className={`text-sm ${accMsgKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{accMsg}</div>
           )}
-          <div className="overflow-auto border rounded-xl">
+          <div className="overflow-auto border rounded-xl max-h-[60vh]">
             <table className="min-w-full text-sm">
-  <thead className="bg-gray-50 text-gray-700">
-    <tr>
-      <th className="text-left p-2">Email</th>
-      <th className="text-left p-2">{t('Name', lang) || 'Name'}</th>
-      <th className="text-left p-2">{t('Role', lang) || 'Role'}</th>
-      <th className="text-center p-2">{t('Active', lang) || 'Active'}</th>
-      <th className="text-center p-2">{t('Auth', lang) || 'Auth'}</th>
-      <th className="text-right p-2">{t('Actions', lang) || 'Actions'}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {accLoading ? (
-      <tr><td className="p-3" colSpan={6}>{t('Loading', lang) || 'Loading…'}</td></tr>
-    ) : acc.length === 0 ? (
-      <tr><td className="p-3" colSpan={6}>{t('NoData', lang) || 'No data'}</td></tr>
-    ) : acc.map(u => (
-      <tr key={u.id} className="border-t align-middle">
-        <td className="p-2">{u.email}</td>
-        <td className="p-2">{u.name || '-'}</td>
-        <td className="p-2">{u.role}</td>
-        <td className="p-2 text-center">
-          {u.is_active ? (
-            <span className="text-green-600 font-bold">✓</span>
-          ) : (
-            <span className="text-red-600 font-bold">✗</span>
-          )}
-        </td>
-        <td className="p-2 text-center">
-          {u.first_login_at ? (
-            <span className="text-green-600 font-bold">✓</span>
-          ) : (
-            <span className="text-red-600 font-bold">✗</span>
-          )}
-        </td>
-        <td className="p-2 text-right whitespace-nowrap">
-          <div className="inline-flex items-center gap-2">
-            <button
-              onClick={() => sendAuthLinkForRow(u)}
-              className="px-3 h-8 rounded-lg border hover:bg-gray-50 leading-none whitespace-nowrap"
-              disabled={!!sendingRow[u.id]}
-              title={t('SendAccessLink', lang) || 'Send access link'}
-            >
-              {sendingRow[u.id]
-                ? (t('Loading', lang) || 'Loading…')
-                : (t('SendLink', lang) || 'Send link')}
-            </button>
-            <button
-              onClick={() => openEdit(u)}
-              className="px-3 h-8 rounded-lg border hover:bg-gray-50 leading-none whitespace-nowrap"
-            >
-              {t('Edit', lang) || 'Edit'}
-            </button>
-            <button
-              onClick={() => deleteAccount(u.id)}
-              className="px-3 h-8 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 leading-none whitespace-nowrap"
-            >
-              {t('Delete', lang) || 'Delete'}
-            </button>
-          </div>
-        </td>
-      </tr>
-    ))}
-  </tbody>
-</table>
+              <thead className="bg-gray-50 text-gray-700">
+                <tr>
+                  <th className="text-left p-2">Email</th>
+                  <th className="text-left p-2">{t('Name', lang) || 'Name'}</th>
+                  <th className="text-left p-2">{t('Role', lang) || 'Role'}</th>
+                  <th className="text-center p-2">{t('Active', lang) || 'Active'}</th>
+                  <th className="text-center p-2">{t('Auth', lang) || 'Auth'}</th>
+                  <th className="text-right p-2">{t('Actions', lang) || 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accLoading ? (
+                  <tr><td className="p-3" colSpan={6}>{t('Loading', lang) || 'Loading…'}</td></tr>
+                ) : acc.length === 0 ? (
+                  <tr><td className="p-3" colSpan={6}>{t('NoData', lang) || 'No data'}</td></tr>
+                ) : acc.map(u => (
+                  <tr key={u.id} className="border-t align-middle">
+                    <td className="p-2">{u.email}</td>
+                    <td className="p-2">{u.name || '-'}</td>
+                    <td className="p-2">{u.role}</td>
+                    <td className="p-2 text-center">
+                      {u.is_active ? (
+                        <span className="text-green-600 font-bold">✓</span>
+                      ) : (
+                        <span className="text-red-600 font-bold">✗</span>
+                      )}
+                    </td>
+                    <td className="p-2 text-center">
+                      {u.first_login_at ? (
+                        <span className="text-green-600 font-bold">✓</span>
+                      ) : (
+                        <span className="text-red-600 font-bold">✗</span>
+                      )}
+                    </td>
+                    <td className="p-2 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          onClick={() => sendAuthLinkForRow(u)}
+                          className="px-3 h-8 rounded-lg border hover:bg-gray-50 leading-none whitespace-nowrap"
+                          disabled={!!sendingRow[u.id]}
+                          title={t('SendAccessLink', lang) || 'Send access link'}
+                        >
+                          {sendingRow[u.id]
+                            ? (t('Loading', lang) || 'Loading…')
+                            : (t('SendLink', lang) || 'Send link')}
+                        </button>
+                        <button
+                          onClick={() => openEdit(u)}
+                          className="px-3 h-8 rounded-lg border hover:bg-gray-50 leading-none whitespace-nowrap"
+                        >
+                          {t('Edit', lang) || 'Edit'}
+                        </button>
+                        <button
+                          onClick={() => requestDelete(u)}
+                          className="px-3 h-8 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 leading-none whitespace-nowrap"
+                        >
+                          {t('Delete', lang) || 'Delete'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <div className="pt-2 flex items-center justify-end">
@@ -1372,26 +1388,26 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
               <div className="col-span-2">
                 <label className="text-sm">{t('Email', lang) || 'Email'}</label>
                 <input type="email" value={formEdit.email}
-                       onChange={e => setFormEdit(v => v ? ({ ...v, email: e.target.value }) : v)}
-                       className="w-full border rounded-lg px-2 py-1 h-9" />
+                  onChange={e => setFormEdit(v => v ? ({ ...v, email: e.target.value }) : v)}
+                  className="w-full border rounded-lg px-2 py-1 h-9" />
               </div>
               <div>
                 <label className="text-sm">{t('Phone', lang) || 'Phone'}</label>
                 <input type="text" value={formEdit.phone}
-                       onChange={e => setFormEdit(v => (v ? ({ ...v, phone: e.target.value }) : v))}
-                       className="w-full border rounded-lg px-2 py-1 h-9" />
+                  onChange={e => setFormEdit(v => (v ? ({ ...v, phone: e.target.value }) : v))}
+                  className="w-full border rounded-lg px-2 py-1 h-9" />
               </div>
               <div>
                 <label className="text-sm">{t('Name', lang) || 'Name'}</label>
                 <input type="text" value={formEdit.name}
-                       onChange={e => setFormEdit(v => (v ? ({ ...v, name: e.target.value }) : v))}
-                       className="w-full border rounded-lg px-2 py-1 h-9" />
+                  onChange={e => setFormEdit(v => (v ? ({ ...v, name: e.target.value }) : v))}
+                  className="w-full border rounded-lg px-2 py-1 h-9" />
               </div>
               <div>
                 <label className="text-sm">{t('Position', lang) || 'Position'}</label>
                 <input type="text" value={formEdit.position}
-                       onChange={e => setFormEdit(v => (v ? ({ ...v, position: e.target.value }) : v))}
-                       className="w-full border rounded-lg px-2 py-1 h-9" />
+                  onChange={e => setFormEdit(v => (v ? ({ ...v, position: e.target.value }) : v))}
+                  className="w-full border rounded-lg px-2 py-1 h-9" />
               </div>
               <div>
                 <label className="text-sm">{t('Role', lang) || 'Role'}</label>
@@ -1407,7 +1423,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
               <div className="flex items-end">
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={formEdit.is_active}
-                         onChange={e => setFormEdit(v => (v ? ({ ...v, is_active: e.target.checked }) : v))} />
+                    onChange={e => setFormEdit(v => (v ? ({ ...v, is_active: e.target.checked }) : v))} />
                   {t('Active', lang) || 'Active'}
                 </label>
               </div>
@@ -1430,50 +1446,65 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </Modal>
 
       {/* Accounts: Post invite confirm */}
-<Modal
-  open={postInviteOpen}
-  title={t('SendAccessLinkTitle', lang) || 'Send access link?'}
-  onClose={() => {
-    if (sendingLink) return; // evita chiusura mentre invia (opzionale)
-    setPostInviteOpen(false);
-    setPostInviteEmail(null);
-  }}
-  width="max-w-md"
->
-  <div className="space-y-3 text-gray-800">
-    <p className="text-sm">
-      {postInviteEmail
-        ? (t('SendAccessLinkBodyKnown', lang) || 'Send a sign-in link to {{email}}?').replace('{{email}}', postInviteEmail!)
-        : (t('SendAccessLinkBodyGeneric', lang) || 'Do you want to send a sign-in link now?')}
-    </p>
-    <div className="pt-2 flex items-center justify-end gap-2">
-      <button
-        type="button"
-        onClick={skipInviteForNow}
-        disabled={sendingLink}
-        className={`px-3 h-9 rounded-lg border ${sendingLink ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+      <Modal
+        open={postInviteOpen}
+        title={t('SendAccessLinkTitle', lang) || 'Send access link?'}
+        onClose={() => {
+          if (sendingLink) return; // evita chiusura mentre invia (opzionale)
+          setPostInviteOpen(false);
+          setPostInviteEmail(null);
+        }}
+        width="max-w-md"
       >
-        {t('NotNow', lang) || 'Not now'}
-      </button>
-      <button
-        type="button"
-        onClick={confirmSendInviteNow}
-        disabled={sendingLink}
-        aria-busy={sendingLink}
-        className={`px-3 h-9 rounded-lg bg-blue-600 text-white ${sendingLink ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}
-      >
-        {sendingLink ? (t('Loading', lang) || 'Sending…') : (t('SendLink', lang) || 'Send link')}
-      </button>
-    </div>
-  </div>
-</Modal>
+        <div className="space-y-3 text-gray-800">
+          <p className="text-sm">
+            {postInviteEmail
+              ? (t('SendAccessLinkBodyKnown', lang) || 'Send a sign-in link to {{email}}?').replace('{{email}}', postInviteEmail!)
+              : (t('SendAccessLinkBodyGeneric', lang) || 'Do you want to send a sign-in link now?')}
+          </p>
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={skipInviteForNow}
+              disabled={sendingLink}
+              className={`px-3 h-9 rounded-lg border ${sendingLink ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+            >
+              {t('NotNow', lang) || 'Not now'}
+            </button>
+            <button
+              type="button"
+              onClick={confirmSendInviteNow}
+              disabled={sendingLink}
+              aria-busy={sendingLink}
+              className={`px-3 h-9 rounded-lg bg-blue-600 text-white ${sendingLink ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}
+            >
+              {sendingLink ? (t('Loading', lang) || 'Sending…') : (t('SendLink', lang) || 'Send link')}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
 
-        
+
+      {/* Accounts: Delete Confirm */}
+      <Modal open={deleteConfirmOpen} title={t('ConfirmDelete', lang) || 'Confirm delete'} onClose={() => setDeleteConfirmOpen(false)} width="max-w-md">
+        <div className="space-y-3 text-gray-800">
+          <p>{t('ConfirmDeleteAccountBody', lang) || 'Are you sure you want to delete this account? This action cannot be undone.'}</p>
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setDeleteConfirmOpen(false)} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
+              {t('Cancel', lang) || 'Cancel'}
+            </button>
+            <button type="button" onClick={confirmDelete} className="px-3 h-9 rounded-lg bg-red-600 text-white hover:opacity-90">
+              {t('Delete', lang) || 'Delete'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <TagManagerModal
-    open={tagModalOpen}
-    onClose={() => setTagModalOpen(false)}
-  />
+        open={tagModalOpen}
+        onClose={() => setTagModalOpen(false)}
+      />
     </div>
   )
 }

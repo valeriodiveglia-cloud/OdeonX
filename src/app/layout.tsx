@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const showEnvBadge = vercelEnv !== 'production'
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${beVietnam.variable} ${geistMono.variable} antialiased font-sans`}>
         <ClientErrorGuard>
           <SettingsProvider>{children}</SettingsProvider>
