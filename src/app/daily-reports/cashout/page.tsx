@@ -174,7 +174,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 
 function EditorModal({
   mode, staffOpts, shiftOpts, catOpts, suppliers, selectedBranchName, initial, onClose, onSaved, onDeleted, currentUserName,
-  onCreateSupplier, t,
+  onCreateSupplier, t, onSaveAndAdd,
 }: {
   mode: 'create' | 'view' | 'edit'
   staffOpts: string[]
@@ -184,11 +184,12 @@ function EditorModal({
   selectedBranchName: string
   initial: Partial<CashoutRow>
   onClose: () => void
-  onSaved: (row: CashoutRow) => void
+  onSaved: (row: CashoutRow) => Promise<void>
   onDeleted: (id: string) => void
   currentUserName: string
   onCreateSupplier: (name: string) => Promise<Sup | null>
   t: ReturnType<typeof getDailyReportsDictionary>['cashout']
+  onSaveAndAdd?: (row: CashoutRow) => Promise<void>
 }) {
   const [viewMode, setViewMode] = useState(mode === 'view')
   const [date, setDate] = useState(initial.date || todayISO())
@@ -205,6 +206,34 @@ function EditorModal({
   const [shift, setShift] = useState<string>(initial.shift || defaultShift)
   const [paidBy] = useState<string>(initial.paidBy || currentUserName || (staffOpts[0] || ''))
   const [timeHHMM, setTimeHHMM] = useState<string>(() => extractHHMM(initial.created_at || undefined))
+
+  // FIX: Reset state when initial prop changes (e.g. for "Save & Add New" or re-opening)
+  useEffect(() => {
+    if (mode === 'edit' || mode === 'view') {
+      setDate(initial.date || todayISO())
+      setDescription(initial.description || '')
+      setCategory(initial.category || '')
+      setAmount(Number(initial.amount || 0))
+      setSupplierId(initial.supplier_id || '')
+      setInvoice(!!initial.invoice)
+      setDeliveryNote(!!initial.deliveryNote)
+      setShift(initial.shift || defaultShift)
+      setTimeHHMM(extractHHMM(initial.created_at || undefined))
+      setViewMode(mode === 'view')
+    } else {
+      // Create mode: reset fields but keep some defaults if provided in initial
+      setDate(initial.date || todayISO())
+      setDescription('')
+      setCategory('')
+      setAmount(0)
+      setSupplierId('')
+      setInvoice(false)
+      setDeliveryNote(false)
+      setShift(initial.shift || defaultShift)
+      setTimeHHMM(extractHHMM(new Date().toISOString()))
+      setViewMode(false)
+    }
+  }, [initial, mode, defaultShift])
 
   const supplierName = useMemo(() => suppliers.find(x => x.id === supplierId)?.name || '', [supplierId, suppliers])
   const canSave = description.trim().length > 0 && amount > 0
@@ -223,10 +252,9 @@ function EditorModal({
     }
   }
 
-  function handleSave() {
-    if (!canSave || viewMode) return
+  function buildRow(): CashoutRow {
     const combinedTs = combineDateAndTimeToISO(String(date), timeHHMM || '00:00')
-    onSaved({
+    return {
       id: initial.id || (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
       branch: selectedBranchName ? selectedBranchName : null,
       date,
@@ -240,8 +268,19 @@ function EditorModal({
       shift: (shift || defaultShift) || null,
       paidBy: paidBy || currentUserName || null,
       created_at: combinedTs,
-    })
+    }
   }
+
+  async function handleSave() {
+    if (!canSave || viewMode) return
+    await onSaved(buildRow())
+  }
+
+  async function handleSaveAndAdd() {
+    if (!canSave || viewMode || !onSaveAndAdd) return
+    await onSaveAndAdd(buildRow())
+  }
+
   async function handleDelete() {
     if (viewMode || !initial.id) return
     if (!window.confirm(tm.deleteConfirm)) return
@@ -347,7 +386,14 @@ function EditorModal({
           <div>
             <button onClick={onClose} className="px-4 py-2 rounded-lg border hover:opacity-80">{tm.buttons.close}</button>
             {!viewMode && (
-              <button onClick={handleSave} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50">{tm.buttons.save}</button>
+              <>
+                {onSaveAndAdd && !initial.id && (
+                  <button onClick={handleSaveAndAdd} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:opacity-50">
+                    {(t as any).buttons?.saveAndAdd || 'Save & Add New'}
+                  </button>
+                )}
+                <button onClick={handleSave} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50">{tm.buttons.save}</button>
+              </>
             )}
           </div>
         </div>
@@ -441,6 +487,7 @@ export default function CashoutPage() {
 
   function openCreate() {
     setEditorMode('create')
+    // Reverted to always default to today as per user request
     setInitialRow({
       date: todayISO(),
       invoice: false,
@@ -460,6 +507,34 @@ export default function CashoutPage() {
     setOpenEditor(false)
   }
 
+  async function onSaveAndAddRow(row: CashoutRow) {
+    const saved = await upsertCashout(row)
+    if (!saved) return
+    // Do NOT close editor. Instead, update initialRow to a new object to trigger reset.
+    // We keep the same date/shift/paidBy as the previous one (or reset them? usually user wants same context)
+    // The requirement says "save and add new expense", implying a fresh form.
+    // Let's reset to defaults similar to openCreate, but maybe keep the date?
+    // For now, let's just reset to the same defaults as openCreate would.
+
+    // Re-calculate default date logic or just reuse the one from the saved row?
+    // Usually when adding multiple, you want the same date.
+
+    setInitialRow({
+      date: row.date, // Keep the date user just used
+      invoice: false,
+      deliveryNote: false,
+      shift: row.shift, // Keep the shift
+      paidBy: row.paidBy, // Keep the payer
+      created_at: new Date().toISOString(),
+      // Ensure we pass a new object reference and NO ID
+      id: undefined,
+      description: '',
+      amount: 0,
+      category: '',
+      supplier_id: '',
+    })
+  }
+
   async function onDeletedRow(id: string) {
     const ok = await deleteCashout(id)
     if (!ok) return
@@ -467,12 +542,12 @@ export default function CashoutPage() {
   }
 
   function toggleSelectAll() {
-    if (rows.length === 0) return
-    const allSelected = rows.every(r => !!selected[r.id])
+    if (visibleRows.length === 0) return
+    const allSelected = visibleRows.every(r => !!selected[r.id])
     if (allSelected) setSelected({})
     else {
       const next: Record<string, boolean> = {}
-      rows.forEach(r => { next[r.id] = true })
+      visibleRows.forEach(r => { next[r.id] = true })
       setSelected(next)
     }
   }
@@ -612,11 +687,11 @@ export default function CashoutPage() {
     )
   }
 
-  const allSelected = rows.length > 0 && rows.every(r => !!selected[r.id])
-  const someSelected = rows.some(r => !!selected[r.id]) && !allSelected
+  const allSelected = visibleRows.length > 0 && visibleRows.every(r => !!selected[r.id])
+  const someSelected = visibleRows.some(r => !!selected[r.id]) && !allSelected
   useEffect(() => {
     if (headerCbRef.current) headerCbRef.current.indeterminate = someSelected
-  }, [someSelected, allSelected, rows.length])
+  }, [someSelected, allSelected, visibleRows.length])
 
   return (
     <div className="max-w-none mx-auto p-4 text-gray-100">
@@ -858,6 +933,7 @@ export default function CashoutPage() {
           selectedBranchName={selectedBranchName}
           onClose={() => setOpenEditor(false)}
           onSaved={onSavedRow}
+          onSaveAndAdd={onSaveAndAddRow}
           onDeleted={onDeletedRow}
           currentUserName={currentUserName}
           onCreateSupplier={createSupplier}

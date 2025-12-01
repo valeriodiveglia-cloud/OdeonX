@@ -270,10 +270,13 @@ export default function TrashPage() {
   useEffect(() => { if (headerCbMat.current) headerCbMat.current.indeterminate = matSomeVisibleSelected }, [matSomeVisibleSelected, matAllVisibleSelected, matsFiltered.length])
   useEffect(() => { if (!selectModeMat) setSelectedMat({}) }, [selectModeMat])
   function toggleSelectAllVisibleMat() {
-    const next: Record<string, boolean> = { ...selectedMat }
-    if (matAllVisibleSelected) matsFiltered.forEach(m => next[m.id] = false)
-    else matsFiltered.forEach(m => next[m.id] = true)
-    setSelectedMat(next)
+    if (matAllVisibleSelected) {
+      setSelectedMat({})
+    } else {
+      const next: Record<string, boolean> = {}
+      matsFiltered.forEach(m => next[m.id] = true)
+      setSelectedMat(next)
+    }
   }
   const selectedMatIds = useMemo(() => Object.keys(selectedMat).filter(id => selectedMat[id]), [selectedMat])
 
@@ -291,10 +294,13 @@ export default function TrashPage() {
   useEffect(() => { if (headerCbDish.current) headerCbDish.current.indeterminate = dishSomeVisibleSelected }, [dishSomeVisibleSelected, dishAllVisibleSelected, dishesFiltered.length])
   useEffect(() => { if (!selectModeDish) setSelectedDish({}) }, [selectModeDish])
   function toggleSelectAllVisibleDish() {
-    const next: Record<string, boolean> = { ...selectedDish }
-    if (dishAllVisibleSelected) dishesFiltered.forEach(m => next[m.id] = false)
-    else dishesFiltered.forEach(m => next[m.id] = true)
-    setSelectedDish(next)
+    if (dishAllVisibleSelected) {
+      setSelectedDish({})
+    } else {
+      const next: Record<string, boolean> = {}
+      dishesFiltered.forEach(m => next[m.id] = true)
+      setSelectedDish(next)
+    }
   }
   const selectedDishIds = useMemo(() => Object.keys(selectedDish).filter(id => selectedDish[id]), [selectedDish])
 
@@ -312,10 +318,13 @@ export default function TrashPage() {
   useEffect(() => { if (headerCbPrep.current) headerCbPrep.current.indeterminate = prepSomeVisibleSelected }, [prepSomeVisibleSelected, prepAllVisibleSelected, prepsFiltered.length])
   useEffect(() => { if (!selectModePrep) setSelectedPrep({}) }, [selectModePrep])
   function toggleSelectAllVisiblePrep() {
-    const next: Record<string, boolean> = { ...selectedPrep }
-    if (prepAllVisibleSelected) prepsFiltered.forEach(m => next[m.id] = false)
-    else prepsFiltered.forEach(m => next[m.id] = true)
-    setSelectedPrep(next)
+    if (prepAllVisibleSelected) {
+      setSelectedPrep({})
+    } else {
+      const next: Record<string, boolean> = {}
+      prepsFiltered.forEach(m => next[m.id] = true)
+      setSelectedPrep(next)
+    }
   }
   const selectedPrepIds = useMemo(() => Object.keys(selectedPrep).filter(id => selectedPrep[id]), [selectedPrep])
 
@@ -333,10 +342,13 @@ export default function TrashPage() {
   useEffect(() => { if (headerCbEq.current) headerCbEq.current.indeterminate = eqSomeVisibleSelected }, [eqSomeVisibleSelected, eqAllVisibleSelected, eqsFiltered.length])
   useEffect(() => { if (!selectModeEq) setSelectedEq({}) }, [selectModeEq])
   function toggleSelectAllVisibleEq() {
-    const next: Record<string, boolean> = { ...selectedEq }
-    if (eqAllVisibleSelected) eqsFiltered.forEach(m => next[m.id] = false)
-    else eqsFiltered.forEach(m => next[m.id] = true)
-    setSelectedEq(next)
+    if (eqAllVisibleSelected) {
+      setSelectedEq({})
+    } else {
+      const next: Record<string, boolean> = {}
+      eqsFiltered.forEach(m => next[m.id] = true)
+      setSelectedEq(next)
+    }
   }
   const selectedEqIds = useMemo(() => Object.keys(selectedEq).filter(id => selectedEq[id]), [selectedEq])
 

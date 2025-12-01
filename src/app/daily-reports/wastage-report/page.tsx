@@ -981,18 +981,18 @@ export default function WastageReportPage() {
     setEditorInitialRow(null)
   }
 
-  const allSelected = rows.length > 0 && rows.every(r => !!selected[r.id])
-  const someSelected = rows.some(r => !!selected[r.id]) && !allSelected
+  const allSelected = visibleRows.length > 0 && visibleRows.every(r => !!selected[r.id])
+  const someSelected = visibleRows.some(r => !!selected[r.id]) && !allSelected
   useEffect(() => {
     if (headerCbRef.current) headerCbRef.current.indeterminate = someSelected
-  }, [someSelected, allSelected, rows.length])
+  }, [someSelected, allSelected, visibleRows.length])
 
   function toggleSelectAll() {
-    if (rows.length === 0) return
+    if (visibleRows.length === 0) return
     if (allSelected) setSelected({})
     else {
       const next: Record<string, boolean> = {}
-      rows.forEach(r => {
+      visibleRows.forEach(r => {
         next[r.id] = true
       })
       setSelected(next)

@@ -136,17 +136,6 @@ export default function ClosingListPage() {
   }, [])
 
   // Indeterminate header checkbox
-  const allSelected = rows.length > 0 && rows.every(r => !!selected[r.id])
-  const someSelected = rows.some(r => !!selected[r.id]) && !allSelected
-  useEffect(() => {
-    if (headerCbRef.current) headerCbRef.current.indeterminate = someSelected
-  }, [someSelected, allSelected, rows.length])
-
-  function toggleSort(k: SortKey) {
-    if (sortKey === k) setSortAsc(v => !v)
-    else { setSortKey(k); setSortAsc(true) }
-  }
-
   // Search filter only. Mese e branch sono già gestiti dall hook.
   const filtered = useMemo(() => {
     let out = rows.slice()
@@ -169,6 +158,19 @@ export default function ClosingListPage() {
     })
     return out
   }, [rows, qText, sortKey, sortAsc])
+
+  const allSelected = filtered.length > 0 && filtered.every(r => !!selected[r.id])
+  const someSelected = filtered.some(r => !!selected[r.id]) && !allSelected
+  useEffect(() => {
+    if (headerCbRef.current) headerCbRef.current.indeterminate = someSelected
+  }, [someSelected, allSelected, filtered.length])
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortAsc(v => !v)
+    else { setSortKey(k); setSortAsc(true) }
+  }
+
+
 
   // KPI calcolati sulle righe visibili
   const stats = useMemo(() => {

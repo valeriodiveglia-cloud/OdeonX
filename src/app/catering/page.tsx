@@ -300,10 +300,13 @@ export default function CateringIndexPage() {
   function thSortProps(k: SortKey) { const active = sort.key === k; const ariaSort = active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'; return { active, ariaSort } }
 
   function toggleSelectAllVisible() {
-    const next: Record<string, boolean> = { ...selected }
-    if (allVisibleSelected) for (const m of rowsSorted) next[m.id] = false
-    else for (const m of rowsSorted) next[m.id] = true
-    setSelected(next)
+    if (allVisibleSelected) {
+      setSelected({})
+    } else {
+      const next: Record<string, boolean> = {}
+      for (const m of rowsSorted) next[m.id] = true
+      setSelected(next)
+    }
   }
 
   async function handleBulkDelete() {

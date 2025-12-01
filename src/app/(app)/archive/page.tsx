@@ -146,10 +146,13 @@ export default function ArchivePage() {
   useEffect(() => { if (headerCbRef.current) headerCbRef.current.indeterminate = someVisibleSelected }, [someVisibleSelected])
 
   function toggleSelectAllVisible() {
-    const next = { ...selected }
-    if (allVisibleSelected) filtered.forEach(r => { next[r.id] = false })
-    else filtered.forEach(r => { next[r.id] = true })
-    setSelected(next)
+    if (allVisibleSelected) {
+      setSelected({})
+    } else {
+      const next: Record<string, boolean> = {}
+      filtered.forEach(r => { next[r.id] = true })
+      setSelected(next)
+    }
   }
   function selectedIds(): string[] { return Object.keys(selected).filter(id => selected[id]) }
 

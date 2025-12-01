@@ -1909,13 +1909,13 @@ ${t('Skipped', language)}: ${skipped}`)
 
 
   function toggleSelectAllVisible() {
-    const next: Record<string, boolean> = { ...selected }
     if (allVisibleSelected) {
-      for (const m of filtered) next[m.id] = false
+      setSelected({})
     } else {
+      const next: Record<string, boolean> = {}
       for (const m of filtered) next[m.id] = true
+      setSelected(next)
     }
-    setSelected(next)
   }
 
   async function bulkMarkReviewed() {

@@ -1901,10 +1901,13 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
   useEffect(() => { if (!selectMode) setSelected({}) }, [selectMode])
 
   function toggleSelectAllVisible() {
-    const next: Record<string, boolean> = { ...selected }
-    if (allVisibleSelected) { for (const m of filtered) next[m.id] = false }
-    else { for (const m of filtered) next[m.id] = true }
-    setSelected(next)
+    if (allVisibleSelected) {
+      setSelected({})
+    } else {
+      const next: Record<string, boolean> = {}
+      for (const m of filtered) next[m.id] = true
+      setSelected(next)
+    }
   }
 
   async function bulkMarkReviewed() {

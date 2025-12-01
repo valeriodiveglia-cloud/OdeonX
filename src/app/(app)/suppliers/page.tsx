@@ -354,10 +354,13 @@ export default function SuppliersPage() {
   useEffect(() => { if (headerCbRef.current) headerCbRef.current.indeterminate = someVisibleSelected }, [someVisibleSelected])
 
   function toggleSelectAllVisible() {
-    const next: Record<string, boolean> = { ...selected }
-    if (allVisibleSelected) filtered.forEach(m => next[m.id] = false)
-    else filtered.forEach(m => next[m.id] = true)
-    setSelected(next)
+    if (allVisibleSelected) {
+      setSelected({})
+    } else {
+      const next: Record<string, boolean> = {}
+      filtered.forEach(m => next[m.id] = true)
+      setSelected(next)
+    }
   }
 
   function openCreate() { setEditorMode('create'); setEditingId(undefined); setInitialItem(null); setOpenEditor(true) }
