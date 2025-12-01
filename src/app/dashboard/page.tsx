@@ -77,9 +77,12 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     let mounted = true
-      ; (async () => {
+
+    const init = async () => {
+      try {
         const { data } = await supabase.auth.getUser()
         if (!mounted) return
+
         setUser(data.user ?? null)
 
         if (data.user) {
@@ -88,18 +91,33 @@ export default function HomeDashboard() {
             .select('role')
             .eq('user_id', data.user.id)
             .single()
-          setRole(acc?.role || null)
+
+          if (mounted) {
+            setRole(acc?.role || null)
+          }
         }
+      } catch (err) {
+        console.error('Dashboard init error:', err)
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
 
-        setLoading(false)
-      })()
+    init()
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt: any, session: any) => {
-      setUser(session?.user ?? null)
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      if (mounted) {
+        setUser(session?.user ?? null)
+      }
     })
 
-    return () => sub?.subscription.unsubscribe()
-  }, [router])
+    return () => {
+      mounted = false
+      sub?.subscription.unsubscribe()
+    }
+  }, [])
 
   function handleLogout() {
     // Navigate to server-side signout route which handles cookie clearing and redirect
