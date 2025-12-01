@@ -388,6 +388,7 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
   /* ---------- Cashout CRUD ---------- */
   const upsertCashout = useCallback(
     async (row: CashoutRow) => {
+      safeSetError(null)
       const payload = toDbPayload(row)
       const { data, error } = await supabase
         .from(TBL_CASHOUT)
@@ -399,6 +400,7 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
 
       if (error || !data) {
         console.error('upsert cashout error', error)
+        safeSetError('Failed to save entry: ' + (error?.message || 'Unknown error'))
         return null
       }
 
@@ -425,11 +427,13 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
   )
 
   const deleteCashout = useCallback(async (id: string) => {
+    safeSetError(null)
     const { error } = await supabase.from(TBL_CASHOUT).delete().eq('id', id)
     if (!isActiveRef.current) return false
 
     if (error) {
       console.error('delete cashout error', error)
+      safeSetError('Failed to delete entry: ' + error.message)
       return false
     }
     safeSetRows(prev => prev.filter(r => r.id !== id))
@@ -444,11 +448,13 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
 
   const bulkDeleteCashout = useCallback(async (ids: string[]) => {
     if (!ids.length) return true
+    safeSetError(null)
     const { error } = await supabase.from(TBL_CASHOUT).delete().in('id', ids)
     if (!isActiveRef.current) return false
 
     if (error) {
       console.error('bulk delete cashout error', error)
+      safeSetError('Failed to delete entries: ' + error.message)
       return false
     }
     safeSetRows(prev => prev.filter(r => !ids.includes(r.id)))

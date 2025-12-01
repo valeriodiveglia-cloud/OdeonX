@@ -14,6 +14,7 @@ import {
   XMarkIcon,
   MapPinIcon,
   ArrowRightStartOnRectangleIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline'
 import { LayoutDashboard } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
@@ -180,6 +181,15 @@ export default function HomeDashboard() {
                     >
                       <Cog6ToothIcon className="h-6 w-6" />
                       <span>{t(language, 'Settings')}</span>
+                    </Link>
+
+                    {/* Loyalty Manager */}
+                    <Link
+                      href="/loyalty-manager"
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+                    >
+                      <UserGroupIcon className="h-6 w-6" />
+                      <span>Loyalty Manager</span>
                     </Link>
                   </div>
                 </div>

@@ -420,6 +420,7 @@ export default function CashoutPage() {
     selectedBranchName,
     currentUserName,
     loading,
+    error,
     createSupplier,
     upsertCashout,
     deleteCashout,
@@ -503,13 +504,19 @@ export default function CashoutPage() {
 
   async function onSavedRow(row: CashoutRow) {
     const saved = await upsertCashout(row)
-    if (!saved) return
+    if (!saved) {
+      alert('Failed to save. Please check your connection and try again.')
+      return
+    }
     setOpenEditor(false)
   }
 
   async function onSaveAndAddRow(row: CashoutRow) {
     const saved = await upsertCashout(row)
-    if (!saved) return
+    if (!saved) {
+      alert('Failed to save. Please check your connection and try again.')
+      return
+    }
     // Do NOT close editor. Instead, update initialRow to a new object to trigger reset.
     // We keep the same date/shift/paidBy as the previous one (or reset them? usually user wants same context)
     // The requirement says "save and add new expense", implying a fresh form.
@@ -796,6 +803,13 @@ export default function CashoutPage() {
           </div>
         }
       />
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-2">
+          <XMarkIcon className="w-5 h-5" />
+          {error}
+        </div>
+      )}
 
       <div className="mt-3 border-t border-white/15" />
 
