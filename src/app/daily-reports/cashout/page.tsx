@@ -163,6 +163,12 @@ function Toggle({
 }
 
 /* ---------- Modal ---------- */
+function toTitleCase(s: string) {
+  const str = String(s || '').toLowerCase().trim()
+  if (!str) return ''
+  return str.replace(/\b\p{L}+/gu, w => w[0].toUpperCase() + w.slice(1))
+}
+
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -542,35 +548,45 @@ export default function CashoutPage() {
     setOpenEditor(false)
   }
 
-  async function onSaveAndAddRow(row: CashoutRow) {
-    const saved = await upsertCashout(row)
-    if (!saved) {
-      alert('Failed to save. Please check your connection and try again.')
-      return
+  async function onSaveAndAddRow(row: CashoutRow): Promise<void> {
+    console.log('[CashoutPage] onSaveAndAddRow called', row)
+    console.log('[CashoutPage] upsertCashout type:', typeof upsertCashout)
+
+    try {
+      const saved = await upsertCashout(row)
+      console.log('[CashoutPage] upsertCashout result:', saved)
+
+      if (!saved) {
+        alert('Failed to save. Please check your connection and try again.')
+        return
+      }
+      // Do NOT close editor. Instead, update initialRow to a new object to trigger reset.
+      // We keep the same date/shift/paidBy as the previous one (or reset them? usually user wants same context)
+      // The requirement says "save and add new expense", implying a fresh form.
+      // Let's reset to defaults similar to openCreate, but maybe keep the date?
+      // For now, let's just reset to the same defaults as openCreate would.
+
+      // Re-calculate default date logic or just reuse the one from the saved row?
+      // Usually when adding multiple, you want the same date.
+
+      setInitialRow({
+        date: row.date, // Keep the date user just used
+        invoice: false,
+        deliveryNote: false,
+        shift: row.shift, // Keep the shift
+        paidBy: row.paidBy, // Keep the payer
+        created_at: new Date().toISOString(),
+        // Ensure we pass a new object reference and NO ID
+        id: undefined,
+        description: '',
+        amount: 0,
+        category: '',
+        supplier_id: '',
+      })
+    } catch (err) {
+      console.error('[CashoutPage] onSaveAndAddRow error', err)
+      alert('Failed to save: ' + String(err))
     }
-    // Do NOT close editor. Instead, update initialRow to a new object to trigger reset.
-    // We keep the same date/shift/paidBy as the previous one (or reset them? usually user wants same context)
-    // The requirement says "save and add new expense", implying a fresh form.
-    // Let's reset to defaults similar to openCreate, but maybe keep the date?
-    // For now, let's just reset to the same defaults as openCreate would.
-
-    // Re-calculate default date logic or just reuse the one from the saved row?
-    // Usually when adding multiple, you want the same date.
-
-    setInitialRow({
-      date: row.date, // Keep the date user just used
-      invoice: false,
-      deliveryNote: false,
-      shift: row.shift, // Keep the shift
-      paidBy: row.paidBy, // Keep the payer
-      created_at: new Date().toISOString(),
-      // Ensure we pass a new object reference and NO ID
-      id: undefined,
-      description: '',
-      amount: 0,
-      category: '',
-      supplier_id: '',
-    })
   }
 
   async function onDeletedRow(id: string) {
@@ -991,8 +1007,4 @@ export default function CashoutPage() {
 }
 
 
-function toTitleCase(s: string) {
-  const str = String(s || '').toLowerCase().trim()
-  if (!str) return ''
-  return str.replace(/\b\p{L}+/gu, w => w[0].toUpperCase() + w.slice(1))
-}
+
