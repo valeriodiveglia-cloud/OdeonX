@@ -338,11 +338,21 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
         const payload = toDbPayload(row)
         console.log('[useCashout] payload', payload)
 
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => {
+          console.warn('[useCashout] upsert timed out')
+          controller.abort()
+        }, 15000)
+
         const { data, error } = await supabase
           .from(TBL_CASHOUT)
           .upsert([payload], { onConflict: 'id' })
           .select('*')
           .single()
+          // @ts-ignore
+          .abortSignal(controller.signal)
+
+        clearTimeout(timeoutId)
 
         console.log('[useCashout] supabase response', { data, error })
 
