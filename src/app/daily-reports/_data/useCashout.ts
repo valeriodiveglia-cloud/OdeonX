@@ -352,7 +352,7 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
             .single()
 
           const timeoutPromise = new Promise<{ data: any, error: any }>((_, reject) =>
-            setTimeout(() => reject(new Error('Network request timed out (15s). Please check your connection.')), 15000)
+            setTimeout(() => reject(new Error('Network request timed out (45s). Please check your connection.')), 45000)
           )
 
           // @ts-ignore

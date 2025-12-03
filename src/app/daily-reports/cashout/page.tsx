@@ -540,12 +540,17 @@ export default function CashoutPage() {
   function openEdit(row: CashoutRow) { setEditorMode('edit'); setInitialRow(row); setOpenEditor(true) }
 
   async function onSavedRow(row: CashoutRow) {
-    const saved = await upsertCashout(row)
-    if (!saved) {
-      alert('Failed to save. Please check your connection and try again.')
-      return
+    try {
+      const saved = await upsertCashout(row)
+      if (!saved) {
+        alert('Failed to save. Please check your connection and try again.')
+        return
+      }
+      setOpenEditor(false)
+    } catch (err) {
+      console.error('[CashoutPage] onSavedRow error', err)
+      alert('Failed to save: ' + String(err))
     }
-    setOpenEditor(false)
   }
 
   async function onSaveAndAddRow(row: CashoutRow): Promise<void> {
