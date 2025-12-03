@@ -338,21 +338,18 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
         const payload = toDbPayload(row)
         console.log('[useCashout] payload', payload)
 
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => {
-          console.warn('[useCashout] upsert timed out')
-          controller.abort()
-        }, 15000)
-
-        const { data, error } = await supabase
+        const dbPromise = supabase
           .from(TBL_CASHOUT)
           .upsert([payload], { onConflict: 'id' })
           .select('*')
           .single()
-          // @ts-ignore
-          .abortSignal(controller.signal)
 
-        clearTimeout(timeoutId)
+        const timeoutPromise = new Promise<{ data: any, error: any }>((_, reject) =>
+          setTimeout(() => reject(new Error('Network request timed out (15s). Please check your connection.')), 15000)
+        )
+
+        // @ts-ignore
+        const { data, error } = await Promise.race([dbPromise, timeoutPromise])
 
         console.log('[useCashout] supabase response', { data, error })
 
