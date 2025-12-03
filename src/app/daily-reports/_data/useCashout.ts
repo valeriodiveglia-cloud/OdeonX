@@ -344,8 +344,9 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
 
       if (error || !data) {
         console.error('upsert cashout error', error)
-        safeSetError('Failed to save entry: ' + (error?.message || 'Unknown error'))
-        return null
+        const msg = 'Failed to save entry: ' + (error?.message || 'Unknown error')
+        safeSetError(msg)
+        throw new Error(msg)
       }
 
       const saved = normFromDb(data, suppliersRef.current)

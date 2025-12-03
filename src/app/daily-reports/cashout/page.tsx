@@ -207,6 +207,7 @@ function EditorModal({
   const [shift, setShift] = useState<string>(initial.shift || defaultShift)
   const [paidBy] = useState<string>(initial.paidBy || currentUserName || (staffOpts[0] || ''))
   const [timeHHMM, setTimeHHMM] = useState<string>(() => extractHHMM(initial.created_at || undefined))
+  const [isSaving, setIsSaving] = useState(false)
 
   // FIX: Reset state when initial prop changes (e.g. for "Save & Add New" or re-opening)
   useEffect(() => {
@@ -272,17 +273,43 @@ function EditorModal({
     }
   }
 
-  async function handleSave() {
-    if (!canSave || viewMode) return
-    await onSaved(buildRow())
+  async function handleSave(e?: React.MouseEvent) {
+    e?.preventDefault()
+    e?.stopPropagation()
+    console.log('[CashoutPage] handleSave called', { canSave, viewMode, description, amount })
+    if (!canSave || viewMode || isSaving) return
+
+    setIsSaving(true)
+    try {
+      await onSaved(buildRow())
+    } catch (err) {
+      console.error('[CashoutPage] handleSave error', err)
+      alert('Error saving: ' + String(err))
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  async function handleSaveAndAdd() {
-    if (!canSave || viewMode || !onSaveAndAdd) return
-    await onSaveAndAdd(buildRow())
+  async function handleSaveAndAdd(e?: React.MouseEvent) {
+    e?.preventDefault()
+    e?.stopPropagation()
+    console.log('[CashoutPage] handleSaveAndAdd called', { canSave, viewMode })
+    if (!canSave || viewMode || !onSaveAndAdd || isSaving) return
+
+    setIsSaving(true)
+    try {
+      await onSaveAndAdd(buildRow())
+    } catch (err) {
+      console.error('[CashoutPage] handleSaveAndAdd error', err)
+      alert('Error saving: ' + String(err))
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  async function handleDelete() {
+  async function handleDelete(e?: React.MouseEvent) {
+    e?.preventDefault()
+    e?.stopPropagation()
     if (viewMode || !initial.id) return
     if (!window.confirm(tm.deleteConfirm)) return
     onDeleted(initial.id)
@@ -294,7 +321,7 @@ function EditorModal({
           <div className="text-xl font-bold">
             {viewMode ? tm.viewTitle : (initial.id ? tm.editTitle : tm.newTitle)}
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><XMarkIcon className="w-7 h-7" /></button>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100"><XMarkIcon className="w-7 h-7" /></button>
         </div>
         <div className="px-4 md:px-6 py-4 flex-1 overflow-y-auto">
           <SectionCard>
@@ -379,21 +406,23 @@ function EditorModal({
         <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
           <div className="flex items-center gap-2">
             {viewMode ? (
-              <button onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80">{tm.buttons.edit}</button>
+              <button type="button" onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80">{tm.buttons.edit}</button>
             ) : (
-              initial.id && <button onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{tm.buttons.delete}</button>
+              initial.id && <button type="button" onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{tm.buttons.delete}</button>
             )}
           </div>
           <div>
-            <button onClick={onClose} className="px-4 py-2 rounded-lg border hover:opacity-80">{tm.buttons.close}</button>
+            <button type="button" onClick={onClose} disabled={isSaving} className="px-4 py-2 rounded-lg border hover:opacity-80 disabled:opacity-50">{tm.buttons.close}</button>
             {!viewMode && (
               <>
                 {onSaveAndAdd && !initial.id && (
-                  <button onClick={handleSaveAndAdd} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:opacity-50">
-                    {(t as any).buttons?.saveAndAdd || 'Save & Add New'}
+                  <button type="button" onClick={handleSaveAndAdd} disabled={!canSave || isSaving} className="ml-2 px-4 py-2 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:opacity-50">
+                    {isSaving ? 'Saving...' : ((t as any).buttons?.saveAndAdd || 'Save & Add New')}
                   </button>
                 )}
-                <button onClick={handleSave} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50">{tm.buttons.save}</button>
+                <button type="button" onClick={handleSave} disabled={!canSave || isSaving} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50">
+                  {isSaving ? 'Saving...' : tm.buttons.save}
+                </button>
               </>
             )}
           </div>
