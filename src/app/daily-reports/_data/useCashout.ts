@@ -334,62 +334,80 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
     async (row: CashoutRow) => {
       console.log('[useCashout] upsertCashout called', row)
       safeSetError(null)
-      try {
-        const payload = toDbPayload(row)
-        console.log('[useCashout] payload', payload)
-
-        const dbPromise = supabase
-          .from(TBL_CASHOUT)
-          .upsert([payload], { onConflict: 'id' })
-          .select('*')
-          .single()
-
-        const timeoutPromise = new Promise<{ data: any, error: any }>((_, reject) =>
-          setTimeout(() => reject(new Error('Network request timed out (15s). Please check your connection.')), 15000)
-        )
-
-        // @ts-ignore
-        const { data, error } = await Promise.race([dbPromise, timeoutPromise])
-
-        console.log('[useCashout] supabase response', { data, error })
-
-        if (!isActiveRef.current) {
-          console.warn('[useCashout] component unmounted during save')
-          return null
-        }
-
-        if (error || !data) {
-          console.error('[useCashout] upsert error', error)
-          const msg = 'Failed to save entry: ' + (error?.message || 'Unknown error')
-          safeSetError(msg)
-          throw new Error(msg)
-        }
-
-        const saved = normFromDb(data, suppliersRef.current)
-        safeSetRows(prev => {
-          const i = prev.findIndex(r => r.id === saved.id)
-          if (i >= 0) {
-            const next = [...prev]
-            next[i] = saved
-            return next
+      let lastError: any
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          if (attempt > 0) {
+            console.warn(`[useCashout] Retry attempt ${attempt + 1}...`)
+            await new Promise(r => setTimeout(r, 1000))
           }
-          return [saved, ...prev]
-        })
 
-        if (bcRef.current) {
-          try {
-            bcRef.current.postMessage({ type: 'cashout:changed', id: saved.id })
-          } catch (e) {
-            console.warn('[useCashout] postMessage error', e)
+          const payload = toDbPayload(row)
+          console.log('[useCashout] payload', payload)
+
+          const dbPromise = supabase
+            .from(TBL_CASHOUT)
+            .upsert([payload], { onConflict: 'id' })
+            .select('*')
+            .single()
+
+          const timeoutPromise = new Promise<{ data: any, error: any }>((_, reject) =>
+            setTimeout(() => reject(new Error('Network request timed out (15s). Please check your connection.')), 15000)
+          )
+
+          // @ts-ignore
+          const { data, error } = await Promise.race([dbPromise, timeoutPromise])
+
+          console.log('[useCashout] supabase response', { data, error })
+
+          if (!isActiveRef.current) {
+            console.warn('[useCashout] component unmounted during save')
+            return null
+          }
+
+          if (error || !data) {
+            console.error('[useCashout] upsert error', error)
+            const msg = 'Failed to save entry: ' + (error?.message || 'Unknown error')
+            // If it's the last attempt, throw
+            if (attempt === 1) {
+              safeSetError(msg)
+              throw new Error(msg)
+            }
+            // Otherwise continue to retry
+            lastError = new Error(msg)
+            continue
+          }
+
+          const saved = normFromDb(data, suppliersRef.current)
+          safeSetRows(prev => {
+            const i = prev.findIndex(r => r.id === saved.id)
+            if (i >= 0) {
+              const next = [...prev]
+              next[i] = saved
+              return next
+            }
+            return [saved, ...prev]
+          })
+
+          if (bcRef.current) {
+            try {
+              bcRef.current.postMessage({ type: 'cashout:changed', id: saved.id })
+            } catch (e) {
+              console.warn('[useCashout] postMessage error', e)
+            }
+          }
+
+          return saved
+        } catch (err) {
+          console.error(`[useCashout] Exception in attempt ${attempt + 1}`, err)
+          lastError = err
+          if (attempt === 1) {
+            if (err instanceof Error) throw err
+            throw new Error(String(err))
           }
         }
-
-        return saved
-      } catch (err) {
-        console.error('[useCashout] CRITICAL EXCEPTION in upsertCashout', err)
-        if (err instanceof Error) throw err
-        throw new Error(String(err))
       }
+      throw lastError
     },
     []
   )
