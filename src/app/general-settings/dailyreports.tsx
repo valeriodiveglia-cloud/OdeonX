@@ -187,15 +187,8 @@ export function DailyReportsCard() {
           }
         }
 
-        const storedOrder = loadOrderLS()
-        let finalOrder: string[]
-        if (storedOrder && storedOrder.length > 0) {
-          const normalizedOrder = storedOrder.filter(id => map[id])
-          const remaining = Object.keys(map).filter(id => !normalizedOrder.includes(id))
-          finalOrder = [...normalizedOrder, ...remaining]
-        } else {
-          finalOrder = (data || []).map(row => String(row.id))
-        }
+        // Always use DB order as source of truth
+        const finalOrder = (data || []).map(row => String(row.id))
 
         if (!ignore) {
           setBranches(map)

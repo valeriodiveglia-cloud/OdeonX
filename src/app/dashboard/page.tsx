@@ -25,6 +25,7 @@ type ProviderBranch = {
   id: string
   name: string
   address?: string
+  sort_order?: number | null
 }
 
 const LS_BRANCH_JSON = 'dailyreports.selectedBranch'      // {id,name,address}
@@ -268,33 +269,19 @@ function BranchPickerModal({ onClose }: { onClose: () => void }) {
         try {
           const { data, error } = await supabase
             .from('provider_branches')
-            .select('id,name,address')
+            .select('id,name,address,sort_order')
+            .order('sort_order', { ascending: true, nullsFirst: true })
+            .order('name', { ascending: true })
+
           if (error) throw error
 
-          let rows: ProviderBranch[] =
+          const rows: ProviderBranch[] =
             (data || []).map(r => ({
               id: String(r.id),
               name: r.name || '',
               address: r.address || '',
+              sort_order: r.sort_order
             }))
-
-          const order = loadProviderOrder()
-          if (order && order.length > 0) {
-            const orderMap = new Map<string, number>()
-            order.forEach((id, idx) => { orderMap.set(id, idx) })
-
-            rows = [...rows].sort((a, b) => {
-              const ia = orderMap.has(a.id) ? orderMap.get(a.id)! : Number.POSITIVE_INFINITY
-              const ib = orderMap.has(b.id) ? orderMap.get(b.id)! : Number.POSITIVE_INFINITY
-              if (ia === ib) {
-                return (a.name || '').localeCompare(b.name || '')
-              }
-              return ia - ib
-            })
-          } else {
-            // fallback: alfabetico se non c'è ordine salvato
-            rows = [...rows].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-          }
 
           if (!ignore) {
             setBranches(rows)

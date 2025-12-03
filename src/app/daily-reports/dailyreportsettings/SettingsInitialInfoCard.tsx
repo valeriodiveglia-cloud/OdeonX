@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PlusIcon, TrashIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline'
 import { DailyReportsDictionary } from '../_i18n'
+import { useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
 
 /**
  * SettingsInitialInfoCard
@@ -85,7 +86,7 @@ function loadFromLS(): SettingsShape | null {
 function saveToLS(v: SettingsShape) {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(v))
-  } catch {}
+  } catch { }
 }
 
 function defaultSettings(): SettingsShape {
@@ -130,17 +131,17 @@ function broadcastInitialInfo(value: SettingsShape) {
     const cache = JSON.parse(localStorage.getItem('dr.settings.cache') || '{}')
     localStorage.setItem('dr.settings.cache', JSON.stringify({ ...cache, initialInfo: value }))
     localStorage.setItem('dr.settings.bump', String(Date.now()))
-  } catch {}
+  } catch { }
   // same-tab
   try {
     window.dispatchEvent(new CustomEvent('dr:settings:initialInfo', { detail: { value } }))
-  } catch {}
+  } catch { }
   // cross-tab
   try {
     const bc = new BroadcastChannel('dr-settings')
     bc.postMessage({ type: 'initialInfo', value })
     bc.close()
-  } catch {}
+  } catch { }
 }
 
 /* ===== Input rows ===== */
@@ -257,149 +258,162 @@ function RowShift(props: {
 
 /* ===== Main card ===== */
 export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictionary['dailyreportsettings']['initialInfo'] }) {
-  const [data, setData] = useState<SettingsShape>(() => {
-    const s = loadFromLS() ?? defaultSettings()
-    return {
-      shifts: migrateShifts(s.shifts),
-      thirdParties: uniqueCaseInsensitive(s.thirdParties, MAX_THIRD_PARTIES),
-    }
-  })
-  const [dbSnap, setDbSnap] = useState<SettingsShape | null>(() => loadFromLS() ?? defaultSettings())
+  const {
+    settings,
+    loading,
+    updateDraft,
+    refresh,
+  } = useDailyReportSettingsContext()
 
-  const isDirty = useMemo(() => {
-    const A = data
-    const B = dbSnap
-    const eqStrArr = (x?: string[], y?: string[]) =>
-      JSON.stringify(uniqueCaseInsensitive(x ?? [])) === JSON.stringify(uniqueCaseInsensitive(y ?? []))
-    const normShifts = (arr?: ShiftItem[]) =>
-      JSON.stringify(
-        (arr ?? []).map((s) => ({
-          name: cleanStr(s.name).toLowerCase(),
+  const serverInitialInfo = settings?.initialInfo
+
+  const [data, setData] = useState<SettingsShape>(defaultSettings())
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
+
+  // Sync from server
+  useEffect(() => {
+    if (loading) return
+
+    const s = serverInitialInfo
+    const loaded: SettingsShape = {
+      shifts: migrateShifts(s?.shifts),
+      thirdParties: uniqueCaseInsensitive(s?.thirdParties ?? [], MAX_THIRD_PARTIES),
+    }
+
+    const final = s ? loaded : defaultSettings()
+
+    if (!initialLoadDone) {
+      setInitialLoadDone(true)
+      setData(final)
+      return
+    }
+
+    // If we wanted to sync external updates while editing, we'd need more complex logic.
+    // For now, we assume context is the source of truth and we write to it.
+    // But if we are typing, we don't want to be overwritten by our own updates coming back.
+    // The context 'settings' is the draft, so it should reflect what we just wrote.
+
+    // Actually, if we updateDraft, 'settings' changes. 
+    // We should probably just rely on 'settings' if we want controlled component, 
+    // but for performance we might keep local state and debounce sync?
+    // For simplicity, let's update context immediately and rely on local state for UI, 
+    // syncing from context only on initial load or reload.
+
+  }, [serverInitialInfo, loading, initialLoadDone])
+
+  const syncToContext = (newData: SettingsShape) => {
+    const toSave: SettingsShape = {
+      shifts: migrateShifts(
+        newData.shifts.map((s) => ({
+          name: cleanStr(s.name),
           start: toTime(s.start),
           end: toTime(s.end),
         })),
-      )
-    return (
-      !B ||
-      normShifts(A.shifts) !== normShifts(B.shifts) ||
-      !eqStrArr(A.thirdParties, B.thirdParties)
-    )
-  }, [data, dbSnap])
+      ),
+      thirdParties: uniqueCaseInsensitive(newData.thirdParties, MAX_THIRD_PARTIES),
+    }
+    updateDraft('initialInfo', toSave)
+    announceDirty(true)
+  }
+
+  const isDirty = useMemo(() => {
+    // We can't easily know if it's dirty compared to DB without original settings.
+    // But the page handles the "Save All" button state based on context.isDirty.
+    // The local "Dirty" badge might be inaccurate if we don't have original.
+    // Let's rely on the page's save button.
+    return true // Placeholder
+  }, [])
 
   const announceDirty = (dirty: boolean) => {
     try {
       window.dispatchEvent(new CustomEvent('dailysettings:dirty', { detail: { section: SECTION_KEY, dirty } }))
-    } catch {}
+    } catch { }
   }
-  useEffect(() => {
-    announceDirty(isDirty)
-  }, [isDirty])
 
   // Save Bar listeners
   useEffect(() => {
-    function onSave() {
-      const toSave: SettingsShape = {
-        shifts: migrateShifts(
-          data.shifts.map((s) => ({
-            name: cleanStr(s.name),
-            start: toTime(s.start),
-            end: toTime(s.end),
-          })),
-        ),
-        thirdParties: uniqueCaseInsensitive(data.thirdParties, MAX_THIRD_PARTIES),
-      }
-      try {
-        saveToLS(toSave)
-        setDbSnap(toSave)
-        announceDirty(false)
-        // real-time broadcast for consumers
-        broadcastInitialInfo(toSave)
-        window.dispatchEvent(
-          new CustomEvent('dailysettings:saved', { detail: { section: SECTION_KEY, ok: true } }),
-        )
-      } catch {
-        window.dispatchEvent(
-          new CustomEvent('dailysettings:saved', { detail: { section: SECTION_KEY, ok: false } }),
-        )
-      }
-    }
-    function onReload() {
-      const snap = loadFromLS() ?? defaultSettings()
-      setData({
-        shifts: migrateShifts(snap.shifts),
-        thirdParties: uniqueCaseInsensitive(snap.thirdParties, MAX_THIRD_PARTIES),
-      })
-      setDbSnap(snap)
-      announceDirty(false)
+    async function onReload() {
+      await refresh()
+      setInitialLoadDone(false)
     }
     function onDefaults() {
       const snap = defaultSettings()
-      setData({
-        shifts: migrateShifts(snap.shifts),
-        thirdParties: uniqueCaseInsensitive(snap.thirdParties, MAX_THIRD_PARTIES),
-      })
-      announceDirty(true)
+      setData(snap)
+      syncToContext(snap)
     }
-    window.addEventListener('dailysettings:save', onSave)
+    // We don't need onSave anymore because the page calls context.saveAll()
+    // But we might want to listen to 'dailysettings:saved' to reset dirty flags if we had them.
+
     window.addEventListener('dailysettings:reload', onReload)
     window.addEventListener('dailysettings:reset-to-defaults', onDefaults)
     return () => {
-      window.removeEventListener('dailysettings:save', onSave)
       window.removeEventListener('dailysettings:reload', onReload)
       window.removeEventListener('dailysettings:reset-to-defaults', onDefaults)
     }
-  }, [data])
+  }, [refresh])
 
   // Handlers - live normalization
-  const addShift = () =>
-    setData((d) => ({ ...d, shifts: [...d.shifts, { name: '', start: '', end: '' }] }))
-  const updShift = (i: number, v: ShiftItem) =>
-    setData((d) => {
-      const next = [...d.shifts]
-      next[i] = {
-        name: cleanStr(v.name),
-        start: toTime(v.start),
-        end: toTime(v.end),
-      }
-      return { ...d, shifts: next.filter((s) => s.name) }
-    })
-  const delShift = (i: number) =>
-    setData((d) => ({ ...d, shifts: d.shifts.filter((_, idx) => idx !== i) }))
-  const moveShiftUp = (i: number) =>
-    setData((d) => ({ ...d, shifts: move(d.shifts, i, i - 1) }))
-  const moveShiftDown = (i: number) =>
-    setData((d) => ({ ...d, shifts: move(d.shifts, i, i + 1) }))
+  const addShift = () => {
+    const next = { ...data, shifts: [...data.shifts, { name: '', start: '', end: '' }] }
+    setData(next)
+    syncToContext(next)
+  }
 
-  const addTP = () =>
-    setData((d) =>
-      d.thirdParties.length >= MAX_THIRD_PARTIES ? d : { ...d, thirdParties: [...d.thirdParties, ''] },
-    )
-  const updTP = (i: number, v: string) =>
-    setData((d) => ({
-      ...d,
-      thirdParties: uniqueCaseInsensitive(
-        d.thirdParties.map((s, idx) => (idx === i ? v : s)),
-        MAX_THIRD_PARTIES,
-      ),
-    }))
-  const delTP = (i: number) =>
-    setData((d) => ({ ...d, thirdParties: d.thirdParties.filter((_, idx) => idx !== i) }))
+  const updShiftSafe = (i: number, v: ShiftItem) => {
+    const nextShifts = [...data.shifts]
+    nextShifts[i] = {
+      name: v.name, // Allow empty while typing
+      start: toTime(v.start),
+      end: toTime(v.end),
+    }
+    const next = { ...data, shifts: nextShifts }
+    setData(next)
+    syncToContext(next)
+  }
+
+  const delShift = (i: number) => {
+    const next = { ...data, shifts: data.shifts.filter((_, idx) => idx !== i) }
+    setData(next)
+    syncToContext(next)
+  }
+
+  const moveShiftUp = (i: number) => {
+    const next = { ...data, shifts: move(data.shifts, i, i - 1) }
+    setData(next)
+    syncToContext(next)
+  }
+
+  const moveShiftDown = (i: number) => {
+    const next = { ...data, shifts: move(data.shifts, i, i + 1) }
+    setData(next)
+    syncToContext(next)
+  }
+
+  const addTP = () => {
+    if (data.thirdParties.length >= MAX_THIRD_PARTIES) return
+    const next = { ...data, thirdParties: [...data.thirdParties, ''] }
+    setData(next)
+    syncToContext(next)
+  }
+
+  const updTP = (i: number, v: string) => {
+    const nextTP = data.thirdParties.map((s, idx) => (idx === i ? v : s))
+    const next = { ...data, thirdParties: nextTP }
+    setData(next)
+    syncToContext(next)
+  }
+
+  const delTP = (i: number) => {
+    const next = { ...data, thirdParties: data.thirdParties.filter((_, idx) => idx !== i) }
+    setData(next)
+    syncToContext(next)
+  }
 
   return (
     <Card>
       <CardHeader
         title={t.title}
-        right={
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full ${
-              isDirty
-                ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
-                : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
-            }`}
-          >
-            {isDirty ? t.status.dirty : t.status.clean}
-          </span>
-        }
+      // Removed local dirty indicator for simplicity as we rely on global save button
       />
       <div className="p-3 space-y-4">
         {/* Shifts */}
@@ -424,7 +438,7 @@ export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictiona
               <RowShift
                 key={`shift-${i}`}
                 value={s}
-                onChange={(v) => updShift(i, v)}
+                onChange={(v) => updShiftSafe(i, v)}
                 onRemove={() => delShift(i)}
                 onMoveUp={() => moveShiftUp(i)}
                 onMoveDown={() => moveShiftDown(i)}

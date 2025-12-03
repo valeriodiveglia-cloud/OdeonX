@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
-import { useDailyReportSettings } from '../_data/useDailyReportSettings'
+import { useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
 import { DailyReportsDictionary } from '../_i18n'
 
 const SECTION_KEY = 'cashout'
@@ -51,19 +51,19 @@ function broadcastCashOutCategories(value: string[]) {
       JSON.stringify({ ...cache, cashOutCategories: value }),
     )
     localStorage.setItem('dr.settings.bump', String(Date.now()))
-  } catch {}
+  } catch { }
 
   try {
     window.dispatchEvent(
       new CustomEvent('dr:settings:cashOutCategories', { detail: { value } }),
     )
-  } catch {}
+  } catch { }
 
   try {
     const bc = new BroadcastChannel('dr-settings')
     bc.postMessage({ type: 'cashOutCategories', value })
     bc.close()
-  } catch {}
+  } catch { }
 }
 
 /* ===== Input row ===== */
@@ -98,30 +98,39 @@ function RowInput(props: {
 /* ===== Main card ===== */
 export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['dailyreportsettings']['cashOut'] }) {
   const {
-    cashOutCategories: serverCategories,
+    settings,
     loading,
-    error,
-    saveCashOutCategories,
+    updateDraft,
     refresh,
-  } = useDailyReportSettings()
+  } = useDailyReportSettingsContext()
+
+  const serverCategories = settings?.cashOut?.categories
 
   const [data, setData] = useState<string[]>([])
-  const [dbSnap, setDbSnap] = useState<string[]>([])
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   // Sync da server → stato locale
   useEffect(() => {
-    if (!loading) {
-      const norm = uniqueCaseInsensitive(serverCategories)
+    if (loading) return
+
+    const norm = uniqueCaseInsensitive(serverCategories ?? [])
+
+    if (!initialLoadDone) {
+      setInitialLoadDone(true)
       setData(norm)
-      setDbSnap(norm)
+      return
     }
-  }, [serverCategories, loading])
+  }, [serverCategories, loading, initialLoadDone])
+
+  const syncToContext = (newData: string[]) => {
+    const toSave = uniqueCaseInsensitive(newData)
+    updateDraft('cashOut', { categories: toSave })
+    announceDirty(true)
+  }
 
   const isDirty = useMemo(() => {
-    const A = uniqueCaseInsensitive(data)
-    const B = uniqueCaseInsensitive(dbSnap)
-    return JSON.stringify(A) !== JSON.stringify(B)
-  }, [data, dbSnap])
+    return true // Placeholder, relying on global save button
+  }, [])
 
   const announceDirty = (dirty: boolean) => {
     try {
@@ -130,93 +139,56 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
           detail: { section: SECTION_KEY, dirty },
         }),
       )
-    } catch {}
+    } catch { }
   }
-
-  useEffect(() => {
-    announceDirty(isDirty)
-  }, [isDirty])
 
   // Save Bar listeners
   useEffect(() => {
-    async function onSave() {
-      try {
-        const toSave = uniqueCaseInsensitive(data)
-        await saveCashOutCategories(toSave)
-        setDbSnap(toSave)
-        announceDirty(false)
-        broadcastCashOutCategories(toSave)
-        window.dispatchEvent(
-          new CustomEvent('dailysettings:saved', {
-            detail: { section: SECTION_KEY, ok: true },
-          }),
-        )
-      } catch {
-        window.dispatchEvent(
-          new CustomEvent('dailysettings:saved', {
-            detail: { section: SECTION_KEY, ok: false },
-          }),
-        )
-      }
-    }
-
     async function onReload() {
       await refresh()
+      setInitialLoadDone(false)
     }
 
     function onDefaults() {
       const snap = ['Food', 'Drink', 'Shipping']
       setData(uniqueCaseInsensitive(snap))
-      announceDirty(true)
+      syncToContext(snap)
     }
 
-    window.addEventListener('dailysettings:save', onSave)
     window.addEventListener('dailysettings:reload', onReload)
     window.addEventListener('dailysettings:reset-to-defaults', onDefaults)
     return () => {
-      window.removeEventListener('dailysettings:save', onSave)
       window.removeEventListener('dailysettings:reload', onReload)
       window.removeEventListener('dailysettings:reset-to-defaults', onDefaults)
     }
-  }, [data, saveCashOutCategories, refresh])
+  }, [refresh])
 
-  const addCategory = () =>
-    setData(d => [...d, ''])
+  const addCategory = () => {
+    const next = [...data, '']
+    setData(next)
+    syncToContext(next)
+  }
 
-  const updCategory = (i: number, v: string) =>
-    setData(d =>
-      uniqueCaseInsensitive(
-        d.map((c, idx) => (idx === i ? v : c)),
-      ),
-    )
+  const updCategory = (i: number, v: string) => {
+    const next = data.map((c, idx) => (idx === i ? v : c))
+    setData(next)
+    syncToContext(next)
+  }
 
-  const delCategory = (i: number) =>
-    setData(d => d.filter((_, idx) => idx !== i))
+  const delCategory = (i: number) => {
+    const next = data.filter((_, idx) => idx !== i)
+    setData(next)
+    syncToContext(next)
+  }
 
   return (
     <Card>
       <CardHeader
         title={t.title}
-        right={
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full ${
-              loading
-                ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
-                : isDirty
-                ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
-                : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
-            }`}
-          >
-            {loading ? t.status.loading : isDirty ? t.status.dirty : t.status.clean}
-          </span>
-        }
+      // Removed local dirty indicator
       />
       <div className="p-3 space-y-4">
-        {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 text-red-800 px-3 py-2 text-sm">
-            {t.errors.loadFailed}
-          </div>
-        )}
+        {/* Removed local error display as page handles it */}
 
         <section className="rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between">

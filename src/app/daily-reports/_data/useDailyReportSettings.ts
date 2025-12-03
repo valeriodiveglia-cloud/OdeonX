@@ -145,7 +145,7 @@ export function useDailyReportSettings() {
       window.removeEventListener('storage', onStorage)
       try {
         bc?.close()
-      } catch {}
+      } catch { }
     }
   }, [branchName, readCacheForBranch])
 
@@ -215,6 +215,12 @@ export function useDailyReportSettings() {
 
   const settings = useMemo<SettingsJson>(() => row?.settings ?? {}, [row])
 
+  // Ref to track latest settings for concurrent saves
+  const latestSettingsRef = useRef<SettingsJson>(settings)
+  useEffect(() => {
+    latestSettingsRef.current = settings
+  }, [settings])
+
   const cashFloatVND = useMemo(() => {
     const raw = settings?.cashCount?.cashFloatVND
     const n = Number(raw)
@@ -249,10 +255,15 @@ export function useDailyReportSettings() {
     if (!cleanBranch) throw new Error('No branch selected')
     const safe = Math.max(0, Math.round(next))
 
+    // Use ref to get latest state, including pending updates from other concurrent saves
+    const current = latestSettingsRef.current
     const merged: SettingsJson = {
-      ...(settings ?? {}),
-      cashCount: { ...(settings?.cashCount ?? {}), cashFloatVND: safe },
+      ...(current ?? {}),
+      cashCount: { ...(current?.cashCount ?? {}), cashFloatVND: safe },
     }
+
+    // Update ref immediately so subsequent calls see it
+    latestSettingsRef.current = merged
 
     savingRef.current = true
     setRow(prev => ({
@@ -279,10 +290,45 @@ export function useDailyReportSettings() {
     if (!cleanBranch) throw new Error('No branch selected')
     const cleaned = normalizeCategories(categories)
 
+    const current = latestSettingsRef.current
     const merged: SettingsJson = {
-      ...(settings ?? {}),
-      cashOut: { ...(settings?.cashOut ?? {}), categories: cleaned },
+      ...(current ?? {}),
+      cashOut: { ...(current?.cashOut ?? {}), categories: cleaned },
     }
+
+    latestSettingsRef.current = merged
+
+    savingRef.current = true
+    setRow(prev => ({
+      ...(prev ?? { branch_name: cleanBranch, settings: {} }),
+      branch_name: cleanBranch,
+      settings: merged,
+    }))
+
+    const { error } = await supabase
+      .from('daily_report_settings')
+      .upsert([{ branch_name: cleanBranch, settings: merged }], {
+        onConflict: 'branch_name',
+      })
+
+    savingRef.current = false
+
+    if (error) {
+      throw error
+    }
+  }
+
+  async function saveInitialInfo(info: SettingsJson['initialInfo']) {
+    const cleanBranch = branchName
+    if (!cleanBranch) throw new Error('No branch selected')
+
+    const current = latestSettingsRef.current
+    const merged: SettingsJson = {
+      ...(current ?? {}),
+      initialInfo: info,
+    }
+
+    latestSettingsRef.current = merged
 
     savingRef.current = true
     setRow(prev => ({
@@ -318,6 +364,7 @@ export function useDailyReportSettings() {
     cashOutCategories,
     saveCashFloatVND,
     saveCashOutCategories,
+    saveInitialInfo,
     refresh,
   }
 }

@@ -8,11 +8,19 @@ type LoyaltyClass = {
     name: string
     method: 'value' | 'points'
     threshold: number
+    points_ratio: number // VND per 1 point (Earning)
+    redemption_ratio: number // VND per 1 point (Redeeming)
+    color?: string
+}
+
+type Reward = {
+    name: string
+    cost: number
 }
 
 type LoyaltySettings = {
     classes: LoyaltyClass[]
-    points_ratio: number
+    rewards: Reward[]
 }
 
 export default function LoyaltySettingsPage() {
@@ -32,7 +40,25 @@ export default function LoyaltySettingsPage() {
             .single()
 
         if (data) {
-            setSettings(data)
+            // Migrate old data if needed or set defaults
+            const rawClasses = Array.isArray(data.classes) ? data.classes : []
+            const classes = rawClasses.map((c: any) => ({
+                ...c,
+                points_ratio: c.points_ratio || data.points_ratio || 1000,
+                redemption_ratio: c.redemption_ratio || data.redemption_ratio || 100,
+                color: c.color || '#3b82f6' // Default blue
+            }))
+
+            const rawRewards = Array.isArray(data.rewards) ? data.rewards : []
+            const rewards = rawRewards.map((r: any) => ({
+                name: r.name,
+                cost: r.cost
+            }))
+
+            setSettings({
+                classes,
+                rewards
+            })
         } else if (error) {
             console.error('Error fetching settings:', error)
         }
@@ -58,7 +84,14 @@ export default function LoyaltySettingsPage() {
         if (!settings) return
         setSettings({
             ...settings,
-            classes: [...settings.classes, { name: 'New Class', method: 'value', threshold: 0 }]
+            classes: [...settings.classes, {
+                name: 'New Class',
+                method: 'value',
+                threshold: 0,
+                points_ratio: 1000,
+                redemption_ratio: 100,
+                color: '#3b82f6'
+            }]
         })
     }
 
@@ -69,11 +102,41 @@ export default function LoyaltySettingsPage() {
         setSettings({ ...settings, classes: newClasses })
     }
 
+    const formatNumber = (num: number) => {
+        return new Intl.NumberFormat('en-US').format(num)
+    }
+
+    const parseNumber = (str: string) => {
+        return Number(str.replace(/,/g, ''))
+    }
+
     const updateClass = (index: number, field: keyof LoyaltyClass, value: any) => {
         if (!settings) return
         const newClasses = [...settings.classes]
         newClasses[index] = { ...newClasses[index], [field]: value }
         setSettings({ ...settings, classes: newClasses })
+    }
+
+    const addReward = () => {
+        if (!settings) return
+        setSettings({
+            ...settings,
+            rewards: [...settings.rewards, { name: 'New Reward', cost: 100 }]
+        })
+    }
+
+    const removeReward = (index: number) => {
+        if (!settings) return
+        const newRewards = [...settings.rewards]
+        newRewards.splice(index, 1)
+        setSettings({ ...settings, rewards: newRewards })
+    }
+
+    const updateReward = (index: number, field: keyof Reward, value: any) => {
+        if (!settings) return
+        const newRewards = [...settings.rewards]
+        newRewards[index] = { ...newRewards[index], [field]: value }
+        setSettings({ ...settings, rewards: newRewards })
     }
 
     if (loading) {
@@ -87,7 +150,7 @@ export default function LoyaltySettingsPage() {
     if (!settings) return <div className="p-8">Error loading settings.</div>
 
     return (
-        <div className="p-8 max-w-4xl">
+        <div className="p-8 w-full">
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-2xl font-bold text-white">
                     Loyalty Settings
@@ -103,23 +166,6 @@ export default function LoyaltySettingsPage() {
             </div>
 
             <div className="space-y-8">
-                {/* General Settings */}
-                <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h2 className="text-lg font-semibold text-slate-800 mb-4">General Configuration</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Points Ratio (VND per 1 Point)</label>
-                            <input
-                                type="number"
-                                value={settings.points_ratio}
-                                onChange={e => setSettings({ ...settings, points_ratio: Number(e.target.value) })}
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <p className="text-xs text-slate-500 mt-1">How much a customer needs to spend to earn 1 point.</p>
-                        </div>
-                    </div>
-                </section>
-
                 {/* Loyalty Classes */}
                 <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <div className="flex justify-between items-center mb-4">
@@ -132,52 +178,156 @@ export default function LoyaltySettingsPage() {
                         </button>
                     </div>
 
-                    <div className="space-y-4">
-                        {settings.classes.map((cls, idx) => (
-                            <div key={idx} className="flex flex-col md:flex-row gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100 items-start md:items-center">
-                                <div className="flex-1">
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Class Name</label>
-                                    <input
-                                        type="text"
-                                        value={cls.name}
-                                        onChange={e => updateClass(idx, 'name', e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                                    />
-                                </div>
-                                <div className="w-full md:w-40">
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Method</label>
-                                    <select
-                                        value={cls.method}
-                                        onChange={e => updateClass(idx, 'method', e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                                    >
-                                        <option value="value">Total Value</option>
-                                        <option value="points">Points</option>
-                                    </select>
-                                </div>
-                                <div className="w-full md:w-48">
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Threshold</label>
-                                    <input
-                                        type="number"
-                                        value={cls.threshold}
-                                        onChange={e => updateClass(idx, 'threshold', Number(e.target.value))}
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                                    />
-                                </div>
-                                <div className="pt-5">
-                                    <button
-                                        onClick={() => removeClass(idx)}
-                                        className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
-                                        title="Remove Class"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                        {settings.classes.length === 0 && (
-                            <p className="text-center text-slate-500 py-4">No classes defined.</p>
-                        )}
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-200">
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-12">Color</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/5">Class Name</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">Method</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">Threshold</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">Earning Ratio<br /><span className="normal-case font-normal text-slate-400">(VND/1pt)</span></th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">Redemption Ratio<br /><span className="normal-case font-normal text-slate-400">(VND/1pt)</span></th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-12"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {settings.classes.map((cls, idx) => (
+                                    <tr key={idx} className="hover:bg-slate-50">
+                                        <td className="p-2">
+                                            <input
+                                                type="color"
+                                                value={cls.color || '#3b82f6'}
+                                                onChange={e => updateClass(idx, 'color', e.target.value)}
+                                                className="w-8 h-8 p-0 border-0 rounded cursor-pointer"
+                                            />
+                                        </td>
+                                        <td className="p-2">
+                                            <input
+                                                type="text"
+                                                value={cls.name}
+                                                onChange={e => updateClass(idx, 'name', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                        </td>
+                                        <td className="p-2">
+                                            <select
+                                                value={cls.method}
+                                                onChange={e => updateClass(idx, 'method', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            >
+                                                <option value="value">Total Value</option>
+                                                <option value="points">Points</option>
+                                            </select>
+                                        </td>
+                                        <td className="p-2">
+                                            <input
+                                                type="text"
+                                                value={formatNumber(cls.threshold)}
+                                                onChange={e => updateClass(idx, 'threshold', parseNumber(e.target.value))}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                        </td>
+                                        <td className="p-2">
+                                            <input
+                                                type="text"
+                                                value={formatNumber(cls.points_ratio)}
+                                                onChange={e => updateClass(idx, 'points_ratio', parseNumber(e.target.value))}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                        </td>
+                                        <td className="p-2">
+                                            <input
+                                                type="text"
+                                                value={formatNumber(cls.redemption_ratio)}
+                                                onChange={e => updateClass(idx, 'redemption_ratio', parseNumber(e.target.value))}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                        </td>
+                                        <td className="p-2 text-right">
+                                            <button
+                                                onClick={() => removeClass(idx)}
+                                                className="text-red-400 hover:text-red-600 p-2 rounded-lg transition"
+                                                title="Remove Class"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {settings.classes.length === 0 && (
+                                    <tr>
+                                        <td colSpan={7} className="text-center text-slate-500 py-8">
+                                            No classes defined. Click "Add Class" to start.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                {/* Rewards Configuration */}
+                <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-lg font-semibold text-slate-800">Rewards</h2>
+                        <button
+                            onClick={addReward}
+                            className="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg text-sm font-medium transition flex items-center gap-1"
+                        >
+                            <Plus className="w-4 h-4" /> Add Reward
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-200">
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-2/3">Reward Name</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/4">Cost (Points)</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-12"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {settings.rewards.map((reward, idx) => (
+                                    <tr key={idx} className="hover:bg-slate-50">
+                                        <td className="p-2">
+                                            <input
+                                                type="text"
+                                                value={reward.name}
+                                                onChange={e => updateReward(idx, 'name', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="e.g. Free Coffee"
+                                            />
+                                        </td>
+                                        <td className="p-2">
+                                            <input
+                                                type="text"
+                                                value={formatNumber(reward.cost)}
+                                                onChange={e => updateReward(idx, 'cost', parseNumber(e.target.value))}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                        </td>
+                                        <td className="p-2 text-right">
+                                            <button
+                                                onClick={() => removeReward(idx)}
+                                                className="text-red-400 hover:text-red-600 p-2 rounded-lg transition"
+                                                title="Remove Reward"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {settings.rewards.length === 0 && (
+                                    <tr>
+                                        <td colSpan={3} className="text-center text-slate-500 py-8">
+                                            No rewards defined. Click "Add Reward" to start.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </section>
             </div>

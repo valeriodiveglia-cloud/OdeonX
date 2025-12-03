@@ -5,9 +5,10 @@ import { useEffect, useRef, useState } from 'react'
 import SettingsInitialInfoCard from './SettingsInitialInfoCard'
 import SettingsCashCountCard from './SettingsCashCountCard'
 import SettingsCashOutCard from './SettingsCashOut'
-import { useDailyReportSettings } from '../_data/useDailyReportSettings'
 import { useSettings } from '@/contexts/SettingsContext'
 import { drI18n } from '../_i18n'
+import { DailyReportSettingsProvider, useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
+import { useBranchUnified } from '../_data/useBranchUnified'
 
 function Card({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow">{children}</div>
@@ -28,11 +29,20 @@ function CardHeader({ title, right, after }: { title: string; right?: React.Reac
 }
 
 export default function DailyReportSettingsPage() {
+  return (
+    <DailyReportSettingsProvider>
+      <DailyReportSettingsContent />
+    </DailyReportSettingsProvider>
+  )
+}
+
+function DailyReportSettingsContent() {
   const [dirtySections, setDirtySections] = useState<Record<string, boolean>>({})
   const savingRef = useRef(false)
 
-  const { loading, error, branchName, refresh } = useDailyReportSettings()
+  const { loading, error, saveAll, refresh, isDirty: contextDirty, settings } = useDailyReportSettingsContext()
   const { language } = useSettings()
+  const { name: branchName } = useBranchUnified()
   const t = drI18n(language).dailyreportsettings
 
   useEffect(() => {
@@ -46,22 +56,24 @@ export default function DailyReportSettingsPage() {
     }
   }, [])
 
-  const anyDirty = Object.values(dirtySections).some(Boolean)
+  const anyDirty = Object.values(dirtySections).some(Boolean) || contextDirty
 
   function emit(name: string) {
     try {
       window.dispatchEvent(new CustomEvent(name))
-    } catch {}
+    } catch { }
   }
 
   async function handleSaveAll() {
     if (savingRef.current || loading) return
     savingRef.current = true
 
+    // Trigger local updates in cards (they update context draft)
     emit('dailysettings:save')
     await new Promise(r => setTimeout(r, 150))
 
     try {
+      await saveAll()
       await refresh()
       window.dispatchEvent(
         new CustomEvent('dailysettings:saved', { detail: { section: 'all', ok: true } }),
@@ -97,9 +109,8 @@ export default function DailyReportSettingsPage() {
             title={t.branch.tooltip}
           >
             <span
-              className={`h-2 w-2 rounded-full ${
-                loading ? 'bg-yellow-400' : 'bg-green-400'
-              }`}
+              className={`h-2 w-2 rounded-full ${loading ? 'bg-yellow-400' : 'bg-green-400'
+                }`}
             />
             <span className="font-medium">{branchName || t.branch.none}</span>
           </div>
@@ -111,11 +122,10 @@ export default function DailyReportSettingsPage() {
               onClick={handleDefaults}
               disabled={loading}
               className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border border-blue-400/30
-                         ${
-                           loading
-                             ? 'bg-blue-600/10 text-blue-300 cursor-not-allowed'
-                             : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25'
-                         }`}
+                         ${loading
+                  ? 'bg-blue-600/10 text-blue-300 cursor-not-allowed'
+                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25'
+                }`}
               title={t.actions.resetTitle}
             >
               {t.actions.reset}
@@ -125,11 +135,10 @@ export default function DailyReportSettingsPage() {
               onClick={handleReload}
               disabled={loading}
               className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border border-blue-400/30
-                         ${
-                           loading
-                             ? 'bg-blue-600/10 text-blue-300 cursor-not-allowed'
-                             : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25'
-                         }`}
+                         ${loading
+                  ? 'bg-blue-600/10 text-blue-300 cursor-not-allowed'
+                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25'
+                }`}
               title={t.actions.reloadTitle}
             >
               {t.actions.reload}
@@ -138,11 +147,10 @@ export default function DailyReportSettingsPage() {
               type="button"
               onClick={handleSaveAll}
               disabled={!anyDirty || loading}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg ${
-                anyDirty && !loading
-                  ? 'bg-blue-600 text-white hover:opacity-80'
-                  : 'bg-blue-600/15 text-blue-200 border border-blue-400/30 cursor-not-allowed'
-              }`}
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg ${anyDirty && !loading
+                ? 'bg-blue-600 text-white hover:opacity-80'
+                : 'bg-blue-600/15 text-blue-200 border border-blue-400/30 cursor-not-allowed'
+                }`}
               title={t.actions.saveAllTitle}
             >
               {t.actions.saveAll}
