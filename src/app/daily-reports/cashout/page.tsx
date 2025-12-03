@@ -174,7 +174,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 
 function EditorModal({
   mode, staffOpts, shiftOpts, catOpts, suppliers, selectedBranchName, initial, onClose, onSaved, onDeleted, currentUserName,
-  onCreateSupplier, t, onSaveAndAdd,
+  onCreateSupplier, t, onSaveAndAdd, currentShiftName,
 }: {
   mode: 'create' | 'view' | 'edit'
   staffOpts: string[]
@@ -190,6 +190,7 @@ function EditorModal({
   onCreateSupplier: (name: string) => Promise<Sup | null>
   t: ReturnType<typeof getDailyReportsDictionary>['cashout']
   onSaveAndAdd?: (row: CashoutRow) => Promise<void>
+  currentShiftName: string
 }) {
   const [viewMode, setViewMode] = useState(mode === 'view')
   const [date, setDate] = useState(initial.date || todayISO())
@@ -202,7 +203,7 @@ function EditorModal({
   const tm = t.modal
   const yesNo = t.yesNo
 
-  const defaultShift = useMemo(() => (pickCurrentShiftName() || (shiftOpts[0] || '')), [shiftOpts])
+  const defaultShift = useMemo(() => (initial.shift || currentShiftName || shiftOpts[0] || ''), [initial.shift, currentShiftName, shiftOpts])
   const [shift, setShift] = useState<string>(initial.shift || defaultShift)
   const [paidBy] = useState<string>(initial.paidBy || currentUserName || (staffOpts[0] || ''))
   const [timeHHMM, setTimeHHMM] = useState<string>(() => extractHHMM(initial.created_at || undefined))
@@ -419,6 +420,7 @@ export default function CashoutPage() {
     shiftOpts,
     selectedBranchName,
     currentUserName,
+    currentShiftName,
     loading,
     error,
     createSupplier,
@@ -493,7 +495,7 @@ export default function CashoutPage() {
       date: todayISO(),
       invoice: false,
       deliveryNote: false,
-      shift: pickCurrentShiftName() || (shiftOpts[0] || ''),
+      shift: currentShiftName || (shiftOpts[0] || ''),
       paidBy: currentUserName,
       created_at: new Date().toISOString(),
     })
@@ -950,6 +952,7 @@ export default function CashoutPage() {
           onSaveAndAdd={onSaveAndAddRow}
           onDeleted={onDeletedRow}
           currentUserName={currentUserName}
+          currentShiftName={currentShiftName}
           onCreateSupplier={createSupplier}
           t={t}
         />
@@ -958,97 +961,6 @@ export default function CashoutPage() {
   )
 }
 
-/* ---------- Shift utilities locali ---------- */
-type ShiftWin = { name: string; startMin: number; endMin: number }
-function hhmmToMin(t: string): number {
-  const m = String(t || '').match(/^(\d{1,2}):(\d{2})$/)
-  if (!m) return NaN
-  const h = Number(m[1]), min = Number(m[2])
-  if (h < 0 || h > 23 || min < 0 || min > 59) return NaN
-  return h * 60 + min
-}
-function loadShiftLabels(): string[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return ['Lunch', 'Dinner', 'All day']
-    const p = JSON.parse(raw)
-    const out: string[] = []
-    const arr = Array.isArray(p?.shifts) ? p.shifts : []
-    for (const it of arr) {
-      if (typeof it === 'string') {
-        const s = it.trim()
-        if (s) out.push(s)
-      } else if (it && typeof it === 'object') {
-        const name = String(it.name ?? it.label ?? '').trim()
-        if (name) out.push(name)
-      }
-    }
-    const uniq = Array.from(new Set(out)).filter(Boolean)
-    return uniq.length ? uniq : ['Lunch', 'Dinner', 'All day']
-  } catch {
-    return ['Lunch', 'Dinner', 'All day']
-  }
-}
-function loadShiftWindows(): ShiftWin[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return []
-    const p = JSON.parse(raw)
-
-    const arr1 = Array.isArray(p?.shift_windows) ? p.shift_windows : null
-    if (arr1) {
-      const out: ShiftWin[] = []
-      for (const it of arr1) {
-        const name = String(it?.name || '').trim()
-        const s = hhmmToMin(String(it?.start || ''))
-        const e = hhmmToMin(String(it?.end || ''))
-        if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-      }
-      if (out.length) return out
-    }
-
-    const arr2 = Array.isArray(p?.shifts) ? p.shifts : null
-    if (arr2) {
-      const out: ShiftWin[] = []
-      for (const item of arr2) {
-        if (typeof item === 'string') {
-          const m = item.match(/^(.+?)\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/)
-          if (m) {
-            const name = m[1].trim()
-            const s = hhmmToMin(m[2]), e = hhmmToMin(m[3])
-            if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-          }
-        } else if (item && typeof item === 'object') {
-          const name = String(item?.name || item?.label || '').trim()
-          const s = hhmmToMin(String(item?.start || item?.from || ''))
-          const e = hhmmToMin(String(item?.end || item?.to || ''))
-          if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-        }
-      }
-      if (out.length) return out
-    }
-
-    return []
-  } catch { return [] }
-}
-function pickCurrentShiftName(): string {
-  const wins = loadShiftWindows()
-  const now = new Date()
-  const nowMin = now.getHours() * 60 + now.getMinutes()
-
-  for (const w of wins) {
-    const inWin = w.startMin <= w.endMin
-      ? nowMin >= w.startMin && nowMin < w.endMin
-      : nowMin >= w.startMin || nowMin < w.endMin
-    if (inWin) return w.name
-  }
-
-  const labels = loadShiftLabels()
-  if (labels.includes('All day')) return 'All day'
-  if (labels.includes('Lunch') && nowMin < 16 * 60) return 'Lunch'
-  if (labels.includes('Dinner')) return 'Dinner'
-  return labels[0] || ''
-}
 
 function toTitleCase(s: string) {
   const str = String(s || '').toLowerCase().trim()

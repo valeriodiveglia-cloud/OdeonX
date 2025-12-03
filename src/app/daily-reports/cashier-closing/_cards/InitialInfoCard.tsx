@@ -4,6 +4,7 @@
 import { ReactNode, useMemo, useRef, useState, useEffect } from 'react'
 import { useDRBranch } from '../../_data/useDRBranch'
 import { supabase } from '@/lib/supabase_shim'
+import { useDailyReportSettingsDB } from '../../_data/useDailyReportSettingsDB'
 import { creditsBus } from '@/lib/creditsSync'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -85,7 +86,6 @@ const fmt = (n: number) => {
 
 /* === Third-party channels helpers (dynamic, up to 6) === */
 const TP_MAX = 6
-const TP_LS_KEY = 'dailysettings.initialInfo.v1'
 
 type ThirdPartyAmount = { label: string; amount: number }
 
@@ -106,35 +106,6 @@ function tpUnique(list: string[], max: number) {
     if (out.length >= max) break
   }
   return out
-}
-
-function tpLoadLabelsFromStorage(): string[] {
-  // 1) dr.settings.cache.initialInfo.thirdParties (broadcast dai settings)
-  try {
-    const rawCache = localStorage.getItem('dr.settings.cache') || ''
-    if (rawCache) {
-      const parsed = JSON.parse(rawCache)
-      const list = parsed?.initialInfo?.thirdParties
-      if (Array.isArray(list) && list.length) {
-        return tpUnique(list.map(tpCleanStr), TP_MAX)
-      }
-    }
-  } catch { }
-
-  // 2) dailysettings.initialInfo.v1 (storage locale dei settings)
-  try {
-    const raw = localStorage.getItem(TP_LS_KEY) || ''
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      const list = parsed?.thirdParties
-      if (Array.isArray(list) && list.length) {
-        return tpUnique(list.map(tpCleanStr), TP_MAX)
-      }
-    }
-  } catch { }
-
-  // 3) default hard-coded
-  return ['Gojek', 'Grab', 'Capichi']
 }
 
 /* Input numerico con migliaia LIVE */
@@ -233,24 +204,7 @@ export type Header = {
   notes?: string
 }
 
-/* Closed by helpers */
-function readCachedDisplayName(): string {
-  try {
-    return (
-      localStorage.getItem('user.displayName') ||
-      localStorage.getItem('user.name') ||
-      localStorage.getItem('app_accounts.displayName') ||
-      ''
-    )
-  } catch {
-    return ''
-  }
-}
-function writeCachedDisplayName(name: string) {
-  try {
-    if (name && name.trim()) localStorage.setItem('user.displayName', name.trim())
-  } catch { }
-}
+
 
 /* Helper: ricava display name utente corrente da Supabase (fallback) */
 async function fetchCurrentUserNameFromDB(): Promise<string> {
@@ -414,20 +368,16 @@ export default function InitialInfoCard(props: {
     }
   }, [activeBranchName]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Closed by: usa cache locale, poi fallback singolo su DB, poi scrivi in cache
+  // Closed by: fetch fresh from DB if new record
   useEffect(() => {
-    // Se è un report esistente, NON sovrascrivere il nome (deve rimanere chi l'ha creato)
     if (isExisting) return
 
     let alive = true
-    const cached = readCachedDisplayName()
-    if (cached && header.cashier !== cached) onChangeHeader({ cashier: cached })
       ; (async () => {
         const name = await fetchCurrentUserNameFromDB()
         if (!alive) return
-        if (name) {
-          writeCachedDisplayName(name)
-          if (header.cashier !== name) onChangeHeader({ cashier: name })
+        if (name && header.cashier !== name) {
+          onChangeHeader({ cashier: name })
         }
       })()
     return () => {
@@ -438,53 +388,15 @@ export default function InitialInfoCard(props: {
   const v = (n: number | undefined) =>
     Number.isFinite(Number(n)) ? Number(n) : 0
 
-  /* === Third-party labels from settings (LS + broadcast) === */
-  const [thirdPartyLabels, setThirdPartyLabels] = useState<string[]>(() => tpLoadLabelsFromStorage())
-
-  useEffect(() => {
-    // 1) Custom event dalla page settings
-    function onInitialInfo(e: Event) {
-      const ce = e as CustomEvent<any>
-      const list = ce?.detail?.value?.thirdParties
-      if (Array.isArray(list)) {
-        setThirdPartyLabels(tpUnique(list.map(tpCleanStr), TP_MAX))
-      }
+  /* === Third-party labels from settings (DB) === */
+  const { settings } = useDailyReportSettingsDB(activeBranchName)
+  const thirdPartyLabels = useMemo(() => {
+    const list = settings?.initialInfo?.thirdParties
+    if (Array.isArray(list) && list.length > 0) {
+      return tpUnique(list.map(tpCleanStr), TP_MAX)
     }
-
-    // 2) storage bump
-    function onStorage(e: StorageEvent) {
-      if (!e.key) return
-      if (e.key === 'dr.settings.bump' || e.key === TP_LS_KEY) {
-        setThirdPartyLabels(tpLoadLabelsFromStorage())
-      }
-    }
-
-    // 3) BroadcastChannel
-    let bc: BroadcastChannel | null = null
-    try {
-      bc = new BroadcastChannel('dr-settings')
-      bc.onmessage = (msg) => {
-        const d = msg?.data
-        if (d?.type === 'initialInfo') {
-          const list = d?.value?.thirdParties
-          if (Array.isArray(list)) {
-            setThirdPartyLabels(tpUnique(list.map(tpCleanStr), TP_MAX))
-          }
-        }
-      }
-    } catch { }
-
-    window.addEventListener('dr:settings:initialInfo', onInitialInfo as EventListener)
-    window.addEventListener('storage', onStorage)
-
-    return () => {
-      window.removeEventListener('dr:settings:initialInfo', onInitialInfo as EventListener)
-      window.removeEventListener('storage', onStorage)
-      try {
-        bc?.close()
-      } catch { }
-    }
-  }, [])
+    return ['Gojek', 'Grab', 'Capichi']
+  }, [settings])
 
   // Third-party amounts effettivi:
   // - se shouldAutoSync: dinamici dai settings

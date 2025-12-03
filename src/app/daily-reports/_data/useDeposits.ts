@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
+import { useDailyReportSettingsDB, ShiftItem, pickCurrentShiftName } from './useDailyReportSettingsDB'
 
 /* ---------- Types ---------- */
 
@@ -35,130 +36,6 @@ export type PaymentItem = {
 }
 
 /* ---------- Helpers (shift, staff, totals) ---------- */
-
-const SETTINGS_LS_KEY = 'dailysettings.initialInfo.v1'
-
-function hhmmToMin(t: string): number {
-  const m = String(t || '').match(/^(\d{1,2}):(\d{2})$/)
-  if (!m) return NaN
-  const h = Number(m[1])
-  const min = Number(m[2])
-  if (h < 0 || h > 23 || min < 0 || min > 59) return NaN
-  return h * 60 + min
-}
-
-type ShiftWin = { name: string; startMin: number; endMin: number }
-
-function loadShiftLabels(): string[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return ['Lunch', 'Dinner', 'All day']
-    const p = JSON.parse(raw)
-    const out: string[] = []
-    const arr = Array.isArray(p?.shifts) ? p.shifts : []
-    for (const it of arr) {
-      if (typeof it === 'string') {
-        const s = it.trim()
-        if (s) out.push(s)
-      } else if (it && typeof it === 'object') {
-        const name = String(it.name ?? it.label ?? '').trim()
-        if (name) out.push(name)
-      }
-    }
-    const uniq = Array.from(new Set(out)).filter(Boolean)
-    return uniq.length ? uniq : ['Lunch', 'Dinner', 'All day']
-  } catch {
-    return ['Lunch', 'Dinner', 'All day']
-  }
-}
-
-function loadShiftWindows(): ShiftWin[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return []
-    const p = JSON.parse(raw)
-
-    const arr1 = Array.isArray(p?.shift_windows) ? p.shift_windows : null
-    if (arr1) {
-      const out: ShiftWin[] = []
-      for (const it of arr1) {
-        const name = String(it?.name || '').trim()
-        const s = hhmmToMin(String(it?.start || ''))
-        const e = hhmmToMin(String(it?.end || ''))
-        if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-      }
-      if (out.length) return out
-    }
-
-    const arr2 = Array.isArray(p?.shifts) ? p.shifts : null
-    if (arr2) {
-      const out: ShiftWin[] = []
-      for (const item of arr2) {
-        if (typeof item === 'string') {
-          const m = item.match(/^(.+?)\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/)
-          if (m) {
-            const name = m[1].trim()
-            const s = hhmmToMin(m[2])
-            const e = hhmmToMin(m[3])
-            if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-          }
-        } else if (item && typeof item === 'object') {
-          const name = String(item?.name || '').trim() || String(item?.label || '').trim()
-          const s = hhmmToMin(String(item?.start || item?.from || ''))
-          const e = hhmmToMin(String(item?.end || item?.to || ''))
-          if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-        }
-      }
-      if (out.length) return out
-    }
-
-    return []
-  } catch {
-    return []
-  }
-}
-
-function pickCurrentShiftName(): string {
-  const wins = loadShiftWindows()
-  const now = new Date()
-  const nowMin = now.getHours() * 60 + now.getMinutes()
-
-  for (const w of wins) {
-    const inWin =
-      w.startMin <= w.endMin
-        ? nowMin >= w.startMin && nowMin < w.endMin
-        : nowMin >= w.startMin || nowMin < w.endMin
-    if (inWin) return w.name
-  }
-
-  const labels = loadShiftLabels()
-  if (labels.includes('All day')) return 'All day'
-  if (labels.includes('Lunch') && nowMin < 16 * 60) return 'Lunch'
-  if (labels.includes('Dinner')) return 'Dinner'
-  return labels[0] || ''
-}
-
-function loadStaffOptions(): string[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return []
-    const p = JSON.parse(raw)
-    const arr = Array.isArray(p?.staff) ? p.staff : []
-    const out: string[] = []
-    for (const it of arr) {
-      if (typeof it === 'string') {
-        const s = it.trim()
-        if (s) out.push(s)
-      } else if (it && typeof it === 'object') {
-        const s = String(it?.name || '').trim()
-        if (s) out.push(s)
-      }
-    }
-    return Array.from(new Set(out))
-  } catch {
-    return []
-  }
-}
 
 /* Totals: deduplica pagamenti per id per sicurezza */
 function computeTotalsForRow(row: DepositRow, allPayments: PaymentItem[]): Totals {
@@ -195,7 +72,26 @@ export function useDeposits(params?: { year?: number; month?: number; branchName
   const [currentUserName, setCurrentUserName] = useState<string>('')
   const [currentShiftName, setCurrentShiftName] = useState<string>('')
 
-  // Initial load: deposits + payments
+  // Fetch settings from DB
+  const { settings: dbSettings } = useDailyReportSettingsDB(params?.branchName)
+
+  // Update options from DB settings
+  useEffect(() => {
+    if (!dbSettings) return
+
+    // Staff
+    if (dbSettings.initialInfo?.staff) {
+      setStaffOpts(dbSettings.initialInfo.staff)
+    }
+
+    // Current Shift
+    if (dbSettings.initialInfo?.shifts) {
+      const shifts = dbSettings.initialInfo.shifts
+      const current = pickCurrentShiftName(shifts)
+      if (current) setCurrentShiftName(current)
+    }
+  }, [dbSettings])
+
   // Initial load: deposits + payments
   const refetch = useCallback(async () => {
     setLoading(true)
@@ -264,10 +160,6 @@ export function useDeposits(params?: { year?: number; month?: number; branchName
   }, [params?.year, params?.month, params?.branchName])
 
   useEffect(() => {
-    const staff = loadStaffOptions()
-    setStaffOpts(staff)
-    setCurrentShiftName(pickCurrentShiftName())
-
     void refetch()
 
     const onFocus = () => {

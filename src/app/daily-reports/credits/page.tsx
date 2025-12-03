@@ -642,7 +642,7 @@ function EditorModal({
   const [amount, setAmount] = useState<number>(Number(initial.amount || 0))
   const [reference, setReference] = useState<string>(initial.reference || '')
 
-  const defaultShift = useMemo(() => pickCurrentShiftName() || currentShiftName || '', [currentShiftName])
+  const defaultShift = useMemo(() => currentShiftName || '', [currentShiftName])
   const [shift, setShift] = useState<string>(initial.shift || defaultShift)
 
   const [handledBy, setHandledBy] = useState<string>(initial.handledBy || currentUserName || staffOpts[0] || '')
@@ -1104,7 +1104,7 @@ export default function CreditsPage() {
                 setInitialRow({
                   date: todayISO(),
                   handledBy: currentUserName,
-                  shift: pickCurrentShiftName() || currentShiftName || null,
+                  shift: currentShiftName || null,
                 })
                 setOpenEditor(true)
               }}
@@ -1464,95 +1464,4 @@ async function handleExport(sortedRows: { row: CreditRow }[], totalsMap: Record<
   URL.revokeObjectURL(url)
 }
 
-type ShiftWin = { name: string; startMin: number; endMin: number }
-const SETTINGS_LS_KEY = 'dailysettings.initialInfo.v1'
 
-function hhmmToMin(t: string): number {
-  const m = String(t || '').match(/^(\d{1,2}):(\d{2})$/)
-  if (!m) return NaN
-  const h = Number(m[1]), min = Number(m[2])
-  if (h < 0 || h > 23 || min < 0 || min > 59) return NaN
-  return h * 60 + min
-}
-function loadShiftLabels(): string[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return ['Lunch', 'Dinner', 'All day']
-    const p = JSON.parse(raw)
-    const out: string[] = []
-    const arr = Array.isArray(p?.shifts) ? p.shifts : []
-    for (const it of arr) {
-      if (typeof it === 'string') {
-        const s = it.trim()
-        if (s) out.push(s)
-      } else if (it && typeof it === 'object') {
-        const name = String(it.name ?? it.label ?? '').trim()
-        if (name) out.push(name)
-      }
-    }
-    const uniq = Array.from(new Set(out)).filter(Boolean)
-    return uniq.length ? uniq : ['Lunch', 'Dinner', 'All day']
-  } catch {
-    return ['Lunch', 'Dinner', 'All day']
-  }
-}
-function loadShiftWindows(): ShiftWin[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return []
-    const p = JSON.parse(raw)
-
-    const arr1 = Array.isArray(p?.shift_windows) ? p.shift_windows : null
-    if (arr1) {
-      const out: ShiftWin[] = []
-      for (const it of arr1) {
-        const name = String(it?.name || '').trim()
-        const s = hhmmToMin(String(it?.start || ''))
-        const e = hhmmToMin(String(it?.end || ''))
-        if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-      }
-      if (out.length) return out
-    }
-
-    const arr2 = Array.isArray(p?.shifts) ? p.shifts : null
-    if (arr2) {
-      const out: ShiftWin[] = []
-      for (const item of arr2) {
-        if (typeof item === 'string') {
-          const m = item.match(/^(.+?)\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/)
-          if (m) {
-            const name = m[1].trim()
-            const s = hhmmToMin(m[2]), e = hhmmToMin(m[3])
-            if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-          }
-        } else if (item && typeof item === 'object') {
-          const name = String(item?.name || '').trim() || String(item?.label || '').trim()
-          const s = hhmmToMin(String(item?.start || item?.from || ''))
-          const e = hhmmToMin(String(item?.end || item?.to || ''))
-          if (name && Number.isFinite(s) && Number.isFinite(e)) out.push({ name, startMin: s, endMin: e })
-        }
-      }
-      if (out.length) return out
-    }
-
-    return []
-  } catch {
-    return []
-  }
-}
-function pickCurrentShiftName(): string {
-  const wins = loadShiftWindows()
-  const now = new Date()
-  const nowMin = now.getHours() * 60 + now.getMinutes()
-
-  for (const w of wins) {
-    const inWin = w.startMin <= w.endMin ? nowMin >= w.startMin && nowMin < w.endMin : nowMin >= w.startMin || nowMin < w.endMin
-    if (inWin) return w.name
-  }
-
-  const labels = loadShiftLabels()
-  if (labels.includes('All day')) return 'All day'
-  if (labels.includes('Lunch') && nowMin < 16 * 60) return 'Lunch'
-  if (labels.includes('Dinner')) return 'Dinner'
-  return labels[0] || ''
-}

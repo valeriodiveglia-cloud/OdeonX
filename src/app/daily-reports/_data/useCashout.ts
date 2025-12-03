@@ -3,22 +3,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
+import { useDailyReportSettingsDB, pickCurrentShiftName } from './useDailyReportSettingsDB'
 
 /* ---------- Const ---------- */
 const TBL_SUPS = 'suppliers'
 const TBL_CASHOUT = 'cashout'
 const TBL_APP_ACCOUNTS = 'app_accounts'
-
-// Initial info LS (staff + shifts)
-const SETTINGS_LS_KEY = 'dailysettings.initialInfo.v1'
-
-// Vecchia chiave categorie - non piu usata come sorgente principale
-const CATEGORIES_LEGACY_LS_KEY = 'dailysettings.categories.v1'
-
-// Nuovo cache globale settings
-const DR_SETTINGS_CACHE_KEY = 'dr.settings.cache'
-const DR_SETTINGS_BUMP_KEY = 'dr.settings.bump'
-const DR_SETTINGS_BC_NAME = 'dr-settings'
 
 // Branch LS bridge
 const BRANCH_KEYS = ['dailyreports.selectedBranch', 'dailyreports.selectedBranch.v1'] as const
@@ -65,71 +55,6 @@ function toTitleCase(s: string) {
   const str = String(s || '').toLowerCase().trim()
   if (!str) return ''
   return str.replace(/\b\p{L}+/gu, w => w[0].toUpperCase() + w.slice(1))
-}
-
-/* ----- Staff / shifts da initialInfo LS ----- */
-function loadAuthorizedStaff(): string[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return []
-    const p = JSON.parse(raw)
-    return Array.isArray(p?.staff) ? p.staff.map((s: any) => String(s).trim()).filter(Boolean) : []
-  } catch {
-    return []
-  }
-}
-function loadShiftLabels(): string[] {
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return ['Lunch', 'Dinner', 'All day']
-    const p = JSON.parse(raw)
-    const out: string[] = []
-    const arr = Array.isArray(p?.shifts) ? p.shifts : []
-    for (const it of arr) {
-      if (typeof it === 'string') {
-        const s = it.trim()
-        if (s) out.push(s)
-      } else if (it && typeof it === 'object') {
-        const name = String(it.name ?? it.label ?? '').trim()
-        if (name) out.push(name)
-      }
-    }
-    const uniq = Array.from(new Set(out)).filter(Boolean)
-    return uniq.length ? uniq : ['Lunch', 'Dinner', 'All day']
-  } catch {
-    return ['Lunch', 'Dinner', 'All day']
-  }
-}
-
-/* ----- Categories: nuova sorgente da dr.settings.cache + eventi ----- */
-function normalizeCategories(list: any): string[] {
-  if (!Array.isArray(list)) return []
-  return list
-    .map((s) => String(s || '').trim())
-    .filter(Boolean)
-}
-
-function loadCategoriesFromCache(): string[] {
-  try {
-    const raw = localStorage.getItem(DR_SETTINGS_CACHE_KEY)
-    if (!raw) return []
-    const p = JSON.parse(raw)
-    const arr = p?.cashOutCategories
-    const norm = normalizeCategories(arr)
-    if (norm.length) return norm
-  } catch {
-    // ignore
-  }
-
-  // fallback legacy (nel caso ci sia ancora roba vecchia)
-  try {
-    const legacyRaw = localStorage.getItem(CATEGORIES_LEGACY_LS_KEY)
-    if (!legacyRaw) return []
-    const p = JSON.parse(legacyRaw)
-    return normalizeCategories(p?.categories)
-  } catch {
-    return []
-  }
 }
 
 /* ----- Branch LS ----- */
@@ -234,6 +159,9 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
   )
   const selectedBranchName = selectedBranch?.name || ''
 
+  // Fetch settings from DB
+  const { settings: dbSettings } = useDailyReportSettingsDB(params?.branchName || selectedBranchName)
+
   const [suppliers, setSuppliers] = useState<Sup[]>([])
   const suppliersRef = useRef<Sup[]>([])
   useEffect(() => {
@@ -241,15 +169,10 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
   }, [suppliers])
 
   const [rows, setRows] = useState<CashoutRow[]>([])
-  const [staffOpts, setStaffOpts] = useState<string[]>(() =>
-    typeof window === 'undefined' ? [] : loadAuthorizedStaff()
-  )
-  const [shiftOpts, setShiftOpts] = useState<string[]>(() =>
-    typeof window === 'undefined' ? [] : loadShiftLabels()
-  )
-  const [catOpts, setCatOpts] = useState<string[]>(() =>
-    typeof window === 'undefined' ? [] : loadCategoriesFromCache()
-  )
+  const [staffOpts, setStaffOpts] = useState<string[]>([])
+  const [shiftOpts, setShiftOpts] = useState<string[]>([])
+  const [catOpts, setCatOpts] = useState<string[]>([])
+  const [currentShiftName, setCurrentShiftName] = useState<string>('')
   const [currentUserName, setCurrentUserName] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -267,18 +190,6 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
     if (!isActiveRef.current) return
     setSuppliers(updater as any)
   }
-  const safeSetStaffOpts = (updater: string[] | ((prev: string[]) => string[])) => {
-    if (!isActiveRef.current) return
-    setStaffOpts(updater as any)
-  }
-  const safeSetShiftOpts = (updater: string[] | ((prev: string[]) => string[])) => {
-    if (!isActiveRef.current) return
-    setShiftOpts(updater as any)
-  }
-  const safeSetCatOpts = (updater: string[] | ((prev: string[]) => string[])) => {
-    if (!isActiveRef.current) return
-    setCatOpts(updater as any)
-  }
   const safeSetSelectedBranch = (val: SelectedBranch | null) => {
     if (!isActiveRef.current) return
     setSelectedBranch(val)
@@ -295,6 +206,39 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
     if (!isActiveRef.current) return
     setError(val)
   }
+
+  // Update options from DB settings
+  useEffect(() => {
+    if (!dbSettings) return
+
+    // Staff
+    if (dbSettings.initialInfo?.staff) {
+      setStaffOpts(dbSettings.initialInfo.staff)
+    }
+
+    // Shifts
+    if (dbSettings.initialInfo?.shifts) {
+      const shifts = dbSettings.initialInfo.shifts
+      const names = Array.isArray(shifts)
+        ? shifts.map(s => typeof s === 'string' ? s : s.name).filter(Boolean)
+        : []
+      setShiftOpts(names)
+
+      // Calculate current shift
+      const current = pickCurrentShiftName(shifts)
+      if (current) setCurrentShiftName(current)
+    } else {
+      // Fallback if missing in DB
+      setShiftOpts(['Lunch', 'Dinner'])
+    }
+
+    // Categories
+    if (dbSettings.cashOut?.categories) {
+      setCatOpts(dbSettings.cashOut.categories)
+    }
+  }, [dbSettings])
+
+
 
   /* ---------- Fetch iniziale / refetch ---------- */
   const refetch = useCallback(async () => {
@@ -503,7 +447,7 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
     }
   }, [refetch])
 
-  /* ---------- localStorage listeners ---------- */
+  /* ---------- localStorage listeners (Branch only) ---------- */
   useEffect(() => {
     function onStorage(ev: StorageEvent) {
       if (!ev.key) return
@@ -512,75 +456,10 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
       if ((BRANCH_KEYS as readonly string[]).includes(ev.key as any)) {
         safeSetSelectedBranch(loadSelectedBranch())
       }
-
-      if (ev.key === SETTINGS_LS_KEY) {
-        safeSetStaffOpts(loadAuthorizedStaff())
-        safeSetShiftOpts(loadShiftLabels())
-      }
-
-      // bump globale settings -> ricarica categorie da cache
-      if (ev.key === DR_SETTINGS_BUMP_KEY) {
-        safeSetCatOpts(loadCategoriesFromCache())
-      }
-
-      // legacy categorie LS (se mai cambia ancora)
-      if (ev.key === CATEGORIES_LEGACY_LS_KEY) {
-        safeSetCatOpts(prev => {
-          const legacy = loadCategoriesFromCache()
-          return legacy.length ? legacy : prev
-        })
-      }
     }
 
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [])
-
-  /* ---------- Settings events (same tab + BC dr-settings) ---------- */
-  useEffect(() => {
-    function onCashOutEvent(ev: Event) {
-      if (!isActiveRef.current) return
-      const ce = ev as CustomEvent<{ value?: string[] }>
-      const list = ce.detail?.value
-      if (!list) return
-      safeSetCatOpts(normalizeCategories(list))
-    }
-
-    window.addEventListener(
-      'dr:settings:cashOutCategories',
-      onCashOutEvent as EventListener
-    )
-
-    let bc: BroadcastChannel | null = null
-    try {
-      bc = new BroadcastChannel(DR_SETTINGS_BC_NAME)
-      const onMsg = (ev: MessageEvent) => {
-        if (!isActiveRef.current) return
-        const t = ev?.data?.type
-        if (t === 'cashOutCategories') {
-          const list = ev.data?.value
-          safeSetCatOpts(normalizeCategories(list))
-        }
-      }
-      bc.addEventListener('message', onMsg)
-      return () => {
-        window.removeEventListener(
-          'dr:settings:cashOutCategories',
-          onCashOutEvent as EventListener
-        )
-        if (bc) {
-          bc.removeEventListener('message', onMsg)
-          bc.close()
-        }
-      }
-    } catch {
-      return () => {
-        window.removeEventListener(
-          'dr:settings:cashOutCategories',
-          onCashOutEvent as EventListener
-        )
-      }
-    }
   }, [])
 
   /* ---------- BroadcastChannel cross tab (cashout specific) ---------- */
@@ -677,6 +556,7 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
     selectedBranch,
     selectedBranchName,
     currentUserName,
+    currentShiftName,
     loading,
     error,
 

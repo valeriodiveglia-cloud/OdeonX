@@ -1,6 +1,7 @@
 // src/app/daily-reports/_data/useCredits.ts 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
+import { useDailyReportSettingsDB, pickCurrentShiftName } from './useDailyReportSettingsDB'
 
 export type LedgerType = 'credit' | 'repayment'
 export type CreditRow = {
@@ -47,6 +48,17 @@ export function useCredits(params?: { year?: number; month?: number; branchName?
   const lastBranchRef = useRef<string>('')
   const lastDateRef = useRef<string>('')
 
+  // Fetch settings from DB
+  const { settings: dbSettings } = useDailyReportSettingsDB(params?.branchName)
+
+  // Update current shift from DB settings
+  useEffect(() => {
+    if (dbSettings?.initialInfo?.shifts) {
+      const current = pickCurrentShiftName(dbSettings.initialInfo.shifts)
+      if (current && isActiveRef.current) setCurrentShiftName(current)
+    }
+  }, [dbSettings])
+
   // safe setters per evitare setState dopo unmount / wake
   const safeSetRows = (updater: CreditRow[] | ((prev: CreditRow[]) => CreditRow[])) => {
     if (!isActiveRef.current) return
@@ -70,10 +82,6 @@ export function useCredits(params?: { year?: number; month?: number; branchName?
     if (!isActiveRef.current) return
     setCurrentUserName(val)
   }
-  const safeSetCurrentShiftName = (val: string) => {
-    if (!isActiveRef.current) return
-    setCurrentShiftName(val)
-  }
 
   useEffect(() => {
     isActiveRef.current = true
@@ -85,9 +93,8 @@ export function useCredits(params?: { year?: number; month?: number; branchName?
   const loadUserMeta = useCallback(() => {
     try {
       const u = localStorage.getItem('user.displayName') || localStorage.getItem('user.name') || ''
-      const s = localStorage.getItem('dailyreports.currentShiftName') || localStorage.getItem('currentShiftName') || ''
       safeSetCurrentUserName(u || '')
-      safeSetCurrentShiftName(s || '')
+      // Shift is now handled by dbSettings effect
     } catch { }
   }, [])
 
