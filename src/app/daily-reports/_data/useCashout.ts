@@ -332,41 +332,57 @@ export function useCashout(params?: { year?: number; month?: number; branchName?
   /* ---------- Cashout CRUD ---------- */
   const upsertCashout = useCallback(
     async (row: CashoutRow) => {
+      console.log('[useCashout] upsertCashout called', row)
       safeSetError(null)
-      const payload = toDbPayload(row)
-      const { data, error } = await supabase
-        .from(TBL_CASHOUT)
-        .upsert([payload], { onConflict: 'id' })
-        .select('*')
-        .single()
+      try {
+        const payload = toDbPayload(row)
+        console.log('[useCashout] payload', payload)
 
-      if (!isActiveRef.current) return null
+        const { data, error } = await supabase
+          .from(TBL_CASHOUT)
+          .upsert([payload], { onConflict: 'id' })
+          .select('*')
+          .single()
 
-      if (error || !data) {
-        console.error('upsert cashout error', error)
-        const msg = 'Failed to save entry: ' + (error?.message || 'Unknown error')
-        safeSetError(msg)
-        throw new Error(msg)
-      }
+        console.log('[useCashout] supabase response', { data, error })
 
-      const saved = normFromDb(data, suppliersRef.current)
-      safeSetRows(prev => {
-        const i = prev.findIndex(r => r.id === saved.id)
-        if (i >= 0) {
-          const next = [...prev]
-          next[i] = saved
-          return next
+        if (!isActiveRef.current) {
+          console.warn('[useCashout] component unmounted during save')
+          return null
         }
-        return [saved, ...prev]
-      })
 
-      if (bcRef.current) {
-        try {
-          bcRef.current.postMessage({ type: 'cashout:changed', id: saved.id })
-        } catch { }
+        if (error || !data) {
+          console.error('[useCashout] upsert error', error)
+          const msg = 'Failed to save entry: ' + (error?.message || 'Unknown error')
+          safeSetError(msg)
+          throw new Error(msg)
+        }
+
+        const saved = normFromDb(data, suppliersRef.current)
+        safeSetRows(prev => {
+          const i = prev.findIndex(r => r.id === saved.id)
+          if (i >= 0) {
+            const next = [...prev]
+            next[i] = saved
+            return next
+          }
+          return [saved, ...prev]
+        })
+
+        if (bcRef.current) {
+          try {
+            bcRef.current.postMessage({ type: 'cashout:changed', id: saved.id })
+          } catch (e) {
+            console.warn('[useCashout] postMessage error', e)
+          }
+        }
+
+        return saved
+      } catch (err) {
+        console.error('[useCashout] CRITICAL EXCEPTION in upsertCashout', err)
+        if (err instanceof Error) throw err
+        throw new Error(String(err))
       }
-
-      return saved
     },
     []
   )
