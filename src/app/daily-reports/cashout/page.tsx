@@ -215,6 +215,7 @@ function EditorModal({
   const [timeHHMM, setTimeHHMM] = useState<string>(() => extractHHMM(initial.created_at || undefined))
 
   const [isSaving, setIsSaving] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const isDeletingRef = useRef(false)
 
   // FIX: Reset state when initial prop changes (e.g. for "Save & Add New" or re-opening)
@@ -320,14 +321,20 @@ function EditorModal({
     e?.stopPropagation()
     if (viewMode || !initial.id || isDeletingRef.current) return
 
-    if (!window.confirm(tm.deleteConfirm)) return
+    // UI Confirmation Step 1
+    if (!showDeleteConfirm) {
+      setShowDeleteConfirm(true)
+      return
+    }
 
+    // Step 2: Actually delete
     isDeletingRef.current = true
     try {
       await onDeleted(initial.id)
     } catch (err) {
       console.error('Delete error', err)
       isDeletingRef.current = false
+      setShowDeleteConfirm(false)
     }
   }
   return (
@@ -424,7 +431,29 @@ function EditorModal({
             {viewMode ? (
               <button type="button" onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80">{tm.buttons.edit}</button>
             ) : (
-              initial.id && <button type="button" onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{tm.buttons.delete}</button>
+              initial.id && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    className={`px-4 py-2 rounded-lg border transition-colors ${showDeleteConfirm
+                      ? 'bg-red-600 text-white border-red-600 hover:bg-red-700'
+                      : 'text-red-600 border-gray-200 hover:bg-red-50'
+                      }`}
+                  >
+                    {showDeleteConfirm ? 'Confirm Delete?' : tm.buttons.delete}
+                  </button>
+                  {showDeleteConfirm && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="px-3 py-2 rounded-lg text-gray-500 hover:text-gray-700"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              )
             )}
           </div>
           <div>
