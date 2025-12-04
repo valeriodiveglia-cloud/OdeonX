@@ -23,6 +23,8 @@ import {
   type CashoutRow,
   type Sup,
 } from '@/app/daily-reports/_data/useCashout'
+import { SupplierPicker } from './SupplierPicker'
+
 
 import { useDailyReportSettings } from '@/app/daily-reports/_data/useDailyReportSettings'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -214,6 +216,7 @@ function EditorModal({
   const [paidBy] = useState<string>(initial.paidBy || currentUserName || (staffOpts[0] || ''))
   const [timeHHMM, setTimeHHMM] = useState<string>(() => extractHHMM(initial.created_at || undefined))
   const [isSaving, setIsSaving] = useState(false)
+  const [showSupplierPicker, setShowSupplierPicker] = useState(false)
 
   // FIX: Reset state when initial prop changes (e.g. for "Save & Add New" or re-opening)
   useEffect(() => {
@@ -247,10 +250,12 @@ function EditorModal({
   const canSave = description.trim().length > 0 && amount > 0
 
   async function handleSupplierSelect(value: string) {
-    if (value !== '__add__') {
-      setSupplierId(value)
-      return
-    }
+    setSupplierId(value)
+    setShowSupplierPicker(false)
+  }
+
+  async function handleAddNewSupplier() {
+    setShowSupplierPicker(false)
     const nextName = window.prompt(tm.promptNewSupplier)
     const clean = String(nextName || '').trim()
     if (!clean) return
@@ -381,16 +386,26 @@ function EditorModal({
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm text-gray-800">{tm.supplier}</label>
-                <select
-                  className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
-                  value={supplierId}
-                  onChange={e => handleSupplierSelect(e.target.value)}
+                <button
+                  type="button"
+                  onClick={() => !viewMode && setShowSupplierPicker(true)}
                   disabled={viewMode}
+                  className={`mt-1 w-full border rounded-lg px-3 h-11 bg-white text-left flex items-center justify-between ${viewMode ? 'opacity-100 bg-gray-50' : 'hover:border-blue-400'}`}
                 >
-                  <option value="">{tm.supplierSelect}</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  <option value="__add__">{tm.supplierAddPrefix}</option>
-                </select>
+                  <span className={supplierId ? 'text-gray-900' : 'text-gray-500'}>
+                    {supplierName || tm.supplierSelect}
+                  </span>
+                  {!viewMode && <ChevronDownIcon className="w-4 h-4 text-gray-400" />}
+                </button>
+                {showSupplierPicker && (
+                  <SupplierPicker
+                    suppliers={suppliers}
+                    onSelect={handleSupplierSelect}
+                    onClose={() => setShowSupplierPicker(false)}
+                    onAddNew={handleAddNewSupplier}
+                    t={tm}
+                  />
+                )}
               </div>
               <div>
                 <label className="text-sm text-gray-800">{tm.shift}</label>
