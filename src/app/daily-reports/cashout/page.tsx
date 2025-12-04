@@ -213,7 +213,9 @@ function EditorModal({
   const [shift, setShift] = useState<string>(initial.shift || defaultShift)
   const [paidBy] = useState<string>(initial.paidBy || currentUserName || (staffOpts[0] || ''))
   const [timeHHMM, setTimeHHMM] = useState<string>(() => extractHHMM(initial.created_at || undefined))
+
   const [isSaving, setIsSaving] = useState(false)
+  const isDeletingRef = useRef(false)
 
   // FIX: Reset state when initial prop changes (e.g. for "Save & Add New" or re-opening)
   useEffect(() => {
@@ -316,9 +318,17 @@ function EditorModal({
   async function handleDelete(e?: React.MouseEvent) {
     e?.preventDefault()
     e?.stopPropagation()
-    if (viewMode || !initial.id) return
+    if (viewMode || !initial.id || isDeletingRef.current) return
+
     if (!window.confirm(tm.deleteConfirm)) return
-    onDeleted(initial.id)
+
+    isDeletingRef.current = true
+    try {
+      await onDeleted(initial.id)
+    } catch (err) {
+      console.error('Delete error', err)
+      isDeletingRef.current = false
+    }
   }
   return (
     <Overlay onClose={onClose}>
