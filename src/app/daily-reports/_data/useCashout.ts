@@ -59,12 +59,12 @@ function toTitleCase(s: string) {
 
 function sanitizeString(str: string | null | undefined): string {
   if (!str) return ''
-  // Remove control characters (ASCII 0-31, 127-159) but keep newlines/tabs if needed (though usually single line)
-  // \p{C} matches invisible control characters. We might want to keep newlines for description?
-  // Let's be aggressive for now as these are mostly single line inputs, except maybe description.
-  // But description in cashout is usually short.
-  // Let's replace control chars with space.
-  return String(str).replace(/[\x00-\x1F\x7F-\x9F]/g, ' ').trim()
+  return String(str)
+    .normalize('NFKC') // Normalize unicode
+    // Remove control characters (ASCII 0-31, 127-159) except \t (9), \n (10), \r (13)
+    .replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F-\u009F]/g, '')
+    .trim()
+    .slice(0, 1000) // Truncate to avoid massive payloads
 }
 
 /* ----- Branch LS ----- */
