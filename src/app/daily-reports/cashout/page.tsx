@@ -215,8 +215,8 @@ function EditorModal({
   const [timeHHMM, setTimeHHMM] = useState<string>(() => extractHHMM(initial.created_at || undefined))
 
   const [isSaving, setIsSaving] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const isDeletingRef = useRef(false)
+  const lastDeleteClick = useRef(0)
 
   // FIX: Reset state when initial prop changes (e.g. for "Save & Add New" or re-opening)
   useEffect(() => {
@@ -319,22 +319,24 @@ function EditorModal({
   async function handleDelete(e?: React.MouseEvent) {
     e?.preventDefault()
     e?.stopPropagation()
+
+    const now = Date.now()
+    if (now - lastDeleteClick.current < 1000) return // Throttle 1s
+    lastDeleteClick.current = now
+
     if (viewMode || !initial.id || isDeletingRef.current) return
 
-    // UI Confirmation Step 1
-    if (!showDeleteConfirm) {
-      setShowDeleteConfirm(true)
+    isDeletingRef.current = true
+    if (!window.confirm(tm.deleteConfirm)) {
+      isDeletingRef.current = false
       return
     }
 
-    // Step 2: Actually delete
-    isDeletingRef.current = true
     try {
       await onDeleted(initial.id)
     } catch (err) {
       console.error('Delete error', err)
       isDeletingRef.current = false
-      setShowDeleteConfirm(false)
     }
   }
   return (
@@ -431,29 +433,7 @@ function EditorModal({
             {viewMode ? (
               <button type="button" onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80">{tm.buttons.edit}</button>
             ) : (
-              initial.id && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    className={`px-4 py-2 rounded-lg border transition-colors ${showDeleteConfirm
-                      ? 'bg-red-600 text-white border-red-600 hover:bg-red-700'
-                      : 'text-red-600 border-gray-200 hover:bg-red-50'
-                      }`}
-                  >
-                    {showDeleteConfirm ? 'Confirm Delete?' : tm.buttons.delete}
-                  </button>
-                  {showDeleteConfirm && (
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteConfirm(false)}
-                      className="px-3 py-2 rounded-lg text-gray-500 hover:text-gray-700"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              )
+              initial.id && <button type="button" onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{tm.buttons.delete}</button>
             )}
           </div>
           <div>
@@ -524,7 +504,9 @@ export default function CashoutPage() {
   const [editorMode, setEditorMode] = useState<'create' | 'view' | 'edit'>('create')
   const [initialRow, setInitialRow] = useState<Partial<CashoutRow> | null>(null)
 
-  const [sort, setSort] = useState<SortState>({ key: null, dir: 'asc' })
+  const [sort, setSort] = useState<SortState>({ key: 'date', dir: 'desc' })
+  const isBulkDeletingRef = useRef(false)
+  const lastBulkDeleteClick = useRef(0)
 
   // Month navigation
   const now = new Date()
@@ -652,12 +634,27 @@ export default function CashoutPage() {
 
   async function bulkDelete() {
     const ids = selectedIds
-    if (ids.length === 0) return
-    const ok = window.confirm(`Delete ${ids.length}?`)
-    if (!ok) return
-    const deleted = await bulkDeleteCashout(ids)
-    if (!deleted) return
-    setSelected({})
+
+    const now = Date.now()
+    if (now - lastBulkDeleteClick.current < 1000) return // Throttle 1s
+    lastBulkDeleteClick.current = now
+
+    if (ids.length === 0 || isBulkDeletingRef.current) return
+
+    isBulkDeletingRef.current = true
+    const ok = window.confirm(t.menu.bulkConfirm.replace('{count}', String(ids.length)))
+    if (!ok) {
+      isBulkDeletingRef.current = false
+      return
+    }
+
+    try {
+      const deleted = await bulkDeleteCashout(ids)
+      if (!deleted) return
+      setSelected({})
+    } finally {
+      isBulkDeletingRef.current = false
+    }
   }
 
   /* ---------- Filter + Search ---------- */
@@ -815,7 +812,7 @@ export default function CashoutPage() {
                       onClick={() => {
                         setMenuOpen(false)
                         const ids = Object.keys(selected).filter(id => selected[id])
-                        if (ids.length && window.confirm(t.menu.bulkConfirm.replace('{count}', String(ids.length)))) {
+                        if (ids.length) {
                           bulkDelete()
                         }
                       }}
