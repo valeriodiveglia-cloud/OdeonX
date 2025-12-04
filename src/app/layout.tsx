@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${beVietnam.variable} ${geistMono.variable} antialiased font-sans`}>
+      <body className={`${beVietnam.variable} ${geistMono.variable} antialiased font-sans`} suppressHydrationWarning>
         <ClientErrorGuard>
           <SettingsProvider>{children}</SettingsProvider>
         </ClientErrorGuard>

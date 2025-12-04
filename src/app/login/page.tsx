@@ -45,8 +45,8 @@ export default function LoginPage() {
         type="button"
         onClick={() => setLanguage(code)}
         className={`px-2 py-1 rounded-lg text-sm border ${active
-            ? 'bg-blue-600 text-white border-blue-700'
-            : 'bg-white text-blue-700 border-blue-400 hover:bg-blue-50'
+          ? 'bg-blue-600 text-white border-blue-700'
+          : 'bg-white text-blue-700 border-blue-400 hover:bg-blue-50'
           }`}
         aria-pressed={active}
       >
@@ -56,7 +56,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-blue-50">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-blue-50 p-4">
+      {/* logo */}
+      <div className="mb-8">
+        <img src="/logologin.svg" alt="App Logo" className="h-24 w-auto object-contain" />
+      </div>
+
       <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-10 w-full max-w-md">
         {/* language switch */}
         <div className="flex items-center justify-end gap-2 mb-4">

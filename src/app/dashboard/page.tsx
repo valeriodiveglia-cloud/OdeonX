@@ -409,10 +409,9 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
     <header className="sticky top-0 bg-white/80 backdrop-blur border-b">
       <div className="h-14 max-w-6xl mx-auto px-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white text-xs font-bold">
-            OO
-          </span>
-          <div className="text-lg font-extrabold text-blue-700">OddsOff</div>
+          <div className="relative h-14 w-52">
+            <img src="/logo.svg" alt="OddsOff Logo" className="h-full w-full object-contain object-left" />
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
