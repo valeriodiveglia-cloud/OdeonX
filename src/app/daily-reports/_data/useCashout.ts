@@ -57,6 +57,16 @@ function toTitleCase(s: string) {
   return str.replace(/\b\p{L}+/gu, w => w[0].toUpperCase() + w.slice(1))
 }
 
+function sanitizeString(str: string | null | undefined): string {
+  if (!str) return ''
+  // Remove control characters (ASCII 0-31, 127-159) but keep newlines/tabs if needed (though usually single line)
+  // \p{C} matches invisible control characters. We might want to keep newlines for description?
+  // Let's be aggressive for now as these are mostly single line inputs, except maybe description.
+  // But description in cashout is usually short.
+  // Let's replace control chars with space.
+  return String(str).replace(/[\x00-\x1F\x7F-\x9F]/g, ' ').trim()
+}
+
 /* ----- Branch LS ----- */
 function loadSelectedBranch(): SelectedBranch | null {
   for (const key of BRANCH_KEYS) {
@@ -106,14 +116,14 @@ function toDbPayload(r: CashoutRow) {
     id: r.id,
     branch: r.branch,
     date: r.date,
-    description: r.description,
-    category: r.category,
+    description: sanitizeString(r.description),
+    category: sanitizeString(r.category),
     amount: Math.round(r.amount || 0),
     supplier_id: r.supplier_id,
     invoice: r.invoice,
     delivery_note: r.deliveryNote,
-    shift: r.shift,
-    paid_by: r.paidBy,
+    shift: sanitizeString(r.shift),
+    paid_by: sanitizeString(r.paidBy),
   }
 }
 
