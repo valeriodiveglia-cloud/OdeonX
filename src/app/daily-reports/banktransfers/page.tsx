@@ -1011,24 +1011,33 @@ async function handleExport(rows: BankRow[], t: ReturnType<typeof getDailyReport
     alert(t.export.empty)
     return
   }
-  const XLSX = await import('xlsx')
-  const data = rows.map(r => ({
-    [t.export.columns.date]: fmtDateDMY(r.date),
-    [t.export.columns.amount]: Math.round(r.amount || 0),
-    [t.export.columns.notes]: r.note || '',
-  }))
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet(t.export.sheetName)
+
+  ws.columns = [
+    { header: t.export.columns.date, key: 'date', width: 12 },
+    { header: t.export.columns.amount, key: 'amount', width: 14 },
+    { header: t.export.columns.notes, key: 'notes', width: 40 },
+  ]
+
+  rows.forEach(r => {
+    ws.addRow({
+      date: fmtDateDMY(r.date),
+      amount: Math.round(r.amount || 0),
+      notes: r.note || '',
+    })
+  })
+
   const totalAmount = rows.reduce((s, r) => s + Math.round(r.amount || 0), 0)
-  data.push({
-    [t.export.columns.date]: '',
-    [t.export.columns.amount]: totalAmount,
-    [t.export.columns.notes]: t.export.totalLabel,
-  } as any)
-  const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 40 }]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, t.export.sheetName)
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-  const blob = new Blob([wbout], {
+  ws.addRow({
+    date: '',
+    amount: totalAmount,
+    notes: t.export.totalLabel,
+  })
+
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   const url = URL.createObjectURL(blob)

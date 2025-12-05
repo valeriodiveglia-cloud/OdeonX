@@ -724,32 +724,40 @@ export default function CashoutPage() {
 
   /* ---------- Export ---------- */
   async function handleExport() {
-    const XLSX = await import('xlsx')
-    const data = sortedRows.map(r => ({
-      [t.export.columns.date]: fmtDateDMY(r.date),
-      [t.export.columns.time]: r.created_at ? extractHHMM(r.created_at) : '',
-      [t.export.columns.description]: r.description || '',
-      [t.export.columns.category]: r.category || '',
-      [t.export.columns.amount]: Math.round(r.amount || 0),
-      [t.export.columns.supplier]: r.supplier_name || '',
-      [t.export.columns.invoice]: r.invoice ? yesNo.yes : yesNo.no,
-      [t.export.columns.delivery]: r.deliveryNote ? yesNo.yes : yesNo.no,
-      [t.export.columns.branch]: r.branch || '',
-      [t.export.columns.paidBy]: r.paidBy || '',
-    }))
+    const ExcelJS = (await import('exceljs')).default
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet(t.export.sheetName)
 
-    const ws = XLSX.utils.json_to_sheet(data)
-    ws['!cols'] = [
-      { wch: 12 }, { wch: 8 }, { wch: 40 }, { wch: 20 },
-      { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 14 },
-      { wch: 14 }, { wch: 16 },
+    ws.columns = [
+      { header: t.export.columns.date, key: 'date', width: 12 },
+      { header: t.export.columns.time, key: 'time', width: 8 },
+      { header: t.export.columns.description, key: 'description', width: 40 },
+      { header: t.export.columns.category, key: 'category', width: 20 },
+      { header: t.export.columns.amount, key: 'amount', width: 12 },
+      { header: t.export.columns.supplier, key: 'supplier', width: 24 },
+      { header: t.export.columns.invoice, key: 'invoice', width: 12 },
+      { header: t.export.columns.delivery, key: 'delivery', width: 14 },
+      { header: t.export.columns.branch, key: 'branch', width: 14 },
+      { header: t.export.columns.paidBy, key: 'paidBy', width: 16 },
     ]
 
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, t.export.sheetName)
+    sortedRows.forEach(r => {
+      ws.addRow({
+        date: fmtDateDMY(r.date),
+        time: r.created_at ? extractHHMM(r.created_at) : '',
+        description: r.description || '',
+        category: r.category || '',
+        amount: Math.round(r.amount || 0),
+        supplier: r.supplier_name || '',
+        invoice: r.invoice ? yesNo.yes : yesNo.no,
+        delivery: r.deliveryNote ? yesNo.yes : yesNo.no,
+        branch: r.branch || '',
+        paidBy: r.paidBy || '',
+      })
+    })
 
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

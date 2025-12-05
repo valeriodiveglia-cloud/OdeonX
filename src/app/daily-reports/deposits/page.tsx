@@ -2249,8 +2249,25 @@ async function handleExport(
     alert(t.export.nothingToExport)
     return
   }
-  const XLSX = await import('xlsx')
-  const data = sortedRows.map(x => {
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet(t.export.sheetName ?? 'Deposits')
+
+  ws.columns = [
+    { header: t.export.colDate ?? 'Date', key: 'date', width: 12 },
+    { header: t.export.colCustomer ?? 'Customer', key: 'customer', width: 24 },
+    { header: t.export.colAgreedAmount ?? 'Agreed amount', key: 'agreed', width: 14 },
+    { header: t.export.colPaid ?? 'Paid', key: 'paid', width: 14 },
+    { header: t.export.colRemaining ?? 'Remaining', key: 'remaining', width: 14 },
+    { header: t.export.colStatus ?? 'Status', key: 'status', width: 10 },
+    { header: t.export.colReference ?? 'Reference', key: 'reference', width: 18 },
+    { header: t.export.colBranch ?? 'Branch', key: 'branch', width: 14 },
+    { header: t.export.colShift ?? 'Shift', key: 'shift', width: 12 },
+    { header: t.export.colHandledBy ?? 'HandledBy', key: 'handledBy', width: 16 },
+    { header: t.export.colNotes ?? 'Notes', key: 'notes', width: 32 },
+  ]
+
+  sortedRows.forEach(x => {
     const r = x.row
     const totals = totalsMap[r.id] || {
       paid: 0,
@@ -2258,20 +2275,21 @@ async function handleExport(
       status: (r.amount || 0) > 0 ? 'Unpaid' : 'Open',
     }
     const statusText = statusLabel(totals.status, t.status)
-    return {
-      [t.export.colDate ?? 'Date']: fmtDateDMY(r.date),
-      [t.export.colCustomer ?? 'Customer']: r.customer_name || '',
-      [t.export.colAgreedAmount ?? 'Agreed amount']: Math.round(r.amount || 0),
-      [t.export.colPaid ?? 'Paid']: Math.round(totals.paid || 0),
-      [t.export.colRemaining ?? 'Remaining']: Math.round(totals.remaining || 0),
-      [t.export.colStatus ?? 'Status']: statusText,
-      [t.export.colReference ?? 'Reference']: r.reference || '',
-      [t.export.colBranch ?? 'Branch']: r.branch || '',
-      [t.export.colShift ?? 'Shift']: r.shift || '',
-      [t.export.colHandledBy ?? 'HandledBy']: r.handledBy || '',
-      [t.export.colNotes ?? 'Notes']: r.note || '',
-    }
+    ws.addRow({
+      date: fmtDateDMY(r.date),
+      customer: r.customer_name || '',
+      agreed: Math.round(r.amount || 0),
+      paid: Math.round(totals.paid || 0),
+      remaining: Math.round(totals.remaining || 0),
+      status: statusText,
+      reference: r.reference || '',
+      branch: r.branch || '',
+      shift: r.shift || '',
+      handledBy: r.handledBy || '',
+      notes: r.note || '',
+    })
   })
+
   const totalAmount = sortedRows.reduce(
     (s, x) => s + Math.round(x.row.amount || 0),
     0,
@@ -2281,43 +2299,22 @@ async function handleExport(
     0,
   )
 
-  data.push({
-    [t.export.colDate ?? 'Date']: '',
-    [t.export.colCustomer ?? 'Customer']:
-      t.export.totalsRowLabel ?? 'TOTALS',
-    [t.export.colAgreedAmount ?? 'Agreed amount']: totalAmount,
-    [t.export.colPaid ?? 'Paid']: totalPaid,
-    [t.export.colRemaining ?? 'Remaining']: '',
-    [t.export.colStatus ?? 'Status']: '',
-    [t.export.colReference ?? 'Reference']: '',
-    [t.export.colBranch ?? 'Branch']: '',
-    [t.export.colShift ?? 'Shift']: '',
-    [t.export.colHandledBy ?? 'HandledBy']: '',
-    [t.export.colNotes ?? 'Notes']: '',
-  } as any)
+  ws.addRow({
+    date: '',
+    customer: t.export.totalsRowLabel ?? 'TOTALS',
+    agreed: totalAmount,
+    paid: totalPaid,
+    remaining: '',
+    status: '',
+    reference: '',
+    branch: '',
+    shift: '',
+    handledBy: '',
+    notes: '',
+  })
 
-  const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [
-    { wch: 12 },
-    { wch: 24 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 10 },
-    { wch: 18 },
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 16 },
-    { wch: 32 },
-  ]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(
-    wb,
-    ws,
-    t.export.sheetName ?? 'Deposits',
-  )
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-  const blob = new Blob([wbout], {
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   const url = URL.createObjectURL(blob)

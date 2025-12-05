@@ -1421,39 +1421,55 @@ function CreditsTable({
 }
 
 async function handleExport(sortedRows: { row: CreditRow }[], totalsMap: Record<string, Totals>) {
-  const XLSX = await import('xlsx')
-  const data = sortedRows.map(x => ({
-    Date: fmtDateDMY(x.row.date),
-    Customer: x.row.customer_name || '',
-    'Initial credit': Math.round(x.row.amount || 0),
-    Remaining: Math.round(totalsMap[x.row.id]?.remaining ?? Math.round(x.row.amount || 0)),
-    Status: totalsMap[x.row.id]?.status ?? 'Unpaid',
-    Reference: x.row.reference || '',
-    Branch: x.row.branch || '',
-    Shift: x.row.shift || '',
-    HandledBy: x.row.handledBy || '',
-    Notes: x.row.note || '',
-  }))
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Credits')
+
+  ws.columns = [
+    { header: 'Date', key: 'date', width: 12 },
+    { header: 'Customer', key: 'customer', width: 24 },
+    { header: 'Initial credit', key: 'initial', width: 14 },
+    { header: 'Remaining', key: 'remaining', width: 14 },
+    { header: 'Status', key: 'status', width: 10 },
+    { header: 'Reference', key: 'reference', width: 18 },
+    { header: 'Branch', key: 'branch', width: 14 },
+    { header: 'Shift', key: 'shift', width: 12 },
+    { header: 'HandledBy', key: 'handledBy', width: 16 },
+    { header: 'Notes', key: 'notes', width: 24 },
+  ]
+
+  sortedRows.forEach(x => {
+    ws.addRow({
+      date: fmtDateDMY(x.row.date),
+      customer: x.row.customer_name || '',
+      initial: Math.round(x.row.amount || 0),
+      remaining: Math.round(totalsMap[x.row.id]?.remaining ?? Math.round(x.row.amount || 0)),
+      status: totalsMap[x.row.id]?.status ?? 'Unpaid',
+      reference: x.row.reference || '',
+      branch: x.row.branch || '',
+      shift: x.row.shift || '',
+      handledBy: x.row.handledBy || '',
+      notes: x.row.note || '',
+    })
+  })
+
   const totalInitial = sortedRows.reduce((s, x) => s + Math.round(x.row.amount || 0), 0)
   const totalRemaining = sortedRows.reduce((s, x) => s + Math.round(totalsMap[x.row.id]?.remaining ?? Math.round(x.row.amount || 0)), 0)
-  data.push({
-    Date: '',
-    Customer: 'TOTALS',
-    'Initial credit': totalInitial,
-    Remaining: totalRemaining,
-    Status: '',
-    Reference: '',
-    Branch: '',
-    Shift: '',
-    HandledBy: '',
-    Notes: '',
-  } as any)
-  const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [{ wch: 12 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 24 }]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Credits')
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  ws.addRow({
+    date: '',
+    customer: 'TOTALS',
+    initial: totalInitial,
+    remaining: totalRemaining,
+    status: '',
+    reference: '',
+    branch: '',
+    shift: '',
+    handledBy: '',
+    notes: '',
+  })
+
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
