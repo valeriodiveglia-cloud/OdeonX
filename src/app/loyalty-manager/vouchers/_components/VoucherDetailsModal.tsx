@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { Loader2, X, Trash, History, CreditCard, Ban, CheckCircle, Power, Download } from 'lucide-react'
+import { Loader2, X, Trash, History, CreditCard, Ban, CheckCircle, Power, Download, Printer } from 'lucide-react'
 import Barcode from 'react-barcode'
 import { format, isPast } from 'date-fns'
 
@@ -24,8 +24,9 @@ type Transaction = {
     created_at: string
 }
 
-export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { voucher: Voucher, onClose: () => void, onUpdate: () => void }) {
+export default function VoucherDetailsModal({ voucher, voucherTerms, voucherHeader, onClose, onUpdate, t }: { voucher: Voucher, voucherTerms: string | null, voucherHeader: string | null, onClose: () => void, onUpdate: () => void, t: any }) {
     const [transactions, setTransactions] = useState<Transaction[]>([])
+    // ... existing state ...
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState<'details' | 'history'>('details')
     const barcodeRef = useRef<HTMLDivElement>(null)
@@ -49,7 +50,7 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
     }
 
     const handleDelete = async () => {
-        if (!confirm('Are you sure you want to delete this voucher? This action cannot be undone.')) return
+        if (!confirm(t.vouchers.modals.delete_confirm)) return
 
         const { error } = await supabase
             .from('gift_vouchers')
@@ -74,7 +75,7 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
     const isRedeemable = displayStatus === 'active'
 
     const handleRedeem = async () => {
-        if (!confirm('Are you sure you want to redeem this voucher?')) return
+        if (!confirm(t.vouchers.modals.redeem_confirm)) return
 
         const { error } = await supabase
             .from('gift_vouchers')
@@ -98,8 +99,9 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
     const handleBlockToggle = async () => {
         const newStatus = voucher.status === 'blocked' ? 'active' : 'blocked'
         const action = voucher.status === 'blocked' ? 'unblock' : 'block'
+        const confirmMsg = voucher.status === 'blocked' ? t.vouchers.modals.unblock_confirm : t.vouchers.modals.block_confirm
 
-        if (!confirm(`Are you sure you want to ${action} this voucher?`)) return
+        if (!confirm(confirmMsg)) return
 
         const { error } = await supabase
             .from('gift_vouchers')
@@ -150,8 +152,8 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                             <CreditCard className="w-5 h-5" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-lg text-slate-800 font-mono">{voucher.code}</h3>
-                            <p className="text-xs text-slate-500">Gift Voucher</p>
+                            <h3 className="font-bold text-lg text-black font-mono">{voucher.code}</h3>
+                            <p className="text-xs text-slate-500">{t.vouchers.details.title}</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
@@ -165,13 +167,13 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                         className={`flex-1 py-3 text-sm font-medium ${activeTab === 'details' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                         onClick={() => setActiveTab('details')}
                     >
-                        Details
+                        {t.vouchers.modals.details}
                     </button>
                     <button
                         className={`flex-1 py-3 text-sm font-medium ${activeTab === 'history' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                         onClick={() => setActiveTab('history')}
                     >
-                        Transaction History
+                        {t.vouchers.modals.history}
                     </button>
                 </div>
 
@@ -181,15 +183,15 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                         <div className="space-y-6">
                             <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm text-slate-500 mb-1">Voucher Value</p>
-                                    <p className="text-2xl font-bold text-slate-800">
+                                    <p className="text-sm text-slate-500 mb-1">{t.vouchers.modals.value}</p>
+                                    <p className="text-2xl font-bold text-black">
                                         {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(voucher.value)}
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-sm text-slate-500 mb-1">Donor</p>
-                                    <p className="font-medium text-slate-800 capitalize">{voucher.donor_type}</p>
-                                    {voucher.donor_name && <p className="text-sm text-slate-600">{voucher.donor_name}</p>}
+                                    <p className="text-sm text-slate-500 mb-1">{t.vouchers.table.donor}</p>
+                                    <p className="font-medium text-black capitalize">{voucher.donor_type}</p>
+                                    {voucher.donor_name && <p className="text-sm text-slate-700">{voucher.donor_name}</p>}
                                 </div>
                             </div>
 
@@ -200,7 +202,7 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                                 <button
                                     onClick={handleDownloadBarcode}
                                     className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                    title="Download Barcode"
+                                    title={t.vouchers.modals.download_barcode}
                                 >
                                     <Download className="w-5 h-5" />
                                 </button>
@@ -208,7 +210,7 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
 
                             <div className="grid grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.status}</label>
                                     <div className={`px-3 py-2 border rounded-lg font-medium capitalize flex items-center gap-2 ${displayStatus === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
                                         displayStatus === 'redeemed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                                             displayStatus === 'blocked' ? 'bg-red-50 text-red-700 border-red-200' :
@@ -219,28 +221,28 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                                                 displayStatus === 'blocked' ? 'bg-red-500' :
                                                     'bg-slate-500'
                                             }`} />
-                                        {displayStatus}
+                                        {t.vouchers.status[displayStatus] || displayStatus}
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Expires On</label>
-                                    <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                                        {voucher.expires_on ? format(new Date(voucher.expires_on), 'dd/MM/yyyy') : 'Never'}
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.expires_on}</label>
+                                    <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-black">
+                                        {voucher.expires_on ? format(new Date(voucher.expires_on), 'dd/MM/yyyy') : t.cards.table.never}
                                     </div>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Issued On</label>
-                                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.issued_on}</label>
+                                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-black">
                                     {format(new Date(voucher.issued_on), 'dd/MM/yyyy HH:mm')}
                                 </div>
                             </div>
 
                             {voucher.notes && (
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
-                                    <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 whitespace-pre-wrap">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.notes}</label>
+                                    <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-black whitespace-pre-wrap">
                                         {voucher.notes}
                                     </div>
                                 </div>
@@ -251,7 +253,7 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                                     onClick={handleDelete}
                                     className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition flex items-center gap-2"
                                 >
-                                    <Trash className="w-4 h-4" /> Delete
+                                    <Trash className="w-4 h-4" /> {t.vouchers.modals.delete}
                                 </button>
 
                                 <div className="flex gap-2">
@@ -261,10 +263,27 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                                             ? 'bg-red-100 text-red-700 hover:bg-red-200'
                                             : 'text-slate-600 hover:bg-slate-100'
                                             }`}
-                                        title={voucher.status === 'blocked' ? 'Unblock Voucher' : 'Block Voucher'}
+                                        title={voucher.status === 'blocked' ? t.vouchers.modals.unblock : t.vouchers.modals.block}
                                     >
                                         <Power className={`w-4 h-4 ${voucher.status === 'blocked' ? 'text-red-600' : 'text-slate-400'}`} />
-                                        {voucher.status === 'blocked' ? 'Blocked' : 'Block'}
+                                        {voucher.status === 'blocked' ? t.vouchers.modals.blocked : t.vouchers.modals.block}
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            const style = document.createElement('style')
+                                            style.innerHTML = `@media print { @page { size: 80mm auto; margin: 3mm; } }`
+                                            document.head.appendChild(style)
+                                            document.body.setAttribute('data-print-mode', 'voucher-80mm')
+                                            window.print()
+                                            setTimeout(() => {
+                                                document.body.removeAttribute('data-print-mode')
+                                                document.head.removeChild(style)
+                                            }, 500)
+                                        }}
+                                        className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition flex items-center gap-2"
+                                    >
+                                        <Printer className="w-4 h-4" /> {t.vouchers.modals.print}
                                     </button>
 
                                     {isRedeemable && (
@@ -272,7 +291,7 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                                             onClick={handleRedeem}
                                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                                         >
-                                            <CheckCircle className="w-4 h-4" /> Redeem
+                                            <CheckCircle className="w-4 h-4" /> {t.vouchers.modals.redeem}
                                         </button>
                                     )}
                                 </div>
@@ -286,7 +305,7 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                                 </div>
                             ) : transactions.length === 0 ? (
                                 <div className="text-center py-8 text-slate-500">
-                                    No transactions found.
+                                    {t.vouchers.modals.no_transactions}
                                 </div>
                             ) : (
                                 <div className="space-y-3">
@@ -319,6 +338,47 @@ export default function VoucherDetailsModal({ voucher, onClose, onUpdate }: { vo
                     )}
                 </div>
             </div>
+
+            {/* Hidden Print Layout */}
+            <div className="print-voucher-only hidden">
+                <div className="flex flex-col items-center">
+                    {voucherHeader && (
+                        <div className="text-center font-black text-5xl mb-4 uppercase border-b-4 border-black pb-2 w-full leading-none">
+                            {voucherHeader}
+                        </div>
+                    )}
+
+                    <h1 className="text-xl font-bold mb-4 text-center mt-2">{t.vouchers.modals.print_template.gift_voucher}</h1>
+
+                    <p className="text-sm mb-1 text-center">{t.vouchers.modals.print_template.value}</p>
+                    <h3 className="text-3xl font-bold mb-6 text-center">
+                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(voucher.value)}
+                    </h3>
+
+                    {/* Barcode Container - Centered with Flex */}
+                    <div className="mb-4 w-full flex justify-center">
+                        <Barcode value={voucher.code} width={2} height={50} fontSize={14} displayValue={true} margin={0} />
+                    </div>
+
+                    <div className="text-sm mb-4 text-center">
+                        <p>{t.vouchers.modals.print_template.issued}: {format(new Date(voucher.issued_on), 'dd/MM/yyyy')}</p>
+                        <p>{t.vouchers.modals.print_template.expires}: {voucher.expires_on ? format(new Date(voucher.expires_on), 'dd/MM/yyyy') : t.cards.table.never}</p>
+                    </div>
+
+                    {voucher.donor_name && (
+                        <div className="text-sm mb-4 border p-2 w-full text-center">
+                            <p className="text-xs">{t.vouchers.modals.print_template.given_by}</p>
+                            <p className="font-bold">{voucher.donor_name}</p>
+                        </div>
+                    )}
+
+                    <div className="w-[90%] border-b border-black border-dashed my-4 mx-auto"></div>
+                    <p className="text-xs text-center whitespace-pre-wrap leading-relaxed">
+                        {voucherTerms || t.vouchers.modals.print_template.default_terms}
+                    </p>
+                </div>
+            </div>
         </div>
+
     )
 }

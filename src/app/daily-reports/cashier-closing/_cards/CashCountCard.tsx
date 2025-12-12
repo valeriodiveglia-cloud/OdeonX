@@ -346,8 +346,8 @@ export default function CashCountCard(props: {
             <div className="flex items-center gap-2">
               <span
                 className={`text-xs px-2 py-0.5 rounded-full ${loading
-                    ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
-                    : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
+                  ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
+                  : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
                   }`}
                 title={t.floatTargetTitle}
               >
@@ -439,7 +439,7 @@ export default function CashCountCard(props: {
           </div>
         </div>
 
-        <div className="pt-3 grid grid-cols-6 gap-3">
+        <div className="pt-3 grid grid-cols-5 gap-3">
           <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
             <div className="text-xs text-gray-600">{t.expectedDrawer}</div>
             <div className="font-semibold tabular-nums">{formatVND(expectedDrawerCash)}</div>
@@ -449,20 +449,16 @@ export default function CashCountCard(props: {
             <div className="font-semibold tabular-nums">{formatVND(countedCash)}</div>
           </div>
           <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-            <div className="text-xs text-gray-600">{t.totalToTake}</div>
-            <div className="font-semibold tabular-nums">{formatVND(totalToTake)}</div>
-          </div>
-          <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-            <div className="text-xs text-gray-600">{t.floatRemain}</div>
-            <div className="font-semibold tabular-nums">{formatVND(totalRemain)}</div>
-          </div>
-          <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
             <div className="text-xs text-gray-600">{t.difference}</div>
             <div className={`font-semibold tabular-nums ${diffCls}`}>
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-sm ${diffPillCls}`}>
                 {formatVND(localCashDiff)}
               </span>
             </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+            <div className="text-xs text-gray-600">{t.totalToTake}</div>
+            <div className="font-semibold tabular-nums">{formatVND(totalToTake)}</div>
           </div>
           <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
             <div className="text-xs text-gray-600">{t.targetFloat}</div>

@@ -2,48 +2,36 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { Plus, Search, Loader2, CheckCircle, XCircle, AlertCircle, Download, MoreVertical, Trash, ScanBarcode, Ticket, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Search, Loader2, CheckCircle, XCircle, AlertCircle, Download, MoreVertical, Trash, ScanBarcode, CreditCard, Wallet, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
 import { format } from 'date-fns'
-import CreateVoucherModal from './_components/CreateVoucherModal'
-import VoucherDetailsModal from './_components/VoucherDetailsModal'
+import CreateCardModal from './_components/CreateCardModal'
+import CardDetailsModal from './_components/CardDetailsModal'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getLoyaltyManagerDictionary } from '../_i18n'
+import { LoyaltyCard } from './types'
 
-type GiftVoucher = {
-    id: string
-    code: string
-    value: number
-    status: 'active' | 'redeemed' | 'expired' | 'blocked'
-    issued_on: string
-    expires_on: string | null
-    donor_type: 'restaurant' | 'partner' | 'customer'
-    donor_name: string | null
-    notes: string | null
-}
-
-export default function VouchersPage() {
+export default function LoyaltyCardsPage() {
     const { language } = useSettings()
     const t = getLoyaltyManagerDictionary(language)
 
-    const [vouchers, setVouchers] = useState<GiftVoucher[]>([])
+    const [cards, setCards] = useState<LoyaltyCard[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
     const [isScanModalOpen, setIsScanModalOpen] = useState(false)
     const [scanError, setScanError] = useState<string | null>(null)
-    const [selectedVoucher, setSelectedVoucher] = useState<GiftVoucher | null>(null)
-    const [voucherTerms, setVoucherTerms] = useState<string | null>(null)
-    const [voucherHeader, setVoucherHeader] = useState<string | null>(null)
+    const [selectedCard, setSelectedCard] = useState<LoyaltyCard | null>(null)
+    const [settings, setSettings] = useState<any>(null)
 
-    const fetchVouchers = async () => {
+    const fetchCards = async () => {
         setLoading(true)
         const { data, error } = await supabase
-            .from('gift_vouchers')
+            .from('loyalty_cards')
             .select('*')
             .order('created_at', { ascending: false })
 
         if (!error && data) {
-            setVouchers(data)
+            setCards(data)
         }
         setLoading(false)
     }
@@ -51,17 +39,20 @@ export default function VouchersPage() {
     const fetchSettings = async () => {
         const { data } = await supabase
             .from('loyalty_settings')
-            .select('voucher_terms, voucher_header')
+            .select('*')
             .single()
-
         if (data) {
-            setVoucherTerms(data.voucher_terms)
-            setVoucherHeader(data.voucher_header)
+            const rawClasses = Array.isArray(data.classes) ? data.classes : []
+            const classes = rawClasses.map((c: any) => ({
+                ...c,
+                color: c.color || '#3b82f6'
+            }))
+            setSettings({ ...data, classes })
         }
     }
 
     useEffect(() => {
-        fetchVouchers()
+        fetchCards()
         fetchSettings()
     }, [])
 
@@ -81,51 +72,54 @@ export default function VouchersPage() {
 
             if (e.key === 'Enter') {
                 if (buffer.length > 0) {
-                    const voucher = vouchers.find(v => v.code === buffer)
-                    if (voucher) {
-                        setSelectedVoucher(voucher)
+                    const card = cards.find(c => c.card_number === buffer)
+                    if (card) {
+                        setSelectedCard(card)
                         setSearch('')
                     }
                     buffer = ''
                 }
-            } else if (e.key.length === 1) {
+            } else if (e.key && e.key.length === 1) {
                 buffer += e.key
             }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [vouchers, isScanModalOpen])
+    }, [cards, isScanModalOpen])
 
     const getStatusBadge = (status: string) => {
         switch (status) {
-            case 'active': return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {t.vouchers.status.active}</span>
-            case 'redeemed': return <span className="px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {t.vouchers.status.redeemed}</span>
-            case 'expired': return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200 flex items-center gap-1"><XCircle className="w-3 h-3" /> {t.vouchers.status.expired}</span>
-            case 'blocked': return <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200 flex items-center gap-1"><XCircle className="w-3 h-3" /> {t.vouchers.status.blocked}</span>
+            case 'active': return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {t.cards.status.active}</span>
+            case 'unassigned': return <span className="px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {t.cards.status.unassigned}</span>
+            case 'expired': return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200 flex items-center gap-1"><XCircle className="w-3 h-3" /> {t.cards.status.expired}</span>
+            case 'blocked': return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200 flex items-center gap-1"><XCircle className="w-3 h-3" /> {t.cards.status.blocked}</span>
             default: return null
         }
     }
 
-    const filteredVouchers = vouchers.filter(v =>
-        (v.code || '').toLowerCase().includes(search.toLowerCase()) ||
-        (v.donor_name && v.donor_name.toLowerCase().includes(search.toLowerCase()))
+    const filteredCards = cards.filter(c =>
+        (c.customer_name?.toLowerCase() || '').includes(search.toLowerCase()) ||
+        c.card_number.includes(search) ||
+        (c.phone_number || '').includes(search)
     )
 
     const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
 
-    const sortedVouchers = sort ? [...filteredVouchers].sort((a, b) => {
+    const sortedCards = sort ? [...filteredCards].sort((a, b) => {
         const dir = sort.dir === 'asc' ? 1 : -1
         switch (sort.key) {
-            case 'code': return (a.code || '').localeCompare(b.code || '') * dir
+            case 'card_number': return (a.card_number || '').localeCompare(b.card_number || '') * dir
             case 'status': return (a.status || '').localeCompare(b.status || '') * dir
-            case 'donor_type': return (a.donor_type || '').localeCompare(b.donor_type || '') * dir
-            case 'issued_on': return (new Date(a.issued_on || 0).getTime() - new Date(b.issued_on || 0).getTime()) * dir
-            case 'expires_on': return (new Date(a.expires_on || 0).getTime() - new Date(b.expires_on || 0).getTime()) * dir
-            case 'value': return ((a.value || 0) - (b.value || 0)) * dir
+            case 'customer_name': return (a.customer_name || '').localeCompare(b.customer_name || '') * dir
+            case 'class': return (a.class || '').localeCompare(b.class || '') * dir
+            case 'total_spent': return ((a.total_spent || 0) - (b.total_spent || 0)) * dir
+            case 'points': return ((a.points || 0) - (b.points || 0)) * dir
+            case 'balance': return ((a.balance || 0) - (b.balance || 0)) * dir
+            case 'card_expires_on': return (new Date(a.card_expires_on || 0).getTime() - new Date(b.card_expires_on || 0).getTime()) * dir
             default: return 0
         }
-    }) : filteredVouchers
+    }) : filteredCards
 
     const handleSort = (key: string) => {
         setSort(prev => {
@@ -159,17 +153,16 @@ export default function VouchersPage() {
     const [selectMode, setSelectMode] = useState(false)
     const [selected, setSelected] = useState<Record<string, boolean>>({})
     const [menuOpen, setMenuOpen] = useState(false)
-    const [isExportModalOpen, setIsExportModalOpen] = useState(false)
 
     const selectedIds = Object.keys(selected).filter(id => selected[id])
-    const allSelected = sortedVouchers.length > 0 && sortedVouchers.every(v => selected[v.id])
+    const allSelected = sortedCards.length > 0 && sortedCards.every(c => selected[c.id])
 
     const toggleSelectAll = () => {
         if (allSelected) {
             setSelected({})
         } else {
             const newSelected: Record<string, boolean> = {}
-            sortedVouchers.forEach(v => newSelected[v.id] = true)
+            sortedCards.forEach(c => newSelected[c.id] = true)
             setSelected(newSelected)
         }
     }
@@ -182,22 +175,26 @@ export default function VouchersPage() {
     }
 
     const handleDeleteSelected = async () => {
-        if (!confirm(t.vouchers.delete_selected_confirm.replace('{count}', selectedIds.length.toString()))) return
+        if (!confirm(t.cards.delete_selected_confirm.replace('{count}', selectedIds.length.toString()))) return
 
         setLoading(true)
         const { error } = await supabase
-            .from('gift_vouchers')
+            .from('loyalty_cards')
             .delete()
             .in('id', selectedIds)
 
         if (error) {
-            alert('Error deleting vouchers: ' + error.message)
+            alert('Error deleting cards: ' + error.message)
         } else {
             setSelected({})
             setSelectMode(false)
-            fetchVouchers()
+            fetchCards()
         }
         setLoading(false)
+    }
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
     }
 
     return (
@@ -218,17 +215,6 @@ export default function VouchersPage() {
                                     <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-20 overflow-hidden py-1">
                                         <button
                                             onClick={() => {
-                                                setIsExportModalOpen(true)
-                                                setMenuOpen(false)
-                                            }}
-                                            disabled={selectedIds.length === 0}
-                                            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 disabled:opacity-50"
-                                        >
-                                            <Download className="w-4 h-4" />
-                                            {t.vouchers.export_csv}
-                                        </button>
-                                        <button
-                                            onClick={() => {
                                                 handleDeleteSelected()
                                                 setMenuOpen(false)
                                             }}
@@ -236,7 +222,7 @@ export default function VouchersPage() {
                                             className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-50"
                                         >
                                             <Trash className="w-4 h-4" />
-                                            {t.vouchers.delete_selected}
+                                            {t.cards.delete_selected}
                                         </button>
                                     </div>
                                 </>
@@ -244,7 +230,7 @@ export default function VouchersPage() {
                         </div>
                     )}
                     <h1 className="text-2xl font-bold text-white">
-                        {t.vouchers.title}
+                        {t.cards.title}
                     </h1>
                 </div>
                 <div className="flex gap-2">
@@ -261,21 +247,21 @@ export default function VouchersPage() {
                         title={selectMode ? 'Exit selection mode' : 'Enter selection mode'}
                     >
                         <CheckCircle className="w-5 h-5" />
-                        {selectMode ? t.vouchers.selecting : t.vouchers.select}
+                        {selectMode ? t.cards.selecting : t.cards.select}
                     </button>
                     <button
                         onClick={() => setIsScanModalOpen(true)}
                         className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-white/10 text-white hover:bg-white/20 border border-blue-400/30"
                     >
                         <ScanBarcode className="w-5 h-5" />
-                        {t.vouchers.scan}
+                        {t.cards.scan}
                     </button>
                     <button
                         onClick={() => setIsCreateModalOpen(true)}
                         className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
                     >
                         <Plus className="w-5 h-5" />
-                        {t.vouchers.new_voucher}
+                        {t.cards.new_card}
                     </button>
                 </div>
             </div>
@@ -287,10 +273,10 @@ export default function VouchersPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
                             type="text"
-                            placeholder={t.vouchers.search_placeholder}
+                            placeholder={t.cards.search_placeholder}
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-600"
+                            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-500"
                         />
                     </div>
                 </div>
@@ -310,67 +296,111 @@ export default function VouchersPage() {
                                         />
                                     </th>
                                 )}
-                                <SortableHeader label={t.vouchers.table.code} colKey="code" />
-                                <SortableHeader label={t.vouchers.table.status} colKey="status" />
-                                <SortableHeader label={t.vouchers.table.donor} colKey="donor_type" />
-                                <SortableHeader label={t.vouchers.table.issued_on} colKey="issued_on" />
-                                <SortableHeader label={t.vouchers.table.expires_on} colKey="expires_on" />
-                                <SortableHeader label={t.vouchers.table.value} colKey="value" align="right" />
+                                <SortableHeader label={t.cards.table.card_id} colKey="card_number" />
+                                <SortableHeader label={t.cards.table.status} colKey="status" />
+                                <SortableHeader label={t.cards.table.customer} colKey="customer_name" />
+                                <SortableHeader label={t.cards.table.class} colKey="class" />
+                                <SortableHeader label={t.cards.table.total_value} colKey="total_spent" align="right" />
+                                <SortableHeader label={t.cards.table.points} colKey="points" align="right" />
+                                <SortableHeader label={t.cards.table.wallet_balance} colKey="balance" align="right" />
+                                <SortableHeader label={t.cards.table.expires} colKey="card_expires_on" />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={selectMode ? 7 : 6} className="px-6 py-8 text-center text-slate-500">
+                                    <td colSpan={selectMode ? 9 : 8} className="px-6 py-8 text-center text-slate-500">
                                         <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                                        {t.vouchers.loading}
+                                        {t.cards.loading}
                                     </td>
                                 </tr>
-                            ) : sortedVouchers.length === 0 ? (
+                            ) : sortedCards.length === 0 ? (
                                 <tr>
-                                    <td colSpan={selectMode ? 7 : 6} className="px-6 py-8 text-center text-slate-500">
-                                        {t.vouchers.no_vouchers}
+                                    <td colSpan={selectMode ? 9 : 8} className="px-6 py-8 text-center text-slate-500">
+                                        {t.cards.no_cards}
                                     </td>
                                 </tr>
                             ) : (
-                                sortedVouchers.map(voucher => (
+                                sortedCards.map(card => (
                                     <tr
-                                        key={voucher.id}
+                                        key={card.id}
                                         onClick={() => {
                                             if (selectMode) {
-                                                toggleSelectRow(voucher.id)
+                                                toggleSelectRow(card.id)
                                             } else {
-                                                setSelectedVoucher(voucher)
+                                                setSelectedCard(card)
                                             }
                                         }}
-                                        className={`hover:bg-slate-50 transition cursor-pointer ${selected[voucher.id] ? 'bg-blue-50' : ''}`}
+                                        className={`hover:bg-slate-50 transition cursor-pointer ${selected[card.id] ? 'bg-blue-50' : ''}`}
                                     >
                                         {selectMode && (
                                             <td className="px-6 py-4">
                                                 <input
                                                     type="checkbox"
-                                                    checked={!!selected[voucher.id]}
-                                                    onChange={() => toggleSelectRow(voucher.id)}
+                                                    checked={!!selected[card.id]}
+                                                    onChange={() => toggleSelectRow(card.id)}
                                                     onClick={(e) => e.stopPropagation()}
                                                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                                 />
                                             </td>
                                         )}
                                         <td className="px-6 py-4 font-mono font-medium text-blue-600 flex items-center gap-2">
-                                            <Ticket className="w-4 h-4 text-slate-400" />
-                                            {voucher.code}
+                                            <CreditCard className="w-4 h-4 text-slate-400" />
+                                            {card.card_number}
                                         </td>
-                                        <td className="px-6 py-4">{getStatusBadge(voucher.status)}</td>
+                                        <td className="px-6 py-4">{getStatusBadge(card.status)}</td>
+                                        <td className="px-6 py-4 font-medium text-slate-900">
+                                            {card.customer_name || <span className="text-slate-400 italic">{t.cards.status.unassigned}</span>}
+                                            {card.phone_number && <div className="text-xs text-slate-500 font-normal">{card.phone_number}</div>}
+                                        </td>
                                         <td className="px-6 py-4">
-                                            <span className="capitalize font-medium text-slate-700">{voucher.donor_type}</span>
-                                            {voucher.donor_name && <span className="text-slate-500 ml-1">({voucher.donor_name})</span>}
+                                            {(() => {
+                                                if (card.class === '-') {
+                                                    return <span className="text-slate-400 font-mono">-</span>
+                                                }
+                                                const currentClass = settings?.classes?.find((c: any) => c.name === card.class)
+                                                return (
+                                                    <span
+                                                        className="px-2 py-1 rounded-full text-xs font-medium"
+                                                        style={{
+                                                            backgroundColor: currentClass?.color || '#e2e8f0',
+                                                            color: '#ffffff'
+                                                        }}
+                                                    >
+                                                        {card.class || t.cards.table.standard}
+                                                    </span>
+                                                )
+                                            })()}
                                         </td>
-                                        <td className="px-6 py-4 text-slate-600">{format(new Date(voucher.issued_on), 'dd/MM/yyyy')}</td>
-                                        <td className="px-6 py-4 text-slate-600">
-                                            {voucher.expires_on ? format(new Date(voucher.expires_on), 'dd/MM/yyyy') : t.cards.table.never}
+                                        <td className="px-6 py-4 text-right font-medium text-slate-700">
+                                            {formatCurrency(card.total_spent || 0)}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-bold text-slate-900">
-                                            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(voucher.value)}
+                                        <td className="px-6 py-4 text-right align-middle">
+                                            <div className="flex flex-col justify-center items-end">
+                                                {card.status === 'blocked' ? (
+                                                    <>
+                                                        <span className="text-slate-400 font-medium">0 pts</span>
+                                                        <span className="text-[10px] text-slate-400 whitespace-nowrap">Old: {card.points} pts</span>
+                                                    </>
+                                                ) : (
+                                                    <span className="font-medium text-amber-600">{card.points || 0} pts</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right align-middle">
+                                            <div className="flex flex-col justify-center items-end">
+                                                {card.status === 'blocked' ? (
+                                                    <>
+                                                        <span className="text-slate-400 font-medium">{formatCurrency(0)}</span>
+                                                        <span className="text-[10px] text-slate-400 whitespace-nowrap">Old: {formatCurrency(card.balance)}</span>
+                                                    </>
+                                                ) : (
+                                                    <span className="font-bold text-slate-900">{formatCurrency(card.balance || 0)}</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-slate-600 text-xs text-right">
+                                            {(card.card_expires_on || card.tier_expires_on) ? format(new Date(card.card_expires_on || card.tier_expires_on!), 'dd/MM/yyyy') : t.cards.table.never}
                                         </td>
                                     </tr>
                                 ))
@@ -380,64 +410,29 @@ export default function VouchersPage() {
                 </div>
 
                 {isCreateModalOpen && (
-                    <CreateVoucherModal
+                    <CreateCardModal
                         t={t}
                         onClose={() => setIsCreateModalOpen(false)}
                         onSuccess={() => {
                             setIsCreateModalOpen(false)
-                            fetchVouchers()
+                            fetchCards()
                         }}
                     />
                 )}
 
-                {selectedVoucher && (
-                    <VoucherDetailsModal
-                        voucher={selectedVoucher}
-                        voucherTerms={voucherTerms}
-                        voucherHeader={voucherHeader}
+                {selectedCard && (
+                    <CardDetailsModal
+                        card={selectedCard}
                         t={t}
-                        onClose={() => setSelectedVoucher(null)}
+                        bonusPercentage={settings?.prepaid_bonus_percentage || 0}
+                        minTopUpAmount={settings?.min_topup_amount || 0}
+                        pointsRatio={settings?.points_ratio || 1000}
+                        redemptionRatio={settings?.redemption_ratio || 100}
+                        rewards={settings?.rewards || []}
+                        onClose={() => setSelectedCard(null)}
                         onUpdate={() => {
-                            fetchVouchers()
-                            setSelectedVoucher(null)
-                        }}
-                    />
-                )}
-
-                {isExportModalOpen && (
-                    <ExportModal
-                        t={t}
-                        selectedCount={selectedIds.length}
-                        onClose={() => setIsExportModalOpen(false)}
-                        onExport={(columns) => {
-                            const selectedVouchers = vouchers.filter(v => selected[v.id])
-
-                            const headers = columns.map(c => c.replace('_', ' ').toUpperCase())
-                            const rows = selectedVouchers.map(v =>
-                                columns.map(col => {
-                                    const val = v[col as keyof GiftVoucher]
-                                    return val === null ? '' : String(val)
-                                })
-                            )
-
-                            const csvContent = [
-                                headers.join(','),
-                                ...rows.map(r => r.map(cell => `"${cell}"`).join(','))
-                            ].join('\n')
-
-                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-                            const link = document.createElement('a')
-                            const url = URL.createObjectURL(blob)
-                            link.setAttribute('href', url)
-                            link.setAttribute('download', `gift_vouchers_export_${format(new Date(), 'yyyyMMdd')}.csv`)
-                            link.style.visibility = 'hidden'
-                            document.body.appendChild(link)
-                            link.click()
-                            document.body.removeChild(link)
-
-                            setIsExportModalOpen(false)
-                            setSelectMode(false)
-                            setSelected({})
+                            fetchCards()
+                            setSelectedCard(null)
                         }}
                     />
                 )}
@@ -449,15 +444,15 @@ export default function VouchersPage() {
                             setIsScanModalOpen(false)
                             setScanError(null)
                         }}
-                        onScan={(code) => {
-                            const voucher = vouchers.find(v => v.code === code)
-                            if (voucher) {
-                                setSelectedVoucher(voucher)
+                        onScan={(cardId) => {
+                            const card = cards.find(c => c.card_number === cardId)
+                            if (card) {
+                                setSelectedCard(card)
                                 setIsScanModalOpen(false)
                                 setScanError(null)
                                 setSearch('')
                             } else {
-                                setScanError('Voucher not found')
+                                setScanError('Card not found')
                             }
                         }}
                         error={scanError}
@@ -503,7 +498,7 @@ function ScanModal({
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
                 <div className="p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xl font-bold text-slate-900">{t.vouchers.modals.scan_title}</h3>
+                        <h3 className="text-xl font-bold text-slate-900">{t.cards.modals.scan_title}</h3>
                         <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
                             <XCircle className="w-6 h-6" />
                         </button>
@@ -530,96 +525,14 @@ function ScanModal({
                             value={buffer}
                             onChange={(e) => setBuffer(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            className="w-full px-4 py-2 text-center text-lg font-bold text-slate-900 tracking-widest border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-600"
-
-                            placeholder={t.vouchers.modals.scan_placeholder}
+                            className="w-full px-4 py-2 text-center text-lg font-bold text-slate-900 tracking-widest border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-400"
+                            placeholder={t.cards.modals.scan_placeholder}
                             autoFocus
                         />
                     </div>
 
                     <div className="mt-4 text-center text-xs text-slate-400">
                         {t.cards.modals.or_type}
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function ExportModal({
-    selectedCount,
-    onClose,
-    onExport,
-    t
-}: {
-    selectedCount: number
-    onClose: () => void
-    onExport: (columns: string[]) => void
-    t: any
-}) {
-    const [columns, setColumns] = useState({
-        code: true,
-        status: true,
-        value: true,
-        donor_type: true,
-        donor_name: true,
-        issued_on: true,
-        expires_on: true
-    })
-
-    const handleExport = () => {
-        const selectedCols = Object.entries(columns)
-            .filter(([_, checked]) => checked)
-            .map(([key]) => key)
-        onExport(selectedCols)
-    }
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-                <div className="p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xl font-bold text-slate-900">{t.vouchers.modals.export_title}</h3>
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-                            <XCircle className="w-6 h-6" />
-                        </button>
-                    </div>
-
-                    <div className="space-y-4 mb-6">
-                        <p className="text-slate-600">
-                            {t.vouchers.modals.select_columns}
-                            {selectedCount > 0 && <span className="font-medium block mt-1">{t.vouchers.modals.exporting_count.replace('{count}', selectedCount.toString())}</span>}
-                        </p>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            {Object.entries(columns).map(([key, checked]) => (
-                                <label key={key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer hover:bg-slate-50 p-2 rounded-lg border border-transparent hover:border-slate-100 transition">
-                                    <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={(e) => setColumns(prev => ({ ...prev, [key]: e.target.checked }))}
-                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <span className="capitalize">{key.replace('_', ' ')}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="flex justify-end gap-3">
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
-                        >
-                            {t.cards.modals.cancel}
-                        </button>
-                        <button
-                            onClick={handleExport}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
-                        >
-                            <Download className="w-4 h-4" />
-                            {t.vouchers.export_csv}
-                        </button>
                     </div>
                 </div>
             </div>

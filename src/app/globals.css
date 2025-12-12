@@ -595,3 +595,67 @@ body.no-tooltips .mantine-Tooltip-tooltip {
 body.ct-dragging {
   cursor: ew-resize;
 }
+
+/* -------------------------------------------------------
+   Voucher 80mm Print Mode
+-------------------------------------------------------- */
+@media print {
+  body[data-print-mode='voucher-80mm'] {
+    background: white !important;
+  }
+
+  /* Use visibility instead of display to allow nested visibility overrides */
+  body[data-print-mode='voucher-80mm'] * {
+    visibility: hidden;
+  }
+
+  /* Reveal the voucher container and its descendants */
+  body[data-print-mode='voucher-80mm'] .print-voucher-only,
+  body[data-print-mode='voucher-80mm'] .print-voucher-only * {
+    visibility: visible;
+  }
+
+  /* Explicitly override the 'hidden' tailwind class */
+  /* Wrapper is the absolute container */
+  body[data-print-mode='voucher-80mm'] .print-voucher-only {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0 !important;
+    /* Remove wrapper padding to avoid scaling issues */
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    box-sizing: border-box;
+    text-align: center;
+    /* Ensure internal content is centered */
+    /* Scale everything by 1.75x */
+    transform: scale(1.75);
+    transform-origin: top center;
+  }
+
+  /* Center the inner container and limit width to target (78mm / 1.75 ≈ 44.5mm) */
+  body[data-print-mode='voucher-80mm'] .print-voucher-only>div {
+    width: 44.5mm !important;
+    max-width: 44.5mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+
+  /* Reset layout constraints for print container elements */
+  body[data-print-mode='voucher-80mm'] .print-voucher-only div:not(:first-child),
+  body[data-print-mode='voucher-80mm'] .print-voucher-only p,
+  body[data-print-mode='voucher-80mm'] .print-voucher-only span,
+  body[data-print-mode='voucher-80mm'] .print-voucher-only h1,
+  body[data-print-mode='voucher-80mm'] .print-voucher-only h2,
+  body[data-print-mode='voucher-80mm'] .print-voucher-only h3 {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    margin-bottom: 5px;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}

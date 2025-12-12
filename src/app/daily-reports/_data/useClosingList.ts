@@ -91,6 +91,7 @@ export function useClosingList({ year, month, branchName }: UseClosingListArgs) 
             'unpaid_vnd',
             'cash_out_vnd',
             'cash_json',
+            'float_plan_json',
             'cashier_name',
             'created_at',
           ].join(',')
@@ -146,6 +147,7 @@ export function useClosingList({ year, month, branchName }: UseClosingListArgs) 
         unpaid_vnd: row.unpaid,
         cash_out_vnd: row.cashout,
         cash_json: null,
+        float_plan_json: null,
         cashier_name: row.enteredBy ?? null,
       }
 
@@ -162,6 +164,7 @@ export function useClosingList({ year, month, branchName }: UseClosingListArgs) 
             'unpaid_vnd',
             'cash_out_vnd',
             'cash_json',
+            'float_plan_json',
             'cashier_name',
             'created_at',
           ].join(',')
@@ -287,7 +290,12 @@ function mapDbRowToClosingRow(r: any): ClosingRow {
   const cashout = toNum(r.cash_out_vnd)
   const floatTarget = toNum(r.opening_float_vnd)
   const countedCash = cashFromJson(r.cash_json)
-  const cashToTake = Math.max(0, countedCash - floatTarget)
+
+  // Prefer float_plan_json if it has a total > 0
+  const planTotal = cashFromJson(r.float_plan_json)
+  const cashToTake = planTotal > 0
+    ? planTotal
+    : Math.max(0, countedCash - floatTarget)
 
   return {
     id: String(r.id),

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import React from 'react'
 
+import { getLoyaltyManagerDictionary } from '@/app/loyalty-manager/_i18n'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
@@ -23,13 +24,6 @@ type Item = {
 }
 
 const BASE = '/loyalty-manager'
-const NAV: Item[] = [
-    { href: BASE, label: 'Dashboard', icon: LayoutDashboard, exact: true },
-    { href: `${BASE}/membership-cards`, label: 'Membership Cards', icon: CreditCard },
-    { href: `${BASE}/vouchers`, label: 'Vouchers', icon: Ticket },
-    { href: `${BASE}/prepaid-cards`, label: 'Prepaid Cards', icon: Gift },
-    { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
-]
 
 function DualIcon({
     Icon,
@@ -63,8 +57,14 @@ export default function LeftNavLoyaltyManager() {
     const pathname = usePathname()
     const { language, setLanguage } = useSettings()
 
-    // Simple translation fallback for now
-    const t = (key: string) => key
+    const t = getLoyaltyManagerDictionary(language)
+
+    const NAV: Item[] = [
+        { href: BASE, label: t.navigation.dashboard, icon: LayoutDashboard, exact: true },
+        { href: `${BASE}/cards`, label: t.navigation.loyalty_cards, icon: CreditCard },
+        { href: `${BASE}/vouchers`, label: t.navigation.vouchers, icon: Ticket },
+        { href: `${BASE}/settings`, label: t.navigation.settings, icon: Settings },
+    ]
 
     const [isTouch, setIsTouch] = React.useState(false)
 
@@ -144,12 +144,12 @@ export default function LeftNavLoyaltyManager() {
         return () => body.classList.remove('no-tooltips')
     }, [isOpen])
 
-    const homeTitle = 'Home'
+    const homeTitle = t.navigation.home
     const appName = 'Loyalty Manager'
     const isEN = language === 'en'
     const countryCode = isEN ? 'GB' : 'VN'
     const nextLang = isEN ? 'vi' : 'en'
-    const label = isEN ? 'Switch to Tiếng Việt' : 'Switch to English'
+    const label = isEN ? t.navigation.switch_to_vi : t.navigation.switch_to_en
     const toggleLang = () => setLanguage(nextLang as 'en' | 'vi')
 
     const stateClass = isOpen ? 'leftnav expanded' : 'leftnav collapsed'

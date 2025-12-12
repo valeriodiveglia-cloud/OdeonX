@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { Settings, Plus, Trash2, Save, Loader2 } from 'lucide-react'
+import { useSettings } from '@/contexts/SettingsContext'
+import { getLoyaltyManagerDictionary } from '../_i18n'
 
 type LoyaltyClass = {
     name: string
@@ -21,9 +23,15 @@ type Reward = {
 type LoyaltySettings = {
     classes: LoyaltyClass[]
     rewards: Reward[]
+    prepaid_bonus_percentage: number
+    min_topup_amount: number
+    voucher_terms: string
+    voucher_header?: string
 }
 
 export default function LoyaltySettingsPage() {
+    const { language } = useSettings()
+    const t = getLoyaltyManagerDictionary(language)
     const [settings, setSettings] = useState<LoyaltySettings | null>(null)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -57,7 +65,11 @@ export default function LoyaltySettingsPage() {
 
             setSettings({
                 classes,
-                rewards
+                rewards,
+                prepaid_bonus_percentage: data.prepaid_bonus_percentage || 0,
+                min_topup_amount: data.min_topup_amount || 0,
+                voucher_terms: data.voucher_terms || t.settings.voucher.terms_desc,
+                voucher_header: data.voucher_header || ''
             })
         } else if (error) {
             console.error('Error fetching settings:', error)
@@ -73,9 +85,9 @@ export default function LoyaltySettingsPage() {
             .upsert({ id: true, ...settings })
 
         if (error) {
-            alert('Error saving settings: ' + error.message)
+            alert(t.settings.error_saving + ': ' + error.message)
         } else {
-            alert('Settings saved successfully!')
+            alert(t.settings.saved_success)
         }
         setSaving(false)
     }
@@ -153,7 +165,7 @@ export default function LoyaltySettingsPage() {
         <div className="p-8 w-full">
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-2xl font-bold text-white">
-                    Loyalty Settings
+                    {t.settings.title}
                 </h1>
                 <button
                     onClick={handleSave}
@@ -161,20 +173,20 @@ export default function LoyaltySettingsPage() {
                     className="bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition disabled:opacity-50"
                 >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save Changes
+                    {t.settings.save_changes}
                 </button>
             </div>
 
             <div className="space-y-8">
-                {/* Loyalty Classes */}
+                {/* Membership Tiers */}
                 <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-lg font-semibold text-slate-800">Loyalty Classes</h2>
+                        <h2 className="text-lg font-semibold text-slate-800">{t.settings.tiers.title}</h2>
                         <button
                             onClick={addClass}
                             className="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg text-sm font-medium transition flex items-center gap-1"
                         >
-                            <Plus className="w-4 h-4" /> Add Class
+                            <Plus className="w-4 h-4" /> {t.settings.tiers.add_class}
                         </button>
                     </div>
 
@@ -182,12 +194,12 @@ export default function LoyaltySettingsPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-200">
-                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-12">Color</th>
-                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/5">Class Name</th>
-                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">Method</th>
-                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">Threshold</th>
-                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">Earning Ratio<br /><span className="normal-case font-normal text-slate-400">(VND/1pt)</span></th>
-                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">Redemption Ratio<br /><span className="normal-case font-normal text-slate-400">(VND/1pt)</span></th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-12">{t.settings.tiers.color}</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/5">{t.settings.tiers.class_name}</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">{t.settings.tiers.method}</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">{t.settings.tiers.threshold}</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">{t.settings.tiers.earning_ratio}<br /><span className="normal-case font-normal text-slate-400">{t.settings.tiers.earning_ratio_upload}</span></th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/6">{t.settings.tiers.redemption_ratio}<br /><span className="normal-case font-normal text-slate-400">{t.settings.tiers.redemption_ratio_upload}</span></th>
                                     <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-12"></th>
                                 </tr>
                             </thead>
@@ -216,8 +228,8 @@ export default function LoyaltySettingsPage() {
                                                 onChange={e => updateClass(idx, 'method', e.target.value)}
                                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                             >
-                                                <option value="value">Total Value</option>
-                                                <option value="points">Points</option>
+                                                <option value="value">{t.cards.table.total_value}</option>
+                                                <option value="points">{t.cards.table.points}</option>
                                             </select>
                                         </td>
                                         <td className="p-2">
@@ -258,7 +270,7 @@ export default function LoyaltySettingsPage() {
                                 {settings.classes.length === 0 && (
                                     <tr>
                                         <td colSpan={7} className="text-center text-slate-500 py-8">
-                                            No classes defined. Click "Add Class" to start.
+                                            {t.settings.tiers.no_classes}
                                         </td>
                                     </tr>
                                 )}
@@ -270,12 +282,12 @@ export default function LoyaltySettingsPage() {
                 {/* Rewards Configuration */}
                 <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-lg font-semibold text-slate-800">Rewards</h2>
+                        <h2 className="text-lg font-semibold text-slate-800">{t.settings.rewards.title}</h2>
                         <button
                             onClick={addReward}
                             className="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg text-sm font-medium transition flex items-center gap-1"
                         >
-                            <Plus className="w-4 h-4" /> Add Reward
+                            <Plus className="w-4 h-4" /> {t.settings.rewards.add_reward}
                         </button>
                     </div>
 
@@ -283,8 +295,8 @@ export default function LoyaltySettingsPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-200">
-                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-2/3">Reward Name</th>
-                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/4">Cost (Points)</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-2/3">{t.settings.rewards.reward_name}</th>
+                                    <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-1/4">{t.settings.rewards.cost_points}</th>
                                     <th className="py-3 px-2 text-xs font-medium text-slate-500 uppercase tracking-wider w-12"></th>
                                 </tr>
                             </thead>
@@ -322,12 +334,95 @@ export default function LoyaltySettingsPage() {
                                 {settings.rewards.length === 0 && (
                                     <tr>
                                         <td colSpan={3} className="text-center text-slate-500 py-8">
-                                            No rewards defined. Click "Add Reward" to start.
+                                            {t.settings.rewards.no_rewards}
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
+                    </div>
+                </section>
+
+                {/* Wallet Configuration */}
+                <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h2 className="text-lg font-semibold text-slate-800 mb-4">{t.settings.wallet.title}</h2>
+                    <div className="max-w-md space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                {t.settings.wallet.bonus_percentage}
+                                <span className="font-normal text-slate-500 ml-2">
+                                    {t.settings.wallet.bonus_percentage_desc}
+                                </span>
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={settings.prepaid_bonus_percentage}
+                                    onChange={e => setSettings({ ...settings, prepaid_bonus_percentage: parseInt(e.target.value) || 0 })}
+                                    className="w-24 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <span className="text-slate-600">%</span>
+                            </div>
+                            <p className="mt-2 text-xs text-slate-500">
+                                {t.settings.wallet.bonus_percentage_example}
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                {t.settings.wallet.min_topup}
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={formatNumber(settings.min_topup_amount)}
+                                    onChange={e => setSettings({ ...settings, min_topup_amount: parseNumber(e.target.value) || 0 })}
+                                    className="w-full max-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <span className="text-slate-600">VND</span>
+                            </div>
+                            <p className="mt-2 text-xs text-slate-500">
+                                {t.settings.wallet.min_topup_desc}
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Voucher Configuration */}
+                <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h2 className="text-lg font-semibold text-slate-800 mb-4">{t.settings.voucher.title}</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                {t.settings.voucher.header}
+                            </label>
+                            <input
+                                type="text"
+                                value={settings.voucher_header || ''}
+                                onChange={e => setSettings({ ...settings, voucher_header: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
+                                placeholder={t.settings.voucher.header_placeholder}
+                            />
+                            <p className="text-xs text-slate-500 mb-4">
+                                {t.settings.voucher.header_desc}
+                            </p>
+
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                {t.settings.voucher.terms}
+                            </label>
+                            <textarea
+                                value={settings.voucher_terms}
+                                onChange={e => setSettings({ ...settings, voucher_terms: e.target.value })}
+                                rows={4}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder={t.settings.voucher.terms_placeholder}
+                            />
+                            <p className="mt-2 text-xs text-slate-500">
+                                {t.settings.voucher.terms_desc}
+                            </p>
+                        </div>
                     </div>
                 </section>
             </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { Loader2 } from 'lucide-react'
 
-export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) {
+export default function CreateVoucherModal({ onClose, onSuccess, t }: { onClose: () => void, onSuccess: () => void, t: any }) {
     const [mode, setMode] = useState<'single' | 'bulk'>('single')
     const [loading, setLoading] = useState(false)
 
@@ -60,7 +60,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
 
         const code = manualId ? customId : autoId
         if (!code) {
-            alert('Voucher Code is required')
+            alert(t.vouchers.modals.error_required_code)
             setLoading(false)
             return
         }
@@ -131,7 +131,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
 
             onSuccess()
         } catch (err: any) {
-            alert('Error creating bulk vouchers: ' + err.message)
+            alert(t.vouchers.modals.error_bulk + ': ' + err.message)
         } finally {
             setLoading(false)
         }
@@ -141,7 +141,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
-                    <h3 className="font-bold text-lg text-slate-800">Create Gift Vouchers</h3>
+                    <h3 className="font-bold text-lg text-slate-800">{t.vouchers.modals.create_title}</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
                 </div>
 
@@ -151,13 +151,13 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                         className={`flex-1 py-3 text-sm font-medium ${mode === 'single' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                         onClick={() => setMode('single')}
                     >
-                        Single Voucher
+                        {t.vouchers.modals.single_voucher}
                     </button>
                     <button
                         className={`flex-1 py-3 text-sm font-medium ${mode === 'bulk' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                         onClick={() => setMode('bulk')}
                     >
-                        Bulk Creation
+                        {t.vouchers.modals.bulk_creation}
                     </button>
                 </div>
 
@@ -165,9 +165,9 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                     {mode === 'single' ? (
                         <form onSubmit={handleSingleSubmit} className="space-y-4">
                             <div className="flex items-center justify-between mb-2">
-                                <label className="text-sm font-medium text-slate-700">Voucher Code</label>
+                                <label className="text-sm font-medium text-slate-700">{t.vouchers.modals.voucher_code}</label>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs text-slate-500">Manual Code</span>
+                                    <span className="text-xs text-slate-500">{t.vouchers.modals.manual_code}</span>
                                     <button
                                         type="button"
                                         onClick={() => setManualId(!manualId)}
@@ -184,7 +184,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                                     value={customId}
                                     onChange={e => setCustomId(e.target.value.toUpperCase())}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-900 placeholder-slate-600"
-                                    placeholder="ENTER CODE"
+                                    placeholder={t.vouchers.modals.enter_code_placeholder}
                                     required
                                     maxLength={8}
                                 />
@@ -201,13 +201,13 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                                         onClick={() => generateNextId().then(id => setAutoId(id))}
                                         className="px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
                                     >
-                                        Regenerate
+                                        {t.vouchers.modals.regenerate}
                                     </button>
                                 </div>
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Value (VND)</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.value}</label>
                                 <input
                                     type="number"
                                     required
@@ -220,7 +220,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Donor Type</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.donor_type}</label>
                                     <select
                                         value={formData.donor_type}
                                         onChange={e => setFormData({ ...formData, donor_type: e.target.value })}
@@ -232,12 +232,12 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Donor Name</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.donor_name}</label>
                                     <input
                                         type="text"
                                         value={formData.donor_name}
                                         onChange={e => setFormData({ ...formData, donor_name: e.target.value })}
-                                        placeholder={formData.donor_type === 'restaurant' ? 'Optional' : 'Required'}
+                                        placeholder={formData.donor_type === 'restaurant' ? t.vouchers.modals.optional_placeholder : t.vouchers.modals.required_placeholder}
                                         required={formData.donor_type !== 'restaurant'}
                                         className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-600"
                                     />
@@ -245,7 +245,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Expires On</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.expires_on}</label>
                                 <input
                                     type="date"
                                     value={formData.expires_on}
@@ -255,31 +255,31 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.notes}</label>
                                 <textarea
                                     value={formData.notes}
                                     onChange={e => setFormData({ ...formData, notes: e.target.value })}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-600"
                                     rows={2}
-                                    placeholder="Optional notes..."
+                                    placeholder={t.vouchers.modals.notes_placeholder}
                                 />
                             </div>
 
                             <div className="pt-4 flex gap-3 justify-end">
-                                <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancel</button>
+                                <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition">{t.vouchers.modals.cancel}</button>
                                 <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
-                                    {loading && <Loader2 className="w-4 h-4 animate-spin" />} Create
+                                    {loading && <Loader2 className="w-4 h-4 animate-spin" />} {t.vouchers.modals.create}
                                 </button>
                             </div>
                         </form>
                     ) : (
                         <form onSubmit={handleBulkSubmit} className="space-y-4">
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-blue-800 mb-4">
-                                Bulk created vouchers will have unique random codes.
+                                {t.vouchers.modals.bulk_note}
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.quantity}</label>
                                 <input
                                     type="number"
                                     min="1"
@@ -291,7 +291,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Value (VND)</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.value}</label>
                                 <input
                                     type="number"
                                     required
@@ -304,7 +304,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Donor Type</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.donor_type}</label>
                                     <select
                                         value={bulkDonorType}
                                         onChange={e => setBulkDonorType(e.target.value)}
@@ -316,12 +316,12 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Donor Name</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.donor_name}</label>
                                     <input
                                         type="text"
                                         value={bulkDonorName}
                                         onChange={e => setBulkDonorName(e.target.value)}
-                                        placeholder={bulkDonorType === 'restaurant' ? 'Optional' : 'Required'}
+                                        placeholder={bulkDonorType === 'restaurant' ? t.vouchers.modals.optional_placeholder : t.vouchers.modals.required_placeholder}
                                         required={bulkDonorType !== 'restaurant'}
                                         className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-600"
                                     />
@@ -329,7 +329,7 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Expires On</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.expires_on}</label>
                                 <input
                                     type="date"
                                     value={bulkExpires}
@@ -339,20 +339,20 @@ export default function CreateVoucherModal({ onClose, onSuccess }: { onClose: ()
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t.vouchers.modals.notes}</label>
                                 <textarea
                                     value={bulkNotes}
                                     onChange={e => setBulkNotes(e.target.value)}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-600"
                                     rows={2}
-                                    placeholder="Optional notes for all vouchers..."
+                                    placeholder={t.vouchers.modals.notes_placeholder}
                                 />
                             </div>
 
                             <div className="pt-4 flex gap-3 justify-end">
-                                <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancel</button>
+                                <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition">{t.vouchers.modals.cancel}</button>
                                 <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
-                                    {loading && <Loader2 className="w-4 h-4 animate-spin" />} Generate {bulkQty} Vouchers
+                                    {loading && <Loader2 className="w-4 h-4 animate-spin" />} {t.vouchers.modals.generate_vouchers.replace('{count}', bulkQty)}
                                 </button>
                             </div>
                         </form>
