@@ -16,7 +16,7 @@ import {
   ArrowRightStartOnRectangleIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
-import { LayoutDashboard } from 'lucide-react'
+import { LayoutDashboard, Boxes } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
@@ -210,6 +210,9 @@ export default function HomeDashboard() {
                       <UserGroupIcon className="h-6 w-6" />
                       <span>Loyalty Manager</span>
                     </Link>
+
+                    {/* Asset Inventory */}
+                    <AssetBranchPickerCTA />
                   </div>
                 </div>
 
@@ -377,6 +380,187 @@ function BranchPickerModal({ onClose }: { onClose: () => void }) {
                     </div>
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-5 py-4 border-t bg-white flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-10 px-4 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
+            >
+              {t(language, 'Close')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------- Asset Inventory Branch Picker ---------- */
+function AssetBranchPickerCTA() {
+  const [open, setOpen] = useState(false)
+  const { language } = useSettings()
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+      >
+        <Boxes className="h-6 w-6" />
+        <span>Asset Inventory</span>
+      </button>
+      {open && <AssetBranchPickerModal onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [branches, setBranches] = useState<ProviderBranch[]>([])
+  const [err, setErr] = useState<string | null>(null)
+  const { language } = useSettings()
+
+  useEffect(() => {
+    let ignore = false
+      ; (async () => {
+        setLoading(true)
+        setErr(null)
+        try {
+          const { data, error } = await supabase
+            .from('provider_branches')
+            .select('id,name,address,sort_order')
+            .order('sort_order', { ascending: true, nullsFirst: true })
+            .order('name', { ascending: true })
+
+          if (error) throw error
+
+          const rows: ProviderBranch[] =
+            (data || []).map(r => ({
+              id: String(r.id),
+              name: r.name || '',
+              address: r.address || '',
+              sort_order: r.sort_order
+            }))
+
+          if (!ignore) {
+            setBranches(rows)
+          }
+        } catch {
+          if (!ignore) {
+            const snap = loadProviderSnapshotFromLS()
+            if (snap && snap.length > 0) {
+              setBranches(snap)
+              setErr(null)
+            } else {
+              setErr(t(language, 'DashboardBranchesLoadFailed'))
+            }
+          }
+        } finally {
+          if (!ignore) setLoading(false)
+        }
+      })()
+    return () => { ignore = true }
+  }, [])
+
+  const pick = (branchId: string) => {
+    onClose()
+    if (branchId === 'all') {
+      router.push(`/asset-inventory?branchId=all`)
+    } else {
+      const branch = branches.find(b => b.id === branchId)
+      const name = branch ? branch.name : ''
+      router.push(`/asset-inventory?branchId=${branchId}&branchName=${encodeURIComponent(name)}`)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50">
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden">
+          {/* Header */}
+          <div className="px-5 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
+                  <Boxes className="w-5 h-5" />
+                </span>
+                <div className="text-lg font-semibold text-gray-900">Select Branch for Inventory</div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg hover:bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                aria-label="Close"
+              >
+                <XMarkIcon className="w-5 h-5 text-gray-700" />
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="p-5">
+            {loading && <CircularLoader />}
+            {!loading && err && <div className="text-sm text-red-600">{err}</div>}
+
+            {!loading && !err && branches.length === 0 && (
+              <div className="text-sm text-gray-700">
+                {t(language, 'DashboardBranchesEmpty')}{' '}
+                <Link href="/general-settings" className="text-blue-700 hover:underline">
+                  {t(language, 'Settings')}
+                </Link>
+                .
+              </div>
+            )}
+
+            {!loading && !err && branches.length > 0 && (
+              <div className="space-y-4">
+                {/* All Branches Option */}
+                <button
+                  type="button"
+                  onClick={() => pick('all')}
+                  className="w-full group relative text-left rounded-2xl border border-blue-200 bg-blue-50/50 px-4 py-4 transition
+                               hover:border-blue-400 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-white shrink-0">
+                      <Boxes className="w-5 h-5" />
+                    </span>
+                    <div className="min-w-0 flex items-center h-10">
+                      <div className="font-bold text-slate-800 text-lg">All Branches</div>
+                    </div>
+                  </div>
+                </button>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {branches.map(b => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => pick(b.id)}
+                      className="group relative text-left rounded-2xl border border-gray-200 bg-white px-4 py-4 transition
+                                   hover:border-blue-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    >
+                      <span className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-blue-200 opacity-0 transition group-hover:opacity-100" />
+                      <div className="flex items-start gap-3">
+                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shrink-0">
+                          <MapPinIcon className="w-5 h-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-gray-900 truncate">{b.name || t(language, 'GeneralSettingsUntitled')}</div>
+                          <div className="text-sm text-gray-600 truncate">{b.address || '-'}</div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

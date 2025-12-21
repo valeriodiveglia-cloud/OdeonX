@@ -595,31 +595,16 @@ export default function InitialInfoCard(props: {
           0,
         )
       } else {
-        const { startISO, endISO } = dayRange(header.dateStr)
-        const q2 = await supabase
+        const q3 = await supabase
           .from('cashout')
           .select('amount')
-          .eq('branch', activeBranchName)
-          .gte('created_at', startISO)
-          .lt('created_at', endISO)
-
-        if (!q2.error && Array.isArray(q2.data) && q2.data.length > 0) {
-          total = q2.data.reduce(
+          .ilike('branch', activeBranchName)
+          .eq('date', header.dateStr)
+        if (!q3.error && Array.isArray(q3.data) && q3.data.length > 0) {
+          total = q3.data.reduce(
             (s, r: any) => s + Math.round(Number(r?.amount || 0)),
             0,
           )
-        } else {
-          const q3 = await supabase
-            .from('cashout')
-            .select('amount')
-            .ilike('branch', activeBranchName)
-            .eq('date', header.dateStr)
-          if (!q3.error && Array.isArray(q3.data) && q3.data.length > 0) {
-            total = q3.data.reduce(
-              (s, r: any) => s + Math.round(Number(r?.amount || 0)),
-              0,
-            )
-          }
         }
       }
 
