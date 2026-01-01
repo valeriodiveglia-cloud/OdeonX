@@ -317,6 +317,7 @@ export default function InitialInfoCard(props: {
   onReloadSaved?: () => void
   liveMode: boolean
   onChangeLiveMode: (v: boolean) => void
+  readOnly?: boolean
 }) {
   const {
     header,
@@ -330,6 +331,7 @@ export default function InitialInfoCard(props: {
     onReloadSaved,
     liveMode,
     onChangeLiveMode,
+    readOnly,
   } = props
   const { language } = useSettings()
   const t = getDailyReportsDictionary(language).cashierClosing.initialInfo
@@ -923,8 +925,9 @@ export default function InitialInfoCard(props: {
                   className={`px-3 py-1 ${!liveMode
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  onClick={handleSavedClick}
+                    } ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={() => !readOnly && handleSavedClick()}
+                  disabled={readOnly}
                 >
                   {t.saved}
                 </button>
@@ -933,8 +936,9 @@ export default function InitialInfoCard(props: {
                   className={`px-3 py-1 border-l border-gray-300 ${liveMode
                     ? 'bg-emerald-600 text-white'
                     : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  onClick={handleLiveClick}
+                    } ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={() => !readOnly && handleLiveClick()}
+                  disabled={readOnly}
                 >
                   {t.live}
                 </button>
@@ -963,7 +967,8 @@ export default function InitialInfoCard(props: {
               type="date"
               value={header.dateStr}
               onChange={e => onChangeHeader({ dateStr: e.target.value })}
-              className="border rounded-lg px-2 h-9 bg-white"
+              className="border rounded-lg px-2 h-9 bg-white disabled:bg-gray-50 disabled:text-gray-500"
+              disabled={readOnly}
             />
           </label>
 
@@ -1008,6 +1013,7 @@ export default function InitialInfoCard(props: {
                 value={v(payments.revenue)}
                 onChange={x => onChangePayments({ revenue: x })}
                 placeholder="0"
+                disabled={readOnly}
               />
             </label>
 
@@ -1041,6 +1047,7 @@ export default function InitialInfoCard(props: {
                     onChangePayments({ thirdPartyAmounts: next })
                   }}
                   className={`col-span-1 ${tpColSpanClass(idx)}`}
+                  readOnly={readOnly}
                 />
               ))}
             </div>
@@ -1051,6 +1058,7 @@ export default function InitialInfoCard(props: {
                 label={t.cardPayments}
                 value={v(payments.mpos)}
                 onChange={x => onChangePayments({ mpos: x })}
+                readOnly={readOnly}
               />
               <ReadOnlyMoney
                 label={unpaidLoading ? t.unpaidLoading : t.unpaid}
@@ -1098,8 +1106,9 @@ export default function InitialInfoCard(props: {
               <textarea
                 value={header.notes || ''}
                 onChange={e => onChangeHeader({ notes: e.target.value })}
-                className="border rounded-lg px-3 py-2 min-h-[80px] bg-white text-sm"
+                className="border rounded-lg px-3 py-2 min-h-[80px] bg-white text-sm disabled:bg-gray-50 disabled:text-gray-500"
                 placeholder={t.commentPlaceholder}
+                disabled={readOnly}
               />
             </label>
           </section>
@@ -1115,12 +1124,13 @@ function EditMoney(props: {
   value: number
   onChange: (v: number) => void
   className?: string
+  readOnly?: boolean
 }) {
-  const { label, value, onChange, className = '' } = props
+  const { label, value, onChange, className = '', readOnly } = props
   return (
     <label className={`flex flex-col gap-1 ${className}`}>
       <span className="text-xs text-gray-600">{label}</span>
-      <NumFmt value={value} onChange={onChange} />
+      <NumFmt value={value} onChange={onChange} disabled={readOnly} />
     </label>
   )
 }

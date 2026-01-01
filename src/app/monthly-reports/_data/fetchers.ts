@@ -217,3 +217,26 @@ export async function fetchUnpaid({ startISO, endISO, branchName }: FetchParams)
 
     return Array.from(map.entries()).map(([date, value]) => ({ date, value }))
 }
+
+// 7. Credit Card (MPOS)
+export async function fetchCreditCard({ startISO, endISO, branchName }: FetchParams): Promise<ChartDataPoint[]> {
+    let q = supabase
+        .from('cashier_closings')
+        .select('report_date, mpos_vnd, branch_name')
+        .gte('report_date', startISO)
+        .lt('report_date', endISO)
+
+    if (branchName) q = q.eq('branch_name', branchName)
+
+    const { data } = await q
+    if (!data) return []
+
+    const map = new Map<string, number>()
+    data.forEach((r: any) => {
+        const d = String(r.report_date).split('T')[0]
+        const val = Number(r.mpos_vnd || 0)
+        map.set(d, (map.get(d) || 0) + val)
+    })
+
+    return Array.from(map.entries()).map(([date, value]) => ({ date, value }))
+}

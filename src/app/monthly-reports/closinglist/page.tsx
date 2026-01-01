@@ -253,7 +253,8 @@ export default function MonthlyClosingListPage() {
                         {filtered.map(r => (
                             <tr
                                 key={r.id}
-                                className="border-t hover:bg-blue-50/40"
+                                className="border-t hover:bg-blue-50/40 cursor-pointer"
+                                onClick={() => router.push(`/daily-reports/cashier-closing?id=${r.id}&mode=readonly`)}
                             >
                                 <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
                                 <td className="p-2 whitespace-nowrap lowercase font-mono">{dow3(r.date)}</td>

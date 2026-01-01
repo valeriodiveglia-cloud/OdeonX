@@ -19,7 +19,7 @@ function CardHeader({ title, right }: { title: string; right?: ReactNode }) {
 }
 
 function Num({
-  value, onChange, min = 0, step = 1, className = '', placeholder,
+  value, onChange, min = 0, step = 1, className = '', placeholder, disabled
 }: {
   value: number | ''
   onChange: (v: number) => void
@@ -27,6 +27,7 @@ function Num({
   step?: number
   className?: string
   placeholder?: string
+  disabled?: boolean
 }) {
   return (
     <input
@@ -41,7 +42,8 @@ function Num({
         onChange(Math.max(min, Math.floor(Number(raw || 0))))
       }}
       placeholder={placeholder}
-      className={`border rounded-lg px-2 w-full ${className}`}
+      className={`border rounded-lg px-2 w-full ${className} ${disabled ? 'bg-gray-50 text-gray-500' : ''}`}
+      disabled={disabled}
     />
   )
 }
@@ -116,10 +118,11 @@ export default function CashCountCard(props: {
   cashDiff: number            // mantenuto per compatibilità, ma non usato nel calcolo locale
   onClear: () => void
   rightActions?: ReactNode
+  readOnly?: boolean
 }) {
   const {
     cash, onChangeCash, floatPlan, onChangeFloatPlan,
-    countedCash, expectedCash, cashDiff: _ignoredCashDiff, onClear, rightActions,
+    countedCash, expectedCash, cashDiff: _ignoredCashDiff, onClear, rightActions, readOnly
   } = props
   const { language } = useSettings()
   const t = getDailyReportsDictionary(language).cashierClosing.cashCount
@@ -356,16 +359,18 @@ export default function CashCountCard(props: {
               <button
                 type="button"
                 onClick={doSuggest}
-                className="px-3 h-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
+                className={`px-3 h-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title={t.suggestTitle}
+                disabled={readOnly}
               >
                 {t.suggest}
               </button>
               <button
                 type="button"
                 onClick={onClear}
-                className="px-3 h-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
+                className={`px-3 h-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title={t.clearTitle}
+                disabled={readOnly}
               >
                 {t.clear}
               </button>
@@ -404,6 +409,7 @@ export default function CashCountCard(props: {
                       min={0}
                       step={1}
                       className="h-9 text-right"
+                      disabled={readOnly}
                     />
                   </div>
 
@@ -415,6 +421,7 @@ export default function CashCountCard(props: {
                       min={0}
                       step={1}
                       className="h-9 text-right"
+                      disabled={readOnly}
                     />
                   </div>
 

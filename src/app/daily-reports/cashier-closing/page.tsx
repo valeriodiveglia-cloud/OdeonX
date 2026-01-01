@@ -252,8 +252,14 @@ export default function CashierClosingPage() {
     d10k: 0, d5k: 0, d2k: 0, d1k: 0,
   })
 
+  // Read read-only mode from URL
+  const readOnlyParam = searchParams.get('mode') === 'readonly'
+  const isReadOnly = initialIdFromUrl ? readOnlyParam : false // Only force readonly if not a new record
+
   // Live / Saved mode
-  const [liveMode, setLiveMode] = useState<boolean>(() => !initialIdFromUrl)
+  // If readonly, we are definitely NOT live.
+  const [liveMode, setLiveMode] = useState<boolean>(() => !initialIdFromUrl && !isReadOnly)
+
   const [lastEditorName, setLastEditorName] = useState<string>('')
   const [currentUserName, setCurrentUserName] = useState<string>('')
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -799,6 +805,7 @@ export default function CashierClosingPage() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const key = (e.key || '').toLowerCase()
+      if (isReadOnly) return
       if ((e.ctrlKey || e.metaKey) && key === 's') {
         e.preventDefault()
         onSaveAll()
@@ -878,36 +885,38 @@ export default function CashierClosingPage() {
       </div>
 
       {/* SaveBar */}
-      <div className="no-print fixed bottom-4 left-0 right-0 pointer-events-none z-[70] flex justify-center">
-        <div
-          className="pointer-events-auto bg-white/95 border border-gray-200 shadow-lg rounded-xl px-3 py-2 flex items-center justify-between gap-3"
-          style={{
-            width: 'min(80rem, calc(100vw - 2rem))',
-            maxWidth: 'calc(100vw - (var(--leftnav-w, 56px) * 2) - 2rem)',
-          }}
-        >
-          <div className="text-sm text-gray-700">
-            {lukeSaving
-              ? t.saveBar.saving
-              : displayDirty
-                ? t.saveBar.dirty
-                : lastSavedLabel(lastSavedAtUI, t.saveBar) + (lastEditorName ? ` • ${lastEditorName}` : '')}
-          </div>
+      {!isReadOnly && (
+        <div className="no-print fixed bottom-4 left-0 right-0 pointer-events-none z-[70] flex justify-center">
+          <div
+            className="pointer-events-auto bg-white/95 border border-gray-200 shadow-lg rounded-xl px-3 py-2 flex items-center justify-between gap-3"
+            style={{
+              width: 'min(80rem, calc(100vw - 2rem))',
+              maxWidth: 'calc(100vw - (var(--leftnav-w, 56px) * 2) - 2rem)',
+            }}
+          >
+            <div className="text-sm text-gray-700">
+              {lukeSaving
+                ? t.saveBar.saving
+                : displayDirty
+                  ? t.saveBar.dirty
+                  : lastSavedLabel(lastSavedAtUI, t.saveBar) + (lastEditorName ? ` • ${lastEditorName}` : '')}
+            </div>
 
-          <div className="flex items-center gap-2">
-            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-xs border rounded bg-gray-50 text-gray-600">
-              {t.saveBar.shortcut}
-            </kbd>
-            <button
-              className="h-9 px-3 rounded bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 disabled:hover:bg-blue-600"
-              onClick={onSaveAll}
-              disabled={disableSave}
-            >
-              {t.saveBar.save}
-            </button>
+            <div className="flex items-center gap-2">
+              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-xs border rounded bg-gray-50 text-gray-600">
+                {t.saveBar.shortcut}
+              </kbd>
+              <button
+                className="h-9 px-3 rounded bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 disabled:hover:bg-blue-600"
+                onClick={onSaveAll}
+                disabled={disableSave}
+              >
+                {t.saveBar.save}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main cards */}
       <div className="space-y-3" data-cashier-pdf-root="1">
@@ -931,6 +940,7 @@ export default function CashierClosingPage() {
           onReloadSaved={handleReloadSaved}
           liveMode={liveMode}
           onChangeLiveMode={setLiveMode}
+          readOnly={isReadOnly}
         />
 
         <CashCountCard
@@ -942,6 +952,7 @@ export default function CashierClosingPage() {
           expectedCash={netCash}   // Net cash, il float effettivo viene calcolato dentro CashCountCard
           cashDiff={cashDiff}
           onClear={clearCounts}
+          readOnly={isReadOnly}
         />
 
         <SummaryCard

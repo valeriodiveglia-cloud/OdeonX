@@ -10,7 +10,8 @@ import {
     fetchCashToTake,
     fetchBankTransfers,
     fetchDeposits,
-    fetchUnpaid
+    fetchUnpaid,
+    fetchCreditCard
 } from './_data/fetchers'
 
 type Branch = {
@@ -64,6 +65,12 @@ export default function MonthlyReportsDashboard() {
                     color="#8b5cf6" // violet-500
                     branches={branches}
                     fetchData={fetchBankTransfers}
+                />
+                <ChartCard
+                    title="Credit Card"
+                    color="#db2777" // pink-600
+                    branches={branches}
+                    fetchData={fetchCreditCard}
                 />
                 <ChartCard
                     title="Deposits"
