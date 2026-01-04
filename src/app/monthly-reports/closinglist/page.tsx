@@ -281,12 +281,12 @@ export default function MonthlyClosingListPage() {
                         {filtered.length > 0 && (
                             <tr className="border-t bg-gray-50 font-semibold">
                                 <td className="p-2" colSpan={4}>{t.table.totals}</td>
-                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalUnpaid)}</td>
-                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalCashout)}</td>
-                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalCard)}</td>
-                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalTransfer)}</td>
-                                <td className="p-2 text-right font-bold border-t border-blue-400/20 bg-blue-100/10 underline decoration-blue-500/30">{fmt(stats.totalToTake)}</td>
-                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalRevenue)}</td>
+                                <td className="p-2 text-right font-bold">{fmt(stats.totalUnpaid)}</td>
+                                <td className="p-2 text-right font-bold">{fmt(stats.totalCashout)}</td>
+                                <td className="p-2 text-right font-bold">{fmt(stats.totalCard)}</td>
+                                <td className="p-2 text-right font-bold">{fmt(stats.totalTransfer)}</td>
+                                <td className="p-2 text-right font-bold bg-blue-100/10 underline decoration-blue-500/30">{fmt(stats.totalToTake)}</td>
+                                <td className="p-2 text-right font-bold">{fmt(stats.totalRevenue)}</td>
                             </tr>
                         )}
                     </tbody>

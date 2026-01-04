@@ -437,8 +437,8 @@ export default function ClosingListPage() {
                 <td className="p-2" colSpan={selectMode ? 5 : 4}>{t.table.totals}</td>
                 <td className="p-2 text-right">{fmt(stats.totalUnpaid)}</td>
                 <td className="p-2 text-right">{fmt(stats.totalCashout)}</td>
-                <td className="p-2 font-bold text-right tabular-nums border-t border-blue-400/20">{fmt(stats.totalCard)}</td>
-                <td className="p-2 font-bold text-right tabular-nums border-t border-blue-400/20">{fmt(stats.totalTransfer)}</td>
+                <td className="p-2 font-bold text-right tabular-nums">{fmt(stats.totalCard)}</td>
+                <td className="p-2 font-bold text-right tabular-nums">{fmt(stats.totalTransfer)}</td>
                 <td className="p-2 text-right">{fmt(stats.totalToTake)}</td>
                 <td className="p-2 text-right">{fmt(stats.totalRevenue)}</td>
               </tr>
