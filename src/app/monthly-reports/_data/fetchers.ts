@@ -58,7 +58,7 @@ export async function fetchRevenue({ startISO, endISO, branchName }: FetchParams
         .from('cashier_closings')
         .select('report_date, revenue_vnd, branch_name')
         .gte('report_date', startISO)
-        .lte('report_date', endISO)
+        .lt('report_date', endISO)
 
     if (branchName) q = q.eq('branch_name', branchName)
 
@@ -82,7 +82,7 @@ export async function fetchTotalCost({ startISO, endISO, branchName }: FetchPara
         .from('wastage_entries')
         .select('date, total_cost_vnd, branch_name')
         .gte('date', startISO)
-        .lte('date', endISO)
+        .lt('date', endISO)
 
     if (branchName) qWastage = qWastage.eq('branch_name', branchName)
 
@@ -91,7 +91,7 @@ export async function fetchTotalCost({ startISO, endISO, branchName }: FetchPara
         .from('cashout')
         .select('date, amount, branch')
         .gte('date', startISO)
-        .lte('date', endISO)
+        .lt('date', endISO)
 
     if (branchName) qCashout = qCashout.eq('branch', branchName)
 

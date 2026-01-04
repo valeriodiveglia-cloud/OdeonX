@@ -65,9 +65,10 @@ export default function ChartCard({ title, color, branches, fetchData, formatter
                 const month = selectedDate.getMonth()
                 const startDate = new Date(year, month, 1)
                 const endDate = new Date(year, month + 1, 0)
+                const nextMonthStart = new Date(year, month + 1, 1)
                 const p = (n: number) => String(n).padStart(2, '0')
                 const startISO = `${startDate.getFullYear()}-${p(startDate.getMonth() + 1)}-${p(startDate.getDate())}`
-                const endISO = `${endDate.getFullYear()}-${p(endDate.getMonth() + 1)}-${p(endDate.getDate())}`
+                const endISO = `${nextMonthStart.getFullYear()}-${p(nextMonthStart.getMonth() + 1)}-${p(nextMonthStart.getDate())}`
 
                 const branchName = selectedBranch !== 'all' ? branches.find(b => b.id === selectedBranch)?.name || null : null
 
