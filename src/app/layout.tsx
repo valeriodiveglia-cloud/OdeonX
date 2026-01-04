@@ -6,6 +6,7 @@ import { SettingsProvider } from '@/contexts/SettingsContext'
 
 import { Be_Vietnam_Pro, Geist_Mono } from 'next/font/google'
 import ClientErrorGuard from '@/app/dev-error-guard'
+import AutoLogout from '@/components/AutoLogout'
 
 const beVietnam = Be_Vietnam_Pro({ subsets: ['vietnamese', 'latin'], weight: ['400', '500', '600', '700', '800'], display: 'swap', variable: '--font-be-vietnam' })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${beVietnam.variable} ${geistMono.variable} antialiased font-sans`} suppressHydrationWarning>
+        <AutoLogout />
         <ClientErrorGuard>
           <SettingsProvider>{children}</SettingsProvider>
         </ClientErrorGuard>

@@ -51,6 +51,8 @@ const vi = {
       totalCashOut: 'Tổng chi ra',
       totalToTake: 'Tiền cần lấy',
       totalRevenue: 'Tổng doanh thu',
+      totalCard: 'Tổng thẻ',
+      totalTransfer: 'Tổng chuyển khoản',
       averageRevenue: 'Doanh thu trung bình',
     },
 
@@ -63,6 +65,8 @@ const vi = {
         unpaid: 'Nợ',
         cashOut: 'Chi ra',
         cashToTake: 'Tiền cần lấy',
+        card: 'Thẻ',
+        transfer: 'Chuyển khoản',
         revenue: 'Doanh thu',
       },
       noResults: 'Không tìm thấy lượt chốt nào',

@@ -35,13 +35,36 @@ function Num({
       inputMode="decimal"
       min={min}
       step={step}
-      value={value === '' ? '' : Number.isFinite(value) ? value : 0}
+      value={value === '' || value === 0 ? '' : Number.isFinite(value) ? value : ''}
       onChange={(e) => {
         const raw = e.target.value
         if (raw === '') { onChange(NaN); return }
         onChange(Math.max(min, Math.floor(Number(raw || 0))))
       }}
-      placeholder={placeholder}
+      onFocus={(e) => e.target.select()}
+      onKeyDown={(e) => {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+          e.preventDefault()
+          const grid = e.currentTarget.closest('.cash-count-grid')
+          if (!grid) return
+          const inputs = Array.from(grid.querySelectorAll('input[type="number"]:not(:disabled)')) as HTMLInputElement[]
+          const index = inputs.indexOf(e.currentTarget)
+          if (index === -1) return
+
+          let nextIndex = index
+          if (e.key === 'ArrowRight') nextIndex = index + 1
+          if (e.key === 'ArrowLeft') nextIndex = index - 1
+          if (e.key === 'ArrowDown') nextIndex = index + 2
+          if (e.key === 'ArrowUp') nextIndex = index - 2
+
+          if (nextIndex >= 0 && nextIndex < inputs.length) {
+            inputs[nextIndex].focus()
+            // The browser's focus() might not select all in some cases, so we call it explicitly
+            inputs[nextIndex].select()
+          }
+        }
+      }}
+      placeholder={placeholder || '0'}
       className={`border rounded-lg px-2 w-full ${className} ${disabled ? 'bg-gray-50 text-gray-500' : ''}`}
       disabled={disabled}
     />
@@ -389,7 +412,7 @@ export default function CashCountCard(props: {
             <div className="text-right">{t.headers.subtotal}</div>
           </div>
 
-          <div className="divide-y">
+          <div className="divide-y cash-count-grid">
             {DENOMS.map(({ key, face }) => {
               const have = cash[key] || 0
               const keep = Math.max(0, have - (effectivePlan[key] || 0))

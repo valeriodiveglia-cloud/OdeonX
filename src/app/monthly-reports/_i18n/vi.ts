@@ -47,6 +47,8 @@ export const vi = {
             closings: 'Lượt chốt',
             totalUnpaid: 'Tổng nợ',
             totalCashOut: 'Tổng chi ra',
+            totalCard: 'Tổng thẻ',
+            totalTransfer: 'Tổng chuyển khoản',
             totalToTake: 'Tiền cần lấy',
             totalRevenue: 'Tổng doanh thu',
             averageRevenue: 'Doanh thu trung bình',

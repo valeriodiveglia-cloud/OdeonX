@@ -13,6 +13,8 @@ export type ClosingRow = {
   unpaid: number
   cashout: number
   cashToTake: number
+  card: number
+  transfer: number
   enteredBy?: string | null
 }
 
@@ -90,6 +92,8 @@ export function useClosingList({ year, month, branchName }: UseClosingListArgs) 
             'revenue_vnd',
             'unpaid_vnd',
             'cash_out_vnd',
+            'mpos_vnd',
+            'bank_transfer_ewallet_vnd',
             'cash_json',
             'float_plan_json',
             'cashier_name',
@@ -306,6 +310,8 @@ function mapDbRowToClosingRow(r: any): ClosingRow {
     unpaid,
     cashout,
     cashToTake,
+    card: toNum(r.mpos_vnd),
+    transfer: toNum(r.bank_transfer_ewallet_vnd),
     enteredBy: r.cashier_name ? String(r.cashier_name) : null,
   }
 }

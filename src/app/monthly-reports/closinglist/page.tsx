@@ -16,7 +16,7 @@ import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
 import { exportToCsv } from '@/lib/exportUtils'
 
-type SortKey = 'date' | 'dow' | 'time' | 'branch' | 'revenue' | 'unpaid' | 'cashout' | 'cashToTake'
+type SortKey = 'date' | 'dow' | 'time' | 'branch' | 'revenue' | 'unpaid' | 'cashout' | 'cashToTake' | 'card' | 'transfer'
 
 type Branch = { id: string; name: string }
 
@@ -94,9 +94,11 @@ export default function MonthlyClosingListPage() {
         const totalRevenue = sum(r => r.revenue)
         const totalUnpaid = sum(r => r.unpaid)
         const totalCashout = sum(r => r.cashout)
+        const totalCard = sum(r => r.card)
+        const totalTransfer = sum(r => r.transfer)
         const totalToTake = sum(r => r.cashToTake)
         const avgRevenue = count ? Math.round(totalRevenue / count) : 0
-        return { count, totalRevenue, totalUnpaid, totalCashout, totalToTake, avgRevenue }
+        return { count, totalRevenue, totalUnpaid, totalCashout, totalCard, totalTransfer, totalToTake, avgRevenue }
     }, [filtered])
 
     function prevMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), -1)) }
@@ -114,6 +116,8 @@ export default function MonthlyClosingListPage() {
             t.table.headers.branch,
             t.table.headers.unpaid,
             t.table.headers.cashOut,
+            t.table.headers.card,
+            t.table.headers.transfer,
             t.table.headers.cashToTake,
             t.table.headers.revenue
         ]
@@ -124,6 +128,8 @@ export default function MonthlyClosingListPage() {
             r.branch,
             r.unpaid,
             r.cashout,
+            r.card,
+            r.transfer,
             r.cashToTake,
             r.revenue
         ])
@@ -217,14 +223,16 @@ export default function MonthlyClosingListPage() {
                 </div>
             </div>
 
-            {/* KPI */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-3">
+            {/* Tiles KPI */}
+            <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
                 <StatPill label={t.kpi.closings} value={stats.count} />
-                <StatPill label={t.kpi.totalUnpaid} value={stats.totalUnpaid} money />
-                <StatPill label={t.kpi.totalCashOut} value={stats.totalCashout} money />
-                <StatPill label={t.kpi.totalToTake} value={stats.totalToTake} money />
                 <StatPill label={t.kpi.totalRevenue} value={stats.totalRevenue} money />
                 <StatPill label={t.kpi.averageRevenue} value={stats.avgRevenue} money />
+                <StatPill label={t.kpi.totalUnpaid} value={stats.totalUnpaid} money />
+                <StatPill label={t.kpi.totalCashOut} value={stats.totalCashout} money />
+                <StatPill label={t.kpi.totalCard} value={stats.totalCard} money />
+                <StatPill label={t.kpi.totalTransfer} value={stats.totalTransfer} money />
+                <StatPill label={t.kpi.totalToTake} value={stats.totalToTake} money />
             </div>
 
             {/* Table */}
@@ -232,12 +240,14 @@ export default function MonthlyClosingListPage() {
                 <table className="w-full table-auto text-sm text-gray-900">
                     <thead>
                         <tr>
-                            <Th label={t.table.headers.date} active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} />
-                            <Th label={t.table.headers.day} active={sortKey === 'dow'} asc={sortAsc} onClick={() => toggleSort('dow')} />
-                            <Th label={t.table.headers.time} active={sortKey === 'time'} asc={sortAsc} onClick={() => toggleSort('time')} />
-                            <Th label={t.table.headers.branch} active={sortKey === 'branch'} asc={sortAsc} onClick={() => toggleSort('branch')} />
+                            <Th label={t.table.headers.date} active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} className="w-[100px]" center />
+                            <Th label={t.table.headers.day} active={sortKey === 'dow'} asc={sortAsc} onClick={() => toggleSort('dow')} className="w-[50px]" center />
+                            <Th label={t.table.headers.time} active={sortKey === 'time'} asc={sortAsc} onClick={() => toggleSort('time')} className="w-[70px]" center />
+                            <Th label={t.table.headers.branch} active={sortKey === 'branch'} asc={sortAsc} onClick={() => toggleSort('branch')} className="w-[180px]" center />
                             <Th label={t.table.headers.unpaid} active={sortKey === 'unpaid'} asc={sortAsc} onClick={() => toggleSort('unpaid')} right />
                             <Th label={t.table.headers.cashOut} active={sortKey === 'cashout'} asc={sortAsc} onClick={() => toggleSort('cashout')} right />
+                            <Th label={t.table.headers.card} active={sortKey === 'card'} asc={sortAsc} onClick={() => toggleSort('card')} right />
+                            <Th label={t.table.headers.transfer} active={sortKey === 'transfer'} asc={sortAsc} onClick={() => toggleSort('transfer')} right />
                             <Th label={t.table.headers.cashToTake} active={sortKey === 'cashToTake'} asc={sortAsc} onClick={() => toggleSort('cashToTake')} right />
                             <Th label={t.table.headers.revenue} active={sortKey === 'revenue'} asc={sortAsc} onClick={() => toggleSort('revenue')} right />
                         </tr>
@@ -245,7 +255,7 @@ export default function MonthlyClosingListPage() {
                     <tbody>
                         {filtered.length === 0 && (
                             <tr>
-                                <td colSpan={8} className="text-center text-gray-500 py-6">
+                                <td colSpan={10} className="text-center text-gray-500 py-6">
                                     {t.table.noResults}
                                 </td>
                             </tr>
@@ -256,23 +266,27 @@ export default function MonthlyClosingListPage() {
                                 className="border-t hover:bg-blue-50/40 cursor-pointer"
                                 onClick={() => router.push(`/daily-reports/cashier-closing?id=${r.id}&mode=readonly`)}
                             >
-                                <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
-                                <td className="p-2 whitespace-nowrap lowercase font-mono">{dow3(r.date)}</td>
-                                <td className="p-2 whitespace-nowrap">{r.time}</td>
-                                <td className="p-2 whitespace-nowrap">{r.branch}</td>
+                                <td className="p-2 truncate max-w-[100px] text-center" title={formatDMY(r.date)}>{formatDMY(r.date)}</td>
+                                <td className="p-2 lowercase font-mono text-center truncate max-w-[50px]" title={dow3(r.date)}>{dow3(r.date)}</td>
+                                <td className="p-2 text-center truncate max-w-[70px]" title={r.time}>{r.time}</td>
+                                <td className="p-2 truncate max-w-[180px] text-center" title={r.branch}>{r.branch}</td>
                                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.unpaid)}</td>
                                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.cashout)}</td>
-                                <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.cashToTake)}</td>
+                                <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.card)}</td>
+                                <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.transfer)}</td>
+                                <td className="p-2 whitespace-nowrap text-right tabular-nums font-bold">{fmt(r.cashToTake)}</td>
                                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.revenue)}</td>
                             </tr>
                         ))}
                         {filtered.length > 0 && (
                             <tr className="border-t bg-gray-50 font-semibold">
                                 <td className="p-2" colSpan={4}>{t.table.totals}</td>
-                                <td className="p-2 text-right">{fmt(stats.totalUnpaid)}</td>
-                                <td className="p-2 text-right">{fmt(stats.totalCashout)}</td>
-                                <td className="p-2 text-right">{fmt(stats.totalToTake)}</td>
-                                <td className="p-2 text-right">{fmt(stats.totalRevenue)}</td>
+                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalUnpaid)}</td>
+                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalCashout)}</td>
+                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalCard)}</td>
+                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalTransfer)}</td>
+                                <td className="p-2 text-right font-bold border-t border-blue-400/20 bg-blue-100/10 underline decoration-blue-500/30">{fmt(stats.totalToTake)}</td>
+                                <td className="p-2 text-right font-bold border-t border-blue-400/20">{fmt(stats.totalRevenue)}</td>
                             </tr>
                         )}
                     </tbody>
@@ -283,12 +297,17 @@ export default function MonthlyClosingListPage() {
 }
 
 /* --- Helpers UI --- */
-function Th({ label, active, asc, onClick, right }: { label: string; active: boolean; asc: boolean; onClick: () => void; right?: boolean }) {
+function Th({ label, active, asc, onClick, right, className = '', center }: { label: string; active: boolean; asc: boolean; onClick: () => void; right?: boolean; className?: string; center?: boolean }) {
     return (
-        <th className={`p-2 ${right ? 'text-right' : ''}`}>
-            <button onClick={onClick} className="w-full flex items-center gap-1 font-semibold cursor-pointer">
-                {!right && <SortIcon active={active} asc={asc} />}
+        <th className={`p-2 ${right ? 'text-right' : ''} ${className}`}>
+            <button
+                onClick={onClick}
+                className={`w-full flex items-center gap-1 font-semibold cursor-pointer ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}
+            >
+                {(!right && !center) && <SortIcon active={active} asc={asc} />}
+                {center && active && !asc && <SortIcon active={active} asc={asc} />}
                 <span>{label}</span>
+                {center && active && asc && <SortIcon active={active} asc={asc} />}
                 {right && <SortIcon active={active} asc={asc} />}
             </button>
         </th>
@@ -324,6 +343,8 @@ function sortValue(r: ClosingRow, key: SortKey) {
         case 'unpaid': return r.unpaid
         case 'cashout': return r.cashout
         case 'cashToTake': return r.cashToTake
+        case 'card': return r.card
+        case 'transfer': return r.transfer
         default: return 0
     }
 }

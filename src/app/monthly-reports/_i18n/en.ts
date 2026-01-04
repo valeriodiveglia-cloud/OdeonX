@@ -47,6 +47,8 @@ export const en = {
             closings: 'Closings',
             totalUnpaid: 'Total unpaid',
             totalCashOut: 'Total cash out',
+            totalCard: 'Total card',
+            totalTransfer: 'Total transfer',
             totalToTake: 'Cash to take',
             totalRevenue: 'Total revenue',
             averageRevenue: 'Average revenue',

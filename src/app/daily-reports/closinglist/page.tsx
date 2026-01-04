@@ -18,7 +18,7 @@ import { getDailyReportsDictionary } from '../_i18n'
 
 type SortKey =
   | 'date' | 'dow' | 'time' | 'branch'
-  | 'revenue' | 'unpaid' | 'cashout' | 'cashToTake'
+  | 'revenue' | 'unpaid' | 'cashout' | 'cashToTake' | 'card' | 'transfer'
 
 /* ---------- Branch badge helpers ---------- */
 type SelectedBranch = { id?: string | null; name: string; address?: string }
@@ -179,9 +179,11 @@ export default function ClosingListPage() {
     const totalRevenue = sum(r => r.revenue)
     const totalUnpaid = sum(r => r.unpaid)
     const totalCashout = sum(r => r.cashout)
+    const totalCard = sum(r => r.card)
+    const totalTransfer = sum(r => r.transfer)
     const totalToTake = sum(r => r.cashToTake)
     const avgRevenue = count ? Math.round(totalRevenue / count) : 0
-    return { count, totalRevenue, totalUnpaid, totalCashout, totalToTake, avgRevenue }
+    return { count, totalRevenue, totalUnpaid, totalCashout, totalCard, totalTransfer, totalToTake, avgRevenue }
   }, [filtered])
 
   function goToCloseDay() {
@@ -348,14 +350,16 @@ export default function ClosingListPage() {
         </div>
       </div>
 
-      {/* KPI */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-3">
+      {/* Tiles KPI */}
+      <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
         <StatPill label={t.kpi.closings} value={stats.count} />
-        <StatPill label={t.kpi.totalUnpaid} value={stats.totalUnpaid} money />
-        <StatPill label={t.kpi.totalCashOut} value={stats.totalCashout} money />
-        <StatPill label={t.kpi.totalToTake} value={stats.totalToTake} money />
         <StatPill label={t.kpi.totalRevenue} value={stats.totalRevenue} money />
         <StatPill label={t.kpi.averageRevenue} value={stats.avgRevenue} money />
+        <StatPill label={t.kpi.totalUnpaid} value={stats.totalUnpaid} money />
+        <StatPill label={t.kpi.totalCashOut} value={stats.totalCashout} money />
+        <StatPill label={t.kpi.totalCard} value={stats.totalCard} money />
+        <StatPill label={t.kpi.totalTransfer} value={stats.totalTransfer} money />
+        <StatPill label={t.kpi.totalToTake} value={stats.totalToTake} money />
       </div>
 
       {/* Tabella */}
@@ -375,12 +379,14 @@ export default function ClosingListPage() {
                   />
                 </th>
               ) : null}
-              <Th label={t.table.headers.date} active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} />
-              <Th label={t.table.headers.day} active={sortKey === 'dow'} asc={sortAsc} onClick={() => toggleSort('dow')} />
-              <Th label={t.table.headers.time} active={sortKey === 'time'} asc={sortAsc} onClick={() => toggleSort('time')} />
-              <Th label={t.table.headers.branch} active={sortKey === 'branch'} asc={sortAsc} onClick={() => toggleSort('branch')} />
+              <Th label={t.table.headers.date} active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} className="w-[100px]" center />
+              <Th label={t.table.headers.day} active={sortKey === 'dow'} asc={sortAsc} onClick={() => toggleSort('dow')} className="w-[50px]" center />
+              <Th label={t.table.headers.time} active={sortKey === 'time'} asc={sortAsc} onClick={() => toggleSort('time')} className="w-[70px]" center />
+              <Th label={t.table.headers.branch} active={sortKey === 'branch'} asc={sortAsc} onClick={() => toggleSort('branch')} className="w-[180px]" center />
               <Th label={t.table.headers.unpaid} active={sortKey === 'unpaid'} asc={sortAsc} onClick={() => toggleSort('unpaid')} right />
               <Th label={t.table.headers.cashOut} active={sortKey === 'cashout'} asc={sortAsc} onClick={() => toggleSort('cashout')} right />
+              <Th label={t.table.headers.card} active={sortKey === 'card'} asc={sortAsc} onClick={() => toggleSort('card')} right />
+              <Th label={t.table.headers.transfer} active={sortKey === 'transfer'} asc={sortAsc} onClick={() => toggleSort('transfer')} right />
               <Th label={t.table.headers.cashToTake} active={sortKey === 'cashToTake'} asc={sortAsc} onClick={() => toggleSort('cashToTake')} right />
               <Th label={t.table.headers.revenue} active={sortKey === 'revenue'} asc={sortAsc} onClick={() => toggleSort('revenue')} right />
             </tr>
@@ -388,7 +394,7 @@ export default function ClosingListPage() {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={selectMode ? 9 : 8} className="text-center text-gray-500 py-6">
+                <td colSpan={selectMode ? 10 : 9} className="text-center text-gray-500 py-6">
                   {t.table.noResults}
                 </td>
               </tr>
@@ -414,13 +420,15 @@ export default function ClosingListPage() {
                     />
                   </td>
                 ) : null}
-                <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
-                <td className="p-2 whitespace-nowrap lowercase font-mono">{dow3(r.date)}</td>
-                <td className="p-2 whitespace-nowrap">{r.time}</td>
-                <td className="p-2 whitespace-nowrap">{r.branch}</td>
+                <td className="p-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px] text-center">{formatDMY(r.date)}</td>
+                <td className="p-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[50px] text-center lowercase font-mono">{dow3(r.date)}</td>
+                <td className="p-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[70px] text-center">{r.time}</td>
+                <td className="p-2 truncate max-w-[180px] text-center" title={r.branch}>{r.branch}</td>
                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.unpaid)}</td>
                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.cashout)}</td>
-                <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.cashToTake)}</td>
+                <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.card)}</td>
+                <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.transfer)}</td>
+                <td className="p-2 whitespace-nowrap text-right tabular-nums font-bold">{fmt(r.cashToTake)}</td>
                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.revenue)}</td>
               </tr>
             ))}
@@ -429,6 +437,8 @@ export default function ClosingListPage() {
                 <td className="p-2" colSpan={selectMode ? 5 : 4}>{t.table.totals}</td>
                 <td className="p-2 text-right">{fmt(stats.totalUnpaid)}</td>
                 <td className="p-2 text-right">{fmt(stats.totalCashout)}</td>
+                <td className="p-2 font-bold text-right tabular-nums border-t border-blue-400/20">{fmt(stats.totalCard)}</td>
+                <td className="p-2 font-bold text-right tabular-nums border-t border-blue-400/20">{fmt(stats.totalTransfer)}</td>
                 <td className="p-2 text-right">{fmt(stats.totalToTake)}</td>
                 <td className="p-2 text-right">{fmt(stats.totalRevenue)}</td>
               </tr>
@@ -437,59 +447,62 @@ export default function ClosingListPage() {
         </table>
       </div>
 
-      {confirmOpen && (
-        <Modal
-          title={t.modal.title}
-          onClose={() => setConfirmOpen(false)}
-          footer={
-            <>
-              <button
-                onClick={() => setConfirmOpen(false)}
-                className="px-4 py-2 rounded-lg border hover:opacity-80"
-              >
-                {t.modal.cancel}
-              </button>
-              <button
-                onClick={performDeleteSelected}
-                disabled={confirmText.trim() !== REQUIRED_WORD}
-                className={`px-4 py-2 rounded-lg ${confirmText.trim() === REQUIRED_WORD
-                  ? 'bg-red-600 text-white hover:opacity-90'
-                  : 'bg-red-600/40 text-white/80 cursor-not-allowed'
-                  }`}
-              >
-                {t.modal.confirm}
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-3">
-            <p>{t.modal.permanent}</p>
-            <p>{deleteSummary}</p>
-            <p className="text-sm text-gray-600">
-              {deleteTypeHint}
-            </p>
-            <input
-              autoFocus
-              value={confirmText}
-              onChange={e => setConfirmText(e.target.value)}
-              placeholder={deletePlaceholder}
-              className="w-full h-11 px-3 border rounded-lg bg-white"
-            />
-          </div>
-        </Modal>
-      )}
-    </div>
+      {
+        confirmOpen && (
+          <Modal
+            title={t.modal.title}
+            onClose={() => setConfirmOpen(false)}
+            footer={
+              <>
+                <button
+                  onClick={() => setConfirmOpen(false)}
+                  className="px-4 py-2 rounded-lg border hover:opacity-80"
+                >
+                  {t.modal.cancel}
+                </button>
+                <button
+                  onClick={performDeleteSelected}
+                  disabled={confirmText.trim() !== REQUIRED_WORD}
+                  className={`px-4 py-2 rounded-lg ${confirmText.trim() === REQUIRED_WORD
+                    ? 'bg-red-600 text-white hover:opacity-90'
+                    : 'bg-red-600/40 text-white/80 cursor-not-allowed'
+                    }`}
+                >
+                  {t.modal.confirm}
+                </button>
+              </>
+            }
+          >
+            <div className="space-y-3">
+              <p>{t.modal.permanent}</p>
+              <p>{deleteSummary}</p>
+              <p className="text-sm text-gray-600">
+                {deleteTypeHint}
+              </p>
+              <input
+                autoFocus
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value)}
+                placeholder={deletePlaceholder}
+                className="w-full h-11 px-3 border rounded-lg bg-white"
+              />
+            </div>
+          </Modal>
+        )
+      }
+    </div >
   )
 }
 
 /* --- Helpers UI --- */
-function Th({ label, active, asc, onClick, right }: { label: string; active: boolean; asc: boolean; onClick: () => void; right?: boolean }) {
+function Th({ label, active, asc, onClick, right, center, className = '' }: { label: string; active: boolean; asc: boolean; onClick: () => void; right?: boolean; center?: boolean; className?: string }) {
   return (
-    <th className={`p-2 ${right ? 'text-right' : ''}`}>
-      <button onClick={onClick} className={`w-full flex items-center gap-1 font-semibold cursor-pointer ${right ? 'justify-end' : ''}`}>
-        {!right && <SortIcon active={active} asc={asc} />}
+    <th className={`p-2 ${right ? 'text-right' : center ? 'text-center' : ''} ${className}`}>
+      <button onClick={onClick} className={`w-full flex items-center gap-1 font-semibold cursor-pointer ${right ? 'justify-end' : center ? 'justify-center' : ''}`}>
+        {!right && !center && <SortIcon active={active} asc={asc} />}
+        {center && <div className="w-4" />} {/* Placeholder for balance if needed, or just center text */}
         <span>{label}</span>
-        {right && <SortIcon active={active} asc={asc} />}
+        {(right || center) && <SortIcon active={active} asc={asc} />}
       </button>
     </th>
   )
@@ -524,6 +537,8 @@ function sortValue(r: ClosingRow, key: SortKey) {
     case 'unpaid': return r.unpaid
     case 'cashout': return r.cashout
     case 'cashToTake': return r.cashToTake
+    case 'card': return r.card
+    case 'transfer': return r.transfer
     default: return 0
   }
 }

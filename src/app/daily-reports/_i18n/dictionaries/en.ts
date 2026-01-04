@@ -51,6 +51,8 @@ const en = {
       totalCashOut: 'Total cash out',
       totalToTake: 'Cash to take',
       totalRevenue: 'Total revenue',
+      totalCard: 'Total card',
+      totalTransfer: 'Total transfer',
       averageRevenue: 'Average revenue',
     },
 
@@ -63,6 +65,8 @@ const en = {
         unpaid: 'Unpaid',
         cashOut: 'Cash out',
         cashToTake: 'Cash to take',
+        card: 'Card',
+        transfer: 'Transfer',
         revenue: 'Revenue',
       },
       noResults: 'No closings found',
