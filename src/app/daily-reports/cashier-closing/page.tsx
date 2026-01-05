@@ -314,6 +314,17 @@ export default function CashierClosingPage() {
         setCash(res.cash as CashShape)
         setFloatPlan(res.floatPlan as CashShape)
         setLastEditorName(res.lastEditorName || '')
+
+        const loadedSig = signatureOfState({
+          header: res.header,
+          floatTarget: res.floatTarget,
+          payments: res.payments,
+          payouts: res.payouts,
+          deposits: res.deposits,
+          cash: res.cash as CashShape,
+          floatPlan: res.floatPlan as CashShape,
+        })
+        setServerSigOverride(loadedSig)
       })()
     return () => { cancelled = true }
   }, [lukeId, lukeLoad])
@@ -337,6 +348,17 @@ export default function CashierClosingPage() {
     setCash(res.cash as CashShape)
     setFloatPlan(res.floatPlan as CashShape)
     setLastEditorName(res.lastEditorName || '')
+
+    const loadedSig = signatureOfState({
+      header: res.header,
+      floatTarget: res.floatTarget,
+      payments: res.payments,
+      payouts: res.payouts,
+      deposits: res.deposits,
+      cash: res.cash as CashShape,
+      floatPlan: res.floatPlan as CashShape,
+    })
+    setServerSigOverride(loadedSig)
   }, [lukeId, lukeLoad])
 
   useEffect(() => {
