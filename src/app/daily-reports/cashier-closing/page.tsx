@@ -314,6 +314,10 @@ export default function CashierClosingPage() {
         setCash(res.cash as CashShape)
         setFloatPlan(res.floatPlan as CashShape)
         setLastEditorName(res.lastEditorName || '')
+        if (res.updatedAt) {
+          const ts = new Date(res.updatedAt).getTime()
+          if (!Number.isNaN(ts) && ts > 0) setLastSavedAtUI(ts)
+        }
 
         const loadedSig = signatureOfState({
           header: res.header,
@@ -348,6 +352,10 @@ export default function CashierClosingPage() {
     setCash(res.cash as CashShape)
     setFloatPlan(res.floatPlan as CashShape)
     setLastEditorName(res.lastEditorName || '')
+    if (res.updatedAt) {
+      const ts = new Date(res.updatedAt).getTime()
+      if (!Number.isNaN(ts) && ts > 0) setLastSavedAtUI(ts)
+    }
 
     const loadedSig = signatureOfState({
       header: res.header,

@@ -21,6 +21,7 @@ export type LukeLoadResult = {
   floatPlan: CashShape
   branchId: string | null
   lastEditorName?: string
+  updatedAt?: string
 }
 
 export type LukePayload = {
@@ -179,6 +180,7 @@ export function useCashierLuke(initialId?: string | null) {
           floatPlan,
           branchId: row.branch_id ? String(row.branch_id) : null,
           lastEditorName: '', // Will be filled below
+          updatedAt: row.updated_at || row.created_at || undefined,
         }
 
         // Resolve updated_by name
