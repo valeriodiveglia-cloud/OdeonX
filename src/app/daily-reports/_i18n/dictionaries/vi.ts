@@ -225,6 +225,7 @@ const vi = {
       netCash: 'Tiền mặt ròng',
       comment: 'Ghi chú',
       commentPlaceholder: 'Thêm ghi chú cho lượt chốt này...',
+      openingFloat: 'Quỹ đầu ca',
     },
     cashCount: {
       title: 'Kiểm đếm tiền',
