@@ -332,6 +332,8 @@ export default function InitialInfoCard(props: {
     liveMode,
     onChangeLiveMode,
     readOnly,
+    openingFloat,
+    onChangeOpeningFloat,
   } = props
   const { language } = useSettings()
   const t = getDailyReportsDictionary(language).cashierClosing.initialInfo
@@ -1007,7 +1009,15 @@ export default function InitialInfoCard(props: {
           </div>
 
           <div className="p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label className="flex flex-col gap-1 md:col-span-2">
+            {/* Opening Float + Revenue + Cash Out */}
+            <EditMoney
+              label={(t as any).openingFloat || 'Opening float'}
+              value={openingFloat}
+              onChange={onChangeOpeningFloat}
+              readOnly={readOnly}
+            />
+
+            <label className="flex flex-col gap-1 md:col-span-1">
               <span className="text-xs text-gray-600">{t.revenue}</span>
               <NumFmt
                 value={v(payments.revenue)}

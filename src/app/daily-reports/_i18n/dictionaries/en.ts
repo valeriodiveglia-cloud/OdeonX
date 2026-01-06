@@ -225,6 +225,7 @@ const en = {
       netCash: 'Net Cash',
       comment: 'Comment',
       commentPlaceholder: 'Add a note for this closing...',
+      openingFloat: 'Opening float',
     },
 
     cashCount: {
