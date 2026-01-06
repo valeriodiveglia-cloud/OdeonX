@@ -17,7 +17,6 @@ import { supabase } from '@/lib/supabase_shim'
 import { useCashierLuke } from '../_data/useCashierLuke'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getDailyReportsDictionary } from '../_i18n'
-import { useDailyReportSettings } from '../_data/useDailyReportSettings'
 
 // PDF libs
 import html2canvas from 'html2canvas-pro'
@@ -217,10 +216,8 @@ export default function CashierClosingPage() {
     notes: '',
   })
 
-  // Float target (State managed here)
+  // Float target
   const [floatTarget, setFloatTarget] = useState<number>(0)
-
-
 
   // Payments
   const [payments, setPayments] = useState<PaymentBreakdown>({
@@ -262,100 +259,6 @@ export default function CashierClosingPage() {
   // Live / Saved mode
   // If readonly, we are definitely NOT live.
   const [liveMode, setLiveMode] = useState<boolean>(() => !initialIdFromUrl && !isReadOnly)
-
-  // -- Float Target Resolution Logic --
-  const { settings } = useDailyReportSettings()
-  const DEFAULT_FLOAT = 3_000_000
-
-  /* Override live */
-  const [liveFloat, setLiveFloat] = useState<number | null>(null)
-
-  /* 0) all mount: leggi cache locale scritta dai Settings per navigazioni stessa tab */
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('dr.settings.cache') || ''
-      if (!raw) return
-      const parsed = JSON.parse(raw || '{}')
-      const v = Number(parsed?.cashFloatVND)
-      if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-    } catch { }
-  }, [])
-
-  /* 1) stessa tab: CustomEvent */
-  useEffect(() => {
-    function onLocal(e: Event) {
-      const ce = e as CustomEvent<any>
-      const v = Number(ce?.detail?.value)
-      if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-    }
-    window.addEventListener('dr:settings:cashFloatVND', onLocal as EventListener)
-    return () => window.removeEventListener('dr:settings:cashFloatVND', onLocal as EventListener)
-  }, [])
-
-  /* 2) cross-tab: storage bump */
-  useEffect(() => {
-    function onStorage(e: StorageEvent) {
-      if (e.key !== 'dr.settings.bump') return
-      try {
-        const raw = localStorage.getItem('dr.settings.cache') || ''
-        const parsed = JSON.parse(raw || '{}')
-        const v = Number(parsed?.cashFloatVND)
-        if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-      } catch { }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
-
-  /* 3) cross-tab: BroadcastChannel */
-  useEffect(() => {
-    let bc: BroadcastChannel | null = null
-    try {
-      bc = new BroadcastChannel('dr-settings')
-      bc.onmessage = (msg) => {
-        const d = msg?.data
-        if (d?.type === 'cashFloatVND') {
-          const v = Number(d?.value)
-          if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-        }
-      }
-    } catch { }
-    return () => { try { bc?.close() } catch { } }
-  }, [])
-
-  /* Valore dal DB (supporta shape piatta o nidificata) */
-  const dbFloat = useMemo(() => {
-    const s: any = settings || {}
-    const n = Number(
-      s?.cashFloatVND ??
-      s?.cash_count_vnd ??
-      s?.cashCount?.cashFloatVND ??
-      s?.cash_count?.cashFloatVND
-    )
-    return Number.isFinite(n) && n > 0 ? Math.round(n) : null
-  }, [settings])
-
-  /* Composizione finale del float */
-  const resolvedFloatTarget = useMemo(() => {
-    if (liveFloat != null) return liveFloat
-    if (dbFloat != null) return dbFloat
-    return DEFAULT_FLOAT
-  }, [liveFloat, dbFloat])
-
-  /* Se DB ha raggiunto l override, pulisci l override */
-  useEffect(() => {
-    if (liveFloat != null && dbFloat != null && liveFloat === dbFloat) {
-      setLiveFloat(null)
-    }
-  }, [liveFloat, dbFloat])
-
-  // Sync resolved float target to state ONLY IF we are in live mode (new record)
-  // If we loaded a record (lukeId exists), we trust the loaded floatTarget.
-  useEffect(() => {
-    if (liveMode) {
-      setFloatTarget(resolvedFloatTarget)
-    }
-  }, [liveMode, resolvedFloatTarget])
 
   const [lastEditorName, setLastEditorName] = useState<string>('')
   const [currentUserName, setCurrentUserName] = useState<string>('')
@@ -1080,7 +983,6 @@ export default function CashierClosingPage() {
           cashDiff={cashDiff}
           onClear={clearCounts}
           readOnly={isReadOnly}
-          floatTarget={floatTarget}
         />
 
         <SummaryCard

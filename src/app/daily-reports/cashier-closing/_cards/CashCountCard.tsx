@@ -142,17 +142,97 @@ export default function CashCountCard(props: {
   onClear: () => void
   rightActions?: ReactNode
   readOnly?: boolean
-  floatTarget: number
 }) {
   const {
     cash, onChangeCash, floatPlan, onChangeFloatPlan,
-    countedCash, expectedCash, cashDiff: _ignoredCashDiff, onClear, rightActions, readOnly,
-    floatTarget // New prop
+    countedCash, expectedCash, cashDiff: _ignoredCashDiff, onClear, rightActions, readOnly
   } = props
   const { language } = useSettings()
   const t = getDailyReportsDictionary(language).cashierClosing.cashCount
 
-  // Removed useDailyReportSettings hook usage here as logic is moved up
+  const { settings, loading } = useDailyReportSettings()
+
+  /* Override live */
+  const [liveFloat, setLiveFloat] = useState<number | null>(null)
+
+  /* 0) all mount: leggi cache locale scritta dai Settings per navigazioni stessa tab */
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('dr.settings.cache') || ''
+      if (!raw) return
+      const parsed = JSON.parse(raw || '{}')
+      const v = Number(parsed?.cashFloatVND)
+      if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
+    } catch { }
+  }, [])
+
+  /* 1) stessa tab: CustomEvent */
+  useEffect(() => {
+    function onLocal(e: Event) {
+      const ce = e as CustomEvent<any>
+      const v = Number(ce?.detail?.value)
+      if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
+    }
+    window.addEventListener('dr:settings:cashFloatVND', onLocal as EventListener)
+    return () => window.removeEventListener('dr:settings:cashFloatVND', onLocal as EventListener)
+  }, [])
+
+  /* 2) cross-tab: storage bump */
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key !== 'dr.settings.bump') return
+      try {
+        const raw = localStorage.getItem('dr.settings.cache') || ''
+        const parsed = JSON.parse(raw || '{}')
+        const v = Number(parsed?.cashFloatVND)
+        if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
+      } catch { }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  /* 3) cross-tab: BroadcastChannel */
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null
+    try {
+      bc = new BroadcastChannel('dr-settings')
+      bc.onmessage = (msg) => {
+        const d = msg?.data
+        if (d?.type === 'cashFloatVND') {
+          const v = Number(d?.value)
+          if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
+        }
+      }
+    } catch { }
+    return () => { try { bc?.close() } catch { } }
+  }, [])
+
+  /* Valore dal DB (supporta shape piatta o nidificata) */
+  const dbFloat = useMemo(() => {
+    const s: any = settings || {}
+    const n = Number(
+      s?.cashFloatVND ??
+      s?.cash_count_vnd ??
+      s?.cashCount?.cashFloatVND ??
+      s?.cash_count?.cashFloatVND
+    )
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : null
+  }, [settings])
+
+  /* Composizione finale del float */
+  const floatTarget = useMemo(() => {
+    if (liveFloat != null) return liveFloat
+    if (dbFloat != null) return dbFloat
+    return DEFAULT_FLOAT
+  }, [liveFloat, dbFloat])
+
+  /* Se DB ha raggiunto l override, pulisci l override */
+  useEffect(() => {
+    if (liveFloat != null && dbFloat != null && liveFloat === dbFloat) {
+      setLiveFloat(null)
+    }
+  }, [liveFloat, dbFloat])
 
   /* Plan logica */
   const [planActive, setPlanActive] = useState(false)
@@ -189,14 +269,6 @@ export default function CashCountCard(props: {
     }
     return plan
   }, [planActive, cash, floatTarget, floatPlan, edited])
-
-  /* Sync effectivePlan back to parent if it differs (and we are not editing actively) */
-  useEffect(() => {
-    const isSame = DENOMS.every(d => (floatPlan[d.key] || 0) === (effectivePlan[d.key] || 0))
-    if (!isSame) {
-      onChangeFloatPlan(effectivePlan)
-    }
-  }, [effectivePlan, floatPlan, onChangeFloatPlan])
 
   const totalToTake = useMemo(() => sumValue(effectivePlan), [effectivePlan])
 
@@ -299,7 +371,10 @@ export default function CashCountCard(props: {
           rightActions ?? (
             <div className="flex items-center gap-2">
               <span
-                className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 ring-1 ring-gray-200"
+                className={`text-xs px-2 py-0.5 rounded-full ${loading
+                  ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
+                  : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
+                  }`}
                 title={t.floatTargetTitle}
               >
                 {t.floatTargetPrefix} {formatVND(floatTarget)} VND
@@ -422,6 +497,5 @@ export default function CashCountCard(props: {
         </div>
       </div>
     </Card>
-
   )
 }
