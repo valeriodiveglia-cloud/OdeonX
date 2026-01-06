@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useDailyReportSettings } from '../_data/useDailyReportSettings'
+import { useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
 import { DailyReportsDictionary } from '../_i18n'
 
 const SECTION_KEY = 'cashcount'
@@ -73,7 +73,7 @@ function MoneyInput(props: {
     requestAnimationFrame(() => {
       try {
         el?.select()
-      } catch {}
+      } catch { }
     })
   }
 
@@ -102,50 +102,67 @@ function MoneyInput(props: {
 /* ===== Main ===== */
 export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary['dailyreportsettings']['cashCount'] }) {
   const {
-    branchName,
-    cashFloatVND: serverFloatVND,
+    settings,
     loading,
-    error,
-    saveCashFloatVND,
+    updateDraft,
     refresh,
-  } = useDailyReportSettings()
+    error,
+    isDirty,
+  } = useDailyReportSettingsContext()
 
   // Stato locale di editing
   const [data, setData] = useState<number>(DEFAULT_FLOAT)
-  const [dbSnap, setDbSnap] = useState<number>(DEFAULT_FLOAT)
 
-  // Flags per gestione sync
+  // Sincronizza dai dati del context (che è la source of truth durante l'editing)
+  const serverFloatVND = settings?.cashCount?.cashFloatVND
+
   const [initialLoadDone, setInitialLoadDone] = useState(false)
-  const [userEdited, setUserEdited] = useState(false)
 
-  // Sincronizza dai dati del server:
-  // - Primo load: UI segue sempre il DB
-  // - Dopo: aggiorna solo se l'utente non ha modificato
+  // Load iniziale dal context
   useEffect(() => {
     if (loading) return
-
     const v = Number(serverFloatVND)
     const safe = Number.isFinite(v) && v > 0 ? Math.round(v) : DEFAULT_FLOAT
 
+    // Se non abbiamo ancora caricato, o se il server cambia (e.g. reload), aggiorniamo
+    // Ma attenzione a non sovrascrivere mentre l'utente digita. 
+    // Usiamo initialLoadDone per farlo una volta sola all'attivazione o reset.
     if (!initialLoadDone) {
       setInitialLoadDone(true)
-      setUserEdited(false)
-      setDbSnap(safe)
-      setData(safe)
-      return
-    }
-
-    setDbSnap(safe)
-    if (!userEdited) {
       setData(safe)
     }
-  }, [serverFloatVND, loading, initialLoadDone, userEdited])
+  }, [serverFloatVND, loading, initialLoadDone])
 
-  const isDirty = useMemo(
-    () => Math.round(dbSnap) !== Math.round(data),
-    [dbSnap, data],
-  )
+  // Listener universali per reset/reload (gestiti dalla pagina, ma qui resettiamo lo stato locale)
+  useEffect(() => {
+    async function onReload() {
+      await refresh()
+      setInitialLoadDone(false)
+    }
+    function onDefaults() {
+      const snap = DEFAULT_FLOAT
+      setData(snap)
+      updateDraft('cashCount', { cashFloatVND: snap })
+      announceDirty(true)
+    }
+    window.addEventListener('dailysettings:reload', onReload)
+    window.addEventListener('dailysettings:reset-to-defaults', onDefaults)
+    return () => {
+      window.removeEventListener('dailysettings:reload', onReload)
+      window.removeEventListener('dailysettings:reset-to-defaults', onDefaults)
+    }
+  }, [refresh])
 
+  const setFloat = (v: number) => {
+    const val = Math.max(0, Math.round(v))
+    setData(val)
+    updateDraft('cashCount', { cashFloatVND: val })
+    announceDirty(true)
+  }
+
+  // Sporco? Lo lasciamo gestire alla pagina / context, ma emettiamo evento per i badge locali se vogliamo.
+  // In realtà il context sa se è sporco rispetto all'originale.
+  // Qui emettiamo solo "ho toccato qualcosa" per la UI della card.
   const announceDirty = (dirty: boolean) => {
     try {
       window.dispatchEvent(
@@ -153,102 +170,13 @@ export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary
           detail: { section: SECTION_KEY, dirty },
         }),
       )
-    } catch {}
+    } catch { }
   }
 
-  useEffect(() => {
-    announceDirty(isDirty)
-  }, [isDirty])
+  // Rimosso blocco onSave locale e broadcast manuale.
+  // Ci affidiamo a DailyReportSettingsContext.saveAll() richiamato dalla Page.
 
-  // Broadcast immediato verso CashCount del closing, per branch
-  function broadcastCashFloat(value: number | null) {
-    const cleanBranch = (branchName || '').trim()
-    if (!cleanBranch) return
 
-    try {
-      const raw = localStorage.getItem(FLOAT_CACHE_KEY) || ''
-      let obj: Record<string, number | null> = {}
-      if (raw) {
-        try {
-          obj = JSON.parse(raw) || {}
-        } catch {
-          obj = {}
-        }
-      }
-      obj[cleanBranch] = value ?? null
-      localStorage.setItem(FLOAT_CACHE_KEY, JSON.stringify(obj))
-      localStorage.setItem('dr.settings.bump', String(Date.now()))
-    } catch {}
-
-    try {
-      window.dispatchEvent(
-        new CustomEvent('dr:settings:cashFloatVND', {
-          detail: { branch: cleanBranch, value },
-        }),
-      )
-    } catch {}
-
-    try {
-      const bc = new BroadcastChannel('dr-settings')
-      bc.postMessage({ type: 'cashFloatVND', branch: cleanBranch, value })
-      bc.close()
-    } catch {}
-  }
-
-  // Save Bar listeners
-  useEffect(() => {
-    async function onSave() {
-      const toSave = Math.max(0, Math.round(data))
-
-      // Aggiorna subito cache locale per questo branch
-      broadcastCashFloat(toSave)
-
-      try {
-        await saveCashFloatVND(toSave)
-        setDbSnap(toSave)
-        setUserEdited(false)
-        announceDirty(false)
-        window.dispatchEvent(
-          new CustomEvent('dailysettings:saved', {
-            detail: { section: SECTION_KEY, ok: true },
-          }),
-        )
-      } catch {
-        window.dispatchEvent(
-          new CustomEvent('dailysettings:saved', {
-            detail: { section: SECTION_KEY, ok: false },
-          }),
-        )
-      }
-    }
-
-    async function onReload() {
-      await refresh()
-      setInitialLoadDone(false)
-      setUserEdited(false)
-    }
-
-    function onDefaults() {
-      const snap = DEFAULT_FLOAT
-      setUserEdited(true)
-      setData(snap)
-      announceDirty(true)
-    }
-
-    window.addEventListener('dailysettings:save', onSave)
-    window.addEventListener('dailysettings:reload', onReload)
-    window.addEventListener('dailysettings:reset-to-defaults', onDefaults)
-    return () => {
-      window.removeEventListener('dailysettings:save', onSave)
-      window.removeEventListener('dailysettings:reload', onReload)
-      window.removeEventListener('dailysettings:reset-to-defaults', onDefaults)
-    }
-  }, [data, saveCashFloatVND, refresh, branchName])
-
-  const setFloat = (v: number) => {
-    setUserEdited(true)
-    setData(Math.max(0, Math.round(v)))
-  }
 
   return (
     <Card>
@@ -256,15 +184,14 @@ export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary
         title={t.title}
         right={
           <span
-            className={`text-xs px-2 py-0.5 rounded-full ${
-              loading
-                ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
-                : isDirty
+            className={`text-xs px-2 py-0.5 rounded-full ${loading
+              ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
+              : isDirty
                 ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
                 : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
-            }`}
+              }`}
           >
-            {loading ? t.status.loading : isDirty ? t.status.dirty : t.status.clean}
+            {loading ? t.status.loading : t.status.clean}
           </span>
         }
       />
@@ -272,7 +199,7 @@ export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary
       <div className="p-3 space-y-4">
         {error && (
           <div className="rounded-lg border border-red-300 bg-red-50 text-red-800 px-3 py-2 text-sm">
-            {t.errors.loadFailed}
+            {error || 'Load Error'}
           </div>
         )}
 

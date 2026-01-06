@@ -40,7 +40,7 @@ function normalizeCategories(list: string[] | undefined | null): string[] {
 }
 
 const DEFAULT_CASHOUT_CATEGORIES: string[] = ['Petty cash', 'Maintenance', 'Misc']
-const DEFAULT_FLOAT = 3_000_000
+export const DEFAULT_FLOAT = 3_000_000
 const FLOAT_CACHE_KEY = 'dr.settings.cashFloatByBranch'
 
 export function useDailyReportSettings() {
@@ -110,11 +110,25 @@ export function useDailyReportSettings() {
       const b = (ce?.detail?.branch || '').trim()
       if (!b || b !== branchName) return
       const v = Number(ce?.detail?.value)
+      // Update local cache
       if (Number.isFinite(v) && v > 0) {
         setCachedFloat(Math.round(v))
       } else {
         setCachedFloat(null)
       }
+
+      // Update Row to reflect change immediately
+      setRow(prev => {
+        if (!prev) return null
+        const nextSettings = {
+          ...(prev.settings || {}),
+          cashCount: {
+            ...(prev.settings?.cashCount || {}),
+            cashFloatVND: Number.isFinite(v) && v > 0 ? Math.round(v) : undefined
+          }
+        }
+        return { ...prev, settings: nextSettings }
+      })
     }
 
     let bc: BroadcastChannel | null = null
@@ -122,6 +136,8 @@ export function useDailyReportSettings() {
       bc = new BroadcastChannel('dr-settings')
       bc.onmessage = msg => {
         const d = msg?.data
+
+        // Legacy broadcast support
         if (d?.type === 'cashFloatVND') {
           const b = (d.branch || '').trim()
           if (!b || b !== branchName) return
@@ -131,6 +147,45 @@ export function useDailyReportSettings() {
           } else {
             setCachedFloat(null)
           }
+
+          // Update Row
+          setRow(prev => {
+            if (!prev) return null
+            const nextSettings = {
+              ...(prev.settings || {}),
+              cashCount: {
+                ...(prev.settings?.cashCount || {}),
+                cashFloatVND: Number.isFinite(v) && v > 0 ? Math.round(v) : undefined
+              }
+            }
+            return { ...prev, settings: nextSettings }
+          })
+        }
+
+        // Context broadcast (full settings)
+        if (d?.type === 'update') {
+          const b = (d.branch || '').trim()
+          if (!b || b !== branchName) return
+
+          // Update cache if float changed
+          const val = Number(d.settings?.cashCount?.cashFloatVND)
+          if (Number.isFinite(val) && val > 0) {
+            setCachedFloat(Math.round(val))
+          } else if (d.settings?.cashCount) {
+            setCachedFloat(null)
+          }
+
+          // Update Row with full settings
+          setRow(prev => {
+            // If we don't have a row yet (loading), we can't fully construct it, 
+            // but we can update cache which is enough for loading state.
+            // If we DO have a row, update it.
+            if (!prev) return null
+            return {
+              ...prev,
+              settings: d.settings || {}
+            }
+          })
         }
       }
     } catch {
@@ -237,13 +292,17 @@ export function useDailyReportSettings() {
       branchName,
     )
 
-    // Se ho un valore in cache per questo branch, preferisco quello
-    if (cachedFloat != null && Number.isFinite(cachedFloat) && cachedFloat > 0) {
-      return Math.round(cachedFloat)
+    // Se stiamo caricando (row == null), usiamo la cache per evitare flash
+    if (!row) {
+      if (cachedFloat != null && Number.isFinite(cachedFloat) && cachedFloat > 0) {
+        return Math.round(cachedFloat)
+      }
     }
 
+    // Se abbiamo caricato il DB (row != null), usiamo il valore DB.
+    // Il safeDb è calcolato sopra dai settings del row.
     return safeDb
-  }, [settings, cachedFloat, branchName])
+  }, [settings, cachedFloat, branchName, row])
 
   const cashOutCategories = useMemo<string[]>(() => {
     const norm = normalizeCategories(settings?.cashOut?.categories)

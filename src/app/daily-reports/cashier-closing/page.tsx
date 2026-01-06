@@ -517,26 +517,39 @@ export default function CashierClosingPage() {
   }
 
   function resetAll() {
-    setHeader({ dateStr: todayISO(), shift: '', cashier: '', notes: '' })
-    setFloatTarget(0)
-    setPayments({
-      revenue: 0,
-      gojek: 0,
-      grab: 0,
-      mpos: 0,
-      unpaid: 0,
-      setOffDebt: 0,
-      capichi: 0,
-      bankTransferEwallet: 0,
-      cashOut: 0,
-      repaymentsCashCard: 0,
-      repaymentsCashOnly: 0,
-    } as PaymentBreakdown)
+    // Clean up local storage for the current scope before changing header/state if needed,
+    // but actually we want to clear it for the *target* scope (which is usually the same if date is today).
+    // Let's clear the CURRENT scope first.
+    try {
+      localStorage.removeItem(savedSigKey(scope))
+      localStorage.removeItem(lastSavedKey(scope))
+    } catch { }
+
+    // Preserve header context (Date, Shift, Cashier), only clear notes
+    // If cashier is missing, try to restore current user
+    setHeader(prev => ({
+      ...prev,
+      notes: '',
+      cashier: prev.cashier || currentUserName
+    }))
+
+    // Do NOT reset floatTarget (it comes from InitialInfoCard/DB)
+    // setFloatTarget(0)
+
+    // Do NOT reset payments (Revenue, etc., come from other modules)
+    // setPayments(...)
+
     setPayouts(0)
     setDeposits(0)
     setDepositsCash(0)
     clearCounts()
     setLiveMode(true)
+
+    // Clear UI state for saved status
+    setLastSavedAtUI(null)
+    setServerSigOverride(null)
+    sigServerRawRef.current = ''
+    setLastEditorName('')
   }
 
   async function exportPDF() {

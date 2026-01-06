@@ -283,6 +283,8 @@ function toISODate(d: Date) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+import { DEFAULT_FLOAT } from './useDailyReportSettings'
+
 function mapDbRowToClosingRow(r: any): ClosingRow {
   const date = String(r.report_date)
 
@@ -292,7 +294,9 @@ function mapDbRowToClosingRow(r: any): ClosingRow {
   const revenue = toNum(r.revenue_vnd)
   const unpaid = toNum(r.unpaid_vnd)
   const cashout = toNum(r.cash_out_vnd)
-  const floatTarget = toNum(r.opening_float_vnd)
+  // Fix: se il DB ha 0 (bug vecchio save), assumiamo float di default 3M per calcolo display,
+  // allineandoci alla logica di CashCountCard.
+  const floatTarget = toNum(r.opening_float_vnd) || DEFAULT_FLOAT
   const countedCash = cashFromJson(r.cash_json)
 
   // Prefer float_plan_json if it has a total > 0

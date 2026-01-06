@@ -150,63 +150,9 @@ export default function CashCountCard(props: {
   const { language } = useSettings()
   const t = getDailyReportsDictionary(language).cashierClosing.cashCount
 
-  const { settings, loading } = useDailyReportSettings()
+  const { settings, loading, branchName } = useDailyReportSettings()
 
-  /* Override live */
-  const [liveFloat, setLiveFloat] = useState<number | null>(null)
-
-  /* 0) all mount: leggi cache locale scritta dai Settings per navigazioni stessa tab */
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('dr.settings.cache') || ''
-      if (!raw) return
-      const parsed = JSON.parse(raw || '{}')
-      const v = Number(parsed?.cashFloatVND)
-      if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-    } catch { }
-  }, [])
-
-  /* 1) stessa tab: CustomEvent */
-  useEffect(() => {
-    function onLocal(e: Event) {
-      const ce = e as CustomEvent<any>
-      const v = Number(ce?.detail?.value)
-      if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-    }
-    window.addEventListener('dr:settings:cashFloatVND', onLocal as EventListener)
-    return () => window.removeEventListener('dr:settings:cashFloatVND', onLocal as EventListener)
-  }, [])
-
-  /* 2) cross-tab: storage bump */
-  useEffect(() => {
-    function onStorage(e: StorageEvent) {
-      if (e.key !== 'dr.settings.bump') return
-      try {
-        const raw = localStorage.getItem('dr.settings.cache') || ''
-        const parsed = JSON.parse(raw || '{}')
-        const v = Number(parsed?.cashFloatVND)
-        if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-      } catch { }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
-
-  /* 3) cross-tab: BroadcastChannel */
-  useEffect(() => {
-    let bc: BroadcastChannel | null = null
-    try {
-      bc = new BroadcastChannel('dr-settings')
-      bc.onmessage = (msg) => {
-        const d = msg?.data
-        if (d?.type === 'cashFloatVND') {
-          const v = Number(d?.value)
-          if (Number.isFinite(v) && v > 0) setLiveFloat(Math.round(v))
-        }
-      }
-    } catch { }
-    return () => { try { bc?.close() } catch { } }
-  }, [])
+  /* Override live logic removed (redundant with useDailyReportSettings broadcast support) */
 
   /* Valore dal DB (supporta shape piatta o nidificata) */
   const dbFloat = useMemo(() => {
@@ -222,17 +168,9 @@ export default function CashCountCard(props: {
 
   /* Composizione finale del float */
   const floatTarget = useMemo(() => {
-    if (liveFloat != null) return liveFloat
     if (dbFloat != null) return dbFloat
     return DEFAULT_FLOAT
-  }, [liveFloat, dbFloat])
-
-  /* Se DB ha raggiunto l override, pulisci l override */
-  useEffect(() => {
-    if (liveFloat != null && dbFloat != null && liveFloat === dbFloat) {
-      setLiveFloat(null)
-    }
-  }, [liveFloat, dbFloat])
+  }, [dbFloat])
 
   /* Plan logica */
   const [planActive, setPlanActive] = useState(false)
@@ -368,37 +306,35 @@ export default function CashCountCard(props: {
       <CardHeader
         title={t.title}
         right={
-          rightActions ?? (
-            <div className="flex items-center gap-2">
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full ${loading
-                  ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
-                  : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
-                  }`}
-                title={t.floatTargetTitle}
-              >
-                {t.floatTargetPrefix} {formatVND(floatTarget)} VND
-              </span>
-              <button
-                type="button"
-                onClick={doSuggest}
-                className={`px-3 h-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={t.suggestTitle}
-                disabled={readOnly}
-              >
-                {t.suggest}
-              </button>
-              <button
-                type="button"
-                onClick={onClear}
-                className={`px-3 h-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={t.clearTitle}
-                disabled={readOnly}
-              >
-                {t.clear}
-              </button>
-            </div>
-          )
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full ${loading
+                ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
+                : 'bg-gray-100 text-gray-700 ring-1 ring-gray-200'
+                }`}
+              title={t.floatTargetTitle}
+            >
+              {t.floatTargetPrefix} {formatVND(floatTarget)} VND
+            </span>
+            <button
+              type="button"
+              onClick={doSuggest}
+              className={`px-3 h-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={t.suggestTitle}
+              disabled={readOnly}
+            >
+              {t.suggest}
+            </button>
+            <button
+              type="button"
+              onClick={onClear}
+              className={`px-3 h-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={t.clearTitle}
+              disabled={readOnly}
+            >
+              {t.clear}
+            </button>
+          </div>
         }
       />
 

@@ -106,6 +106,22 @@ export function DailyReportSettingsProvider({ children }: { children: React.Reac
 
             setOriginalSettings(draftSettings)
 
+            // Update legacy float cache for useDailyReportSettings
+            try {
+                const floatVal = draftSettings?.cashCount?.cashFloatVND
+                if (typeof floatVal === 'number') {
+                    const CACHE_KEY = 'dr.settings.cashFloatByBranch'
+                    const raw = localStorage.getItem(CACHE_KEY) || ''
+                    let obj: Record<string, number> = {}
+                    try { obj = JSON.parse(raw) || {} } catch { }
+
+                    obj[branchName] = floatVal
+                    localStorage.setItem(CACHE_KEY, JSON.stringify(obj))
+                    // Bump timestamp to force storage event listeners to react if they check this key
+                    localStorage.setItem('dr.settings.bump', String(Date.now()))
+                }
+            } catch { }
+
             // Broadcast changes
             try {
                 const bc = new BroadcastChannel('dr-settings')

@@ -45,6 +45,8 @@ export function useDailyReportSettingsDB(overrideBranchName?: string | null) {
                     .eq('branch_name', branchName)
                     .maybeSingle()
 
+                console.log('[useDailyReportSettingsDB] fetched for branch:', branchName, 'result:', data ? 'FOUND' : 'NOT FOUND', 'error:', error)
+
                 if (!active) return
 
                 if (error) {
@@ -54,6 +56,7 @@ export function useDailyReportSettingsDB(overrideBranchName?: string | null) {
                     const parsed = typeof data.settings === 'string'
                         ? JSON.parse(data.settings)
                         : data.settings
+                    console.log('[useDailyReportSettingsDB] parsed settings:', parsed)
                     setSettings(parsed)
                 } else {
                     setSettings(null)
