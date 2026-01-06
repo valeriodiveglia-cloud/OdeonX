@@ -190,6 +190,14 @@ export default function CashCountCard(props: {
     return plan
   }, [planActive, cash, floatTarget, floatPlan, edited])
 
+  /* Sync effectivePlan back to parent if it differs (and we are not editing actively) */
+  useEffect(() => {
+    const isSame = DENOMS.every(d => (floatPlan[d.key] || 0) === (effectivePlan[d.key] || 0))
+    if (!isSame) {
+      onChangeFloatPlan(effectivePlan)
+    }
+  }, [effectivePlan, floatPlan, onChangeFloatPlan])
+
   const totalToTake = useMemo(() => sumValue(effectivePlan), [effectivePlan])
 
   const totalRemain = useMemo(() => {
