@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import React from 'react'
 import { Home, LayoutDashboard, Boxes, Settings, FileText } from 'lucide-react' // Using standard lucide icons
 import { useSettings } from '@/contexts/SettingsContext'
@@ -10,7 +10,7 @@ import { HomeIcon } from '@heroicons/react/24/outline'
 
 const NAV = [
     { href: '/asset-inventory', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-    { href: '/asset-inventory/list', label: 'All Assets', icon: Boxes },
+    { href: '/asset-inventory/list', label: 'Assets', icon: Boxes },
     { href: '/asset-inventory/reports', label: 'Reports', icon: FileText },
     { href: '/asset-inventory/settings', label: 'Settings', icon: Settings },
 ]
@@ -22,6 +22,9 @@ const CLOSE_DELAY_MS = 120
 
 export default function LeftNavAssetInventory() {
     const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const branchName = searchParams.get('branchName')
+
     const { language, setLanguage } = useSettings() // Reuse settings context if available
     const [open, setOpen] = React.useState(false)
 
@@ -61,10 +64,18 @@ export default function LeftNavAssetInventory() {
             <nav className="p-2 space-y-1 mt-2">
                 {NAV.map((item) => {
                     const active = item.exact ? pathname === item.href : pathname.startsWith(item.href)
+
+                    // Append branchName if present
+                    let finalHref = item.href
+                    if (branchName) {
+                        const separator = item.href.includes('?') ? '&' : '?'
+                        finalHref = `${item.href}${separator}branchName=${encodeURIComponent(branchName)}`
+                    }
+
                     return (
                         <Link
                             key={item.href}
-                            href={item.href}
+                            href={finalHref}
                             className={`relative flex items-center h-11 rounded-xl transition-colors hover:bg-white/10 ${open ? 'gap-3 px-3' : 'justify-center px-0'}`}
                         >
                             {active && (

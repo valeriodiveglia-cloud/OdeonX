@@ -1,10 +1,11 @@
+
 import { Suspense } from 'react'
-import AssetDashboard from './_components/AssetDashboard'
+import AssetInventoryLayout from '../_components/AssetInventoryLayout'
 
 export default function Page() {
     return (
         <Suspense fallback={<div>Loading...</div>}>
-            <AssetDashboard />
+            <AssetInventoryLayout />
         </Suspense>
     )
 }

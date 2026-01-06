@@ -23,3 +23,28 @@ export async function getLogoSignedUrl(path: string) {
   if (error) throw error
   return data.signedUrl
 }
+
+export async function uploadAssetImage(file: File) {
+  const timestamp = Date.now()
+  const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+  const path = `assets/${timestamp}-${cleanName}`
+
+  const { error } = await supabase.storage
+    .from('app-assets')
+    .upload(path, file, {
+      upsert: false,
+      contentType: file.type || 'image/jpeg',
+      cacheControl: '3600',
+    })
+
+  if (error) throw error
+  return path
+}
+
+export async function getAssetSignedUrl(path: string) {
+  const { data, error } = await supabase.storage
+    .from('app-assets')
+    .createSignedUrl(path, 60 * 60 * 24) // 24 hours
+  if (error) throw error
+  return data.signedUrl
+}

@@ -1,5 +1,5 @@
 export type AssetType = 'fixed' | 'smallware'
-export type AssetStatus = 'active' | 'maintenance' | 'in_transit' | 'broken'
+export type AssetStatus = 'active' | 'maintenance' | 'in_transit' | 'broken' | 'out_for_catering'
 export type AssetCondition = 'new' | 'good' | 'fair' | 'poor'
 
 export type AssetFinancials = {
@@ -8,6 +8,14 @@ export type AssetFinancials = {
     usefulLifeYears: number
     salvageValue?: number // Optional: value at end of life
     warrantyYears?: number
+}
+
+export type CateringEvent = {
+    eventName: string
+    customerName?: string
+    eventDate: string
+    expectedReturnDate?: string
+    notes?: string
 }
 
 export interface Asset {
@@ -28,6 +36,7 @@ export interface Asset {
     targetBranch?: string // If in_transit, where it's going
     transferDate?: string // ISO date of transfer
     transferBy?: string // Name of staff who initiated transfer
+    cateringEvent?: CateringEvent // If out_for_catering
 }
 
 // Helper to calculate current value based on straight-line depreciation
@@ -62,6 +71,7 @@ export function getStatusColor(status: AssetStatus): string {
         case 'maintenance': return 'bg-amber-100 text-amber-800 ring-amber-600/20'
         case 'in_transit': return 'bg-blue-100 text-blue-800 ring-blue-600/20'
         case 'broken': return 'bg-red-100 text-red-800 ring-red-600/20'
+        case 'out_for_catering': return 'bg-purple-100 text-purple-800 ring-purple-600/20'
     }
 }
 
@@ -107,7 +117,7 @@ export function getWarrantyStatus(asset: Asset): { status: 'Valid' | 'Expired' |
     }
 }
 
-export type LogAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'TRANSFER_INIT' | 'TRANSFER_RECEIVE'
+export type LogAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'TRANSFER_INIT' | 'TRANSFER_RECEIVE' | 'CATERING_OUT' | 'CATERING_RETURN'
 
 export interface AssetLogEntry {
     id: string
@@ -117,4 +127,30 @@ export interface AssetLogEntry {
     user: string
     assetId?: string
     assetName?: string
+}
+
+export interface InventorySessionItem {
+    assetId: string
+    assetName: string
+    category: string
+    expectedQuantity: number
+    countedQuantity: number
+    systemStatus: AssetStatus
+    condition: AssetCondition
+    notes?: string
+}
+
+export type InventorySessionStatus = 'open' | 'completed'
+
+export interface InventorySession {
+    id: string
+    date: string // ISO
+    branch: string
+    assetType: AssetType
+    status: InventorySessionStatus
+    items: InventorySessionItem[]
+    createdBy: string // User who started it
+    submittedBy?: string // User who finished it
+    submittedAt?: string // ISO
+    totalDiscrepancyCost?: number
 }

@@ -295,9 +295,11 @@ function mapDbRowToClosingRow(r: any): ClosingRow {
   const floatTarget = toNum(r.opening_float_vnd)
   const countedCash = cashFromJson(r.cash_json)
 
-  // Prefer float_plan_json if it has a total > 0
+  // Prefer float_plan_json if it exists (even if 0), otherwise calc
+  const hasPlan = r.float_plan_json && Object.keys(typeof r.float_plan_json === 'string' ? JSON.parse(r.float_plan_json) : r.float_plan_json || {}).length > 0
   const planTotal = cashFromJson(r.float_plan_json)
-  const cashToTake = planTotal > 0
+
+  const cashToTake = hasPlan
     ? planTotal
     : Math.max(0, countedCash - floatTarget)
 

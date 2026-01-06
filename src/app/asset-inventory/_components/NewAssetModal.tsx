@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { XMarkIcon, PlusIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { supabase } from '@/lib/supabase_shim'
 import { Asset, AssetType, AssetStatus, AssetCondition } from '../types'
+import { uploadAssetImage } from '@/lib/storage'
+import { PhotoIcon } from '@heroicons/react/24/solid'
 
 type Props = {
     open: boolean
@@ -52,6 +54,11 @@ export default function NewAssetModal({ open, onClose, onSave, initialData }: Pr
     // New Warranty Field
     const [warrantyYears, setWarrantyYears] = useState(0)
 
+    // Image Upload
+    const [imageFile, setImageFile] = useState<File | null>(null)
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+    const [uploading, setUploading] = useState(false)
+
     useEffect(() => {
         if (!open) return
 
@@ -94,6 +101,16 @@ export default function NewAssetModal({ open, onClose, onSave, initialData }: Pr
             setUsefulLifeYears(initialData.financials.usefulLifeYears)
             setWarrantyYears(initialData.financials.warrantyYears || 0)
 
+
+            // Image
+            if (initialData.images && initialData.images.length > 0) {
+                // We don't have the signed URL here easily without async fetch, 
+                // but we can assume we might want to just show "Product has image" or fetch it.
+                // For now, let's just clear preview if we can't easily get it, or simpler:
+                // We won't show the OLD image in preview unless we fetch it. 
+                // Let's rely on the user uploading a NEW one if they want to change it.
+                setPreviewUrl(null)
+            }
         } else {
             // Reset / Default
             resetForm()
@@ -144,34 +161,57 @@ export default function NewAssetModal({ open, onClose, onSave, initialData }: Pr
         }
     }, [type, open, initialData])
 
-    const handleSave = () => {
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0]
+            setImageFile(file)
+            setPreviewUrl(URL.createObjectURL(file))
+        }
+    }
+
+    const handleSave = async () => {
         if (!name || !sku) return
 
-        const priceValue = parseFloat(purchasePrice.replace(/,/g, '')) || 0
+        try {
+            setUploading(true)
+            let imagePath = initialData?.images?.[0] // Keep existing image by default
 
-        const newAsset: Omit<Asset, 'id'> = {
-            name,
-            sku,
-            category,
-            branch,
-            location,
-            type,
-            status,
-            condition,
-            quantity: type === 'fixed' ? 1 : quantity,
-            parLevel: type === 'smallware' ? parLevel : undefined,
-            serialNumber: type === 'fixed' ? serialNumber : undefined,
-            financials: {
-                purchasePrice: priceValue,
-                purchaseDate,
-                usefulLifeYears,
-                warrantyYears // Add to payload
+            if (imageFile) {
+                imagePath = await uploadAssetImage(imageFile)
             }
-        }
 
-        onSave(newAsset)
-        onClose()
-        resetForm()
+            const priceValue = parseFloat(purchasePrice.replace(/,/g, '')) || 0
+
+            const newAsset: Omit<Asset, 'id'> = {
+                name,
+                sku,
+                category,
+                branch,
+                location,
+                type,
+                status,
+                condition,
+                quantity: type === 'fixed' ? 1 : quantity,
+                parLevel: type === 'smallware' ? parLevel : undefined,
+                serialNumber: type === 'fixed' ? serialNumber : undefined,
+                images: imagePath ? [imagePath] : undefined,
+                financials: {
+                    purchasePrice: priceValue,
+                    purchaseDate,
+                    usefulLifeYears,
+                    warrantyYears
+                }
+            }
+
+            onSave(newAsset)
+            onClose()
+            resetForm()
+        } catch (error) {
+            console.error('Error saving asset:', error)
+            alert(`Failed to save asset: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        } finally {
+            setUploading(false)
+        }
     }
 
     const resetForm = () => {
@@ -190,6 +230,9 @@ export default function NewAssetModal({ open, onClose, onSave, initialData }: Pr
         setPurchaseDate(new Date().toISOString().split('T')[0])
         setUsefulLifeYears(5)
         setWarrantyYears(0)
+        setImageFile(null)
+        setPreviewUrl(null)
+        setUploading(false)
     }
 
     if (!open) return null
@@ -232,6 +275,35 @@ export default function NewAssetModal({ open, onClose, onSave, initialData }: Pr
                                 ? 'Tracked individually by Serial Number. E.g., Ovens, Mixers.'
                                 : 'Tracked by Quantity and Par Levels. E.g., Plates, Glassware.'}
                         </p>
+                    </div>
+
+                    {/* Image Upload */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Asset Photo</label>
+                        <div className="flex items-center gap-4">
+                            <div className="relative w-24 h-24 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden">
+                                {previewUrl ? (
+                                    <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                                ) : (
+                                    <PhotoIcon className="w-8 h-8 text-slate-400" />
+                                )}
+                            </div>
+                            <div>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFileSelect}
+                                    className="block w-full text-sm text-slate-500
+                                    file:mr-4 file:py-2 file:px-4
+                                    file:rounded-full file:border-0
+                                    file:text-sm file:font-semibold
+                                    file:bg-blue-50 file:text-blue-700
+                                    hover:file:bg-blue-100
+                                  "
+                                />
+                                <p className="mt-1 text-xs text-slate-500">JPG, PNG, WebP up to 5MB</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -416,13 +488,13 @@ export default function NewAssetModal({ open, onClose, onSave, initialData }: Pr
                     <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-100 transition-colors">
                         Cancel
                     </button>
-                    <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm inline-flex items-center gap-2">
+                    <button onClick={handleSave} disabled={uploading} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                         <PlusIcon className="w-4 h-4" />
-                        {initialData ? 'Update Asset' : 'Create Asset'}
+                        {uploading ? 'Saving...' : (initialData ? 'Update Asset' : 'Create Asset')}
                     </button>
                 </div>
 
             </div>
-        </div>
+        </div >
     )
 }

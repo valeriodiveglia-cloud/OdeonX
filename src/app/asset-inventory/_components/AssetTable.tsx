@@ -81,7 +81,7 @@ export default function AssetTable({ assets, onAssetClick }: Props) {
                             <td className="px-6 py-3">{asset.category}</td>
                             <td className="px-6 py-3">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(asset.status)}`}>
-                                    {asset.status.replace('_', ' ')}
+                                    {asset.status.replaceAll('_', ' ')}
                                 </span>
                             </td>
                             <td className="px-6 py-3">

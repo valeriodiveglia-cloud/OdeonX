@@ -2,6 +2,7 @@
 
 import { XMarkIcon, TruckIcon, WrenchScrewdriverIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { Asset, calculateCurrentValue, getStatusColor, getConditionColor, getWarrantyStatus, getComputedCondition } from '../types'
+import { getAssetSignedUrl } from '@/lib/storage'
 import { useState, useEffect } from 'react'
 
 type Props = {
@@ -10,15 +11,26 @@ type Props = {
     onEdit: () => void
     onDelete: (id: string) => void
     onTransfer: (asset: Asset) => void
+    onCatering: (asset: Asset) => void
 }
 
-export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onTransfer }: Props) {
+export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onTransfer, onCatering }: Props) {
     const [duration, setDuration] = useState(6)
 
     useEffect(() => {
         const stored = localStorage.getItem('asset_new_duration_months')
         if (stored) setDuration(Number(stored))
     }, [])
+
+    const [imageUrl, setImageUrl] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (asset?.images?.[0]) {
+            getAssetSignedUrl(asset.images[0]).then(setImageUrl).catch(console.error)
+        } else {
+            setImageUrl(null)
+        }
+    }, [asset])
 
     if (!asset) return null
 
@@ -75,10 +87,16 @@ export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onT
                     {/* Scrollable Content */}
                     <div className="flex-1 overflow-y-auto p-6 space-y-8">
 
+                        {imageUrl && (
+                            <div className="w-full h-56 bg-slate-100 rounded-2xl overflow-hidden shadow-sm border border-slate-200">
+                                <img src={imageUrl} alt={asset.name} className="w-full h-full object-cover" />
+                            </div>
+                        )}
+
                         {/* Status Section */}
                         <div className="flex items-center gap-4">
                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ring-1 ring-inset ${getStatusColor(asset.status)} capitalize`}>
-                                {asset.status.replace('_', ' ')}
+                                {asset.status.replaceAll('_', ' ')}
                             </span>
                             <div className="h-4 w-px bg-slate-300" />
                             <div className="flex items-center gap-2">
@@ -128,6 +146,20 @@ export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onT
                                     <p className="text-slate-500">Location</p>
                                     <p className="font-medium text-slate-900">{asset.location}</p>
                                 </div>
+                                {asset.status === 'out_for_catering' && asset.cateringEvent && (
+                                    <div className="col-span-2 bg-purple-50 p-3 rounded-lg border border-purple-100">
+                                        <p className="text-purple-900 font-medium flex items-center gap-2">
+                                            <TruckIcon className="w-4 h-4" />
+                                            Out for Catering
+                                        </p>
+                                        <div className="mt-2 text-sm text-slate-700 space-y-1">
+                                            <p><span className="text-slate-500">Event:</span> {asset.cateringEvent.eventName}</p>
+                                            {asset.cateringEvent.expectedReturnDate && (
+                                                <p><span className="text-slate-500">Return:</span> {formatDate(asset.cateringEvent.expectedReturnDate)}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                                 {asset.serialNumber && (
                                     <div className="col-span-2">
                                         <p className="text-slate-500">Serial Number</p>
@@ -177,18 +209,41 @@ export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onT
                     </div>
 
                     {/* Footer Actions */}
-                    <div className="p-4 border-t border-slate-200 bg-slate-50 grid grid-cols-2 gap-3">
-                        <button
-                            onClick={() => onTransfer(asset!)}
-                            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-medium hover:bg-blue-100 transition-colors"
-                        >
-                            <TruckIcon className="w-5 h-5" />
-                            Transfer
-                        </button>
-                        <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 font-medium hover:bg-amber-100 transition-colors">
-                            <WrenchScrewdriverIcon className="w-5 h-5" />
-                            Maintenance
-                        </button>
+                    <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col gap-3">
+                        {asset.status === 'out_for_catering' ? (
+                            <button
+                                onClick={() => onCatering(asset!)}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100 transition-colors shadow-sm"
+                            >
+                                <TruckIcon className="w-5 h-5" />
+                                Return from Catering
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => onTransfer(asset!)}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-blue-200 bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                                >
+                                    <TruckIcon className="w-5 h-5" />
+                                    Transfer Asset
+                                </button>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => onCatering(asset!)}
+                                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100 transition-colors"
+                                    >
+                                        <TruckIcon className="w-5 h-5" />
+                                        Catering
+                                    </button>
+                                    <button
+                                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 font-medium hover:bg-amber-100 transition-colors"
+                                    >
+                                        <WrenchScrewdriverIcon className="w-5 h-5" />
+                                        Maintenance
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
