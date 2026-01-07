@@ -1123,6 +1123,7 @@ type SortKey =
   | 'uom'
   | 'packaging_size'
   | 'package_price'
+  | 'package_plus_vat'
   | 'vat_rate'
   | 'unit_cost'
   | 'unit_plus_vat'
@@ -1235,6 +1236,10 @@ export default function MaterialsPage() {
     const pct = effVatPct(m) / 100
     return (m.unit_cost ?? 0) * (1 + pct)
   }
+  function packagePlusVat(m: Mat) {
+    const pct = effVatPct(m) / 100
+    return (m.package_price ?? 0) * (1 + pct)
+  }
   async function enforceSingleDefaultByName(materialName: string, keepId: string) {
     await supabase
       .from(TBL_MATERIALS)
@@ -1282,6 +1287,8 @@ export default function MaterialsPage() {
             return m.packaging_size ?? -Infinity
           case 'package_price':
             return m.package_price ?? -Infinity
+          case 'package_plus_vat':
+            return packagePlusVat(m)
           case 'unit_cost':
             return m.unit_cost ?? -Infinity
           case 'is_food_drink':
@@ -2231,12 +2238,24 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
                 </button>
               </th>
 
+
               {vatEnabled && (
                 <th className="p-2 w-16 min-w-[4rem]">
                   <button type="button" onClick={() => toggleSort('vat_rate')} className="w-full cursor-pointer">
                     <div className="flex items-center gap-1 justify-center font-semibold">
                       <SortIcon active={sortCol === 'vat_rate'} asc={sortAsc} />
                       <span>{t('VatRatePct', lang)}</span>
+                    </div>
+                  </button>
+                </th>
+              )}
+
+              {vatEnabled && (
+                <th className="p-2 w-28 min-w-[7rem]">
+                  <button type="button" onClick={() => toggleSort('package_plus_vat')} className="w-full cursor-pointer">
+                    <div className="flex items-center gap-1 justify-center font-semibold">
+                      <SortIcon active={sortCol === 'package_plus_vat'} asc={sortAsc} />
+                      <span>{t('PackagePricePlusVat', lang)}</span>
                     </div>
                   </button>
                 </th>
@@ -2333,9 +2352,16 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
                     {m.package_price != null ? num.format(m.package_price) : '-'}
                   </td>
 
+
                   {vatEnabled && (
                     <td className="p-2 w-16 min-w-[4rem] text-center tabular-nums whitespace-nowrap">
                       {num.format(effPct)}%
+                    </td>
+                  )}
+
+                  {vatEnabled && (
+                    <td className="p-2 w-28 min-w-[7rem] text-center tabular-nums whitespace-nowrap">
+                      {num.format(packagePlusVat(m))}
                     </td>
                   )}
 

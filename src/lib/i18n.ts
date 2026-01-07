@@ -67,6 +67,7 @@ const dict = {
     Uom: 'UOM',
     PackagingSize: 'Packaging size',
     PackagePrice: 'Package cost',
+    PackagePricePlusVat: 'Package cost + VAT',
     UnitCost: 'Unit cost',
     FinalPrice: 'Final price',
     IsDefault: 'Default',
@@ -577,6 +578,7 @@ const dict = {
     Uom: 'Đơn vị',
     PackagingSize: 'Quy cách đóng gói',
     PackagePrice: 'Chi phí gói',
+    PackagePricePlusVat: 'Chi phí gói + VAT',
     UnitCost: 'Đơn giá',
     FinalPrice: 'Giá bán cuối',
     IsDefault: 'Mặc định',
@@ -862,7 +864,7 @@ const dict = {
     Change: 'Chênh lệch',
     PercentChange: '% Thay đổi',
     LastChangePerEquipment: 'Lần thay đổi gần nhất theo thiết bị',
-    
+
     // ---------- Archive ----------
     Archive: 'Lưu trữ',
     Archived: 'Đã lưu trữ',
