@@ -1596,8 +1596,11 @@ export default function Page() {
   useEffect(() => {
     (async () => {
       await fetchUoms()
-      await Promise.all([fetchPrepCats(), fetchDishCats(), fetchPrepList(), fetchFinalList()])
+      await Promise.all([fetchPrepCats(), fetchDishCats()])
+      // Fetch ingredient sources FIRST to get current material prices
       await fetchIngredientSources()
+      // Then fetch recipe lists and recalculate costs with current prices
+      await recalculateLiveCosts()
       await fetchFinalsTagsMap()
     })()
   }, [])
@@ -1624,14 +1627,166 @@ export default function Page() {
     const { data } = await supabase.from(TBL_UOM).select('id,name').order('name')
     if (data) setUoms(data)
   }
+
+  // Legacy functions kept for backwards compat when called after save
   async function fetchPrepList() {
-    const { data } = await supabase.from(VW_PREP_LIST).select('*').order('last_update', { ascending: false })
-    if (data) setPreps(data)
+    await recalculateLiveCosts()
   }
   async function fetchFinalList() {
-    const { data } = await supabase.from(VW_FINAL_LIST).select('*').order('last_update', { ascending: false })
-    if (data) {
-      setFinals(data)
+    await recalculateLiveCosts()
+  }
+
+  // ========== LIVE COST RECALCULATION ==========
+  // This function recalculates recipe costs using current material prices
+  async function recalculateLiveCosts() {
+    try {
+      // 1) Fetch current material prices
+      const { data: matsData } = await supabase
+        .from(TBL_MAT)
+        .select('id, name, unit_cost, vat_rate_percent, uom_id')
+        .order('name')
+
+      const { data: uomsData } = await supabase.from(TBL_UOM).select('id,name')
+      const uomMap = new Map((uomsData || []).map((u: any) => [String(u.id), u.name]))
+
+      // Build material prices map (with VAT applied if applicable)
+      const matPricesMap = new Map<string, number>()
+      const matOptionsNew: MatOption[] = []
+      for (const m of (matsData || [])) {
+        const netUnit = Number(m.unit_cost) || 0
+        const vatPct = Number((m as any).vat_rate_percent) || 0
+        const grossUnit = Math.round(netUnit * (1 + vatPct / 100))
+        matPricesMap.set(String(m.id), grossUnit)
+        matOptionsNew.push({
+          id: String(m.id),
+          label: m.name as string,
+          unit_cost: grossUnit,
+          uom_name: String(uomMap.get(String(m.uom_id)) ?? ''),
+        })
+      }
+      setMatOptions(matOptionsNew)
+
+      // 2) Fetch all prep recipes with their items
+      const { data: prepsData } = await supabase
+        .from(VW_PREP_LIST)
+        .select('*')
+        .order('last_update', { ascending: false })
+
+      const { data: prepItemsData } = await supabase
+        .from(TBL_PREP_ITEMS)
+        .select('prep_id, ref_type, ref_id, qty')
+
+      // Group items by prep_id
+      const prepItemsMap = new Map<string, any[]>()
+      for (const item of (prepItemsData || [])) {
+        const key = String(item.prep_id)
+        if (!prepItemsMap.has(key)) prepItemsMap.set(key, [])
+        prepItemsMap.get(key)!.push(item)
+      }
+
+      // 3) First pass: calculate prep costs (preps can only reference materials, not other preps in their items for now simplified approach)
+      // We'll also build a prepPricesMap for finals that reference preps
+      const prepPricesMap = new Map<string, number>()
+      const recalculatedPreps: PrepRow[] = []
+
+      for (const prep of (prepsData || [])) {
+        const items = prepItemsMap.get(String(prep.id)) || []
+        let totalCost = 0
+
+        for (const item of items) {
+          const qty = Number(item.qty) || 0
+          let unitCost = 0
+          if (item.ref_type === 'material' && item.ref_id) {
+            unitCost = matPricesMap.get(String(item.ref_id)) ?? 0
+          }
+          // Note: if prep references another prep, we would need recursive calculation
+          // For now, use saved cost as fallback for prep references
+          totalCost += qty * unitCost
+        }
+
+        // Calculate cost per unit (serving cost)
+        const yieldQty = Number(prep.yield_qty) || 0
+        const wastePct = Number(prep.waste_pct) || 0
+        const portionSize = 1 // Default portion size
+        const effectiveYield = yieldQty * (1 - wastePct / 100)
+        const nServ = yieldQty > 0 && portionSize > 0 ? effectiveYield / portionSize : 1
+        const costUnitVnd = nServ > 0 ? Math.round(totalCost / nServ) : 0
+
+        prepPricesMap.set(String(prep.id), costUnitVnd)
+
+        recalculatedPreps.push({
+          ...prep,
+          cost_unit_vnd: costUnitVnd > 0 ? costUnitVnd : prep.cost_unit_vnd, // Use recalculated if > 0
+        })
+      }
+
+      setPreps(recalculatedPreps)
+
+      // Update prepOptions with new prices
+      const prepOptionsNew: PrepOption[] = recalculatedPreps.map(p => ({
+        id: String(p.id),
+        label: p.name,
+        unit_cost: p.cost_unit_vnd ?? null,
+        uom_name: String(p.uom_name ?? ''),
+      }))
+      setPrepOptions(prepOptionsNew)
+
+      // 4) Fetch all final recipes with their items
+      const { data: finalsData } = await supabase
+        .from(VW_FINAL_LIST)
+        .select('*')
+        .order('last_update', { ascending: false })
+
+      const { data: finalItemsData } = await supabase
+        .from(TBL_FINAL_ITEMS)
+        .select('final_id, ref_type, ref_id, qty')
+
+      // Group items by final_id
+      const finalItemsMap = new Map<string, any[]>()
+      for (const item of (finalItemsData || [])) {
+        const key = String(item.final_id)
+        if (!finalItemsMap.has(key)) finalItemsMap.set(key, [])
+        finalItemsMap.get(key)!.push(item)
+      }
+
+      // 5) Calculate final recipe costs
+      const recalculatedFinals: FinalRow[] = []
+
+      for (const final of (finalsData || [])) {
+        const items = finalItemsMap.get(String(final.id)) || []
+        let totalCost = 0
+
+        for (const item of items) {
+          const qty = Number(item.qty) || 0
+          let unitCost = 0
+          if (item.ref_type === 'material' && item.ref_id) {
+            unitCost = matPricesMap.get(String(item.ref_id)) ?? 0
+          } else if (item.ref_type === 'prep' && item.ref_id) {
+            unitCost = prepPricesMap.get(String(item.ref_id)) ?? 0
+          }
+          totalCost += qty * unitCost
+        }
+
+        const costUnitVnd = Math.round(totalCost)
+        const priceVnd = Number(final.price_vnd) || 0
+        const costRatio = priceVnd > 0 ? costUnitVnd / priceVnd : null
+
+        recalculatedFinals.push({
+          ...final,
+          cost_unit_vnd: costUnitVnd > 0 ? costUnitVnd : final.cost_unit_vnd,
+          cost_ratio: costRatio !== null ? costRatio : final.cost_ratio,
+        })
+      }
+
+      setFinals(recalculatedFinals)
+
+    } catch (e) {
+      console.error('recalculateLiveCosts error', e)
+      // Fallback to old method
+      const { data: prepsData } = await supabase.from(VW_PREP_LIST).select('*').order('last_update', { ascending: false })
+      if (prepsData) setPreps(prepsData)
+      const { data: finalsData } = await supabase.from(VW_FINAL_LIST).select('*').order('last_update', { ascending: false })
+      if (finalsData) setFinals(finalsData)
     }
   }
 
@@ -2301,8 +2456,8 @@ export default function Page() {
               <button
                 onClick={toggleSelectMode}
                 className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${showSelectDish
-                    ? 'border-blue-600 text-blue-700 bg-blue-100'
-                    : 'text-blue-700 hover:bg-blue-50 border-gray-300'
+                  ? 'border-blue-600 text-blue-700 bg-blue-100'
+                  : 'text-blue-700 hover:bg-blue-50 border-gray-300'
                   }`}
                 title={t('EnableSelectionTitle', language)}
               >
@@ -2514,8 +2669,8 @@ export default function Page() {
               <button
                 onClick={toggleSelectMode}
                 className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${showSelectPrep
-                    ? 'border-blue-600 text-blue-700 bg-blue-100'
-                    : 'text-blue-700 hover:bg-blue-50 border-gray-300'
+                  ? 'border-blue-600 text-blue-700 bg-blue-100'
+                  : 'text-blue-700 hover:bg-blue-50 border-gray-300'
                   }`}
                 title={t('EnableSelectionTitle', language)}
               >
