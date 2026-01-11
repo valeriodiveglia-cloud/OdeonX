@@ -499,15 +499,33 @@ function EditorModal({
     prevKeyMaterial.current = key
 
     if (type === 'Material') {
-      const c = safeCategories.find(c => c.id === categoryId)
-      setCategoryName(c ? c.name : '')
-      setItemId('')
-      setItemName('')
-      setUnit('')
-      setPackageCost(0)
-      setUnitCost(0)
+      /* If item selected matches new category, preserve it */
+      let keepItem = false
+      if (itemId) {
+        const currentItem = safeMaterials.find(x => x.id === itemId)
+        if (currentItem && (currentItem.category_id || '') === categoryId) {
+          keepItem = true
+        }
+      }
+
+      if (!keepItem) {
+        setItemId('')
+        setItemName('')
+        setUnit('')
+        setPackageCost(0)
+        setUnitCost(0)
+      } else {
+        // If we kept the item, ensure categoryName is synced
+        const c = safeCategories.find(c => c.id === categoryId)
+        setCategoryName(c ? c.name : '')
+      }
+
+      if (!keepItem) {
+        const c = safeCategories.find(c => c.id === categoryId)
+        setCategoryName(c ? c.name : '')
+      }
     }
-  }, [type, categoryId, safeCategories])
+  }, [type, categoryId, safeCategories, itemId, safeMaterials])
 
   const prevKeyDish = useRef(`${type}:${categoryName}`)
   useEffect(() => {
@@ -640,7 +658,19 @@ function EditorModal({
                 </div>
                 <div>
                   <label className="text-sm text-gray-800">{t.fields.item}</label>
-                  <select className="mt-1 w-full border rounded-lg px-3 h-11 bg:white" value={itemId} onChange={e => setItemId(e.target.value)} disabled={viewMode}>
+                  <select
+                    className="mt-1 w-full border rounded-lg px-3 h-11 bg:white"
+                    value={itemId}
+                    onChange={e => {
+                      const val = e.target.value
+                      setItemId(val)
+                      if (val) {
+                        const m = safeMaterials.find(x => x.id === val)
+                        if (m?.category_id) setCategoryId(m.category_id)
+                      }
+                    }}
+                    disabled={viewMode}
+                  >
                     <option value="">{materialOpts.length ? t.fields.item : t.noItems}</option>
                     {materialOpts.map(m => (
                       <option key={m.id} value={m.id}>
