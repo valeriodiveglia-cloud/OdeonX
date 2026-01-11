@@ -434,6 +434,7 @@ export function useWastage(params: {
         unit: row.unit ?? null,
         qty: row.qty,
         unit_cost_vnd: row.unitCost,
+        // total_cost_vnd is generated
         charge_target: row.chargeTo,
         reason: row.reason ?? null,
         responsible: row.responsible ?? null,
@@ -485,6 +486,85 @@ export function useWastage(params: {
     }
   }
 
+  async function updateWastage(id: string, row: Partial<WastageRow>): Promise<WastageRow | null> {
+    try {
+      const payload: any = {}
+      if (row.date !== undefined) payload.date = row.date
+      if (row.time !== undefined) payload.time = row.time
+      if (row.type !== undefined) payload.wtype = row.type
+      if (row.categoryId !== undefined) payload.category_id = row.categoryId
+      if (row.categoryName !== undefined) payload.category_name = row.categoryName
+      if (row.itemId !== undefined) payload.item_id = row.itemId
+      if (row.itemName !== undefined) payload.item_name = row.itemName
+      if (row.unit !== undefined) payload.unit = row.unit
+      if (row.qty !== undefined) payload.qty = row.qty
+      if (row.unitCost !== undefined) payload.unit_cost_vnd = row.unitCost
+      // if (row.totalCost !== undefined) payload.total_cost_vnd = row.totalCost // generated
+      if (row.chargeTo !== undefined) payload.charge_target = row.chargeTo
+      if (row.reason !== undefined) payload.reason = row.reason
+      if (row.responsible !== undefined) payload.responsible = row.responsible
+      if (row.enteredBy !== undefined) payload.entered_by = row.enteredBy
+
+      // console.log('DEBUG updateWastage', id, payload)
+
+      const { data, error } = await supabase
+        .from(TBL_WASTAGE)
+        .update(payload)
+        .eq('id', id)
+        .select(
+          'id,date,time,wtype,category_id,category_name,item_id,item_name,unit,qty,unit_cost_vnd,total_cost_vnd,charge_target,reason,responsible,entered_by,branch_name'
+        )
+
+      if (error) {
+        console.error('Supabase update error:', error)
+        throw error
+      }
+
+      const updatedItem = data?.[0]
+      if (!updatedItem) {
+        console.error('Update returned no rows. ID might be wrong or RLS denied.')
+        throw new Error('No data returned from update (row not found?)')
+      }
+
+      const mapped: WastageRow = {
+        id: String(updatedItem.id),
+        date: String(updatedItem.date),
+        time: String(updatedItem.time),
+        type: updatedItem.wtype as WType,
+        categoryId: updatedItem.category_id ? String(updatedItem.category_id) : null,
+        categoryName: updatedItem.category_name ? String(updatedItem.category_name) : null,
+        itemId: updatedItem.item_id ? String(updatedItem.item_id) : null,
+        itemName: String(updatedItem.item_name || ''),
+        unit: updatedItem.unit ? String(updatedItem.unit) : null,
+        qty: Number(updatedItem.qty || 0),
+        unitCost: Number(updatedItem.unit_cost_vnd || 0),
+        totalCost: Number(
+          updatedItem.total_cost_vnd ||
+          Number(updatedItem.unit_cost_vnd || 0) * Number(updatedItem.qty || 0)
+        ),
+        chargeTo: updatedItem.charge_target as 'Restaurant' | 'Staff',
+        reason: updatedItem.reason ? String(updatedItem.reason) : null,
+        responsible: updatedItem.responsible ? String(updatedItem.responsible) : null,
+        enteredBy: updatedItem.entered_by ? String(updatedItem.entered_by) : null,
+        branchName: updatedItem.branch_name ? String(updatedItem.branch_name) : null,
+      }
+
+      setRows(prev => {
+        const idx = prev.findIndex(r => r.id === id)
+        if (idx >= 0) {
+          const next = [...prev]
+          next[idx] = mapped
+          return next
+        }
+        return prev
+      })
+      return mapped
+    } catch (e) {
+      console.error('Update wastage failed', e)
+      return null
+    }
+  }
+
   async function deleteWastage(id: string): Promise<boolean> {
     try {
       const { error } = await supabase.from(TBL_WASTAGE).delete().eq('id', id)
@@ -520,6 +600,7 @@ export function useWastage(params: {
     error,
     master, // { categories, materials, dishes, preps }
     insertWastage,
+    updateWastage,
     deleteWastage,
     bulkDeleteWastage,
     refreshMonth: safeRefreshMonth, // esponiamo la versione safe

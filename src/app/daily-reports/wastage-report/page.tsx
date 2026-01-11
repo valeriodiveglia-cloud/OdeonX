@@ -491,7 +491,13 @@ function EditorModal({
     }
   }, [type, itemId, materialOpts, dishOpts, prepOpts, initialRow])
 
+  /* Tracks previous values to implement "only on change" logic (skips mount) */
+  const prevKeyMaterial = useRef(`${type}:${categoryId}`)
   useEffect(() => {
+    const key = `${type}:${categoryId}`
+    if (key === prevKeyMaterial.current) return
+    prevKeyMaterial.current = key
+
     if (type === 'Material') {
       const c = safeCategories.find(c => c.id === categoryId)
       setCategoryName(c ? c.name : '')
@@ -503,14 +509,31 @@ function EditorModal({
     }
   }, [type, categoryId, safeCategories])
 
+  const prevKeyDish = useRef(`${type}:${categoryName}`)
   useEffect(() => {
+    const key = `${type}:${categoryName}`
+    if (key === prevKeyDish.current) return
+    prevKeyDish.current = key
+
     if (type === 'Dish' || type === 'Prep') {
-      setItemId('')
-      setItemName('')
-      setUnit('')
-      setUnitCost(0)
+      /* If we have an item selected, check if it belongs to the new category. If so, preserve it. */
+      let keepItem = false
+      if (itemId) {
+        const list = type === 'Dish' ? safeDishes : safePreps
+        const currentItem = list.find(x => x.id === itemId)
+        if (currentItem && (currentItem.category || '') === categoryName) {
+          keepItem = true
+        }
+      }
+
+      if (!keepItem) {
+        setItemId('')
+        setItemName('')
+        setUnit('')
+        setUnitCost(0)
+      }
     }
-  }, [type, categoryName])
+  }, [type, categoryName, itemId, safeDishes, safePreps])
 
   const canSave = useMemo(() => {
     if (!date || !time) return false
@@ -657,7 +680,20 @@ function EditorModal({
                 </div>
                 <div>
                   <label className="text-sm text-gray-800">{type === 'Dish' ? t.typeOpts.Dish : t.typeOpts.Prep}</label>
-                  <select className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={itemId} onChange={e => setItemId(e.target.value)} disabled={viewMode}>
+                  <select
+                    className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
+                    value={itemId}
+                    onChange={e => {
+                      const val = e.target.value
+                      setItemId(val)
+                      if (val) {
+                        const list = type === 'Dish' ? safeDishes : safePreps
+                        const item = list.find(x => x.id === val)
+                        if (item?.category) setCategoryName(item.category)
+                      }
+                    }}
+                    disabled={viewMode}
+                  >
                     <option value="">{(type === 'Dish' ? dishOpts : prepOpts).length ? t.fields.item : t.noItems}</option>
                     {(type === 'Dish' ? dishOpts : prepOpts).map(x => (
                       <option key={x.id} value={x.id}>
@@ -706,7 +742,7 @@ function EditorModal({
               <div className="md:col-span-2">
                 <label className="text-sm text-gray-800">{t.unitCostInput || t.fields.unitCost}</label>
                 <div className="mt-1">
-                  <MoneyInput value={unitCost} onChange={setUnitCost} className="h-11" />
+                  <MoneyInput value={unitCost} onChange={() => { }} className="h-11 bg-gray-50 pointer-events-none" />
                 </div>
               </div>
             )}
@@ -803,7 +839,7 @@ export default function WastageReportPage() {
   const [month, setMonth] = useState<number>(now.getMonth())
   const monthInputValue = useMemo(() => `${year}-${String(month + 1).padStart(2, '0')}`, [year, month])
 
-  const { rows, loading, master, insertWastage, deleteWastage, bulkDeleteWastage } = useWastage({
+  const { rows, loading, master, insertWastage, updateWastage, deleteWastage, bulkDeleteWastage } = useWastage({
     year,
     month,
     branchName: selectedBranch?.name || null,
@@ -964,7 +1000,13 @@ export default function WastageReportPage() {
 
   async function onSavedRow(r: WastageRow) {
     try {
-      await insertWastage(r)
+      if (editorInitialRow?.id) {
+        // Edit existing
+        await updateWastage(editorInitialRow.id, { ...r, id: undefined }) // Ensure we pass partial, but ID is in arg 1
+      } else {
+        // Create new
+        await insertWastage(r)
+      }
       setOpenEditor(false)
       setEditorInitialRow(null)
     } catch (err) {
