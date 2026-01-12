@@ -13,6 +13,8 @@ export type CashLedgerRow = {
     deposit_date?: string | null
 }
 
+const DEFAULT_FLOAT = 3_000_000
+
 // Helpers for Cash to Take calculation (duplicated from fetchers.ts for now, could be shared)
 const DENOMS = [
     { key: 'd500k', face: 500_000 },
@@ -73,7 +75,7 @@ export function useCashLedger(params: { year: number; month: number; branchName:
             // 1. Fetch Cashier Closings (Current Month)
             let qClosings = supabase
                 .from('cashier_closings')
-                .select('report_date, opening_float_vnd, cash_json, branch_name')
+                .select('report_date, opening_float_vnd, cash_json, float_plan_json, branch_name')
                 .gte('report_date', startISO)
                 .lt('report_date', endISO)
 
@@ -87,7 +89,7 @@ export function useCashLedger(params: { year: number; month: number; branchName:
             // 3. Fetch ALL time stats for Total Pending
             let qAllClosings = supabase
                 .from('cashier_closings')
-                .select('report_date, branch_name, opening_float_vnd, cash_json')
+                .select('report_date, branch_name, opening_float_vnd, cash_json, float_plan_json')
 
             let qAllDeposits = supabase
                 .from('cash_ledger_deposits')
@@ -126,9 +128,13 @@ export function useCashLedger(params: { year: number; month: number; branchName:
             const newRows: CashLedgerRow[] = (resClosings.data || []).map((r: any) => {
                 const date = String(r.report_date).split('T')[0]
                 const branch = r.branch_name
-                const floatTarget = Number(r.opening_float_vnd || 0)
+                const floatTarget = Number(r.opening_float_vnd) || DEFAULT_FLOAT
                 const countedCash = cashFromJson(r.cash_json)
-                const cashToTake = Math.max(0, countedCash - floatTarget)
+                const planTotal = cashFromJson(r.float_plan_json)
+
+                const cashToTake = planTotal > 0
+                    ? planTotal
+                    : Math.max(0, countedCash - floatTarget)
 
                 // Check if deposited
                 const key = `${date}|${branch}`
@@ -173,9 +179,13 @@ export function useCashLedger(params: { year: number; month: number; branchName:
             for (const r of allClosings) {
                 const date = String(r.report_date).split('T')[0]
                 const branch = r.branch_name
-                const floatTarget = Number(r.opening_float_vnd || 0)
+                const floatTarget = Number(r.opening_float_vnd) || DEFAULT_FLOAT
                 const countedCash = cashFromJson(r.cash_json)
-                const cashToTake = Math.max(0, countedCash - floatTarget)
+                const planTotal = cashFromJson(r.float_plan_json)
+
+                const cashToTake = planTotal > 0
+                    ? planTotal
+                    : Math.max(0, countedCash - floatTarget)
 
                 if (cashToTake > 0) {
                     const key = `${date}|${branch}`
