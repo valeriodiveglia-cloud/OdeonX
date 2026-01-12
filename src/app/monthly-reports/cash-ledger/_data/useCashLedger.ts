@@ -59,8 +59,8 @@ export function useCashLedger(params: { year: number; month: number; branchName:
     const [error, setError] = useState<string | null>(null)
     const [totalPending, setTotalPending] = useState<number>(0)
 
-    const refresh = useCallback(async () => {
-        setLoading(true)
+    const refresh = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true)
         setError(null)
 
         try {
@@ -215,7 +215,7 @@ export function useCashLedger(params: { year: number; month: number; branchName:
 
             if (error) throw error
 
-            await refresh()
+            await refresh(true)
         } catch (err: any) {
             console.error('Error depositing:', err)
             alert('Failed to deposit: ' + err.message)
@@ -228,7 +228,7 @@ export function useCashLedger(params: { year: number; month: number; branchName:
         try {
             const { error } = await supabase.from('cash_ledger_deposits').delete().eq('id', row.deposit_id)
             if (error) throw error
-            await refresh()
+            await refresh(true)
         } catch (err: any) {
             console.error('Error undepositing:', err)
             alert('Failed to undo deposit: ' + err.message)
@@ -245,7 +245,7 @@ export function useCashLedger(params: { year: number; month: number; branchName:
                 .eq('id', row.deposit_id)
 
             if (error) throw error
-            await refresh()
+            await refresh(true)
         } catch (err: any) {
             console.error('Error updating deposit date:', err)
             alert('Failed to update deposit date: ' + err.message)
