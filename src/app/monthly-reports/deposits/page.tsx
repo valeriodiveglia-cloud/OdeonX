@@ -259,7 +259,11 @@ export default function MonthlyDepositsPage() {
                             const tot = totalsMap[r.id]
                             return (
                                 <tr key={r.id} className="border-t hover:bg-blue-50/40">
-                                    <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
+                                    <td className="p-2 whitespace-nowrap">
+                                        <span className={new Date(r.date) < monthCursor ? 'text-red-500 font-medium' : ''}>
+                                            {formatDMY(r.date)}
+                                        </span>
+                                    </td>
                                     <td className="p-2 whitespace-nowrap">{r.event_date ? formatDMY(r.event_date) : '-'}</td>
                                     <td className="p-2 whitespace-nowrap font-medium">{r.customer_name}</td>
                                     <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold">{fmt(r.amount)}</td>

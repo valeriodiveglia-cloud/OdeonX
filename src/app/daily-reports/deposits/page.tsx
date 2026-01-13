@@ -143,10 +143,22 @@ function aheadIsFutureGuard(y: number, m: number) {
 
 /* ---------- UI primitives ---------- */
 
+
 function Card({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow">{children}</div>
 }
+
+function StatPill({ label, value, money }: { label: string; value: number; money?: boolean }) {
+  return (
+    <div className="text-left rounded-xl border border-blue-400/30 bg-blue-600/10 text-blue-100 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide opacity-80">{label}</div>
+      <div className="text-base font-semibold tabular-nums">{money ? fmtInt(value) : value}</div>
+    </div>
+  )
+}
+
 function PageHeader({
+
   title,
   left,
   after,
@@ -1552,11 +1564,27 @@ export default function DepositsPage() {
     })
   }, [rows, totalsMap])
 
+
   const monthFiltered = useMemo(() => {
     return rowsWithCalc.filter(x => {
+      // 1) Logic base: date in selected month
       const dstr = x.row.date || ''
       const d = /T/.test(dstr) ? new Date(dstr) : new Date(`${dstr}T00:00`)
-      return d >= monthStart && d < monthEnd
+      const inMonth = d >= monthStart && d < monthEnd
+
+      // 2) Carry-over logic: if remaining > 0, we show it even if it's from the past
+      // (The hook already fetches past unpaid deposits, but we must ensure we don't filter them out here)
+      const isUnpaid = x.remaining > 0
+      // We only want to "carry over" strict past deposits. Future deposits (if any)
+      // matching the filter might be weird but let's stick to "unpaid or in-month".
+      // Actually, standard logic:
+      // - Show ALL deposits of this month
+      // - PLUS show ALL deposits from previous months that are UNPAID
+
+      if (inMonth) return true
+      if (d < monthStart && isUnpaid) return true
+
+      return false
     })
   }, [rowsWithCalc, monthStart, monthEnd])
 
@@ -1680,6 +1708,14 @@ export default function DepositsPage() {
     }
   }, [loading])
 
+  const stats = useMemo(() => {
+    const count = visibleRows.length
+    const totalAmount = visibleRows.reduce((s, x) => s + (x.row.amount || 0), 0)
+    const totalPaid = visibleRows.reduce((s, x) => s + (totalsMap[x.row.id]?.paid || 0), 0)
+    const totalRemaining = visibleRows.reduce((s, x) => s + (totalsMap[x.row.id]?.remaining || 0), 0)
+    return { count, totalAmount, totalPaid, totalRemaining }
+  }, [visibleRows, totalsMap])
+
   return (
     <div className="max-w-none mx-auto p-4 text-gray-100">
       <PageHeader
@@ -1792,6 +1828,7 @@ export default function DepositsPage() {
 
       <div className="mt-3 border-t border-white/15" />
 
+
       <MonthNav
         monthLabel={monthLabel}
         monthInputValue={monthInputValue}
@@ -1801,6 +1838,14 @@ export default function DepositsPage() {
         guardDisabled={aheadIsFutureGuard(year, month)}
         t={t}
       />
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+        <StatPill label={t.table?.totals ?? 'Total Deposits'} value={stats.count} />
+        <StatPill label={t.columns?.agreed ?? 'Total Amount'} value={stats.totalAmount} money />
+        <StatPill label={t.columns?.paid ?? 'Total Paid'} value={stats.totalPaid} money />
+        <StatPill label={t.columns?.remaining ?? 'Total Remaining'} value={stats.totalRemaining} money />
+      </div>
 
       <Card>
         <div className="p-3 overflow-x-auto">
@@ -1822,6 +1867,7 @@ export default function DepositsPage() {
             selectMode={selectMode}
             setPayingRow={setPayingRow}
             setHistoryRow={setHistoryRow}
+            monthStart={monthStart}
             t={t}
           />
         </div>
@@ -1971,6 +2017,7 @@ function DepositsTable({
   selectMode,
   setPayingRow,
   setHistoryRow,
+  monthStart,
   t,
 }: {
   rows: DepositRow[]
@@ -1987,6 +2034,7 @@ function DepositsTable({
   selectMode: boolean
   setPayingRow: (r: DepositRow) => void
   setHistoryRow: (r: DepositRow) => void
+  monthStart: Date
   t: any
 }) {
   useEffect(() => {
@@ -2159,7 +2207,11 @@ function DepositsTable({
                   />
                 ) : null}
               </td>
-              <td className="p-2 whitespace-nowrap">{fmtDateDMY(r.date)}</td>
+              <td className="p-2 whitespace-nowrap">
+                <span className={new Date(r.date) < monthStart ? 'text-red-500 font-medium' : ''}>
+                  {fmtDateDMY(r.date)}
+                </span>
+              </td>
               <td className="p-2 whitespace-nowrap">{r.customer_name || '-'}</td>
               <td className="p-2 text-right tabular-nums">{fmtInt(r.amount)}</td>
               <td className="p-2 text-right tabular-nums">
