@@ -359,6 +359,7 @@ export default function AssetInventoryLayout() {
                 onClose={() => { setIsNewModalOpen(false); setAssetToEdit(null) }}
                 onSave={handleSaveAsset}
                 initialData={assetToEdit}
+                defaultBranch={branchName && branchName !== 'all' ? branchName : undefined}
             />
 
             <TransferAssetModal

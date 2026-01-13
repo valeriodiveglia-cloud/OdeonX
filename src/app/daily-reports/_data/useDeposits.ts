@@ -111,11 +111,56 @@ export function useDeposits(params?: { year?: number; month?: number; branchName
         qDep = qDep.eq('branch', params.branchName)
       }
 
+
+      // 1. Fetch IDs of past unpaid deposits (date < startISO, remaining > 0)
+      let extraIds: string[] = []
+      if (params?.year != null && params?.month != null) {
+        const start = new Date(params.year, params.month, 1)
+        const p = (n: number) => String(n).padStart(2, '0')
+        const startISO = `${start.getFullYear()}-${p(start.getMonth() + 1)}-${p(start.getDate())}`
+
+        let qUnpaid = supabase
+          .from('view_deposit_remaining')
+          .select('id')
+          .lt('date', startISO)
+          .gt('remaining', 0)
+
+        if (params?.branchName) {
+          qUnpaid = qUnpaid.eq('branch', params.branchName)
+        }
+
+        const { data: unpaidData } = await qUnpaid
+        if (unpaidData) {
+          extraIds = unpaidData.map((r: any) => r.id)
+        }
+      }
+
+      // 2. Fetch current month deposits
       const { data: depData, error: depErr } = await qDep
 
       if (depErr || !depData) return
 
-      const mapped: DepositRow[] = depData.map((r: any) => ({
+      let combinedData = depData || []
+
+      // 3. Fetch extra "past unpaid" deposits if we have any
+      if (extraIds.length > 0) {
+        const { data: extraData } = await supabase
+          .from('deposits')
+          .select('*')
+          .in('id', extraIds)
+
+        if (extraData) {
+          const existingIds = new Set(combinedData.map((r: any) => r.id))
+          for (const row of extraData) {
+            if (!existingIds.has(row.id)) {
+              combinedData.push(row)
+            }
+          }
+        }
+      }
+
+      const mapped: DepositRow[] = combinedData.map((r: any) => ({
+
         id: String(r.id),
         branch: r.branch ?? null,
         date: r.date || new Date().toISOString().slice(0, 10),

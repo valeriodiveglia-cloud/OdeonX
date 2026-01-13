@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { XMarkIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon, ListBulletIcon, ArrowLeftIcon } from '@heroicons/react/24/outline'
-import { Asset, AssetCondition, InventorySessionItem } from '../../types'
+import { Asset, AssetCondition, InventorySessionItem, AssetType } from '../../types'
 import { getAssetSignedUrl } from '@/lib/storage'
 
 interface BlindCountModalProps {
@@ -11,9 +11,12 @@ interface BlindCountModalProps {
     assets: Asset[]
     branchName: string
     onSubmit: (items: InventorySessionItem[]) => void
+    countingType?: AssetType | null
 }
 
-export default function BlindCountModal({ open, onClose, assets, branchName, onSubmit }: BlindCountModalProps) {
+const DRAFT_STORAGE_KEY = 'INVENTORY_DRAFT'
+
+export default function BlindCountModal({ open, onClose, assets, branchName, onSubmit, countingType }: BlindCountModalProps) {
     const [items, setItems] = useState<InventorySessionItem[]>([])
     const [currentAssetId, setCurrentAssetId] = useState<string | null>(null)
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -26,23 +29,56 @@ export default function BlindCountModal({ open, onClose, assets, branchName, onS
 
     useEffect(() => {
         if (open && assets.length > 0) {
-            // Initialize items
-            const initialItems: InventorySessionItem[] = assets.map(a => ({
-                assetId: a.id,
-                assetName: a.name,
-                category: a.category,
-                expectedQuantity: a.quantity,
-                countedQuantity: 0,
-                systemStatus: a.status,
-                condition: a.condition,
-                notes: ''
-            }))
-            setItems(initialItems)
-            if (initialItems.length > 0) {
-                setCurrentAssetId(initialItems[0].assetId)
+            // CHECK FOR DRAFT FIRST
+            let loadedFromDraft = false
+            try {
+                const draftStr = localStorage.getItem(DRAFT_STORAGE_KEY)
+                if (draftStr) {
+                    const draft = JSON.parse(draftStr)
+                    // Check context match
+                    if (draft.branchName === branchName && draft.countingType === countingType) {
+                        setItems(draft.items)
+                        setCurrentAssetId(draft.currentAssetId || (draft.items.length > 0 ? draft.items[0].assetId : null))
+                        loadedFromDraft = true
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load draft in modal", e)
+            }
+
+            if (!loadedFromDraft) {
+                // Initialize items normally
+                const initialItems: InventorySessionItem[] = assets.map(a => ({
+                    assetId: a.id,
+                    assetName: a.name,
+                    category: a.category,
+                    expectedQuantity: a.quantity,
+                    countedQuantity: 0,
+                    systemStatus: a.status,
+                    condition: a.condition,
+                    notes: ''
+                }))
+                setItems(initialItems)
+                if (initialItems.length > 0) {
+                    setCurrentAssetId(initialItems[0].assetId)
+                }
             }
         }
-    }, [open, assets])
+    }, [open, assets, branchName, countingType])
+
+    // AUTO-SAVE EFFECT
+    useEffect(() => {
+        if (open && items.length > 0) {
+            const draft = {
+                branchName,
+                countingType,
+                items,
+                currentAssetId,
+                lastSaved: new Date().toISOString()
+            }
+            localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
+        }
+    }, [items, currentAssetId, open, branchName, countingType])
 
     // Image fetching
     const [currentItemImageUrl, setCurrentItemImageUrl] = useState<string | null>(null)
@@ -115,9 +151,16 @@ export default function BlindCountModal({ open, onClose, assets, branchName, onS
             setCurrentAssetId(items[currentIndex + 1].assetId)
         } else {
             if (confirm("You have reached the last item. Submit inventory?")) {
+                localStorage.removeItem(DRAFT_STORAGE_KEY) // Clear draft on submit
                 onSubmit(items)
             }
         }
+    }
+
+    const handleClose = () => {
+        // Explicitly clear draft when closing via UI (Cancel action)
+        localStorage.removeItem(DRAFT_STORAGE_KEY)
+        onClose()
     }
 
     return (
@@ -143,7 +186,7 @@ export default function BlindCountModal({ open, onClose, assets, branchName, onS
                         </div>
                     </div>
 
-                    <button onClick={onClose} className="p-2 -mr-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/5">
+                    <button onClick={handleClose} className="p-2 -mr-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/5">
                         <XMarkIcon className="w-6 h-6" />
                     </button>
                 </div>

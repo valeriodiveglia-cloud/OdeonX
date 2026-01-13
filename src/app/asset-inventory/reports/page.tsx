@@ -10,6 +10,7 @@ import InventoryTypeSelectionModal from './_components/InventoryTypeSelectionMod
 import { useRouter, useSearchParams } from 'next/navigation'
 
 const SESSION_STORAGE_KEY = 'mock_inventory_sessions_v1'
+const DRAFT_STORAGE_KEY = 'INVENTORY_DRAFT'
 
 const loadAssets = (defaults: Asset[]): Asset[] => {
     if (typeof window === 'undefined') return defaults
@@ -43,6 +44,26 @@ export default function InventoryReportsPage() {
             setAssets(loadedAssets.filter(a => a.branch === branchName && a.status === 'active')) // Only count active?
         } else {
             setAssets([])
+        }
+    }, [branchName])
+
+    // Check for Draft on Mount
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const draftStr = localStorage.getItem(DRAFT_STORAGE_KEY)
+            if (draftStr) {
+                try {
+                    const draft = JSON.parse(draftStr)
+                    // Only resume if it matches the current branch (or if we are on 'all' and draft has a branch?)
+                    // For now, strict branch matching
+                    if (draft.branchName === branchName) {
+                        setCountingType(draft.countingType)
+                        setIsCountModalOpen(true)
+                    }
+                } catch (e) {
+                    console.error("Failed to parse inventory draft", e)
+                }
+            }
         }
     }, [branchName])
 
@@ -128,11 +149,12 @@ export default function InventoryReportsPage() {
     }
 
     return (
-        <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8 text-gray-100" onClick={() => setOpenMenuId(null)}>
+        <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8 text-gray-900" onClick={() => setOpenMenuId(null)}>
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                    {/* Fixed title contrast - was text-gray-900 on dark bg likely */}
+                    <h1 className="text-3xl font-bold text-white">
                         Inventory Reports
                     </h1>
                     <p className="text-slate-400 mt-1">
@@ -151,32 +173,34 @@ export default function InventoryReportsPage() {
                 </div>
             </div>
 
+            {/* Asset Type Tabs */}
+            <div className="mb-6 flex items-center gap-1 bg-slate-800/50 p-1 rounded-xl w-fit">
+                <button
+                    onClick={() => setActiveTab('fixed')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'fixed'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                        }`}
+                >
+                    <WrenchScrewdriverIcon className="w-4 h-4" />
+                    Fixed Assets
+                </button>
+                <button
+                    onClick={() => setActiveTab('smallware')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'smallware'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                        }`}
+                >
+                    <CubeIcon className="w-4 h-4" />
+                    Smallwares
+                </button>
+            </div>
+
             {/* Recent Sessions List */}
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-white/5 rounded-2xl overflow-visible">
-                <div className="border-b border-white/5 bg-white/5 rounded-t-2xl flex flex-col md:flex-row md:items-center justify-between p-2 gap-4">
-                    <div className="flex p-1 bg-slate-950/50 rounded-xl">
-                        <button
-                            onClick={() => setActiveTab('fixed')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'fixed'
-                                ? 'bg-blue-600 text-white shadow-lg'
-                                : 'text-slate-400 hover:text-white'
-                                }`}
-                        >
-                            <WrenchScrewdriverIcon className="w-4 h-4" />
-                            Fixed Assets
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('smallware')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'smallware'
-                                ? 'bg-indigo-600 text-white shadow-lg'
-                                : 'text-slate-400 hover:text-white'
-                                }`}
-                        >
-                            <CubeIcon className="w-4 h-4" />
-                            Smallwares
-                        </button>
-                    </div>
-                    <h2 className="font-semibold text-lg text-white px-4">Reports History</h2>
+            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-visible">
+                <div className="border-b border-gray-100 bg-gray-50 rounded-t-2xl flex flex-col md:flex-row md:items-center justify-between p-2 gap-4">
+                    <h2 className="font-semibold text-lg text-gray-900 px-4 py-2">Reports History</h2>
                 </div>
 
                 {sessions.filter(s => s.assetType === activeTab).length === 0 ? (
@@ -186,33 +210,33 @@ export default function InventoryReportsPage() {
                         <p className="text-sm mt-1">Start a new count to generate a report.</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-white/5">
+                    <div className="divide-y divide-gray-100">
                         {sessions.filter(s => s.assetType === activeTab).map((session, index, filteredArray) => (
                             <div
                                 key={session.id}
-                                className={`p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors group relative ${index === filteredArray.length - 1 ? 'rounded-b-2xl' : ''
+                                className={`p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group relative ${index === filteredArray.length - 1 ? 'rounded-b-2xl' : ''
                                     }`}
                             >
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
                                         <ClipboardDocumentCheckIcon className="w-5 h-5" />
                                     </div>
                                     <div>
-                                        <h3 className="font-medium text-white">
+                                        <h3 className="font-medium text-gray-900">
                                             {new Date(session.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
                                         </h3>
-                                        <p className="text-sm text-slate-400">
+                                        <p className="text-sm text-gray-500">
                                             {session.branch} • {session.items.length} items scanned
                                         </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
                                         {session.status}
                                     </span>
                                     <button
                                         onClick={() => setSelectedSession(session)}
-                                        className="text-sm text-blue-400 hover:text-blue-300 font-medium"
+                                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                                     >
                                         View Details
                                     </button>
@@ -224,16 +248,16 @@ export default function InventoryReportsPage() {
                                                 e.stopPropagation()
                                                 setOpenMenuId(openMenuId === session.id ? null : session.id)
                                             }}
-                                            className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                                         >
                                             <EllipsisVerticalIcon className="w-5 h-5" />
                                         </button>
 
                                         {openMenuId === session.id && (
-                                            <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                                            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
                                                 <button
                                                     onClick={(e) => handleDeleteSession(e, session.id)}
-                                                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors text-left"
+                                                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left"
                                                 >
                                                     <TrashIcon className="w-4 h-4" />
                                                     Delete Report
@@ -257,6 +281,7 @@ export default function InventoryReportsPage() {
                 branchName={branchName}
                 assets={assets.filter(a => a.type === countingType)}
                 onSubmit={handleSubmitInventory}
+                countingType={countingType}
             />
 
             <InventoryTypeSelectionModal

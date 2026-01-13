@@ -9,13 +9,20 @@ type Props = {
 
 // Reusing StatPill component style from ClosingList page for consistency
 function StatPill({ label, value, subtext, color = "blue" }: { label: string; value: string | number; subtext?: string, color?: "blue" | "emerald" | "amber" }) {
-    let bgClass = "bg-blue-600/10 border-blue-400/30 text-blue-100"
-    if (color === "emerald") bgClass = "bg-emerald-600/10 border-emerald-400/30 text-emerald-100"
-    if (color === "amber") bgClass = "bg-amber-600/10 border-amber-400/30 text-amber-100"
+    let bgClass = "bg-white border-blue-200 text-gray-900 shadow-sm"
+    let labelClass = "text-blue-600"
+    if (color === "emerald") {
+        bgClass = "bg-white border-emerald-200 text-gray-900 shadow-sm"
+        labelClass = "text-emerald-600"
+    }
+    if (color === "amber") {
+        bgClass = "bg-white border-amber-200 text-gray-900 shadow-sm"
+        labelClass = "text-amber-600"
+    }
 
     return (
         <div className={`text-left rounded-xl border ${bgClass} px-3 py-2`}>
-            <div className="text-[11px] uppercase tracking-wide opacity-80 mb-1">{label}</div>
+            <div className={`text-[11px] uppercase tracking-wide opacity-80 mb-1 ${labelClass}`}>{label}</div>
             <div className="flex items-baseline gap-2">
                 <div className="text-xl font-semibold tabular-nums">{value}</div>
                 {subtext && <div className="text-xs opacity-70">{subtext}</div>}

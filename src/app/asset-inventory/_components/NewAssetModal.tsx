@@ -12,6 +12,7 @@ type Props = {
     onClose: () => void
     onSave: (asset: Omit<Asset, 'id'>) => void
     initialData?: Asset | null
+    defaultBranch?: string
 }
 
 type BranchOption = {
@@ -19,7 +20,7 @@ type BranchOption = {
     name: string
 }
 
-export default function NewAssetModal({ open, onClose, onSave, initialData }: Props) {
+export default function NewAssetModal({ open, onClose, onSave, initialData, defaultBranch }: Props) {
     const [type, setType] = useState<AssetType>('fixed')
     const [name, setName] = useState('')
     const [sku, setSku] = useState('')
@@ -75,7 +76,11 @@ export default function NewAssetModal({ open, onClose, onSave, initialData }: Pr
                 setBranches(mapped)
                 // Default to first branch if not set and no initialData
                 if (!initialData) {
-                    setBranch(prev => prev || mapped[0].name)
+                    if (defaultBranch) {
+                        setBranch(defaultBranch)
+                    } else {
+                        setBranch(prev => prev || mapped[0].name)
+                    }
                 }
             }
         }

@@ -25,7 +25,7 @@ const loadLogs = () => {
 }
 
 // FORMATTTER
-const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val)
+const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(val)
 
 export default function AssetDashboard() {
     const searchParams = useSearchParams()
@@ -113,11 +113,11 @@ export default function AssetDashboard() {
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1']
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-6 text-slate-100">
+        <div className="p-6 max-w-7xl mx-auto space-y-6 text-gray-900">
 
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+                    <h1 className="text-2xl font-bold text-white">
                         Asset Overview
                     </h1>
                     <p className="text-slate-400 text-sm">Real-time insights on inventory financial health and status.</p>
@@ -134,52 +134,52 @@ export default function AssetDashboard() {
 
             {/* TOP KPI CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 flex items-center gap-4">
-                    <div className="p-3 rounded-lg bg-blue-500/20 text-blue-400"><Package size={24} /></div>
+                <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-4 flex items-center gap-4">
+                    <div className="p-3 rounded-lg bg-blue-50 text-blue-600"><Package size={24} /></div>
                     <div>
-                        <div className="text-sm text-slate-400">Total Assets</div>
-                        <div className="text-2xl font-bold">{kpis.totalCount}</div>
+                        <div className="text-sm text-gray-500">Total Assets</div>
+                        <div className="text-2xl font-bold text-gray-900">{kpis.totalCount}</div>
                     </div>
                 </div>
-                <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 flex items-center gap-4">
-                    <div className="p-3 rounded-lg bg-emerald-500/20 text-emerald-400"><TrendingUp size={24} /></div>
+                <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-4 flex items-center gap-4">
+                    <div className="p-3 rounded-lg bg-emerald-50 text-emerald-600"><TrendingUp size={24} /></div>
                     <div>
-                        <div className="text-sm text-slate-400">Current Valuation</div>
-                        <div className="text-2xl font-bold">{formatCurrency(kpis.totalCurrentValue)}</div>
-                        <div className="text-xs text-slate-500">Orig: {formatCurrency(kpis.totalPurchaseValue)}</div>
+                        <div className="text-sm text-gray-500">Current Valuation</div>
+                        <div className="text-2xl font-bold text-gray-900">{formatCurrency(kpis.totalCurrentValue)}</div>
+                        <div className="text-xs text-gray-400">Orig: {formatCurrency(kpis.totalPurchaseValue)}</div>
                     </div>
                 </div>
-                <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 flex items-center gap-4">
-                    <div className="p-3 rounded-lg bg-amber-500/20 text-amber-400"><AlertTriangle size={24} /></div>
+                <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-4 flex items-center gap-4">
+                    <div className="p-3 rounded-lg bg-amber-50 text-amber-600"><AlertTriangle size={24} /></div>
                     <div>
-                        <div className="text-sm text-slate-400">In Maintenance</div>
-                        <div className="text-2xl font-bold">{kpis.maintenanceCount}</div>
+                        <div className="text-sm text-gray-500">In Maintenance</div>
+                        <div className="text-2xl font-bold text-gray-900">{kpis.maintenanceCount}</div>
                     </div>
                 </div>
-                <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 flex items-center gap-4">
-                    <div className="p-3 rounded-lg bg-slate-500/20 text-slate-400"><Clock size={24} /></div>
+                <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-4 flex items-center gap-4">
+                    <div className="p-3 rounded-lg bg-slate-50 text-slate-600"><Clock size={24} /></div>
                     <div>
-                        <div className="text-sm text-slate-400">Warranty Expired</div>
-                        <div className="text-2xl font-bold">{kpis.expiredWarrantyCount}</div>
+                        <div className="text-sm text-gray-500">Warranty Expired</div>
+                        <div className="text-2xl font-bold text-gray-900">{kpis.expiredWarrantyCount}</div>
                     </div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* CHART: Value by Category */}
-                <div className="col-span-1 lg:col-span-2 bg-slate-900/50 border border-white/10 rounded-xl p-6">
-                    <h3 className="font-semibold mb-4 flex items-center gap-2">
-                        <TrendingUp size={18} className="text-blue-400" />
+                <div className="col-span-1 lg:col-span-2 bg-white border border-gray-200 shadow-sm rounded-xl p-6">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2 text-gray-800">
+                        <TrendingUp size={18} className="text-blue-500" />
                         Value Distribution by Category
                     </h3>
                     <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={categoryData} layout="vertical" margin={{ left: 40 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
-                                <XAxis type="number" stroke="#94a3b8" tickFormatter={(val) => `$${val / 1000}k`} />
-                                <YAxis dataKey="name" type="category" stroke="#94a3b8" width={120} tick={{ fontSize: 12 }} />
+                                <XAxis type="number" stroke="#94a3b8" tickFormatter={(val) => `${val / 1000}k`} />
+                                <YAxis dataKey="name" type="category" stroke="#64748b" width={120} tick={{ fontSize: 12 }} />
                                 <RechartsTooltip
-                                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
+                                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a' }}
                                     formatter={(val: number) => formatCurrency(val)}
                                 />
                                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
@@ -193,9 +193,9 @@ export default function AssetDashboard() {
                 </div>
 
                 {/* CHART: Condition */}
-                <div className="bg-slate-900/50 border border-white/10 rounded-xl p-6">
-                    <h3 className="font-semibold mb-4 flex items-center gap-2">
-                        <CheckCircle2 size={18} className="text-emerald-400" />
+                <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-6">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2 text-gray-800">
+                        <CheckCircle2 size={18} className="text-emerald-500" />
                         Asset Condition
                     </h3>
                     <div className="h-64">
@@ -213,7 +213,7 @@ export default function AssetDashboard() {
                                     ))}
                                 </Pie>
                                 <RechartsTooltip
-                                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
+                                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a' }}
                                 />
                                 <Legend verticalAlign="bottom" height={36} />
                             </PieChart>
@@ -223,17 +223,17 @@ export default function AssetDashboard() {
             </div>
 
             {/* RECENT ACTIVITY */}
-            <div className="bg-slate-900/50 border border-white/10 rounded-xl p-6">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <History size={18} className="text-slate-400" />
+            <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-6">
+                <h3 className="font-semibold mb-4 flex items-center gap-2 text-gray-800">
+                    <History size={18} className="text-gray-400" />
                     Recent Activity
                 </h3>
                 <div className="space-y-4">
                     {logs.length === 0 ? (
-                        <div className="text-center text-slate-500 py-8">No recent activity</div>
+                        <div className="text-center text-gray-500 py-8">No recent activity</div>
                     ) : (
                         logs.slice(0, 5).map(log => (
-                            <div key={log.id} className="flex items-start gap-4 pb-4 border-b border-white/5 last:border-0 last:pb-0">
+                            <div key={log.id} className="flex items-start gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div className={`mt-1 w-2 h-2 rounded-full shrink-0
                                     ${log.action === 'CREATE' ? 'bg-emerald-500' :
                                         log.action === 'DELETE' ? 'bg-red-500' :
@@ -241,13 +241,13 @@ export default function AssetDashboard() {
                                     }`}
                                 />
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-medium text-slate-200">
+                                    <div className="text-sm font-medium text-gray-700">
                                         {log.action.replace('_', ' ')}
-                                        {log.assetName && <span className="text-slate-400 font-normal"> - {log.assetName}</span>}
+                                        {log.assetName && <span className="text-gray-500 font-normal"> - {log.assetName}</span>}
                                     </div>
-                                    <div className="text-xs text-slate-500 truncate">{log.details}</div>
+                                    <div className="text-xs text-gray-400 truncate">{log.details}</div>
                                 </div>
-                                <div className="text-xs text-slate-500 whitespace-nowrap">
+                                <div className="text-xs text-gray-400 whitespace-nowrap">
                                     {new Date(log.timestamp).toLocaleDateString()}
                                 </div>
                             </div>
