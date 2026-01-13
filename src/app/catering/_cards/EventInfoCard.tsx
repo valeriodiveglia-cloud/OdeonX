@@ -196,7 +196,7 @@ function writePaymentLS(eventId: string | null, patch: Record<string, any>) {
     const prev = readPaymentLS(eventId) || {}
     const next = { ...prev, ...patch }
     localStorage.setItem(`eventcalc.payment:${eventId || ''}`, JSON.stringify(next))
-  } catch {}
+  } catch { }
 }
 
 /** LS percentuali o importi vincono sul DB */
@@ -258,35 +258,35 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
           return snap
         }
       }
-    } catch {}
+    } catch { }
     return null
   }
   const saveLastInstallments = (snap: InstallmentsSnap) => {
     lastInstallmentsRef.current = snap
-    try { if (typeof window !== 'undefined') localStorage.setItem(installmentsKey(eventId), JSON.stringify(snap)) } catch {}
+    try { if (typeof window !== 'undefined') localStorage.setItem(installmentsKey(eventId), JSON.stringify(snap)) } catch { }
   }
 
   const [branches, setBranches] = useState<ProviderBranch[]>([])
   const [branchesLoading, setBranchesLoading] = useState(false)
   useEffect(() => {
     let active = true
-    ;(async () => {
-      try {
-        setBranchesLoading(true)
-        const { data, error } = await supabase
-          .from('provider_branches')
-          .select('id, name, company_name')
-          .order('name', { ascending: true })
-        if (!active) return
-        if (error) throw error
-        setBranches((data || []) as ProviderBranch[])
-      } catch (e) {
-        console.warn('[EventInfoCard] provider_branches load error:', (e as any)?.message || e)
-        setBranches([])
-      } finally {
-        if (active) setBranchesLoading(false)
-      }
-    })()
+      ; (async () => {
+        try {
+          setBranchesLoading(true)
+          const { data, error } = await supabase
+            .from('provider_branches')
+            .select('id, name, company_name')
+            .order('name', { ascending: true })
+          if (!active) return
+          if (error) throw error
+          setBranches((data || []) as ProviderBranch[])
+        } catch (e) {
+          console.warn('[EventInfoCard] provider_branches load error:', (e as any)?.message || e)
+          setBranches([])
+        } finally {
+          if (active) setBranchesLoading(false)
+        }
+      })()
     return () => { active = false }
   }, [])
 
@@ -316,7 +316,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         setHydrated(true)
         setDirty(true)
       }
-    } catch {}
+    } catch { }
   }, [eventId]) // eslint-disable-line
 
   useEffect(() => {
@@ -342,13 +342,13 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
 
     const depFinal =
       depFromLS != null ? depFromLS
-      : depFromDB != null ? depFromDB
-      : (balFromDB != null ? Math.max(0, Math.min(100, 100 - balFromDB)) : null)
+        : depFromDB != null ? depFromDB
+          : (balFromDB != null ? Math.max(0, Math.min(100, 100 - balFromDB)) : null)
 
     const balFinal =
       balFromLS != null ? balFromLS
-      : balFromDB != null ? balFromDB
-      : (depFinal != null ? Math.max(0, Math.min(100, 100 - depFinal)) : (planResolved === 'full' ? 100 : null))
+        : balFromDB != null ? balFromDB
+          : (depFinal != null ? Math.max(0, Math.min(100, 100 - depFinal)) : (planResolved === 'full' ? 100 : null))
 
     const depDueDB = (header as any)?.deposit_due_date ?? ''
     const balDueDB = (header as any)?.balance_due_date ?? ''
@@ -503,12 +503,13 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
       setDirty(false)
       announceDirty(false)
       announceSaved()
+      try { window.dispatchEvent(new CustomEvent('eventcalc:header-saved-ok', { detail: { eventId } })) } catch { }
     })()
   }
 
   function persistDraft(next: EventInfo) {
     if (typeof window === 'undefined') return
-    try { localStorage.setItem(draftKey(eventId), JSON.stringify(next)) } catch {}
+    try { localStorage.setItem(draftKey(eventId), JSON.stringify(next)) } catch { }
   }
 
   function broadcastHeader(
@@ -527,13 +528,13 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
     const key = `eventcalc.header:${eventId || ''}`
     try {
       localStorage.setItem(key, JSON.stringify({ people, budgetPerPerson, budgetTotal, totalHours }))
-    } catch {}
+    } catch { }
 
     try {
       window.dispatchEvent(new CustomEvent('eventinfo:changed', {
         detail: { eventId: eventId || null, people, budgetPerPerson, budgetTotal, totalHours }
       }))
-    } catch {}
+    } catch { }
 
     if (opts?.emitPayment === false) return
     try {
@@ -552,7 +553,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
       window.dispatchEvent(new CustomEvent('payment:changed', {
         detail: { eventId: eventId || null, plan: next.paymentPlan, deposit_percent: dep, balance_percent: bal }
       }))
-    } catch {}
+    } catch { }
   }
 
   function emitSaveBarEvent(type: 'dirty' | 'saved', detail: any) {
@@ -562,7 +563,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
       const payloadEventInfo = { ...detail, card: 'eventinfo' }
       window.dispatchEvent(new CustomEvent(`eventcalc:${type}`, { detail: payloadHeader }))
       window.dispatchEvent(new CustomEvent(`eventcalc:${type}`, { detail: payloadEventInfo }))
-    } catch {}
+    } catch { }
   }
 
   function announceDirty(v: boolean) {
@@ -702,11 +703,11 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onGlobalSave = () => persistNow(data)
-    window.addEventListener('eventcalc:save', onGlobalSave as EventListener)
-    return () => window.removeEventListener('eventcalc:save', onGlobalSave as EventListener)
+    window.addEventListener('eventcalc:save-header', onGlobalSave as EventListener)
+    return () => window.removeEventListener('eventcalc:save-header', onGlobalSave as EventListener)
   }, [data, eventId]) // eslint-disable-line
 
-  function applyExternalPayment(plan: PaymentPlan, depIn: number | null, balIn: number | null, amounts?: {dep?: number|null; bal?: number|null; total?: number|null}) {
+  function applyExternalPayment(plan: PaymentPlan, depIn: number | null, balIn: number | null, amounts?: { dep?: number | null; bal?: number | null; total?: number | null }) {
     if (applyingExternalRef.current) return
     applyingExternalRef.current = true
 
@@ -778,7 +779,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         const bal = normDbPct(d?.balance_percent)
         const depAmt = Number.isFinite(Number(d?.deposit_amount_vnd)) ? Number(d?.deposit_amount_vnd) : null
         const balAmt = Number.isFinite(Number(d?.balance_amount_vnd)) ? Number(d?.balance_amount_vnd) : null
-        const totAmt = Number.isFinite(Number(d?.total_amount_vnd))   ? Number(d?.total_amount_vnd)   : null
+        const totAmt = Number.isFinite(Number(d?.total_amount_vnd)) ? Number(d?.total_amount_vnd) : null
         setTimeout(() => applyExternalPayment(plan, dep, bal, { dep: depAmt, bal: balAmt, total: totAmt }), 0)
       }
     }
@@ -811,7 +812,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
         }
 
         setTimeout(() => applyExternalPayment(plan, depPct, balPct, { dep: depAmt, bal: balAmt, total: tot }), 0)
-      } catch {}
+      } catch { }
     }
     readOnce()
   }, [eventId])
@@ -920,7 +921,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
             <label className="flex flex-col h-full">
               <span className="text-sm text-gray-800">{t('eventinfo.notes')}</span>
               <textarea className="mt-1 w-full border rounded-lg px-2 py-2 text-gray-900 bg-white min-h-[140px]"
-                        value={data.notes ?? ''} onChange={e => upd('notes', e.target.value ?? '')} />
+                value={data.notes ?? ''} onChange={e => upd('notes', e.target.value ?? '')} />
             </label>
             {error && (
               <div className="mt-2 text-xs text-red-600">

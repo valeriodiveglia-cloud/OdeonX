@@ -575,6 +575,29 @@ function EventBundleScene({ eventId }: { eventId: string }) {
 
   // ====== Save All ======
   const onSaveAll = useCallback(async () => {
+    // 1. Prima salviamo l'header (che crea il record su DB per le FK)
+    try {
+      await new Promise<void>((resolve) => {
+        let done = false
+        const handler = () => {
+          if (done) return
+          done = true
+          resolve()
+        }
+        window.addEventListener('eventcalc:header-saved-ok', handler, { once: true })
+        window.dispatchEvent(new CustomEvent('eventcalc:save-header'))
+        // Timeout di sicurezza (se la card non c'è o errore)
+        setTimeout(() => {
+          if (!done) {
+            done = true
+            window.removeEventListener('eventcalc:header-saved-ok', handler)
+            resolve()
+          }
+        }, 2000)
+      })
+    } catch { }
+
+    // 2. Poi salviamo il resto (Transport, Staff, ecc)
     try { window.dispatchEvent(new CustomEvent('eventcalc:save')) } catch { }
     await ec.saveAll()
   }, [ec])
