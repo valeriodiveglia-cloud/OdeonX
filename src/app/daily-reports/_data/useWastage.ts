@@ -359,19 +359,16 @@ export function useWastage(params: {
 
   // Wrapper “safe”, usato da focus/online/realtime per evitare loop e spam
   const safeRefreshMonth = useCallback(
-    async (reason?: string) => {
+    async (reason?: string, force = false) => {
       const now = Date.now()
-      // throttling 4s
-      if (now - lastRefreshAtRef.current < 4000) {
+      // throttling 4s (unless forced)
+      if (!force && now - lastRefreshAtRef.current < 4000) {
         return
       }
       if (refreshLockRef.current) return
       refreshLockRef.current = true
       try {
-        // utile per debug, se vuoi:
-        if (reason) {
-          // console.log('safeRefreshMonth via', reason)
-        }
+        // console.log('safeRefreshMonth via', reason, 'force=', force)
         await refreshMonth()
         lastRefreshAtRef.current = Date.now()
       } finally {
@@ -387,7 +384,8 @@ export function useWastage(params: {
 
       ; (async () => {
         if (!alive) return
-        await safeRefreshMonth('mount')
+        // Force refresh when parameters change (and thus this effect runs)
+        await safeRefreshMonth('mount', true)
       })()
 
     const onVisibilityChange = () => {
