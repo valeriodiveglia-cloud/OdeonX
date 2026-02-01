@@ -14,11 +14,25 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
-import { exportToCsv } from '@/lib/exportUtils'
+import ExcelJS from 'exceljs'
+import { saveAs } from 'file-saver'
 
 type SortKey = 'date' | 'dow' | 'time' | 'branch' | 'revenue' | 'unpaid' | 'cashout' | 'cashToTake' | 'card' | 'transfer'
 
 type Branch = { id: string; name: string }
+
+/* Helper for Third Party Fallback */
+function getThirdPartyPayments(r: ClosingRow) {
+    if (r.thirdPartyAmounts && r.thirdPartyAmounts.length > 0) {
+        return r.thirdPartyAmounts
+    }
+    // Fallback legacy
+    const out = []
+    if (r.gojek > 0) out.push({ label: 'Gojek', amount: r.gojek })
+    if (r.grab > 0) out.push({ label: 'Grab', amount: r.grab })
+    if (r.capichi > 0) out.push({ label: 'Capichi', amount: r.capichi })
+    return out
+}
 
 export default function MonthlyClosingListPage() {
     const router = useRouter()
@@ -108,32 +122,115 @@ export default function MonthlyClosingListPage() {
         if (d) setMonthCursor(d)
     }
 
-    function handleExport() {
-        const headers = [
-            t.table.headers.date,
-            t.table.headers.day,
-            t.table.headers.time,
-            t.table.headers.branch,
-            t.table.headers.unpaid,
-            t.table.headers.cashOut,
-            t.table.headers.card,
-            t.table.headers.transfer,
-            t.table.headers.cashToTake,
-            t.table.headers.revenue
+    async function handleExport() {
+        const workbook = new ExcelJS.Workbook()
+        const sheet = workbook.addWorksheet('Closing List')
+
+        // Define columns
+        sheet.columns = [
+            { header: t.table.headers.date, key: 'date', width: 12 },
+            { header: t.table.headers.day, key: 'day', width: 8 },
+            { header: t.table.headers.time, key: 'time', width: 8 },
+            { header: t.table.headers.branch, key: 'branch', width: 20 },
+            { header: t.table.headers.unpaid, key: 'unpaid', width: 12 },
+            { header: t.table.headers.cashOut, key: 'cashout', width: 12 },
+            { header: t.table.headers.card, key: 'card', width: 12 },
+            { header: t.table.headers.transfer, key: 'transfer', width: 12 },
+            { header: t.table.headers.cashToTake, key: 'cashToTake', width: 12 },
+            { header: t.table.headers.revenue, key: 'revenue', width: 12 },
         ]
-        const data = filtered.map(r => [
-            formatDMY(r.date),
-            dow3(r.date),
-            r.time,
-            r.branch,
-            r.unpaid,
-            r.cashout,
-            r.card,
-            r.transfer,
-            r.cashToTake,
-            r.revenue
-        ])
-        exportToCsv(`closing-list-${monthInputValue}.csv`, headers, data)
+
+        // Style header
+        const headerRow = sheet.getRow(1)
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+        headerRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF2563EB' } // blue-600
+        }
+        headerRow.alignment = { horizontal: 'center' }
+
+        // Data rows
+        filtered.forEach(r => {
+            const row = sheet.addRow({
+                date: formatDMY(r.date),
+                day: dow3(r.date),
+                time: r.time,
+                branch: r.branch,
+                unpaid: r.unpaid,
+                cashout: r.cashout,
+                card: r.card,
+                transfer: r.transfer,
+                cashToTake: r.cashToTake,
+                revenue: r.revenue
+            })
+
+            // Number formats
+            const moneyCols = [5, 6, 7, 8, 9, 10]
+            moneyCols.forEach(idx => {
+                row.getCell(idx).numFmt = '#,##0'
+            })
+        })
+
+        sheet.addRow([])
+
+        // Existing KPIs (Totals)
+        const totalRowIndex = sheet.rowCount + 1
+        const totalRow = sheet.addRow({
+            branch: t.table.totals,
+            unpaid: stats.totalUnpaid,
+            cashout: stats.totalCashout,
+            card: stats.totalCard,
+            transfer: stats.totalTransfer,
+            cashToTake: stats.totalToTake,
+            revenue: stats.totalRevenue
+        })
+        totalRow.font = { bold: true }
+
+        // Format totals
+        const moneyCols = [5, 6, 7, 8, 9, 10]
+        moneyCols.forEach(idx => {
+            totalRow.getCell(idx).numFmt = '#,##0'
+        })
+
+        sheet.addRow([])
+        sheet.addRow([])
+
+        // --- NEW: Third Party Apps Breakdown ---
+        sheet.addRow(['Third Party Apps breakdown']).font = { bold: true, size: 12 }
+
+        // Calculate totals
+        const tpTotals: Record<string, number> = {}
+        filtered.forEach(r => {
+            const tpList = getThirdPartyPayments(r)
+            tpList.forEach(item => {
+                const key = (item.label || 'Other').trim()
+                // Normalize slightly if needed, but usually exact match is expected
+                if (key) {
+                    tpTotals[key] = (tpTotals[key] || 0) + (item.amount || 0)
+                }
+            })
+        })
+
+        // Sort keys alphanumerically
+        const sortedKeys = Object.keys(tpTotals).sort((a, b) => a.localeCompare(b))
+
+        sheet.addRow(['App Name', 'Total Amount']).font = { bold: true }
+        sortedKeys.forEach(key => {
+            const r = sheet.addRow([key, tpTotals[key]])
+            r.getCell(2).numFmt = '#,##0'
+        })
+
+        // Total of Third Parties
+        const totalTP = Object.values(tpTotals).reduce((a, b) => a + b, 0)
+        const grRow = sheet.addRow(['Total', totalTP])
+        grRow.font = { bold: true }
+        grRow.getCell(2).numFmt = '#,##0'
+
+
+        // Final export
+        const buf = await workbook.xlsx.writeBuffer()
+        saveAs(new Blob([buf]), `closing-list-${monthInputValue}.xlsx`)
     }
 
     if (loading && branches.length === 0) return <div className="p-6 text-gray-200">{t.common.loading}</div>

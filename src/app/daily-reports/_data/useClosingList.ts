@@ -16,6 +16,11 @@ export type ClosingRow = {
   card: number
   transfer: number
   enteredBy?: string | null
+  // Third party
+  gojek: number
+  grab: number
+  capichi: number
+  thirdPartyAmounts: { label: string; amount: number }[]
 }
 
 export type UseClosingListArgs = {
@@ -94,6 +99,10 @@ export function useClosingList({ year, month, branchName }: UseClosingListArgs) 
             'cash_out_vnd',
             'mpos_vnd',
             'bank_transfer_ewallet_vnd',
+            'gojek_vnd',
+            'grab_vnd',
+            'capichi_vnd',
+            'third_party_amounts_json',
             'cash_json',
             'float_plan_json',
             'cashier_name',
@@ -317,6 +326,10 @@ function mapDbRowToClosingRow(r: any): ClosingRow {
     card: toNum(r.mpos_vnd),
     transfer: toNum(r.bank_transfer_ewallet_vnd),
     enteredBy: r.cashier_name ? String(r.cashier_name) : null,
+    gojek: toNum(r.gojek_vnd),
+    grab: toNum(r.grab_vnd),
+    capichi: toNum(r.capichi_vnd),
+    thirdPartyAmounts: Array.isArray(r.third_party_amounts_json) ? r.third_party_amounts_json : [],
   }
 }
 
