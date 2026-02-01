@@ -13,7 +13,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
-import { exportToCsv } from '@/lib/exportUtils'
+
 
 type SortKey = 'date' | 'customer' | 'amount' | 'paid' | 'remaining' | 'status' | 'branch' | 'reference' | 'shift' | 'handledBy'
 
@@ -110,35 +110,71 @@ export default function MonthlyCreditsPage() {
         if (d) setMonthCursor(d)
     }
 
-    function handleExport() {
-        const headers = [
-            t.table?.headers?.date || 'Date',
-            t.table?.headers?.customer || 'Customer',
-            t.table?.headers?.amount || 'Amount',
-            t.table?.headers?.paid || 'Paid',
-            t.table?.headers?.remaining || 'Remaining',
-            t.table?.headers?.status || 'Status',
-            t.table?.headers?.branch || 'Branch',
-            t.table?.headers?.shift || 'Shift',
-            t.table?.headers?.handledBy || 'Handled By',
-            t.table?.headers?.reference || 'Reference'
+    async function handleExport() {
+        const ExcelJS = (await import('exceljs')).default
+        const wb = new ExcelJS.Workbook()
+        const ws = wb.addWorksheet('Credits')
+
+        ws.columns = [
+            { header: t.table?.headers?.date || 'Date', key: 'date', width: 12 },
+            { header: t.table?.headers?.customer || 'Customer', key: 'customer', width: 20 },
+            { header: t.table?.headers?.amount || 'Amount', key: 'amount', width: 15 },
+            { header: t.table?.headers?.paid || 'Paid', key: 'paid', width: 15 },
+            { header: t.table?.headers?.remaining || 'Remaining', key: 'remaining', width: 15 },
+            { header: t.table?.headers?.status || 'Status', key: 'status', width: 15 },
+            { header: t.table?.headers?.branch || 'Branch', key: 'branch', width: 20 },
+            { header: t.table?.headers?.shift || 'Shift', key: 'shift', width: 15 },
+            { header: t.table?.headers?.handledBy || 'Handled By', key: 'handledBy', width: 20 },
+            { header: t.table?.headers?.reference || 'Reference', key: 'reference', width: 25 },
         ]
-        const data = filtered.map(r => {
+
+        // Style header row
+        ws.getRow(1).font = { bold: true }
+        ws.getRow(1).alignment = { horizontal: 'center' }
+
+        filtered.forEach(r => {
             const tot = totalsMap[r.id]
-            return [
-                formatDMY(r.date),
-                r.customer_name,
-                r.amount,
-                tot?.paid || 0,
-                tot?.remaining || 0,
-                tot?.status || '',
-                r.branch,
-                r.shift,
-                r.handledBy,
-                r.reference
-            ]
+            const row = ws.addRow({
+                date: formatDMY(r.date),
+                customer: r.customer_name,
+                amount: r.amount,
+                paid: tot?.paid || 0,
+                remaining: tot?.remaining || 0,
+                status: tot?.status || '',
+                branch: r.branch,
+                shift: r.shift,
+                handledBy: r.handledBy,
+                reference: r.reference
+            })
+
+            // Format numbers
+            row.getCell('amount').numFmt = '#,##0'
+            row.getCell('paid').numFmt = '#,##0'
+            row.getCell('remaining').numFmt = '#,##0'
         })
-        exportToCsv(`credits-${monthInputValue}.csv`, headers, data)
+
+        // Add borders
+        ws.eachRow((row, rowNumber) => {
+            row.eachCell((cell) => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                }
+            })
+        })
+
+        const buf = await wb.xlsx.writeBuffer()
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `credits-${monthInputValue}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
     if (loading && branches.length === 0) return <CircularLoader />

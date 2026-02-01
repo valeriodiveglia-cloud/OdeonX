@@ -16,7 +16,7 @@ import {
     ArrowUturnLeftIcon,
     ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
-import { exportToCsv } from '@/lib/exportUtils'
+
 
 type Branch = {
     id: string
@@ -125,24 +125,60 @@ export default function CashLedgerPage() {
         else { setSortKey(k); setSortAsc(true) }
     }
 
-    function handleExport() {
-        const headers = [
-            'Date',
-            'Day',
-            'Branch',
-            'Cash Revenues',
-            'Status',
-            'Deposit Date'
+    async function handleExport() {
+        const ExcelJS = (await import('exceljs')).default
+        const wb = new ExcelJS.Workbook()
+        const ws = wb.addWorksheet('Cash Ledger')
+
+        ws.columns = [
+            { header: 'Date', key: 'date', width: 12 },
+            { header: 'Day', key: 'day', width: 12 },
+            { header: 'Branch', key: 'branch', width: 20 },
+            { header: 'Cash Revenues', key: 'amount', width: 15 },
+            { header: 'Status', key: 'status', width: 15 },
+            { header: 'Deposit Date', key: 'depositDate', width: 15 },
         ]
-        const data = sortedRows.map(r => [
-            formatDMY(r.date),
-            formatDay(new Date(r.date)),
-            r.branch,
-            r.cash_to_take,
-            r.deposited ? 'Deposited' : 'Pending',
-            r.deposited && r.deposit_date ? formatDMY(r.deposit_date) : ''
-        ])
-        exportToCsv(`cash-ledger-${monthInputValue}.csv`, headers, data)
+
+        // Style header row
+        ws.getRow(1).font = { bold: true }
+        ws.getRow(1).alignment = { horizontal: 'center' }
+
+        sortedRows.forEach(r => {
+            const row = ws.addRow({
+                date: formatDMY(r.date),
+                day: formatDay(new Date(r.date)),
+                branch: r.branch,
+                amount: r.cash_to_take,
+                status: r.deposited ? 'Deposited' : 'Pending',
+                depositDate: r.deposited && r.deposit_date ? formatDMY(r.deposit_date) : ''
+            })
+
+            // Format numbers
+            row.getCell('amount').numFmt = '#,##0'
+        })
+
+        // Add borders
+        ws.eachRow((row, rowNumber) => {
+            row.eachCell((cell) => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                }
+            })
+        })
+
+        const buf = await wb.xlsx.writeBuffer()
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `cash-ledger-${monthInputValue}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
     if (branchesLoading) return <CircularLoader />

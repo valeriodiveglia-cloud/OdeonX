@@ -13,7 +13,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
-import { exportToCsv } from '@/lib/exportUtils'
+
 
 type SortKey = 'date' | 'dow' | 'time' | 'branch' | 'type' | 'category' | 'item' | 'unit' | 'qty' | 'unitCost' | 'totalCost' | 'chargeTo'
 
@@ -102,36 +102,74 @@ export default function MonthlyWastageReportPage() {
         if (d) setMonthCursor(d)
     }
 
-    function handleExport() {
-        const headers = [
-            t.table.headers.date,
-            t.table.headers.day,
-            t.table.headers.time,
-            'Branch',
-            t.table.headers.type,
-            t.table.headers.category,
-            t.table.headers.item,
-            t.table.headers.unit,
-            t.table.headers.qty,
-            t.table.headers.unitCost,
-            t.table.headers.totalCost,
-            t.table.headers.chargeTo
+    async function handleExport() {
+        const ExcelJS = (await import('exceljs')).default
+        const wb = new ExcelJS.Workbook()
+        const ws = wb.addWorksheet('Wastage Report')
+
+        ws.columns = [
+            { header: t.table.headers.date, key: 'date', width: 12 },
+            { header: t.table.headers.day, key: 'day', width: 8 },
+            { header: t.table.headers.time, key: 'time', width: 8 },
+            { header: 'Branch', key: 'branch', width: 15 },
+            { header: t.table.headers.type, key: 'type', width: 10 },
+            { header: t.table.headers.category, key: 'category', width: 20 },
+            { header: t.table.headers.item, key: 'item', width: 30 },
+            { header: t.table.headers.unit, key: 'unit', width: 10 },
+            { header: t.table.headers.qty, key: 'qty', width: 10 },
+            { header: t.table.headers.unitCost, key: 'unitCost', width: 15 },
+            { header: t.table.headers.totalCost, key: 'totalCost', width: 15 },
+            { header: t.table.headers.chargeTo, key: 'chargeTo', width: 15 },
         ]
-        const data = filtered.map(r => [
-            formatDMY(r.date),
-            dow3(r.date),
-            r.time,
-            r.branchName,
-            r.type,
-            r.categoryName,
-            r.itemName,
-            r.unit,
-            r.qty,
-            r.unitCost,
-            r.totalCost,
-            r.chargeTo
-        ])
-        exportToCsv(`wastage-${monthInputValue}.csv`, headers, data)
+
+        // Style header row
+        ws.getRow(1).font = { bold: true }
+        ws.getRow(1).alignment = { horizontal: 'center' }
+
+        filtered.forEach(r => {
+            const row = ws.addRow({
+                date: formatDMY(r.date),
+                day: dow3(r.date),
+                time: r.time,
+                branch: r.branchName,
+                type: r.type,
+                category: r.categoryName,
+                item: r.itemName,
+                unit: r.unit,
+                qty: r.qty,
+                unitCost: r.unitCost,
+                totalCost: r.totalCost,
+                chargeTo: r.chargeTo
+            })
+
+            // Format numbers
+            row.getCell('qty').numFmt = '0.00'
+            row.getCell('unitCost').numFmt = '#,##0'
+            row.getCell('totalCost').numFmt = '#,##0'
+        })
+
+        // Add borders
+        ws.eachRow((row, rowNumber) => {
+            row.eachCell((cell) => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                }
+            })
+        })
+
+        const buf = await wb.xlsx.writeBuffer()
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `wastage-${monthInputValue}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
     if (loading && branches.length === 0) return <CircularLoader />

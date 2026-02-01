@@ -13,7 +13,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
-import { exportToCsv } from '@/lib/exportUtils'
+
 
 type SortKey = 'date' | 'amount' | 'note' | 'branch'
 
@@ -106,20 +106,56 @@ export default function MonthlyBankTransfersPage() {
         if (d) setMonthCursor(d)
     }
 
-    function handleExport() {
-        const headers = [
-            t.table?.headers?.date || 'Date',
-            t.table?.headers?.amount || 'Amount',
-            t.table?.headers?.note || 'Note',
-            t.table?.headers?.branch || 'Branch'
+    async function handleExport() {
+        const ExcelJS = (await import('exceljs')).default
+        const wb = new ExcelJS.Workbook()
+        const ws = wb.addWorksheet('Bank Transfers')
+
+        ws.columns = [
+            { header: t.table?.headers?.date || 'Date', key: 'date', width: 12 },
+            { header: t.table?.headers?.amount || 'Amount', key: 'amount', width: 15 },
+            { header: t.table?.headers?.note || 'Note', key: 'note', width: 40 },
+            { header: t.table?.headers?.branch || 'Branch', key: 'branch', width: 20 },
         ]
-        const data = filtered.map(r => [
-            formatDMY(r.date),
-            r.amount,
-            r.note,
-            r.branch
-        ])
-        exportToCsv(`bank-transfers-${monthInputValue}.csv`, headers, data)
+
+        // Style header row
+        ws.getRow(1).font = { bold: true }
+        ws.getRow(1).alignment = { horizontal: 'center' }
+
+        filtered.forEach(r => {
+            const row = ws.addRow({
+                date: formatDMY(r.date),
+                amount: r.amount,
+                note: r.note || '',
+                branch: r.branch || ''
+            })
+
+            // Format amount as number
+            row.getCell('amount').numFmt = '#,##0'
+        })
+
+        // Add borders
+        ws.eachRow((row, rowNumber) => {
+            row.eachCell((cell) => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                }
+            })
+        })
+
+        const buf = await wb.xlsx.writeBuffer()
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `bank-transfers-${monthInputValue}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
     if (loading && branches.length === 0) return <CircularLoader />

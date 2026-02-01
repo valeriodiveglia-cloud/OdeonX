@@ -13,7 +13,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
-import { exportToCsv } from '@/lib/exportUtils'
+
 
 type SortKey = 'date' | 'time' | 'description' | 'category' | 'amount' | 'supplier' | 'invoice' | 'delivery' | 'branch' | 'paidBy'
 
@@ -101,32 +101,68 @@ export default function MonthlyCashoutPage() {
         if (d) setMonthCursor(d)
     }
 
-    function handleExport() {
-        const headers = [
-            t.table.headers.date,
-            t.table.headers.time,
-            t.table.headers.description,
-            t.table.headers.category,
-            t.table.headers.amount,
-            t.table.headers.supplier,
-            t.table.headers.invoice,
-            t.table.headers.deliveryNote,
-            t.table.headers.branch,
-            t.table.headers.paidBy
+    async function handleExport() {
+        const ExcelJS = (await import('exceljs')).default
+        const wb = new ExcelJS.Workbook()
+        const ws = wb.addWorksheet('Cashout')
+
+        ws.columns = [
+            { header: t.table.headers.date, key: 'date', width: 12 },
+            { header: t.table.headers.time, key: 'time', width: 8 },
+            { header: t.table.headers.description, key: 'description', width: 40 },
+            { header: t.table.headers.category, key: 'category', width: 20 },
+            { header: t.table.headers.amount, key: 'amount', width: 15 },
+            { header: t.table.headers.supplier, key: 'supplier', width: 25 },
+            { header: t.table.headers.invoice, key: 'invoice', width: 10 },
+            { header: t.table.headers.deliveryNote, key: 'delivery', width: 10 },
+            { header: t.table.headers.branch, key: 'branch', width: 15 },
+            { header: t.table.headers.paidBy, key: 'paidBy', width: 20 },
         ]
-        const data = filtered.map(r => [
-            formatDMY(r.date),
-            extractHHMM(r.created_at),
-            r.description,
-            r.category,
-            r.amount,
-            r.supplier_name,
-            r.invoice ? 'Yes' : 'No',
-            r.deliveryNote ? 'Yes' : 'No',
-            r.branch,
-            r.paidBy
-        ])
-        exportToCsv(`cashout-${monthInputValue}.csv`, headers, data)
+
+        // Style header row
+        ws.getRow(1).font = { bold: true }
+        ws.getRow(1).alignment = { horizontal: 'center' }
+
+        filtered.forEach(r => {
+            const row = ws.addRow({
+                date: formatDMY(r.date),
+                time: extractHHMM(r.created_at),
+                description: r.description,
+                category: r.category,
+                amount: r.amount,
+                supplier: r.supplier_name,
+                invoice: r.invoice ? 'Yes' : 'No',
+                delivery: r.deliveryNote ? 'Yes' : 'No',
+                branch: r.branch,
+                paidBy: r.paidBy
+            })
+
+            // Format amount as number
+            row.getCell('amount').numFmt = '#,##0'
+        })
+
+        // Add borders
+        ws.eachRow((row, rowNumber) => {
+            row.eachCell((cell) => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                }
+            })
+        })
+
+        const buf = await wb.xlsx.writeBuffer()
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `cashout-${monthInputValue}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
     if (loading && branches.length === 0) return <CircularLoader />
