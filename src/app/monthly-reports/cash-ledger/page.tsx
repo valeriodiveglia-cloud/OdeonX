@@ -149,7 +149,7 @@ export default function CashLedgerPage() {
                 day: formatDay(new Date(r.date)),
                 branch: r.branch,
                 amount: r.cash_to_take,
-                status: r.deposited ? 'Deposited' : 'Pending',
+                status: r.cash_to_take === 0 ? 'Null' : (r.deposited ? 'Deposited' : 'Pending'),
                 depositDate: r.deposited && r.deposit_date ? formatDMY(r.deposit_date) : ''
             })
 
@@ -296,7 +296,9 @@ export default function CashLedgerPage() {
                                             {fmt(row.cash_to_take)}
                                         </td>
                                         <td className="p-2 whitespace-nowrap text-center">
-                                            {row.deposited ? (
+                                            {row.cash_to_take === 0 ? (
+                                                <span className="text-gray-400">Null</span>
+                                            ) : row.deposited ? (
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
                                                     <CheckCircleIcon className="w-3 h-3 mr-1" />
                                                     Deposited
