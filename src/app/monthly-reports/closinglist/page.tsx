@@ -126,8 +126,22 @@ export default function MonthlyClosingListPage() {
         const workbook = new ExcelJS.Workbook()
         const sheet = workbook.addWorksheet('Closing List')
 
-        // Define columns
-        sheet.columns = [
+        // 1. Identify all unique third party app names in current data
+        const uniqueAppNames = new Set<string>()
+        filtered.forEach(r => {
+            const list = getThirdPartyPayments(r)
+            list.forEach(item => {
+                if (item.label && item.amount > 0) {
+                    uniqueAppNames.add(item.label.trim())
+                }
+            })
+        })
+        // Sort alphanumerically
+        const appColumns = Array.from(uniqueAppNames).sort((a, b) => a.localeCompare(b))
+
+        // 2. Define standard columns
+        // Base keys
+        const columns = [
             { header: t.table.headers.date, key: 'date', width: 12 },
             { header: t.table.headers.day, key: 'day', width: 8 },
             { header: t.table.headers.time, key: 'time', width: 8 },
@@ -136,9 +150,18 @@ export default function MonthlyClosingListPage() {
             { header: t.table.headers.cashOut, key: 'cashout', width: 12 },
             { header: t.table.headers.card, key: 'card', width: 12 },
             { header: t.table.headers.transfer, key: 'transfer', width: 12 },
-            { header: t.table.headers.cashToTake, key: 'cashToTake', width: 12 },
-            { header: t.table.headers.revenue, key: 'revenue', width: 12 },
         ]
+
+        // Add dynamic columns for apps
+        appColumns.forEach(appName => {
+            columns.push({ header: appName, key: `app_${appName}`, width: 12 })
+        })
+
+        // Add final standard columns
+        columns.push({ header: t.table.headers.cashToTake, key: 'cashToTake', width: 12 })
+        columns.push({ header: t.table.headers.revenue, key: 'revenue', width: 12 })
+
+        sheet.columns = columns
 
         // Style header
         const headerRow = sheet.getRow(1)
@@ -150,9 +173,14 @@ export default function MonthlyClosingListPage() {
         }
         headerRow.alignment = { horizontal: 'center' }
 
-        // Data rows
+        // 3. Populate Data rows
+        // We'll track totals for dynamic columns here
+        const appTotals: Record<string, number> = {}
+        appColumns.forEach(key => appTotals[key] = 0)
+
         filtered.forEach(r => {
-            const row = sheet.addRow({
+            // Build the row object
+            const rowData: any = {
                 date: formatDMY(r.date),
                 day: dow3(r.date),
                 time: r.time,
@@ -163,20 +191,37 @@ export default function MonthlyClosingListPage() {
                 transfer: r.transfer,
                 cashToTake: r.cashToTake,
                 revenue: r.revenue
+            }
+
+            // Fill dynamic app columns
+            const list = getThirdPartyPayments(r)
+            // Create a lookup for this row
+            const rowApps: Record<string, number> = {}
+            list.forEach(item => {
+                if (item.label) rowApps[item.label.trim()] = item.amount
             })
 
-            // Number formats
-            const moneyCols = [5, 6, 7, 8, 9, 10]
-            moneyCols.forEach(idx => {
-                row.getCell(idx).numFmt = '#,##0'
+            appColumns.forEach(appName => {
+                const val = rowApps[appName] || 0
+                rowData[`app_${appName}`] = val
+                appTotals[appName] = (appTotals[appName] || 0) + val
             })
+
+            const row = sheet.addRow(rowData)
+
+            // Number formats for all money columns (starting from index 5)
+            // indices are 1-based in ExcelJS
+            // Date(1), Day(2), Time(3), Branch(4) are text.
+            // Money starts at 5 (unpaid)
+            for (let i = 5; i <= columns.length; i++) {
+                row.getCell(i).numFmt = '#,##0'
+            }
         })
 
         sheet.addRow([])
 
-        // Existing KPIs (Totals)
-        const totalRowIndex = sheet.rowCount + 1
-        const totalRow = sheet.addRow({
+        // 4. Totals Row
+        const totalRowData: any = {
             branch: t.table.totals,
             unpaid: stats.totalUnpaid,
             cashout: stats.totalCashout,
@@ -184,49 +229,20 @@ export default function MonthlyClosingListPage() {
             transfer: stats.totalTransfer,
             cashToTake: stats.totalToTake,
             revenue: stats.totalRevenue
+        }
+
+        // Add app totals
+        appColumns.forEach(appName => {
+            totalRowData[`app_${appName}`] = appTotals[appName]
         })
+
+        const totalRow = sheet.addRow(totalRowData)
         totalRow.font = { bold: true }
 
         // Format totals
-        const moneyCols = [5, 6, 7, 8, 9, 10]
-        moneyCols.forEach(idx => {
-            totalRow.getCell(idx).numFmt = '#,##0'
-        })
-
-        sheet.addRow([])
-        sheet.addRow([])
-
-        // --- NEW: Third Party Apps Breakdown ---
-        sheet.addRow(['Third Party Apps breakdown']).font = { bold: true, size: 12 }
-
-        // Calculate totals
-        const tpTotals: Record<string, number> = {}
-        filtered.forEach(r => {
-            const tpList = getThirdPartyPayments(r)
-            tpList.forEach(item => {
-                const key = (item.label || 'Other').trim()
-                // Normalize slightly if needed, but usually exact match is expected
-                if (key) {
-                    tpTotals[key] = (tpTotals[key] || 0) + (item.amount || 0)
-                }
-            })
-        })
-
-        // Sort keys alphanumerically
-        const sortedKeys = Object.keys(tpTotals).sort((a, b) => a.localeCompare(b))
-
-        sheet.addRow(['App Name', 'Total Amount']).font = { bold: true }
-        sortedKeys.forEach(key => {
-            const r = sheet.addRow([key, tpTotals[key]])
-            r.getCell(2).numFmt = '#,##0'
-        })
-
-        // Total of Third Parties
-        const totalTP = Object.values(tpTotals).reduce((a, b) => a + b, 0)
-        const grRow = sheet.addRow(['Total', totalTP])
-        grRow.font = { bold: true }
-        grRow.getCell(2).numFmt = '#,##0'
-
+        for (let i = 5; i <= columns.length; i++) {
+            totalRow.getCell(i).numFmt = '#,##0'
+        }
 
         // Final export
         const buf = await workbook.xlsx.writeBuffer()
