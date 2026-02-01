@@ -157,208 +157,235 @@ export default function CashLedgerPage() {
             row.getCell('amount').numFmt = '#,##0'
         })
 
-        // Add borders
-        ws.eachRow((row, rowNumber) => {
-            row.eachCell((cell) => {
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                }
-            })
+    })
+
+    // Add borders
+    ws.eachRow((row, rowNumber) => {
+        row.eachCell((cell) => {
+            cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+            }
+        })
+    })
+
+    // Add KPIs
+    ws.addRow([]) // Spacer
+    const depositedRow = ws.addRow(['Deposited (Current Month)', '', '', kpis.deposited])
+    const pendingRow = ws.addRow(['Pending (Current Month)', '', '', kpis.pending])
+    const totalPendingRow = ws.addRow(['Total Pending', '', '', totalPending])
+
+        // Style KPIs
+        ;[depositedRow, pendingRow, totalPendingRow].forEach(row => {
+            row.getCell(1).font = { bold: true }
+            row.getCell(4).numFmt = '#,##0'
+            row.getCell(4).font = { bold: true }
+            row.getCell(1).border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+            }
+            row.getCell(4).border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+            }
         })
 
-        const buf = await wb.xlsx.writeBuffer()
-        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `cash-ledger-${monthInputValue}.xlsx`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-    }
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `cash-ledger-${monthInputValue}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+}
 
-    if (branchesLoading) return <CircularLoader />
+if (branchesLoading) return <CircularLoader />
 
-    return (
-        <div className="max-w-none mx-auto p-4 text-gray-100">
-            {/* Header */}
-            <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold text-white">Cash Ledger</h1>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    {/* Branch Picker */}
-                    <select
-                        value={selectedBranch}
-                        onChange={e => setSelectedBranch(e.target.value)}
-                        className="h-9 rounded-lg border border-blue-400/30 bg-blue-600/15 text-blue-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                    >
-                        <option value="" className="text-gray-900">All Branches</option>
-                        {branches.map(b => (
-                            <option key={b.id} value={b.name} className="text-gray-900">{b.name}</option>
-                        ))}
-                    </select>
-
-                    {/* Export Button */}
-                    <button
-                        onClick={handleExport}
-                        className="flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors"
-                        title="Export to CSV"
-                    >
-                        <ArrowDownTrayIcon className="w-4 h-4" />
-                        <span className="hidden sm:inline">Export</span>
-                    </button>
-                </div>
+return (
+    <div className="max-w-none mx-auto p-4 text-gray-100">
+        {/* Header */}
+        <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-white">Cash Ledger</h1>
             </div>
 
-            {/* Divider */}
-            <div className="border-t border-blue-400/20 my-3"></div>
+            <div className="flex items-center gap-2">
+                {/* Branch Picker */}
+                <select
+                    value={selectedBranch}
+                    onChange={e => setSelectedBranch(e.target.value)}
+                    className="h-9 rounded-lg border border-blue-400/30 bg-blue-600/15 text-blue-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                >
+                    <option value="" className="text-gray-900">All Branches</option>
+                    {branches.map(b => (
+                        <option key={b.id} value={b.name} className="text-gray-900">{b.name}</option>
+                    ))}
+                </select>
 
-            {/* Month Nav */}
-            <div className="mb-3 grid grid-cols-3 items-center">
-                <div className="justify-self-start">
-                    <button
-                        type="button"
-                        onClick={handlePrevMonth}
-                        className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
-                    >
-                        Previous
-                    </button>
-                </div>
-                <div className="justify-self-center flex items-center gap-2">
-                    <span className="text-white font-semibold">{monthLabel}</span>
-                    <div className="relative w-6 h-6">
-                        <CalendarDaysIcon className="w-6 h-6 text-blue-200" />
-                        <input
-                            type="month"
-                            value={monthInputValue}
-                            onChange={e => onPickMonth(e.target.value)}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                    </div>
-                </div>
-                <div className="justify-self-end">
-                    <button
-                        type="button"
-                        onClick={handleNextMonth}
-                        className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
-                    >
-                        Next
-                    </button>
-                </div>
-            </div>
-
-            {/* KPI */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
-                <StatPill label="Deposited (Current Month)" value={kpis.deposited} money />
-                <StatPill label="Pending (Current Month)" value={kpis.pending} money />
-                <StatPill label="Total Pending" value={totalPending} money />
-            </div>
-
-            {/* Table */}
-            <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
-                {loading ? (
-                    <div className="flex justify-center p-12"><CircularLoader /></div>
-                ) : (
-                    <table className="w-full table-auto text-sm text-gray-900">
-                        <thead>
-                            <tr>
-                                <Th label="Date" active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} />
-                                <Th label="Day" active={sortKey === 'day'} asc={sortAsc} onClick={() => toggleSort('day')} />
-                                <Th label="Branch" active={sortKey === 'branch'} asc={sortAsc} onClick={() => toggleSort('branch')} />
-                                <Th label="Cash Revenues" active={sortKey === 'amount'} asc={sortAsc} onClick={() => toggleSort('amount')} right />
-                                <Th label="Status" active={sortKey === 'status'} asc={sortAsc} onClick={() => toggleSort('status')} center />
-                                <th className="p-2 text-center font-semibold text-gray-700">Deposit Date</th>
-                                <th className="p-2 text-center font-semibold text-gray-700">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {sortedRows.length === 0 && (
-                                <tr>
-                                    <td colSpan={7} className="text-center text-gray-500 py-6">
-                                        No data found for this period.
-                                    </td>
-                                </tr>
-                            )}
-                            {sortedRows.map((row, idx) => {
-                                const dateObj = new Date(row.date)
-                                return (
-                                    <tr key={`${row.date}-${row.branch}-${idx}`} className="border-t hover:bg-blue-50/40">
-                                        <td className="p-2 whitespace-nowrap">{formatDMY(row.date)}</td>
-                                        <td className="p-2 whitespace-nowrap text-gray-600">{formatDay(dateObj)}</td>
-                                        <td className="p-2 whitespace-nowrap">{row.branch}</td>
-                                        <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold text-gray-900">
-                                            {fmt(row.cash_to_take)}
-                                        </td>
-                                        <td className="p-2 whitespace-nowrap text-center">
-                                            {row.cash_to_take === 0 ? (
-                                                <span className="text-gray-400">Null</span>
-                                            ) : row.deposited ? (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
-                                                    <CheckCircleIcon className="w-3 h-3 mr-1" />
-                                                    Deposited
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-800">
-                                                    <ExclamationCircleIcon className="w-3 h-3 mr-1" />
-                                                    Pending
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="p-2 whitespace-nowrap text-center">
-                                            {row.deposited && row.deposit_date ? (
-                                                <div className="flex items-center justify-center gap-1 group">
-                                                    <span className="text-gray-700">{formatDMY(row.deposit_date)}</span>
-                                                    <div className="relative w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-blue-500">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                                                        </svg>
-                                                        <input
-                                                            type="date"
-                                                            className="absolute inset-0 opacity-0 cursor-pointer"
-                                                            value={row.deposit_date}
-                                                            onChange={(e) => updateDepositDate(row, e.target.value)}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <span className="text-gray-400">-</span>
-                                            )}
-                                        </td>
-                                        <td className="p-2 whitespace-nowrap text-center">
-                                            {row.cash_to_take > 0 && (
-                                                <button
-                                                    onClick={() => row.deposited ? undeposit(row) : deposit(row)}
-                                                    title={row.deposited ? "Undo Deposit" : "Mark as Deposited"}
-                                                    className={`p-0 h-auto w-auto bg-transparent hover:opacity-80 transition-opacity ${row.deposited ? 'text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
-                                                >
-                                                    <BuildingLibraryIcon className="w-5 h-5" />
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                            {sortedRows.length > 0 && (
-                                <tr className="border-t bg-gray-50 font-semibold">
-                                    <td className="p-2" colSpan={3}>Totals</td>
-                                    <td className="p-2 text-right tabular-nums text-gray-900">
-                                        {fmt(sortedRows.reduce((sum, r) => sum + r.cash_to_take, 0))}
-                                    </td>
-                                    <td className="p-2" colSpan={3}></td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                )}
+                {/* Export Button */}
+                <button
+                    onClick={handleExport}
+                    className="flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors"
+                    title="Export to CSV"
+                >
+                    <ArrowDownTrayIcon className="w-4 h-4" />
+                    <span className="hidden sm:inline">Export</span>
+                </button>
             </div>
         </div>
-    )
+
+        {/* Divider */}
+        <div className="border-t border-blue-400/20 my-3"></div>
+
+        {/* Month Nav */}
+        <div className="mb-3 grid grid-cols-3 items-center">
+            <div className="justify-self-start">
+                <button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
+                >
+                    Previous
+                </button>
+            </div>
+            <div className="justify-self-center flex items-center gap-2">
+                <span className="text-white font-semibold">{monthLabel}</span>
+                <div className="relative w-6 h-6">
+                    <CalendarDaysIcon className="w-6 h-6 text-blue-200" />
+                    <input
+                        type="month"
+                        value={monthInputValue}
+                        onChange={e => onPickMonth(e.target.value)}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                </div>
+            </div>
+            <div className="justify-self-end">
+                <button
+                    type="button"
+                    onClick={handleNextMonth}
+                    className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
+                >
+                    Next
+                </button>
+            </div>
+        </div>
+
+        {/* KPI */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+            <StatPill label="Deposited (Current Month)" value={kpis.deposited} money />
+            <StatPill label="Pending (Current Month)" value={kpis.pending} money />
+            <StatPill label="Total Pending" value={totalPending} money />
+        </div>
+
+        {/* Table */}
+        <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
+            {loading ? (
+                <div className="flex justify-center p-12"><CircularLoader /></div>
+            ) : (
+                <table className="w-full table-auto text-sm text-gray-900">
+                    <thead>
+                        <tr>
+                            <Th label="Date" active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} />
+                            <Th label="Day" active={sortKey === 'day'} asc={sortAsc} onClick={() => toggleSort('day')} />
+                            <Th label="Branch" active={sortKey === 'branch'} asc={sortAsc} onClick={() => toggleSort('branch')} />
+                            <Th label="Cash Revenues" active={sortKey === 'amount'} asc={sortAsc} onClick={() => toggleSort('amount')} right />
+                            <Th label="Status" active={sortKey === 'status'} asc={sortAsc} onClick={() => toggleSort('status')} center />
+                            <th className="p-2 text-center font-semibold text-gray-700">Deposit Date</th>
+                            <th className="p-2 text-center font-semibold text-gray-700">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sortedRows.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="text-center text-gray-500 py-6">
+                                    No data found for this period.
+                                </td>
+                            </tr>
+                        )}
+                        {sortedRows.map((row, idx) => {
+                            const dateObj = new Date(row.date)
+                            return (
+                                <tr key={`${row.date}-${row.branch}-${idx}`} className="border-t hover:bg-blue-50/40">
+                                    <td className="p-2 whitespace-nowrap">{formatDMY(row.date)}</td>
+                                    <td className="p-2 whitespace-nowrap text-gray-600">{formatDay(dateObj)}</td>
+                                    <td className="p-2 whitespace-nowrap">{row.branch}</td>
+                                    <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold text-gray-900">
+                                        {fmt(row.cash_to_take)}
+                                    </td>
+                                    <td className="p-2 whitespace-nowrap text-center">
+                                        {row.cash_to_take === 0 ? (
+                                            <span className="text-gray-400">Null</span>
+                                        ) : row.deposited ? (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                                                <CheckCircleIcon className="w-3 h-3 mr-1" />
+                                                Deposited
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-800">
+                                                <ExclamationCircleIcon className="w-3 h-3 mr-1" />
+                                                Pending
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="p-2 whitespace-nowrap text-center">
+                                        {row.deposited && row.deposit_date ? (
+                                            <div className="flex items-center justify-center gap-1 group">
+                                                <span className="text-gray-700">{formatDMY(row.deposit_date)}</span>
+                                                <div className="relative w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-blue-500">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                                                    </svg>
+                                                    <input
+                                                        type="date"
+                                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                                        value={row.deposit_date}
+                                                        onChange={(e) => updateDepositDate(row, e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-400">-</span>
+                                        )}
+                                    </td>
+                                    <td className="p-2 whitespace-nowrap text-center">
+                                        {row.cash_to_take > 0 && (
+                                            <button
+                                                onClick={() => row.deposited ? undeposit(row) : deposit(row)}
+                                                title={row.deposited ? "Undo Deposit" : "Mark as Deposited"}
+                                                className={`p-0 h-auto w-auto bg-transparent hover:opacity-80 transition-opacity ${row.deposited ? 'text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
+                                            >
+                                                <BuildingLibraryIcon className="w-5 h-5" />
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            )
+                        })}
+                        {sortedRows.length > 0 && (
+                            <tr className="border-t bg-gray-50 font-semibold">
+                                <td className="p-2" colSpan={3}>Totals</td>
+                                <td className="p-2 text-right tabular-nums text-gray-900">
+                                    {fmt(sortedRows.reduce((sum, r) => sum + r.cash_to_take, 0))}
+                                </td>
+                                <td className="p-2" colSpan={3}></td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            )}
+        </div>
+    </div>
+)
 }
 
 /* --- Helpers UI --- */
