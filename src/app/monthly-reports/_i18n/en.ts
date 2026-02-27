@@ -462,6 +462,14 @@ export const en = {
             totals: 'Totals',
             loading: 'Loading…',
             error: 'Load error',
+            columnMenu: {
+                sortAsc: 'Sort Ascending',
+                sortDesc: 'Sort Descending',
+                selectAll: 'Select All',
+                deselectAll: 'Deselect All',
+                filterPlaceholder: 'Search...',
+                clearFilters: 'Clear Filters',
+            },
         },
         export: {
             label: 'Export',
@@ -544,6 +552,14 @@ export const en = {
             empty: 'No wastage in this month.',
             totals: 'Totals',
             noRows: 'No wastage records found for this month.',
+            columnMenu: {
+                sortAsc: 'Sort Ascending',
+                sortDesc: 'Sort Descending',
+                selectAll: 'Select All',
+                deselectAll: 'Deselect All',
+                filterPlaceholder: 'Search...',
+                clearFilters: 'Clear Filters',
+            },
         },
         menu: {
             more: 'More actions',
@@ -648,6 +664,14 @@ export const en = {
             totals: 'Totals',
             action: { history: 'View payment history', record: 'Record payment' },
             noRows: 'No credits found for this month.',
+            columnMenu: {
+                sortAsc: 'Sort Ascending',
+                sortDesc: 'Sort Descending',
+                selectAll: 'Select All',
+                deselectAll: 'Deselect All',
+                filterPlaceholder: 'Search...',
+                clearFilters: 'Clear Filters',
+            },
         },
         export: { label: 'Export', title: 'Export Excel' },
         editor: {
