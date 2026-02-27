@@ -1,12 +1,14 @@
 'use client'
 
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import {
     CalendarDaysIcon,
-    ChevronUpIcon,
-    ChevronDownIcon,
     MagnifyingGlassIcon,
     ArrowDownTrayIcon,
+    EllipsisVerticalIcon,
+    BarsArrowUpIcon,
+    BarsArrowDownIcon,
+    FunnelIcon,
 } from '@heroicons/react/24/outline'
 import { useCashout, type CashoutRow } from '../../daily-reports/_data/useCashout'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -14,6 +16,7 @@ import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
 
+import { exportToExcelTable, type ExcelColumn } from '@/lib/exportUtils'
 
 type SortKey = 'date' | 'time' | 'description' | 'category' | 'amount' | 'supplier' | 'invoice' | 'delivery' | 'branch' | 'paidBy'
 
@@ -27,6 +30,8 @@ export default function MonthlyCashoutPage() {
     const [qText, setQText] = useState('')
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortAsc, setSortAsc] = useState(false)
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+    const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
 
     const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()))
     const monthInputValue = useMemo(() => toMonthInputValue(monthCursor), [monthCursor])
@@ -57,12 +62,46 @@ export default function MonthlyCashoutPage() {
         branchName: selectedBranchName,
     })
 
-    function toggleSort(k: SortKey) {
-        if (sortKey === k) setSortAsc(v => !v)
-        else { setSortKey(k); setSortAsc(true) }
+    function applySort(k: SortKey, asc: boolean) {
+        setSortKey(k); setSortAsc(asc); setOpenMenu(null)
+    }
+    function applyColumnFilter(col: SortKey, vals: Set<string> | null) {
+        setColumnFilters(prev => ({ ...prev, [col]: vals })); setOpenMenu(null)
+    }
+    function clearColumnFilter(col: SortKey) {
+        setColumnFilters(prev => { const n = { ...prev }; delete n[col]; return n }); setOpenMenu(null)
     }
 
+    // Display value helper for filter checkboxes
+    const displayValue = useCallback((r: CashoutRow, key: SortKey): string => {
+        switch (key) {
+            case 'date': return formatDMY(r.date)
+            case 'time': return extractHHMM(r.created_at)
+            case 'description': return r.description || ''
+            case 'category': return r.category || ''
+            case 'amount': return fmt(r.amount)
+            case 'supplier': return r.supplier_name || ''
+            case 'invoice': return r.invoice ? 'Yes' : '-'
+            case 'delivery': return r.deliveryNote ? 'Yes' : '-'
+            case 'branch': return r.branch || ''
+            case 'paidBy': return r.paidBy || ''
+            default: return ''
+        }
+    }, [])
+
     // Search & Sort
+    // Unique filterable values per column
+    const columnValues = useMemo(() => {
+        const map: Record<string, string[]> = {}
+        const keys: SortKey[] = ['date', 'time', 'description', 'category', 'amount', 'supplier', 'invoice', 'delivery', 'branch', 'paidBy']
+        keys.forEach(k => {
+            const s = new Set<string>()
+            rows.forEach(r => { const v = displayValue(r, k); if (v) s.add(v) })
+            map[k] = Array.from(s).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        })
+        return map
+    }, [rows, displayValue])
+
     const filtered = useMemo(() => {
         let out = rows.slice()
         if (qText.trim()) {
@@ -76,6 +115,11 @@ export default function MonthlyCashoutPage() {
                 formatDMY(r.date).includes(s)
             )
         }
+        // Apply column filters
+        for (const [col, allowed] of Object.entries(columnFilters)) {
+            if (!allowed) continue
+            out = out.filter(r => allowed.has(displayValue(r, col as SortKey)))
+        }
         out.sort((a, b) => {
             const av = sortValue(a, sortKey)
             const bv = sortValue(b, sortKey)
@@ -85,7 +129,7 @@ export default function MonthlyCashoutPage() {
             return sortAsc ? cmp : -cmp
         })
         return out
-    }, [rows, qText, sortKey, sortAsc])
+    }, [rows, qText, sortKey, sortAsc, columnFilters, displayValue])
 
     // KPI
     const stats = useMemo(() => {
@@ -102,16 +146,12 @@ export default function MonthlyCashoutPage() {
     }
 
     async function handleExport() {
-        const ExcelJS = (await import('exceljs')).default
-        const wb = new ExcelJS.Workbook()
-        const ws = wb.addWorksheet('Cashout')
-
-        ws.columns = [
-            { header: t.table.headers.date, key: 'date', width: 12 },
+        const columns: ExcelColumn[] = [
+            { header: t.table.headers.date, key: 'date', width: 12, total: 'Totals:' },
             { header: t.table.headers.time, key: 'time', width: 8 },
             { header: t.table.headers.description, key: 'description', width: 40 },
             { header: t.table.headers.category, key: 'category', width: 20 },
-            { header: t.table.headers.amount, key: 'amount', width: 15 },
+            { header: t.table.headers.amount, key: 'amount', width: 15, total: true, fmt: '#,##0' },
             { header: t.table.headers.supplier, key: 'supplier', width: 25 },
             { header: t.table.headers.invoice, key: 'invoice', width: 10 },
             { header: t.table.headers.deliveryNote, key: 'delivery', width: 10 },
@@ -119,50 +159,20 @@ export default function MonthlyCashoutPage() {
             { header: t.table.headers.paidBy, key: 'paidBy', width: 20 },
         ]
 
-        // Style header row
-        ws.getRow(1).font = { bold: true }
-        ws.getRow(1).alignment = { horizontal: 'center' }
+        const data = filtered.map(r => ({
+            date: formatDMY(r.date),
+            time: extractHHMM(r.created_at),
+            description: r.description,
+            category: r.category,
+            amount: r.amount,
+            supplier: r.supplier_name,
+            invoice: r.invoice ? 'Yes' : 'No',
+            delivery: r.deliveryNote ? 'Yes' : 'No',
+            branch: r.branch,
+            paidBy: r.paidBy
+        }))
 
-        filtered.forEach(r => {
-            const row = ws.addRow({
-                date: formatDMY(r.date),
-                time: extractHHMM(r.created_at),
-                description: r.description,
-                category: r.category,
-                amount: r.amount,
-                supplier: r.supplier_name,
-                invoice: r.invoice ? 'Yes' : 'No',
-                delivery: r.deliveryNote ? 'Yes' : 'No',
-                branch: r.branch,
-                paidBy: r.paidBy
-            })
-
-            // Format amount as number
-            row.getCell('amount').numFmt = '#,##0'
-        })
-
-        // Add borders
-        ws.eachRow((row, rowNumber) => {
-            row.eachCell((cell) => {
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                }
-            })
-        })
-
-        const buf = await wb.xlsx.writeBuffer()
-        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `cashout-${monthInputValue}.xlsx`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
+        await exportToExcelTable('Cashout', `cashout-${monthInputValue}.xlsx`, columns, data)
     }
 
     if (loading && branches.length === 0) return <CircularLoader />
@@ -263,16 +273,25 @@ export default function MonthlyCashoutPage() {
                 <table className="w-full table-auto text-sm text-gray-900">
                     <thead>
                         <tr>
-                            <Th label={t.table.headers.date} active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} />
-                            <Th label={t.table.headers.time} active={sortKey === 'time'} asc={sortAsc} onClick={() => toggleSort('time')} />
-                            <Th label={t.table.headers.description} active={sortKey === 'description'} asc={sortAsc} onClick={() => toggleSort('description')} />
-                            <Th label={t.table.headers.category} active={sortKey === 'category'} asc={sortAsc} onClick={() => toggleSort('category')} />
-                            <Th label={t.table.headers.amount} active={sortKey === 'amount'} asc={sortAsc} onClick={() => toggleSort('amount')} right />
-                            <Th label={t.table.headers.supplier} active={sortKey === 'supplier'} asc={sortAsc} onClick={() => toggleSort('supplier')} />
-                            <Th label={t.table.headers.invoice} active={sortKey === 'invoice'} asc={sortAsc} onClick={() => toggleSort('invoice')} />
-                            <Th label={t.table.headers.deliveryNote} active={sortKey === 'delivery'} asc={sortAsc} onClick={() => toggleSort('delivery')} />
-                            <Th label={t.table.headers.branch} active={sortKey === 'branch'} asc={sortAsc} onClick={() => toggleSort('branch')} />
-                            <Th label={t.table.headers.paidBy} active={sortKey === 'paidBy'} asc={sortAsc} onClick={() => toggleSort('paidBy')} />
+                            {([['date', t.table.headers.date], ['time', t.table.headers.time], ['description', t.table.headers.description], ['category', t.table.headers.category], ['amount', t.table.headers.amount, true], ['supplier', t.table.headers.supplier], ['invoice', t.table.headers.invoice], ['delivery', t.table.headers.deliveryNote], ['branch', t.table.headers.branch], ['paidBy', t.table.headers.paidBy]] as [SortKey, string, boolean?][]).map(([k, lbl, right]) => (
+                                <ColumnHeader
+                                    key={k}
+                                    colKey={k}
+                                    label={lbl}
+                                    sortKey={sortKey}
+                                    sortAsc={sortAsc}
+                                    onSort={applySort}
+                                    values={columnValues[k] || []}
+                                    activeFilter={columnFilters[k] || null}
+                                    onFilter={(s) => applyColumnFilter(k, s)}
+                                    onClear={() => clearColumnFilter(k)}
+                                    open={openMenu === k}
+                                    onToggle={() => setOpenMenu(openMenu === k ? null : k)}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={t.table.columnMenu}
+                                    right={!!right}
+                                />
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
@@ -312,20 +331,175 @@ export default function MonthlyCashoutPage() {
 }
 
 /* --- Helpers UI --- */
-function Th({ label, active, asc, onClick, right }: { label: string; active: boolean; asc: boolean; onClick: () => void; right?: boolean }) {
+/* --- Column Header with Excel-style dropdown --- */
+type ColumnHeaderProps = {
+    colKey: SortKey
+    label: string
+    sortKey: SortKey
+    sortAsc: boolean
+    onSort: (k: SortKey, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (s: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+    right?: boolean
+    center?: boolean
+    className?: string
+}
+
+function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '' }: ColumnHeaderProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+        ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+        : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) { filteredValues.forEach(v => next.delete(v)) }
+        else { filteredValues.forEach(v => next.add(v)) }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        if (localChecked.size >= values.length) onFilter(null)
+        else onFilter(new Set(localChecked))
+    }
+
     return (
-        <th className={`p-2 ${right ? 'text-right' : ''}`}>
-            <button onClick={onClick} className={`w-full flex items-center gap-1 font-semibold cursor-pointer ${right ? 'justify-end' : ''}`}>
-                {!right && <SortIcon active={active} asc={asc} />}
-                <span>{label}</span>
-                {right && <SortIcon active={active} asc={asc} />}
-            </button>
+        <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
+            <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+                <span className="select-none">{label}</span>
+                {isActive && (
+                    sortAsc
+                        ? <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        : <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                )}
+                {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onToggle() }}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+                    aria-label={`Menu ${label}`}
+                >
+                    <EllipsisVerticalIcon className="w-4 h-4 text-gray-500" />
+                </button>
+            </div>
+
+            {open && dropdownStyle && (
+                <div
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700"
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button
+                            onClick={() => onSort(colKey, true)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                                }`}
+                        >
+                            <BarsArrowUpIcon className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button
+                            onClick={() => onSort(colKey, false)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                                }`}
+                        >
+                            <BarsArrowDownIcon className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input
+                            type="text"
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                            placeholder={dict.filterPlaceholder}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+                        <button
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+                        <button
+                            onClick={onClear}
+                            className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                        >
+                            {dict.clearFilters}
+                        </button>
+                        <button
+                            onClick={handleApply}
+                            className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
         </th>
     )
-}
-function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
-    if (!active) return <span className="inline-block w-4" />
-    return asc ? <ChevronUpIcon className="w-4 h-4 text-gray-700" /> : <ChevronDownIcon className="w-4 h-4 text-gray-700" />
 }
 function StatPill({ label, value, money }: { label: string; value: number; money?: boolean }) {
     return (

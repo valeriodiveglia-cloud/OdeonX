@@ -77,6 +77,14 @@ export const vi = {
             selectRow: 'Chọn dòng',
             totals: 'Tổng cộng',
             noRows: 'Không có báo cáo chốt ca nào trong tháng này.',
+            columnMenu: {
+                sortAsc: 'Sắp xếp tăng dần',
+                sortDesc: 'Sắp xếp giảm dần',
+                selectAll: 'Chọn tất cả',
+                deselectAll: 'Bỏ chọn tất cả',
+                filterPlaceholder: 'Tìm kiếm...',
+                clearFilters: 'Xóa bộ lọc',
+            },
         },
 
         menu: {
@@ -365,6 +373,14 @@ export const vi = {
             selectRow: 'Chọn dòng',
             totals: 'Tổng',
             loading: 'Đang tải…',
+            columnMenu: {
+                sortAsc: 'Sắp xếp tăng dần',
+                sortDesc: 'Sắp xếp giảm dần',
+                selectAll: 'Chọn tất cả',
+                deselectAll: 'Bỏ chọn tất cả',
+                filterPlaceholder: 'Tìm kiếm...',
+                clearFilters: 'Xóa bộ lọc',
+            },
         },
         actions: {
             newExpense: 'Thêm chi phí',
@@ -444,6 +460,14 @@ export const vi = {
             totals: 'Tổng',
             loading: 'Đang tải…',
             error: 'Lỗi tải dữ liệu',
+            columnMenu: {
+                sortAsc: 'Sắp xếp tăng dần',
+                sortDesc: 'Sắp xếp giảm dần',
+                selectAll: 'Chọn tất cả',
+                deselectAll: 'Bỏ chọn tất cả',
+                filterPlaceholder: 'Tìm kiếm...',
+                clearFilters: 'Xóa bộ lọc',
+            },
         },
         export: {
             label: 'Xuất',
@@ -525,6 +549,14 @@ export const vi = {
             },
             empty: 'Không có hao hụt trong tháng này.',
             totals: 'Tổng',
+            columnMenu: {
+                sortAsc: 'Sắp xếp tăng dần',
+                sortDesc: 'Sắp xếp giảm dần',
+                selectAll: 'Chọn tất cả',
+                deselectAll: 'Bỏ chọn tất cả',
+                filterPlaceholder: 'Tìm kiếm...',
+                clearFilters: 'Xóa bộ lọc',
+            },
         },
         menu: {
             more: 'Thao tác khác',
@@ -628,6 +660,14 @@ export const vi = {
             loading: 'Đang tải…',
             totals: 'Tổng',
             action: { history: 'Xem lịch sử thanh toán', record: 'Ghi nhận thanh toán' },
+            columnMenu: {
+                sortAsc: 'Sắp xếp tăng dần',
+                sortDesc: 'Sắp xếp giảm dần',
+                selectAll: 'Chọn tất cả',
+                deselectAll: 'Bỏ chọn tất cả',
+                filterPlaceholder: 'Tìm kiếm...',
+                clearFilters: 'Xóa bộ lọc',
+            },
         },
         export: { label: 'Xuất', title: 'Xuất Excel' },
         editor: {
@@ -843,6 +883,14 @@ export const vi = {
             viewPaymentHistory: 'Xem lịch sử thanh toán',
             recordPayment: 'Ghi nhận thanh toán',
             action: { history: 'Xem lịch sử thanh toán', record: 'Ghi nhận thanh toán' },
+            columnMenu: {
+                sortAsc: 'Sắp xếp tăng dần',
+                sortDesc: 'Sắp xếp giảm dần',
+                selectAll: 'Chọn tất cả',
+                deselectAll: 'Bỏ chọn tất cả',
+                filterPlaceholder: 'Tìm kiếm...',
+                clearFilters: 'Xóa bộ lọc',
+            },
         },
 
         export: {

@@ -3,7 +3,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { HomeIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import { UserGroupIcon, HomeIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
 import { ChefHat, Utensils, Package, BarChart3, LineChart, Building2 } from 'lucide-react'
 import React from 'react'
 
@@ -20,15 +20,14 @@ type Item = {
   fallback: string
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
 }
-
 const NAV: Item[] = [
-  { href: '/materials',          i18nKey: 'Materials',         fallback: 'Materials',          icon: Package },
-  { href: '/materials-history',  i18nKey: 'MaterialsHistory',  fallback: 'Materials History',  icon: BarChart3 },
-  { href: '/recipes',            i18nKey: 'Recipes',           fallback: 'Recipes',            icon: ChefHat },
-  { href: '/equipment',          i18nKey: 'Equipment',         fallback: 'Equipment',          icon: Utensils },
-  { href: '/equipment-history',  i18nKey: 'EquipmentHistory',  fallback: 'Equipment History',  icon: LineChart },
-  { href: '/suppliers',          i18nKey: 'Suppliers',         fallback: 'Suppliers',          icon: Building2 },
-  { href: '/settings',           i18nKey: 'Settings',          fallback: 'Settings',           icon: Cog6ToothIcon },
+  { href: '/materials', i18nKey: 'Materials', fallback: 'Materials', icon: Package },
+  { href: '/materials-history', i18nKey: 'MaterialsHistory', fallback: 'Materials History', icon: BarChart3 },
+  { href: '/recipes', i18nKey: 'Recipes', fallback: 'Recipes', icon: ChefHat },
+  { href: '/equipment', i18nKey: 'Equipment', fallback: 'Equipment', icon: Utensils },
+  { href: '/equipment-history', i18nKey: 'EquipmentHistory', fallback: 'Equipment History', icon: LineChart },
+  { href: '/suppliers', i18nKey: 'Suppliers', fallback: 'Suppliers', icon: Building2 },
+  { href: '/settings', i18nKey: 'Settings', fallback: 'Settings', icon: Cog6ToothIcon },
 ]
 
 // doppio layer per le icone
@@ -45,9 +44,8 @@ function DualIcon({
     <span className="relative inline-block w-5 h-5 shrink-0">
       <Icon className="absolute inset-0 w-5 h-5 text-white" />
       <Icon
-        className={`absolute inset-0 w-5 h-5 text-slate-900 ${
-          open && active ? 'opacity-100' : 'opacity-0'
-        } transition-opacity`}
+        className={`absolute inset-0 w-5 h-5 text-slate-900 ${open && active ? 'opacity-100' : 'opacity-0'
+          } transition-opacity`}
       />
     </span>
   )
@@ -159,9 +157,8 @@ export default function LeftNav() {
 
   return (
     <div
-      className={`relative z-10 h-full flex flex-col text-white transition-[width] duration-150 ease-out ${
-        open ? 'w-64' : 'w-14'
-      } ${stateClass}`}
+      className={`relative z-10 h-full flex flex-col text-white transition-[width] duration-150 ease-out ${open ? 'w-64' : 'w-14'
+        } ${stateClass}`}
       aria-expanded={open}
       onFocus={handleFocusWithin}
       onBlur={handleBlurWithin}
@@ -175,9 +172,8 @@ export default function LeftNav() {
           href="/dashboard"
           aria-label={homeTitle}
           title={homeTitle}
-          className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${
-            open ? '' : 'mx-auto'
-          }`}
+          className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'
+            }`}
           onPointerEnter={() => {
             if (!isTouch) setOpen(true)
           }}
@@ -203,9 +199,8 @@ export default function LeftNav() {
               aria-label={labelTxt}
               title={labelTxt}
               aria-current={active ? 'page' : undefined}
-              className={`relative flex items-center h-11 rounded-xl transition-colors hover:bg-white/10 ${
-                open ? 'gap-3 px-3' : 'justify-center px-0'
-              }`}
+              className={`relative flex items-center h-11 rounded-xl transition-colors hover:bg-white/10 ${open ? 'gap-3 px-3' : 'justify-center px-0'
+                }`}
               tabIndex={0}
               onPointerEnter={() => {
                 if (!isTouch) setOpen(true)
@@ -225,9 +220,8 @@ export default function LeftNav() {
 
               {open && (
                 <span
-                  className={`whitespace-nowrap overflow-hidden text-ellipsis font-medium nav-text ${
-                    active ? 'text-slate-900' : 'text-slate-100'
-                  }`}
+                  className={`whitespace-nowrap overflow-hidden text-ellipsis font-medium nav-text ${active ? 'text-slate-900' : 'text-slate-100'
+                    }`}
                 >
                   {labelTxt}
                 </span>
@@ -235,9 +229,8 @@ export default function LeftNav() {
 
               {open && (
                 <span
-                  className={`pointer-events-none absolute inset-0 -z-10 rounded-xl bg-blue-100 nav-active-bg ${
-                    active ? '' : 'opacity-0'
-                  }`}
+                  className={`pointer-events-none absolute inset-0 -z-10 rounded-xl bg-blue-100 nav-active-bg ${active ? '' : 'opacity-0'
+                    }`}
                 />
               )}
             </Link>
@@ -247,17 +240,15 @@ export default function LeftNav() {
 
       {/* Footer */}
       <div
-        className={`mt-auto p-3 flex items-center justify-between footer-wrap clip-scope ${
-          open ? 'opacity-100' : 'opacity-0'
-        }`}
+        className={`mt-auto p-3 flex items-center justify-between footer-wrap clip-scope ${open ? 'opacity-100' : 'opacity-0'
+          }`}
       >
         <button
           type="button"
           onClick={toggleLang}
           aria-label={open ? label : undefined}
-          className={`w-8 h-8 flex items-center justify-center ${
-            FLAG_SHAPE === 'circle' ? 'rounded-full' : 'rounded-none'
-          } overflow-hidden border border-white/20 hover:bg-white/10`}
+          className={`w-8 h-8 flex items-center justify-center ${FLAG_SHAPE === 'circle' ? 'rounded-full' : 'rounded-none'
+            } overflow-hidden border border-white/20 hover:bg-white/10`}
           tabIndex={open ? 0 : -1}
           onPointerEnter={() => {
             if (!isTouch) setOpen(true)

@@ -20,6 +20,7 @@ import { LayoutDashboard, Boxes } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
+import HRDashboardModal from '@/components/human-resources/HRDashboardModal'
 
 type ProviderBranch = {
   id: string
@@ -210,6 +211,9 @@ export default function HomeDashboard() {
                       <UserGroupIcon className="h-6 w-6" />
                       <span>Loyalty Manager</span>
                     </Link>
+
+                    {/* Human Resources */}
+                    <HRModuleCTA />
 
                     {/* Asset Inventory */}
                     <AssetBranchPickerCTA />
@@ -621,5 +625,24 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
         </div>
       </div>
     </header>
+  )
+}
+
+/* ---------- HR Module CTA ---------- */
+function HRModuleCTA() {
+  const [open, setOpen] = useState(false)
+  const { language } = useSettings()
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+      >
+        <UserGroupIcon className="h-6 w-6" />
+        <span>{t(language, 'HumanResources') || 'Human Resources'}</span>
+      </button>
+      {open && <HRDashboardModal onClose={() => setOpen(false)} />}
+    </>
   )
 }

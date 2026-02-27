@@ -1,21 +1,22 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-    ChevronUpIcon,
-    ChevronDownIcon,
     CalendarDaysIcon,
     MagnifyingGlassIcon,
     ArrowDownTrayIcon,
+    EllipsisVerticalIcon,
+    BarsArrowUpIcon,
+    BarsArrowDownIcon,
+    FunnelIcon,
 } from '@heroicons/react/24/outline'
 import { useClosingList, type ClosingRow } from '../../daily-reports/_data/useClosingList'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
-import ExcelJS from 'exceljs'
-import { saveAs } from 'file-saver'
+import { exportToExcelTable, type ExcelColumn } from '@/lib/exportUtils'
 
 type SortKey = 'date' | 'dow' | 'time' | 'branch' | 'revenue' | 'unpaid' | 'cashout' | 'cashToTake' | 'card' | 'transfer'
 
@@ -43,6 +44,11 @@ export default function MonthlyClosingListPage() {
     const [qText, setQText] = useState('')
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortAsc, setSortAsc] = useState(false)
+
+    // Column filter state: per-column set of allowed display values
+    const [columnFilters, setColumnFilters] = useState<Partial<Record<SortKey, Set<string>>>>({})
+    // Which column menu is currently open
+    const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
 
     const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()))
     const monthInputValue = useMemo(() => toMonthInputValue(monthCursor), [monthCursor])
@@ -73,12 +79,73 @@ export default function MonthlyClosingListPage() {
         branchName: selectedBranchName,
     })
 
-    function toggleSort(k: SortKey) {
-        if (sortKey === k) setSortAsc(v => !v)
-        else { setSortKey(k); setSortAsc(true) }
+    function applySort(k: SortKey, asc: boolean) {
+        setSortKey(k)
+        setSortAsc(asc)
+        setOpenMenu(null)
     }
 
-    // Search filter
+    function applyColumnFilter(k: SortKey, allowed: Set<string> | null) {
+        setColumnFilters(prev => {
+            const next = { ...prev }
+            if (!allowed) delete next[k]
+            else next[k] = allowed
+            return next
+        })
+        setOpenMenu(null)
+    }
+
+    function clearColumnFilter(k: SortKey) {
+        setColumnFilters(prev => {
+            const next = { ...prev }
+            delete next[k]
+            return next
+        })
+        setOpenMenu(null)
+    }
+
+    // Build unique display values per column (for filter checkboxes)
+    const columnValues = useMemo(() => {
+        const map: Partial<Record<SortKey, string[]>> = {}
+        const sets: Partial<Record<SortKey, Set<string>>> = {}
+        const keys: SortKey[] = ['date', 'dow', 'time', 'branch', 'unpaid', 'cashout', 'card', 'transfer', 'cashToTake', 'revenue']
+        keys.forEach(k => { sets[k] = new Set() })
+        rows.forEach(r => {
+            sets.date!.add(formatDMY(r.date))
+            sets.dow!.add(dow3(r.date))
+            sets.time!.add(r.time)
+            sets.branch!.add(r.branch)
+            sets.unpaid!.add(fmt(r.unpaid))
+            sets.cashout!.add(fmt(r.cashout))
+            sets.card!.add(fmt(r.card))
+            sets.transfer!.add(fmt(r.transfer))
+            sets.cashToTake!.add(fmt(r.cashToTake))
+            sets.revenue!.add(fmt(r.revenue))
+        })
+        keys.forEach(k => {
+            map[k] = Array.from(sets[k]!).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        })
+        return map
+    }, [rows])
+
+    // Helper to get display value for a row + column
+    const displayValue = useCallback((r: ClosingRow, k: SortKey): string => {
+        switch (k) {
+            case 'date': return formatDMY(r.date)
+            case 'dow': return dow3(r.date)
+            case 'time': return r.time
+            case 'branch': return r.branch
+            case 'unpaid': return fmt(r.unpaid)
+            case 'cashout': return fmt(r.cashout)
+            case 'card': return fmt(r.card)
+            case 'transfer': return fmt(r.transfer)
+            case 'cashToTake': return fmt(r.cashToTake)
+            case 'revenue': return fmt(r.revenue)
+            default: return ''
+        }
+    }, [])
+
+    // Search filter + column filters
     const filtered = useMemo(() => {
         let out = rows.slice()
         if (qText.trim()) {
@@ -90,6 +157,12 @@ export default function MonthlyClosingListPage() {
                 r.time.includes(s)
             )
         }
+        // Apply per-column value filters
+        for (const [k, allowed] of Object.entries(columnFilters) as [SortKey, Set<string>][]) {
+            if (allowed && allowed.size > 0) {
+                out = out.filter(r => allowed.has(displayValue(r, k)))
+            }
+        }
         out.sort((a, b) => {
             const av = sortValue(a, sortKey)
             const bv = sortValue(b, sortKey)
@@ -99,7 +172,7 @@ export default function MonthlyClosingListPage() {
             return sortAsc ? cmp : -cmp
         })
         return out
-    }, [rows, qText, sortKey, sortAsc])
+    }, [rows, qText, sortKey, sortAsc, columnFilters, displayValue])
 
     // KPI
     const stats = useMemo(() => {
@@ -123,64 +196,38 @@ export default function MonthlyClosingListPage() {
     }
 
     async function handleExport() {
-        const workbook = new ExcelJS.Workbook()
-        const sheet = workbook.addWorksheet('Closing List')
-
-        // 1. Identify all unique third party app names in current data
+        // 1. Identify dynamic columns
         const uniqueAppNames = new Set<string>()
         filtered.forEach(r => {
             const list = getThirdPartyPayments(r)
             list.forEach(item => {
-                if (item.label && item.amount > 0) {
-                    uniqueAppNames.add(item.label.trim())
-                }
+                if (item.label && item.amount > 0) uniqueAppNames.add(item.label.trim())
             })
         })
-        // Sort alphanumerically
-        const appColumns = Array.from(uniqueAppNames).sort((a, b) => a.localeCompare(b))
+        const sortedApps = Array.from(uniqueAppNames).sort((a, b) => a.localeCompare(b))
 
-        // 2. Define standard columns
-        // Base keys
-        const columns = [
-            { header: t.table.headers.date, key: 'date', width: 12 },
+        // 2. Define Columns
+        const columns: ExcelColumn[] = [
+            { header: t.table.headers.date, key: 'date', width: 15, total: 'Totals:' },
             { header: t.table.headers.day, key: 'day', width: 8 },
-            { header: t.table.headers.time, key: 'time', width: 8 },
-            { header: t.table.headers.branch, key: 'branch', width: 20 },
-            { header: t.table.headers.unpaid, key: 'unpaid', width: 12 },
-            { header: t.table.headers.cashOut, key: 'cashout', width: 12 },
-            { header: t.table.headers.card, key: 'card', width: 12 },
-            { header: t.table.headers.transfer, key: 'transfer', width: 12 },
+            { header: t.table.headers.time, key: 'time', width: 10 },
+            { header: t.table.headers.branch, key: 'branch', width: 25 },
+            { header: t.table.headers.unpaid, key: 'unpaid', width: 15, total: true },
+            { header: t.table.headers.cashOut, key: 'cashout', width: 15, total: true },
+            { header: t.table.headers.card, key: 'card', width: 15, total: true },
+            { header: t.table.headers.transfer, key: 'transfer', width: 15, total: true },
         ]
 
-        // Add dynamic columns for apps
-        appColumns.forEach(appName => {
-            columns.push({ header: appName, key: `app_${appName}`, width: 12 })
+        sortedApps.forEach(app => {
+            columns.push({ header: app, key: `app_${app}`, width: 15, total: true })
         })
 
-        // Add final standard columns
-        columns.push({ header: t.table.headers.cashToTake, key: 'cashToTake', width: 12 })
-        columns.push({ header: t.table.headers.revenue, key: 'revenue', width: 12 })
+        columns.push({ header: t.table.headers.cashToTake, key: 'cashToTake', width: 15, total: true })
+        columns.push({ header: t.table.headers.revenue, key: 'revenue', width: 15, total: true })
 
-        sheet.columns = columns
-
-        // Style header
-        const headerRow = sheet.getRow(1)
-        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-        headerRow.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF2563EB' } // blue-600
-        }
-        headerRow.alignment = { horizontal: 'center' }
-
-        // 3. Populate Data rows
-        // We'll track totals for dynamic columns here
-        const appTotals: Record<string, number> = {}
-        appColumns.forEach(key => appTotals[key] = 0)
-
-        filtered.forEach(r => {
-            // Build the row object
-            const rowData: any = {
+        // 3. Prepare Data
+        const data = filtered.map(r => {
+            const row: any = {
                 date: formatDMY(r.date),
                 day: dow3(r.date),
                 time: r.time,
@@ -193,60 +240,18 @@ export default function MonthlyClosingListPage() {
                 revenue: r.revenue
             }
 
-            // Fill dynamic app columns
             const list = getThirdPartyPayments(r)
-            // Create a lookup for this row
             const rowApps: Record<string, number> = {}
-            list.forEach(item => {
-                if (item.label) rowApps[item.label.trim()] = item.amount
+            list.forEach(item => { if (item.label) rowApps[item.label.trim()] = item.amount })
+
+            sortedApps.forEach(app => {
+                row[`app_${app}`] = rowApps[app] || 0
             })
 
-            appColumns.forEach(appName => {
-                const val = rowApps[appName] || 0
-                rowData[`app_${appName}`] = val
-                appTotals[appName] = (appTotals[appName] || 0) + val
-            })
-
-            const row = sheet.addRow(rowData)
-
-            // Number formats for all money columns (starting from index 5)
-            // indices are 1-based in ExcelJS
-            // Date(1), Day(2), Time(3), Branch(4) are text.
-            // Money starts at 5 (unpaid)
-            for (let i = 5; i <= columns.length; i++) {
-                row.getCell(i).numFmt = '#,##0'
-            }
+            return row
         })
 
-        sheet.addRow([])
-
-        // 4. Totals Row
-        const totalRowData: any = {
-            branch: t.table.totals,
-            unpaid: stats.totalUnpaid,
-            cashout: stats.totalCashout,
-            card: stats.totalCard,
-            transfer: stats.totalTransfer,
-            cashToTake: stats.totalToTake,
-            revenue: stats.totalRevenue
-        }
-
-        // Add app totals
-        appColumns.forEach(appName => {
-            totalRowData[`app_${appName}`] = appTotals[appName]
-        })
-
-        const totalRow = sheet.addRow(totalRowData)
-        totalRow.font = { bold: true }
-
-        // Format totals
-        for (let i = 5; i <= columns.length; i++) {
-            totalRow.getCell(i).numFmt = '#,##0'
-        }
-
-        // Final export
-        const buf = await workbook.xlsx.writeBuffer()
-        saveAs(new Blob([buf]), `closing-list-${monthInputValue}.xlsx`)
+        await exportToExcelTable('Closing List', `closing-list-${monthInputValue}.xlsx`, columns, data)
     }
 
     if (loading && branches.length === 0) return <div className="p-6 text-gray-200">{t.common.loading}</div>
@@ -353,16 +358,16 @@ export default function MonthlyClosingListPage() {
                 <table className="w-full table-auto text-sm text-gray-900">
                     <thead>
                         <tr>
-                            <Th label={t.table.headers.date} active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} className="w-[100px]" center />
-                            <Th label={t.table.headers.day} active={sortKey === 'dow'} asc={sortAsc} onClick={() => toggleSort('dow')} className="w-[50px]" center />
-                            <Th label={t.table.headers.time} active={sortKey === 'time'} asc={sortAsc} onClick={() => toggleSort('time')} className="w-[70px]" center />
-                            <Th label={t.table.headers.branch} active={sortKey === 'branch'} asc={sortAsc} onClick={() => toggleSort('branch')} className="w-[180px]" center />
-                            <Th label={t.table.headers.unpaid} active={sortKey === 'unpaid'} asc={sortAsc} onClick={() => toggleSort('unpaid')} right />
-                            <Th label={t.table.headers.cashOut} active={sortKey === 'cashout'} asc={sortAsc} onClick={() => toggleSort('cashout')} right />
-                            <Th label={t.table.headers.card} active={sortKey === 'card'} asc={sortAsc} onClick={() => toggleSort('card')} right />
-                            <Th label={t.table.headers.transfer} active={sortKey === 'transfer'} asc={sortAsc} onClick={() => toggleSort('transfer')} right />
-                            <Th label={t.table.headers.cashToTake} active={sortKey === 'cashToTake'} asc={sortAsc} onClick={() => toggleSort('cashToTake')} right />
-                            <Th label={t.table.headers.revenue} active={sortKey === 'revenue'} asc={sortAsc} onClick={() => toggleSort('revenue')} right />
+                            <ColumnHeader colKey="date" label={t.table.headers.date} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.date || []} activeFilter={columnFilters.date || null} onFilter={(s) => applyColumnFilter('date', s)} onClear={() => clearColumnFilter('date')} open={openMenu === 'date'} onToggle={() => setOpenMenu(v => v === 'date' ? null : 'date')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} center className="w-[100px]" />
+                            <ColumnHeader colKey="dow" label={t.table.headers.day} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.dow || []} activeFilter={columnFilters.dow || null} onFilter={(s) => applyColumnFilter('dow', s)} onClear={() => clearColumnFilter('dow')} open={openMenu === 'dow'} onToggle={() => setOpenMenu(v => v === 'dow' ? null : 'dow')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} center className="w-[50px]" />
+                            <ColumnHeader colKey="time" label={t.table.headers.time} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.time || []} activeFilter={columnFilters.time || null} onFilter={(s) => applyColumnFilter('time', s)} onClear={() => clearColumnFilter('time')} open={openMenu === 'time'} onToggle={() => setOpenMenu(v => v === 'time' ? null : 'time')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} center className="w-[70px]" />
+                            <ColumnHeader colKey="branch" label={t.table.headers.branch} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.branch || []} activeFilter={columnFilters.branch || null} onFilter={(s) => applyColumnFilter('branch', s)} onClear={() => clearColumnFilter('branch')} open={openMenu === 'branch'} onToggle={() => setOpenMenu(v => v === 'branch' ? null : 'branch')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} center className="w-[180px]" />
+                            <ColumnHeader colKey="unpaid" label={t.table.headers.unpaid} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.unpaid || []} activeFilter={columnFilters.unpaid || null} onFilter={(s) => applyColumnFilter('unpaid', s)} onClear={() => clearColumnFilter('unpaid')} open={openMenu === 'unpaid'} onToggle={() => setOpenMenu(v => v === 'unpaid' ? null : 'unpaid')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} right />
+                            <ColumnHeader colKey="cashout" label={t.table.headers.cashOut} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.cashout || []} activeFilter={columnFilters.cashout || null} onFilter={(s) => applyColumnFilter('cashout', s)} onClear={() => clearColumnFilter('cashout')} open={openMenu === 'cashout'} onToggle={() => setOpenMenu(v => v === 'cashout' ? null : 'cashout')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} right />
+                            <ColumnHeader colKey="card" label={t.table.headers.card} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.card || []} activeFilter={columnFilters.card || null} onFilter={(s) => applyColumnFilter('card', s)} onClear={() => clearColumnFilter('card')} open={openMenu === 'card'} onToggle={() => setOpenMenu(v => v === 'card' ? null : 'card')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} right />
+                            <ColumnHeader colKey="transfer" label={t.table.headers.transfer} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.transfer || []} activeFilter={columnFilters.transfer || null} onFilter={(s) => applyColumnFilter('transfer', s)} onClear={() => clearColumnFilter('transfer')} open={openMenu === 'transfer'} onToggle={() => setOpenMenu(v => v === 'transfer' ? null : 'transfer')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} right />
+                            <ColumnHeader colKey="cashToTake" label={t.table.headers.cashToTake} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.cashToTake || []} activeFilter={columnFilters.cashToTake || null} onFilter={(s) => applyColumnFilter('cashToTake', s)} onClear={() => clearColumnFilter('cashToTake')} open={openMenu === 'cashToTake'} onToggle={() => setOpenMenu(v => v === 'cashToTake' ? null : 'cashToTake')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} right />
+                            <ColumnHeader colKey="revenue" label={t.table.headers.revenue} sortKey={sortKey} sortAsc={sortAsc} onSort={applySort} values={columnValues.revenue || []} activeFilter={columnFilters.revenue || null} onFilter={(s) => applyColumnFilter('revenue', s)} onClear={() => clearColumnFilter('revenue')} open={openMenu === 'revenue'} onToggle={() => setOpenMenu(v => v === 'revenue' ? null : 'revenue')} onClose={() => setOpenMenu(null)} dict={t.table.columnMenu} right />
                         </tr>
                     </thead>
                     <tbody>
@@ -409,26 +414,195 @@ export default function MonthlyClosingListPage() {
     )
 }
 
-/* --- Helpers UI --- */
-function Th({ label, active, asc, onClick, right, className = '', center }: { label: string; active: boolean; asc: boolean; onClick: () => void; right?: boolean; className?: string; center?: boolean }) {
+/* --- Column Header with Excel-style dropdown --- */
+type ColumnHeaderProps = {
+    colKey: SortKey
+    label: string
+    sortKey: SortKey
+    sortAsc: boolean
+    onSort: (k: SortKey, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (s: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+    right?: boolean
+    center?: boolean
+    className?: string
+}
+
+function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '' }: ColumnHeaderProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    // Sync local state when menu opens or values change
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    // Click-outside handler
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+        ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+        : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) {
+            filteredValues.forEach(v => next.delete(v))
+        } else {
+            filteredValues.forEach(v => next.add(v))
+        }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v)
+        else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        // If all values are checked, remove the filter entirely
+        if (localChecked.size >= values.length) onFilter(null)
+        else onFilter(new Set(localChecked))
+    }
+
     return (
-        <th className={`p-2 ${right ? 'text-right' : ''} ${className}`}>
-            <button
-                onClick={onClick}
-                className={`w-full flex items-center gap-1 font-semibold cursor-pointer ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}
-            >
-                {(!right && !center) && <SortIcon active={active} asc={asc} />}
-                {center && active && !asc && <SortIcon active={active} asc={asc} />}
-                <span>{label}</span>
-                {center && active && asc && <SortIcon active={active} asc={asc} />}
-                {right && <SortIcon active={active} asc={asc} />}
-            </button>
+        <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
+            <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+                <span className="select-none">{label}</span>
+                {/* Sort indicator */}
+                {isActive && (
+                    sortAsc
+                        ? <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        : <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                )}
+                {/* Filter indicator */}
+                {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+                {/* Kebab menu button */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onToggle() }}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+                    aria-label={`Menu ${label}`}
+                >
+                    <EllipsisVerticalIcon className="w-4 h-4 text-gray-500" />
+                </button>
+            </div>
+
+            {/* Dropdown panel */}
+            {open && dropdownStyle && (
+                <div
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700"
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    {/* Sort section */}
+                    <div className="px-3 py-2 space-y-1">
+                        <button
+                            onClick={() => onSort(colKey, true)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                                }`}
+                        >
+                            <BarsArrowUpIcon className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button
+                            onClick={() => onSort(colKey, false)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                                }`}
+                        >
+                            <BarsArrowDownIcon className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-200" />
+
+                    {/* Filter section */}
+                    <div className="px-3 py-2">
+                        {/* Search */}
+                        <input
+                            type="text"
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                            placeholder={dict.filterPlaceholder}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+
+                        {/* Select all / Deselect all */}
+                        <button
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+
+                        {/* Checkbox list */}
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+                        <button
+                            onClick={onClear}
+                            className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                        >
+                            {dict.clearFilters}
+                        </button>
+                        <button
+                            onClick={handleApply}
+                            className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
         </th>
     )
-}
-function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
-    if (!active) return <span className="inline-block w-4" />
-    return asc ? <ChevronUpIcon className="w-4 h-4 text-gray-700" /> : <ChevronDownIcon className="w-4 h-4 text-gray-700" />
 }
 function StatPill({ label, value, money }: { label: string; value: number; money?: boolean }) {
     return (

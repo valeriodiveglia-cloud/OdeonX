@@ -77,6 +77,14 @@ export const en = {
             selectRow: 'Select row',
             totals: 'Totals',
             noRows: 'No closing reports found for this month.',
+            columnMenu: {
+                sortAsc: 'Sort Ascending',
+                sortDesc: 'Sort Descending',
+                selectAll: 'Select All',
+                deselectAll: 'Deselect All',
+                filterPlaceholder: 'Search...',
+                clearFilters: 'Clear Filters',
+            },
         },
 
         menu: {
@@ -367,6 +375,14 @@ export const en = {
             selectRow: 'Select row',
             totals: 'Totals',
             loading: 'Loading…',
+            columnMenu: {
+                sortAsc: 'Sort Ascending',
+                sortDesc: 'Sort Descending',
+                selectAll: 'Select All',
+                deselectAll: 'Deselect All',
+                filterPlaceholder: 'Search...',
+                clearFilters: 'Clear Filters',
+            },
         },
         actions: {
             newExpense: 'New expense',
@@ -850,6 +866,14 @@ export const en = {
             viewPaymentHistory: 'View payment history',
             recordPayment: 'Record payment',
             action: { history: 'View payment history', record: 'Record payment' },
+            columnMenu: {
+                sortAsc: 'Sort Ascending',
+                sortDesc: 'Sort Descending',
+                selectAll: 'Select All',
+                deselectAll: 'Deselect All',
+                filterPlaceholder: 'Search...',
+                clearFilters: 'Clear Filters',
+            },
         },
 
         export: {
