@@ -235,8 +235,7 @@ export default function MonthlyCashoutPage() {
                         onClick={prevMonth}
                         className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
                     >
-                        {t.modal.buttons.close}
-                        Previous
+                        {t.monthNav.previous}
                     </button>
                 </div>
                 <div className="justify-self-center flex items-center gap-2">
@@ -257,7 +256,7 @@ export default function MonthlyCashoutPage() {
                         onClick={nextMonth}
                         className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
                     >
-                        Next
+                        {t.monthNav.next}
                     </button>
                 </div>
             </div>

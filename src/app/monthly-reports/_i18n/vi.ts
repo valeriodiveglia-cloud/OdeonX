@@ -38,9 +38,9 @@ export const vi = {
         },
 
         monthNav: {
-            previous: 'Tháng trước',
+            previous: 'Trước',
             pickLabel: 'Chọn tháng',
-            next: 'Tháng sau',
+            next: 'Sau',
         },
 
         kpi: {

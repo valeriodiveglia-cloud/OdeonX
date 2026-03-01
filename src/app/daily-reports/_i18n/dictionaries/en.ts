@@ -40,9 +40,9 @@ const en = {
     },
 
     monthNav: {
-      previous: 'Previous month',
+      previous: 'Previous',
       pickLabel: 'Pick month',
-      next: 'Next month',
+      next: 'Next',
     },
 
     kpi: {

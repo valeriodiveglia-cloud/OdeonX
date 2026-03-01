@@ -37,8 +37,10 @@ export async function exportToExcelTable(
     fileName: string,
     columns: ExcelColumn[],
     data: any[],
-    extraRows?: any[][]
-) {
+    extraRows?: any[][],
+    /** If true, returns the file as a Blob instead of triggering a download */
+    returnBlob?: boolean
+): Promise<Blob | void> {
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet(sheetName)
 
@@ -93,5 +95,11 @@ export async function exportToExcelTable(
     }
 
     const buf = await workbook.xlsx.writeBuffer()
-    saveAs(new Blob([buf]), fileName)
+    const blob = new Blob([buf])
+
+    if (returnBlob) {
+        return blob
+    }
+
+    saveAs(blob, fileName)
 }

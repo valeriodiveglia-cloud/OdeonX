@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
 import ChartCard from './_components/ChartCard'
+import BulkExportModal from './_components/BulkExportModal'
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import {
     fetchRevenue,
     fetchTotalCost,
@@ -22,6 +24,7 @@ type Branch = {
 export default function MonthlyReportsDashboard() {
     const [loading, setLoading] = useState(true)
     const [branches, setBranches] = useState<Branch[]>([])
+    const [exportOpen, setExportOpen] = useState(false)
 
     // Load branches once
     useEffect(() => {
@@ -39,7 +42,16 @@ export default function MonthlyReportsDashboard() {
 
     return (
         <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-            <h1 className="text-2xl font-bold text-gray-900">Monthly Reports Dashboard</h1>
+            <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold text-gray-900">Monthly Reports Dashboard</h1>
+                <button
+                    onClick={() => setExportOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-500 transition-colors text-sm font-medium shadow-sm"
+                >
+                    <ArrowDownTrayIcon className="w-4 h-4" />
+                    Export Data
+                </button>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 <ChartCard
@@ -85,6 +97,11 @@ export default function MonthlyReportsDashboard() {
                     fetchData={fetchUnpaid}
                 />
             </div>
+
+            <BulkExportModal
+                open={exportOpen}
+                onClose={() => setExportOpen(false)}
+            />
         </div>
     )
 }
