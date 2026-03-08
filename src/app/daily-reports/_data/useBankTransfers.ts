@@ -86,8 +86,8 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
       let q = supabase
         .from('daily_report_bank_transfers')
         .select('*')
-        .order('date', { ascending: true })
-        .order('created_at', { ascending: true })
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (effectiveBranchName) {
         q = q.eq('branch', effectiveBranchName)
