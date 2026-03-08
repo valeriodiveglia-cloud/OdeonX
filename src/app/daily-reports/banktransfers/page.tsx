@@ -615,7 +615,7 @@ export default function BankTransfersPage() {
   }, [branchRows, monthStart, monthEnd])
 
   const [sortKey, setSortKey] = useState<SortKey>('date')
-  const [sortAsc, setSortAsc] = useState<boolean>(true)
+  const [sortAsc, setSortAsc] = useState<boolean>(false)
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortAsc(v => !v)
