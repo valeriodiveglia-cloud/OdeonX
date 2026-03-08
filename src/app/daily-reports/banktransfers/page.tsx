@@ -536,6 +536,10 @@ export default function BankTransfersPage() {
     if (officialName && setBridgeName) setBridgeName(officialName)
   }, [officialName, setBridgeName])
 
+  const now = new Date()
+  const [year, setYear] = useState<number>(now.getFullYear())
+  const [month, setMonth] = useState<number>(now.getMonth())
+
   // hook collegato al DB
   const {
     rows: dbRows,
@@ -544,7 +548,7 @@ export default function BankTransfersPage() {
     createTransfer,
     updateTransfer,
     deleteTransfers,
-  } = useBankTransfers()
+  } = useBankTransfers({ year, month })
 
   // adattiamo le righe DB al tipo locale (e ci portiamo dietro il branch)
   const baseRows: BankRow[] = useMemo(
@@ -565,9 +569,7 @@ export default function BankTransfersPage() {
     return baseRows.filter(r => (r.branch || '') === branchName)
   }, [baseRows, branchName])
 
-  const now = new Date()
-  const [year, setYear] = useState<number>(now.getFullYear())
-  const [month, setMonth] = useState<number>(now.getMonth())
+
   const monthInputValue = useMemo(
     () => `${year}-${String(month + 1).padStart(2, '0')}`,
     [year, month],
