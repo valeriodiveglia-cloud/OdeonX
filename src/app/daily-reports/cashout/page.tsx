@@ -467,6 +467,11 @@ export default function CashoutPage() {
   const t = getDailyReportsDictionary(language).cashout
   const tm = t.modal
   const yesNo = t.yesNo
+  // Month navigation (deve essere prima di useCashout per passare year/month)
+  const now = new Date()
+  const [year, setYear] = useState<number>(now.getFullYear())
+  const [month, setMonth] = useState<number>(now.getMonth())
+
   const {
     rows,
     suppliers,
@@ -481,7 +486,7 @@ export default function CashoutPage() {
     upsertCashout,
     deleteCashout,
     bulkDeleteCashout,
-  } = useCashout()
+  } = useCashout({ year, month })
 
   // nuove categorie prese dai settings Daily Report
   const { cashOutCategories } = useDailyReportSettings()
@@ -508,10 +513,6 @@ export default function CashoutPage() {
   const isBulkDeletingRef = useRef(false)
   const lastBulkDeleteClick = useRef(0)
 
-  // Month navigation
-  const now = new Date()
-  const [year, setYear] = useState<number>(now.getFullYear())
-  const [month, setMonth] = useState<number>(now.getMonth())
   const monthLabel = `${monthName(month)} ${year}`
   const monthInputValue = useMemo(() => `${year}-${String(month + 1).padStart(2, '0')}`, [year, month])
   const monthStart = useMemo(() => new Date(year, month, 1), [year, month])
