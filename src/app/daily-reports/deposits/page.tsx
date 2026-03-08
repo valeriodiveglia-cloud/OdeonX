@@ -1456,6 +1456,11 @@ type SortState = { key: SortKeyWithBranch | null; dir: 'asc' | 'desc' }
 type RowCalc = { row: DepositRow; remaining: number; status: TotalsStatus }
 
 export default function DepositsPage() {
+  // Month navigation (deve essere prima di useDeposits per passare year/month)
+  const now = new Date()
+  const [year, setYear] = useState<number>(now.getFullYear())
+  const [month, setMonth] = useState<number>(now.getMonth())
+
   const {
     rows: rowsState,
     totalsMap,
@@ -1472,7 +1477,7 @@ export default function DepositsPage() {
     deletePayment,
     refreshTotalsFor,
     fetchTotalsOne,
-  } = useDeposits()
+  } = useDeposits({ year, month })
 
   const { language } = useSettings()
   const t = drI18n(language).deposits
@@ -1507,9 +1512,7 @@ export default function DepositsPage() {
   const [payingRow, setPayingRow] = useState<DepositRow | null>(null)
   const [historyRow, setHistoryRow] = useState<DepositRow | null>(null)
 
-  const now = new Date()
-  const [year, setYear] = useState<number>(now.getFullYear())
-  const [month, setMonth] = useState<number>(now.getMonth())
+
   const monthInputValue = useMemo(
     () => `${year}-${String(month + 1).padStart(2, '0')}`,
     [year, month],

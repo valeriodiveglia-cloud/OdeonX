@@ -841,6 +841,11 @@ export default function CreditsPage() {
       deleteFailed: p.deleteFailed || '',
     }
   }, [t])
+  // Month navigation (deve essere prima di useCredits per passare year/month)
+  const now = new Date()
+  const [year, setYear] = useState<number>(now.getFullYear())
+  const [month, setMonth] = useState<number>(now.getMonth())
+
   const {
     rows,
     totalsMap,
@@ -857,7 +862,7 @@ export default function CreditsPage() {
     deletePayment,
     refreshTotalsFor,
     fetchTotalsOne,
-  } = useCredits()
+  } = useCredits({ year, month })
 
   const { branch } = useDRBranch({ validate: false })
   const officialName = branch?.name || ''
@@ -894,9 +899,7 @@ export default function CreditsPage() {
   const [payingRow, setPayingRow] = useState<CreditRow | null>(null)
   const [historyRow, setHistoryRow] = useState<CreditRow | null>(null)
 
-  const now = new Date()
-  const [year, setYear] = useState<number>(now.getFullYear())
-  const [month, setMonth] = useState<number>(now.getMonth())
+
   const monthInputValue = useMemo(() => `${year}-${String(month + 1).padStart(2, '0')}`, [year, month])
   const monthLabel = `${monthName(month)} ${year}`
   const monthStart = useMemo(() => new Date(year, month, 1), [year, month])
