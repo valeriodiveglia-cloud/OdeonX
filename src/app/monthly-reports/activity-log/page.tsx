@@ -332,24 +332,74 @@ export default function ActivityLogPage() {
 }
 
 /* ── helpers ── */
-function summarize(r: AuditRow, isEN: boolean): string {
+function summarize(r: AuditRow, _isEN: boolean): string {
     const d = r.op === 'DELETE' ? r.old_data : r.new_data
     if (!d) return ''
 
-    // Try to build a human-readable summary from known fields
+    const p = (v: unknown) => v != null && v !== '' && v !== 0
     const parts: string[] = []
-    if (d.date) parts.push(String(d.date))
-    if (d.branch) parts.push(String(d.branch))
-    if (d.description) parts.push(String(d.description))
-    if (d.customer_name) parts.push(String(d.customer_name))
-    if (d.name) parts.push(String(d.name))
-    if (d.amount) parts.push(fmt(Number(d.amount)))
-    if (d.initial_amount) parts.push(fmt(Number(d.initial_amount)))
 
-    if (parts.length > 0) return parts.join(' · ')
-    // Fallback: show first few keys
-    const keys = Object.keys(d).filter(k => !['id', 'created_at', 'updated_at'].includes(k)).slice(0, 3)
-    return keys.map(k => `${k}: ${String(d[k]).slice(0, 30)}`).join(', ')
+    switch (r.table_name) {
+        case 'cashier_closings':
+            if (p(d.branch_name)) parts.push(String(d.branch_name))
+            if (p(d.cashier_name)) parts.push(String(d.cashier_name))
+            if (p(d.revenue_vnd)) parts.push(`Revenue: ${fmt(Number(d.revenue_vnd))}`)
+            if (p(d.shift)) parts.push(`Shift: ${d.shift}`)
+            break
+        case 'cashout':
+            if (p(d.branch)) parts.push(String(d.branch))
+            if (p(d.description)) parts.push(String(d.description))
+            if (p(d.amount)) parts.push(fmt(Number(d.amount)))
+            if (p(d.category)) parts.push(String(d.category))
+            break
+        case 'daily_report_bank_transfers':
+            if (p(d.branch)) parts.push(String(d.branch))
+            if (p(d.note)) parts.push(String(d.note))
+            if (p(d.amount)) parts.push(fmt(Number(d.amount)))
+            break
+        case 'wastage_entries':
+            if (p(d.branch_name)) parts.push(String(d.branch_name))
+            if (p(d.item_name)) parts.push(String(d.item_name))
+            if (p(d.qty) && p(d.unit)) parts.push(`${d.qty} ${d.unit}`)
+            else if (p(d.qty)) parts.push(`Qty: ${d.qty}`)
+            if (p(d.total_cost_vnd)) parts.push(fmt(Number(d.total_cost_vnd)))
+            if (p(d.reason)) parts.push(String(d.reason))
+            break
+        case 'credits':
+        case 'credit_payments':
+            if (p(d.customer_name)) parts.push(String(d.customer_name))
+            if (p(d.branch)) parts.push(String(d.branch))
+            if (p(d.amount)) parts.push(fmt(Number(d.amount)))
+            if (p(d.initial_amount)) parts.push(fmt(Number(d.initial_amount)))
+            break
+        case 'deposits':
+        case 'deposit_payments':
+            if (p(d.customer_name)) parts.push(String(d.customer_name))
+            if (p(d.branch)) parts.push(String(d.branch))
+            if (p(d.amount)) parts.push(fmt(Number(d.amount)))
+            if (p(d.initial_amount)) parts.push(fmt(Number(d.initial_amount)))
+            break
+        case 'daily_report_settings':
+            if (p(d.branch)) parts.push(String(d.branch))
+            if (p(d.name)) parts.push(String(d.name))
+            break
+        default: {
+            // Generic: pick meaningful fields, skip date/id/timestamps
+            const skip = new Set(['id', 'created_at', 'updated_at', 'date', 'report_date', 'created_by', 'updated_by'])
+            if (p(d.branch)) parts.push(String(d.branch))
+            if (p(d.branch_name)) parts.push(String(d.branch_name))
+            if (p(d.name)) parts.push(String(d.name))
+            if (p(d.description)) parts.push(String(d.description))
+            if (p(d.amount)) parts.push(fmt(Number(d.amount)))
+            if (parts.length === 0) {
+                const keys = Object.keys(d).filter(k => !skip.has(k)).slice(0, 3)
+                return keys.map(k => `${k}: ${String(d[k]).slice(0, 30)}`).join(', ')
+            }
+            break
+        }
+    }
+
+    return parts.join(' · ')
 }
 
 function StatPill({ label, value }: { label: string; value: number }) {
