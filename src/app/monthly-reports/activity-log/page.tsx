@@ -76,7 +76,8 @@ export default function ActivityLogPage() {
             const { data } = await supabase
                 .from('app_accounts')
                 .select('role')
-                .eq('user_id', user.id)
+                .eq('email', user.email ?? '')
+                .eq('is_active', true)
                 .maybeSingle()
             setRole(data?.role ?? null)
             setAuthLoaded(true)
@@ -104,21 +105,22 @@ export default function ActivityLogPage() {
         let cancelled = false
         async function load() {
             setLoading(true)
-            const start = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1).toISOString()
-            const end = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1).toISOString()
+            const y = monthCursor.getFullYear()
+            const m = monthCursor.getMonth()
+            const pad = (n: number) => String(n).padStart(2, '0')
+            const start = `${y}-${pad(m + 1)}-01T00:00:00Z`
+            const endDate = new Date(Date.UTC(y, m + 1, 1))
+            const end = `${endDate.getUTCFullYear()}-${pad(endDate.getUTCMonth() + 1)}-01T00:00:00Z`
 
-            let q = supabase
-                .from('audit_log')
-                .select('*')
-                .gte('at', start)
-                .lt('at', end)
-                .order('at', { ascending: false })
-                .limit(2000)
+            const params: Record<string, unknown> = {
+                p_start: start,
+                p_end: end,
+                p_limit: 2000,
+            }
+            if (filterTable !== 'all') params.p_table = filterTable
+            if (filterOp !== 'all') params.p_op = filterOp
 
-            if (filterTable !== 'all') q = q.eq('table_name', filterTable)
-            if (filterOp !== 'all') q = q.eq('op', filterOp)
-
-            const { data } = await q
+            const { data } = await supabase.rpc('get_audit_log', params)
             if (!cancelled && data) setRows(data as AuditRow[])
             setLoading(false)
         }
