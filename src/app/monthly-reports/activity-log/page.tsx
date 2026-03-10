@@ -343,6 +343,30 @@ function getBranch(r: AuditRow): string {
 }
 
 function summarize(r: AuditRow, _isEN: boolean): string {
+    const SKIP = new Set(['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'branch', 'branch_name', 'branch_id', 'date', 'report_date', 'input_time', 'month_key', 'month_first'])
+
+    /* ── UPDATE: show changed fields as old → new ── */
+    if (r.op === 'UPDATE' && r.old_data && r.new_data) {
+        const diffs: string[] = []
+        const allKeys = new Set([...Object.keys(r.old_data), ...Object.keys(r.new_data)])
+        for (const k of allKeys) {
+            if (SKIP.has(k)) continue
+            const ov = r.old_data[k]
+            const nv = r.new_data[k]
+            if (JSON.stringify(ov) === JSON.stringify(nv)) continue
+            const label = FIELD_LABELS[k] ?? k
+            const fmtVal = (v: unknown) => {
+                if (v == null) return '∅'
+                if (typeof v === 'number') return fmt(v)
+                if (typeof v === 'object') return JSON.stringify(v).slice(0, 40)
+                return String(v).slice(0, 40)
+            }
+            diffs.push(`${label}: ${fmtVal(ov)} → ${fmtVal(nv)}`)
+        }
+        return diffs.length > 0 ? diffs.join(' · ') : 'no visible changes'
+    }
+
+    /* ── INSERT / DELETE: per-table summary ── */
     const d = r.op === 'DELETE' ? r.old_data : r.new_data
     if (!d) return ''
 
@@ -387,12 +411,11 @@ function summarize(r: AuditRow, _isEN: boolean): string {
             if (p(d.name)) parts.push(String(d.name))
             break
         default: {
-            const skip = new Set(['id', 'created_at', 'updated_at', 'date', 'report_date', 'created_by', 'updated_by', 'branch', 'branch_name', 'branch_id'])
             if (p(d.name)) parts.push(String(d.name))
             if (p(d.description)) parts.push(String(d.description))
             if (p(d.amount)) parts.push(fmt(Number(d.amount)))
             if (parts.length === 0) {
-                const keys = Object.keys(d).filter(k => !skip.has(k)).slice(0, 3)
+                const keys = Object.keys(d).filter(k => !SKIP.has(k)).slice(0, 3)
                 return keys.map(k => `${k}: ${String(d[k]).slice(0, 30)}`).join(', ')
             }
             break
@@ -400,6 +423,28 @@ function summarize(r: AuditRow, _isEN: boolean): string {
     }
 
     return parts.join(' · ')
+}
+
+/* Human-readable field labels */
+const FIELD_LABELS: Record<string, string> = {
+    amount: 'Amount', description: 'Description', category: 'Category',
+    customer_name: 'Customer', name: 'Name', note: 'Note',
+    revenue_vnd: 'Revenue', cashier_name: 'Cashier', shift: 'Shift',
+    cash_out_vnd: 'Cash out', deposits_vnd: 'Deposits',
+    grab_vnd: 'Grab', gojek_vnd: 'Gojek', mpos_vnd: 'mPOS',
+    capichi_vnd: 'Capichi', payouts_vnd: 'Payouts',
+    unpaid_vnd: 'Unpaid', opening_float_vnd: 'Float',
+    bank_transfer_ewallet_vnd: 'Bank/eWallet',
+    set_off_debt_vnd: 'Set-off debt', notes: 'Notes',
+    repayments_cash_card_vnd: 'Card repay',
+    item_name: 'Item', qty: 'Qty', unit: 'Unit',
+    total_cost_vnd: 'Cost', unit_cost_vnd: 'Unit cost',
+    reason: 'Reason', responsible: 'Responsible',
+    charge_target: 'Charge to', category_name: 'Category',
+    supplier_name: 'Supplier', supplier_id: 'Supplier',
+    paid_by: 'Paid by', invoice: 'Invoice', delivery_note: 'Del. note',
+    initial_amount: 'Initial amt', cash_json: 'Cash denom.',
+    float_plan_json: 'Float plan', third_party_amounts_json: '3rd party',
 }
 
 function StatPill({ label, value }: { label: string; value: number }) {
