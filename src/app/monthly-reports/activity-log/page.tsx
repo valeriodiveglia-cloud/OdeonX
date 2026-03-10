@@ -343,14 +343,22 @@ function getBranch(r: AuditRow): string {
 }
 
 function summarize(r: AuditRow, _isEN: boolean): string {
-    const SKIP = new Set(['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'branch', 'branch_name', 'branch_id', 'date', 'report_date', 'input_time', 'month_key', 'month_first'])
+    /* Fields to always skip in UPDATE diffs */
+    const SKIP = new Set(['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'branch', 'branch_name', 'branch_id', 'month_key', 'month_first'])
+
+    /* Extra noisy fields to skip per table */
+    const EXTRA_SKIP: Record<string, string[]> = {
+        cashier_closings: ['cash_json', 'float_plan_json', 'third_party_amounts_json', 'mpos_vnd', 'capichi_vnd', 'gojek_vnd', 'grab_vnd', 'payouts_vnd', 'unpaid_vnd', 'opening_float_vnd', 'set_off_debt_vnd', 'repayments_cash_card_vnd', 'deposits_vnd', 'notes', 'shift'],
+    }
 
     /* ── UPDATE: show changed fields as old → new ── */
     if (r.op === 'UPDATE' && r.old_data && r.new_data) {
+        const tableSkip = EXTRA_SKIP[r.table_name] ?? []
+        const fullSkip = new Set([...SKIP, ...tableSkip])
         const diffs: string[] = []
         const allKeys = new Set([...Object.keys(r.old_data), ...Object.keys(r.new_data)])
         for (const k of allKeys) {
-            if (SKIP.has(k)) continue
+            if (fullSkip.has(k)) continue
             const ov = r.old_data[k]
             const nv = r.new_data[k]
             if (JSON.stringify(ov) === JSON.stringify(nv)) continue
