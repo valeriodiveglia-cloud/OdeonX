@@ -13,6 +13,7 @@ import {
     ArrowLeftRight,
     Landmark,
     BookOpen,
+    ScrollText,
 } from 'lucide-react'
 import React from 'react'
 
@@ -38,6 +39,7 @@ const NAV: Item[] = [
     { href: `${BASE}/credits`, i18nKey: 'Credits', fallback: 'Credits', icon: Wallet },
     { href: `${BASE}/deposits`, i18nKey: 'Deposits', fallback: 'Deposits', icon: Landmark },
     { href: `${BASE}/cash-ledger`, i18nKey: 'CashLedger', fallback: 'Cash Ledger', icon: BookOpen },
+    { href: `${BASE}/activity-log`, i18nKey: 'ActivityLog', fallback: 'Activity Log', icon: ScrollText },
 ]
 
 function DualIcon({

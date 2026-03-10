@@ -8,6 +8,7 @@ export const en = {
         Credits: 'Credits',
         Deposits: 'Deposits',
         Settings: 'Settings',
+        ActivityLog: 'Activity Log',
     },
     closingList: {
         title: 'Monthly Closing List',
@@ -1083,5 +1084,21 @@ export const en = {
             dateRequired: 'Date is required.',
             methodRequired: 'Please specify the payment method.',
         },
+    },
+
+    activityLog: {
+        title: 'Activity Log',
+        noAccess: 'Only the owner can view this page.',
+        allTables: 'All tables',
+        allOps: 'All operations',
+        searchPlaceholder: 'Search...',
+        system: 'System',
+        totalEntries: 'Total entries',
+        inserts: 'Inserts',
+        deletes: 'Deletes',
+        monthNav: { previous: 'Previous', next: 'Next' },
+        headers: { timestamp: 'Timestamp', user: 'User', table: 'Table', operation: 'Operation', summary: 'Summary' },
+        ops: { INSERT: 'Created', UPDATE: 'Updated', DELETE: 'Deleted' },
+        noRows: 'No activity for this month.',
     },
 }

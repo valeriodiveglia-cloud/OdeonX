@@ -8,6 +8,7 @@ export const vi = {
         Credits: 'Công nợ tháng',
         Deposits: 'Đặt cọc tháng',
         Settings: 'Cài đặt',
+        ActivityLog: 'Nhật ký hoạt động',
     },
     closingList: {
         title: 'Danh sách chốt ca tháng',
@@ -1069,5 +1070,21 @@ export const vi = {
             dateRequired: 'Vui lòng chọn ngày.',
             methodRequired: 'Vui lòng chỉ rõ phương thức.',
         },
+    },
+
+    activityLog: {
+        title: 'Nhật ký hoạt động',
+        noAccess: 'Chỉ chủ sở hữu mới có thể xem trang này.',
+        allTables: 'Tất cả bảng',
+        allOps: 'Tất cả thao tác',
+        searchPlaceholder: 'Tìm kiếm...',
+        system: 'Hệ thống',
+        totalEntries: 'Tổng mục',
+        inserts: 'Thêm mới',
+        deletes: 'Đã xóa',
+        monthNav: { previous: 'Trước', next: 'Sau' },
+        headers: { timestamp: 'Thời gian', user: 'Người dùng', table: 'Bảng', operation: 'Thao tác', summary: 'Tóm tắt' },
+        ops: { INSERT: 'Tạo mới', UPDATE: 'Cập nhật', DELETE: 'Xóa' },
+        noRows: 'Không có hoạt động nào trong tháng này.',
     },
 }
