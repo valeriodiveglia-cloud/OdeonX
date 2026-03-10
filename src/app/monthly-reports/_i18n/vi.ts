@@ -1083,7 +1083,7 @@ export const vi = {
         inserts: 'Thêm mới',
         deletes: 'Đã xóa',
         monthNav: { previous: 'Trước', next: 'Sau' },
-        headers: { timestamp: 'Thời gian', user: 'Người dùng', table: 'Bảng', operation: 'Thao tác', summary: 'Tóm tắt' },
+        headers: { timestamp: 'Thời gian', user: 'Người dùng', branch: 'Chi nhánh', table: 'Bảng', operation: 'Thao tác', summary: 'Tóm tắt' },
         ops: { INSERT: 'Tạo mới', UPDATE: 'Cập nhật', DELETE: 'Xóa' },
         noRows: 'Không có hoạt động nào trong tháng này.',
     },

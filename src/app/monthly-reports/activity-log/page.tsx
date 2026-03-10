@@ -292,6 +292,7 @@ export default function ActivityLogPage() {
                             <tr>
                                 <th className="p-2 text-left font-semibold">{t.headers.timestamp}</th>
                                 <th className="p-2 text-left font-semibold">{t.headers.user}</th>
+                                <th className="p-2 text-left font-semibold">{t.headers.branch}</th>
                                 <th className="p-2 text-left font-semibold">{t.headers.table}</th>
                                 <th className="p-2 text-center font-semibold">{t.headers.operation}</th>
                                 <th className="p-2 text-left font-semibold">{t.headers.summary}</th>
@@ -299,7 +300,7 @@ export default function ActivityLogPage() {
                         </thead>
                         <tbody>
                             {filtered.length === 0 && (
-                                <tr><td colSpan={5} className="text-center text-gray-500 py-6">{t.noRows}</td></tr>
+                                <tr><td colSpan={6} className="text-center text-gray-500 py-6">{t.noRows}</td></tr>
                             )}
                             {filtered.map(r => (
                                 <tr key={r.id} className="border-t hover:bg-blue-50/40">
@@ -309,6 +310,9 @@ export default function ActivityLogPage() {
                                     <td className="p-2 whitespace-nowrap">
                                         <span className="font-medium">{userName(r.user_id)}</span>
                                         {r.role && <span className="ml-1 text-[10px] uppercase text-gray-400">{r.role}</span>}
+                                    </td>
+                                    <td className="p-2 whitespace-nowrap text-gray-600">
+                                        {getBranch(r)}
                                     </td>
                                     <td className="p-2 whitespace-nowrap text-gray-600">
                                         {tableLabel(r.table_name)}
@@ -332,6 +336,12 @@ export default function ActivityLogPage() {
 }
 
 /* ── helpers ── */
+function getBranch(r: AuditRow): string {
+    const d = r.op === 'DELETE' ? r.old_data : r.new_data
+    if (!d) return ''
+    return String(d.branch_name || d.branch || '')
+}
+
 function summarize(r: AuditRow, _isEN: boolean): string {
     const d = r.op === 'DELETE' ? r.old_data : r.new_data
     if (!d) return ''
@@ -341,24 +351,20 @@ function summarize(r: AuditRow, _isEN: boolean): string {
 
     switch (r.table_name) {
         case 'cashier_closings':
-            if (p(d.branch_name)) parts.push(String(d.branch_name))
             if (p(d.cashier_name)) parts.push(String(d.cashier_name))
             if (p(d.revenue_vnd)) parts.push(`Revenue: ${fmt(Number(d.revenue_vnd))}`)
             if (p(d.shift)) parts.push(`Shift: ${d.shift}`)
             break
         case 'cashout':
-            if (p(d.branch)) parts.push(String(d.branch))
             if (p(d.description)) parts.push(String(d.description))
             if (p(d.amount)) parts.push(fmt(Number(d.amount)))
             if (p(d.category)) parts.push(String(d.category))
             break
         case 'daily_report_bank_transfers':
-            if (p(d.branch)) parts.push(String(d.branch))
             if (p(d.note)) parts.push(String(d.note))
             if (p(d.amount)) parts.push(fmt(Number(d.amount)))
             break
         case 'wastage_entries':
-            if (p(d.branch_name)) parts.push(String(d.branch_name))
             if (p(d.item_name)) parts.push(String(d.item_name))
             if (p(d.qty) && p(d.unit)) parts.push(`${d.qty} ${d.unit}`)
             else if (p(d.qty)) parts.push(`Qty: ${d.qty}`)
@@ -368,26 +374,20 @@ function summarize(r: AuditRow, _isEN: boolean): string {
         case 'credits':
         case 'credit_payments':
             if (p(d.customer_name)) parts.push(String(d.customer_name))
-            if (p(d.branch)) parts.push(String(d.branch))
             if (p(d.amount)) parts.push(fmt(Number(d.amount)))
             if (p(d.initial_amount)) parts.push(fmt(Number(d.initial_amount)))
             break
         case 'deposits':
         case 'deposit_payments':
             if (p(d.customer_name)) parts.push(String(d.customer_name))
-            if (p(d.branch)) parts.push(String(d.branch))
             if (p(d.amount)) parts.push(fmt(Number(d.amount)))
             if (p(d.initial_amount)) parts.push(fmt(Number(d.initial_amount)))
             break
         case 'daily_report_settings':
-            if (p(d.branch)) parts.push(String(d.branch))
             if (p(d.name)) parts.push(String(d.name))
             break
         default: {
-            // Generic: pick meaningful fields, skip date/id/timestamps
-            const skip = new Set(['id', 'created_at', 'updated_at', 'date', 'report_date', 'created_by', 'updated_by'])
-            if (p(d.branch)) parts.push(String(d.branch))
-            if (p(d.branch_name)) parts.push(String(d.branch_name))
+            const skip = new Set(['id', 'created_at', 'updated_at', 'date', 'report_date', 'created_by', 'updated_by', 'branch', 'branch_name', 'branch_id'])
             if (p(d.name)) parts.push(String(d.name))
             if (p(d.description)) parts.push(String(d.description))
             if (p(d.amount)) parts.push(fmt(Number(d.amount)))
@@ -435,7 +435,7 @@ const defaultT = {
     inserts: 'Inserts',
     deletes: 'Deletes',
     monthNav: { previous: 'Previous', next: 'Next' },
-    headers: { timestamp: 'Timestamp', user: 'User', table: 'Table', operation: 'Operation', summary: 'Summary' },
+    headers: { timestamp: 'Timestamp', user: 'User', branch: 'Branch', table: 'Table', operation: 'Operation', summary: 'Summary' },
     ops: { INSERT: 'Created', UPDATE: 'Updated', DELETE: 'Deleted' },
     noRows: 'No activity for this month.',
 }

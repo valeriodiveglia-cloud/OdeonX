@@ -1097,7 +1097,7 @@ export const en = {
         inserts: 'Inserts',
         deletes: 'Deletes',
         monthNav: { previous: 'Previous', next: 'Next' },
-        headers: { timestamp: 'Timestamp', user: 'User', table: 'Table', operation: 'Operation', summary: 'Summary' },
+        headers: { timestamp: 'Timestamp', user: 'User', branch: 'Branch', table: 'Table', operation: 'Operation', summary: 'Summary' },
         ops: { INSERT: 'Created', UPDATE: 'Updated', DELETE: 'Deleted' },
         noRows: 'No activity for this month.',
     },
