@@ -353,8 +353,8 @@ function summarize(r: AuditRow, _isEN: boolean): string {
 
     /* Extract the record's own date (which day it refers to in the table) */
     const refData = r.new_data ?? r.old_data
-    const recordDate = refData?.report_date ?? refData?.date ?? ''
-    const datePrefix = recordDate ? String(recordDate) : ''
+    const rawDate = refData?.report_date ?? refData?.date ?? ''
+    const datePrefix = rawDate ? fmtDateDMY(String(rawDate)) : ''
 
     /* ── UPDATE: show changed fields as old → new ── */
     if (r.op === 'UPDATE' && r.old_data && r.new_data) {
@@ -473,6 +473,14 @@ function StatPill({ label, value }: { label: string; value: number }) {
     )
 }
 
+function fmtDateDMY(iso: string): string {
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    return `${dd}/${mm}/${d.getFullYear()}`
+}
 function fmt(n: number) { return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.round(n || 0)) }
 function formatDateTime(iso: string) {
     const d = new Date(iso)
