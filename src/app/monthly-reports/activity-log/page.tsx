@@ -381,6 +381,10 @@ function summarize(r: AuditRow, _isEN: boolean): string {
     const p = (v: unknown) => v != null && v !== '' && v !== 0
     const parts: string[] = []
 
+    /* Prepend the record's own date (which day it refers to) */
+    const recordDate = d.report_date || d.date
+    if (recordDate) parts.push(String(recordDate))
+
     switch (r.table_name) {
         case 'cashier_closings':
             if (p(d.cashier_name)) parts.push(String(d.cashier_name))
