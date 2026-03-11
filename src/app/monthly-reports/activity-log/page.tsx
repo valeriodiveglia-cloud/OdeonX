@@ -344,12 +344,17 @@ function getBranch(r: AuditRow): string {
 
 function summarize(r: AuditRow, _isEN: boolean): string {
     /* Fields to always skip in UPDATE diffs */
-    const SKIP = new Set(['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'branch', 'branch_name', 'branch_id', 'month_key', 'month_first'])
+    const SKIP = new Set(['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'branch', 'branch_name', 'branch_id', 'month_key', 'month_first', 'date', 'report_date'])
 
     /* Extra noisy fields to skip per table */
     const EXTRA_SKIP: Record<string, string[]> = {
         cashier_closings: ['cash_json', 'float_plan_json', 'third_party_amounts_json', 'mpos_vnd', 'capichi_vnd', 'gojek_vnd', 'grab_vnd', 'payouts_vnd', 'unpaid_vnd', 'opening_float_vnd', 'set_off_debt_vnd', 'repayments_cash_card_vnd', 'deposits_vnd', 'notes', 'shift'],
     }
+
+    /* Extract the record's own date (which day it refers to in the table) */
+    const refData = r.new_data ?? r.old_data
+    const recordDate = refData?.report_date ?? refData?.date ?? ''
+    const datePrefix = recordDate ? String(recordDate) : ''
 
     /* ── UPDATE: show changed fields as old → new ── */
     if (r.op === 'UPDATE' && r.old_data && r.new_data) {
@@ -371,7 +376,8 @@ function summarize(r: AuditRow, _isEN: boolean): string {
             }
             diffs.push(`${label}: ${fmtVal(ov)} → ${fmtVal(nv)}`)
         }
-        return diffs.length > 0 ? diffs.join(' · ') : 'no visible changes'
+        const body = diffs.length > 0 ? diffs.join(' · ') : 'no visible changes'
+        return datePrefix ? `${datePrefix} · ${body}` : body
     }
 
     /* ── INSERT / DELETE: per-table summary ── */
@@ -382,8 +388,7 @@ function summarize(r: AuditRow, _isEN: boolean): string {
     const parts: string[] = []
 
     /* Prepend the record's own date (which day it refers to) */
-    const recordDate = d.report_date || d.date
-    if (recordDate) parts.push(String(recordDate))
+    if (datePrefix) parts.push(datePrefix)
 
     switch (r.table_name) {
         case 'cashier_closings':
