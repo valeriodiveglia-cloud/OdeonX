@@ -93,6 +93,16 @@ export const en = {
             delete: 'Delete selected',
         },
 
+        monthLock: {
+            lock: 'Lock Month',
+            unlock: 'Unlock Month',
+            lockConfirm: 'Lock this month? Staff will not be able to modify cashier flow data (cashout, closings, wastage, bank transfers) for this month.',
+            unlockConfirm: 'Unlock this month? Staff will be able to modify data again.',
+            locked: '🔒 Month locked',
+            unlocked: '🔓 Month unlocked',
+            banner: '🔒 This month is locked — editing is disabled',
+        },
+
         modal: {
             title: 'Confirm deletion',
             cancel: 'Cancel',

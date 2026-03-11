@@ -93,6 +93,16 @@ export const vi = {
             delete: 'Xóa đã chọn',
         },
 
+        monthLock: {
+            lock: 'Khóa tháng',
+            unlock: 'Mở khóa tháng',
+            lockConfirm: 'Khóa tháng này? Nhân viên sẽ không thể chỉnh sửa dữ liệu dòng tiền (chi tiền, chốt ca, hao hụt, chuyển khoản) trong tháng này.',
+            unlockConfirm: 'Mở khóa tháng này? Nhân viên sẽ có thể chỉnh sửa dữ liệu lại.',
+            locked: '🔒 Tháng đã khóa',
+            unlocked: '🔓 Tháng đã mở khóa',
+            banner: '🔒 Tháng này đã bị khóa — không thể chỉnh sửa',
+        },
+
         modal: {
             title: 'Xác nhận xóa',
             cancel: 'Hủy',

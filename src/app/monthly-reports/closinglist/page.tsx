@@ -10,6 +10,8 @@ import {
     BarsArrowUpIcon,
     BarsArrowDownIcon,
     FunnelIcon,
+    LockClosedIcon,
+    LockOpenIcon,
 } from '@heroicons/react/24/outline'
 import { useClosingList, type ClosingRow } from '../../daily-reports/_data/useClosingList'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -45,6 +47,12 @@ export default function MonthlyClosingListPage() {
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortAsc, setSortAsc] = useState(false)
 
+    /* ── Month lock state ── */
+    const [isMonthLocked, setIsMonthLocked] = useState(false)
+    const [lockLoading, setLockLoading] = useState(false)
+    const [userRole, setUserRole] = useState<string | null>(null)
+    const canManageLock = userRole === 'owner' || userRole === 'manager'
+
     // Column filter state: per-column set of allowed display values
     const [columnFilters, setColumnFilters] = useState<Partial<Record<SortKey, Set<string>>>>({})
     // Which column menu is currently open
@@ -61,16 +69,50 @@ export default function MonthlyClosingListPage() {
         return branches.find(b => b.id === selectedBranchId)?.name || null
     }, [selectedBranchId, branches])
 
-    // Load branches
+    // Load branches + user role
     useEffect(() => {
         async function loadBranches() {
             const { data } = await supabase.from('provider_branches').select('id, name').order('name')
-            if (data) {
-                setBranches(data)
-            }
+            if (data) setBranches(data)
+        }
+        async function loadRole() {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+            const { data } = await supabase
+                .from('app_accounts')
+                .select('role')
+                .eq('email', user.email ?? '')
+                .eq('is_active', true)
+                .maybeSingle()
+            setUserRole(data?.role ?? null)
         }
         loadBranches()
+        loadRole()
     }, [])
+
+    // Check lock status when month changes
+    useEffect(() => {
+        async function checkLock() {
+            const mk = toMonthInputValue(monthCursor)
+            const { data } = await supabase.from('month_locks').select('month_key').eq('month_key', mk).maybeSingle()
+            setIsMonthLocked(!!data)
+        }
+        checkLock()
+    }, [monthCursor])
+
+    async function handleToggleLock() {
+        const mk = toMonthInputValue(monthCursor)
+        const msg = isMonthLocked ? t.monthLock.unlockConfirm : t.monthLock.lockConfirm
+        if (!confirm(msg)) return
+        setLockLoading(true)
+        try {
+            const { data, error } = await supabase.rpc('toggle_month_lock', { p_month_key: mk })
+            if (error) { alert(error.message); return }
+            setIsMonthLocked(data?.locked ?? false)
+        } finally {
+            setLockLoading(false)
+        }
+    }
 
     // Data from hook
     const { rows, loading } = useClosingList({
@@ -300,11 +342,39 @@ export default function MonthlyClosingListPage() {
                         <ArrowDownTrayIcon className="w-4 h-4" />
                         <span className="hidden sm:inline">Export</span>
                     </button>
+
+                    {/* Lock/Unlock Button */}
+                    {canManageLock && (
+                        <button
+                            onClick={handleToggleLock}
+                            disabled={lockLoading}
+                            className={`flex items-center gap-2 px-3 h-9 rounded-lg transition-colors ${isMonthLocked
+                                    ? 'bg-amber-500 text-white hover:bg-amber-400'
+                                    : 'bg-gray-600 text-white hover:bg-gray-500'
+                                } ${lockLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={isMonthLocked ? t.monthLock.unlock : t.monthLock.lock}
+                        >
+                            {isMonthLocked
+                                ? <LockClosedIcon className="w-4 h-4" />
+                                : <LockOpenIcon className="w-4 h-4" />
+                            }
+                            <span className="hidden sm:inline">
+                                {isMonthLocked ? t.monthLock.unlock : t.monthLock.lock}
+                            </span>
+                        </button>
+                    )}
                 </div>
             </div>
 
             {/* Divider */}
             <div className="border-t border-blue-400/20 my-3"></div>
+
+            {/* Locked Banner */}
+            {isMonthLocked && (
+                <div className="mb-3 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 text-sm font-medium">
+                    {t.monthLock.banner}
+                </div>
+            )}
 
             {/* Month Nav */}
             <div className="mb-3 grid grid-cols-3 items-center">
