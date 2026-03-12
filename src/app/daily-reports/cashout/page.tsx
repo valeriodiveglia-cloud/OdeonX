@@ -389,7 +389,7 @@ function EditorModal({
 
               <div className="md:col-span-2">
                 <label className="text-sm text-gray-800">{tm.description}</label>
-                <input className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={description} onChange={e => setDescription(e.target.value)} disabled={viewMode} />
+                <input className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={description} onChange={e => { const v = e.target.value; setDescription(v.charAt(0).toUpperCase() + v.slice(1)) }} disabled={viewMode} />
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm text-gray-800">{tm.category}</label>
