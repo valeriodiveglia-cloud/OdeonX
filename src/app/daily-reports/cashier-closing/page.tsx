@@ -188,8 +188,8 @@ export default function CashierClosingPage() {
   const bridgeName = bridge?.name || ''
   const setBridgeName: (v: string) => void = bridge?.setName || (() => { })
 
-  // Prima il nome ufficiale, poi il fallback legacy
-  const activeBranchName = officialName || bridgeName
+  // Base branch name from dashboard context (may be overridden below for existing records)
+  const _contextBranchName = officialName || bridgeName
 
   // Sincronizza officialName verso bridgeName solo se diverso, evitando loop
   useEffect(() => {
@@ -215,6 +215,13 @@ export default function CashierClosingPage() {
     cashier: '',
     notes: '',
   })
+
+  // Per record esistenti: il branch caricato dal DB (header.branch) ha la precedenza
+  // Per nuovi: usa il branch ufficiale dal contesto daily-reports
+  const activeBranchName = useMemo(() => {
+    if (initialIdFromUrl && header.branch) return header.branch
+    return _contextBranchName
+  }, [initialIdFromUrl, header.branch, _contextBranchName])
 
   // Float target
   const [floatTarget, setFloatTarget] = useState<number>(0)

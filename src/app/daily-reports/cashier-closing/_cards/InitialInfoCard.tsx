@@ -364,11 +364,15 @@ export default function InitialInfoCard(props: {
   const activeBranchName = (officialName || bridgeName).trim()
 
   // Inietta il branch attivo nell'header, se manca o cambia
+  // Ma NON sovrascrivere se stiamo visualizzando un record esistente in modalità
+  // Saved/ReadOnly (es. aperto dal monthly report) — il branch del record ha la precedenza.
   useEffect(() => {
+    if (readOnly) return
+    if (isExisting && !liveMode) return
     if (activeBranchName && header.branch !== activeBranchName) {
       onChangeHeader({ branch: activeBranchName })
     }
-  }, [activeBranchName]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeBranchName, readOnly, isExisting, liveMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Closed by: fetch fresh from DB if new record
   useEffect(() => {
