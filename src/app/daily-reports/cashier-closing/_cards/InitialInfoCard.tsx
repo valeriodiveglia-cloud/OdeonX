@@ -360,8 +360,13 @@ export default function InitialInfoCard(props: {
   const bridge = useBridgeSafe()
   const bridgeName = bridge?.name || ''
 
-  // Active name used for UI + queries (official first, then legacy)
+  // Active name used for queries (official first, then legacy)
   const activeBranchName = (officialName || bridgeName).trim()
+
+  // Per il display: record esistenti in saved/readonly usano il branch dal record
+  const displayBranchName = (isExisting && !liveMode && header.branch)
+    ? header.branch
+    : activeBranchName
 
   // Inietta il branch attivo nell'header, se manca o cambia
   // Ma NON sovrascrivere se stiamo visualizzando un record esistente in modalità
@@ -983,7 +988,7 @@ export default function InitialInfoCard(props: {
               className="h-9 px-3 rounded-lg border bg-gray-50 text-gray-800 flex items-center justify-between"
             >
               <div className="truncate">
-                {validating ? t.branchLoading : activeBranchName || t.branchNone}
+                {validating ? t.branchLoading : displayBranchName || t.branchNone}
               </div>
               <span className="text-[11px] text-gray-500">{t.readOnly}</span>
             </div>
