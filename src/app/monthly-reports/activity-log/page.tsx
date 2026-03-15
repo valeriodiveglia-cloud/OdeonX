@@ -97,6 +97,7 @@ export default function ActivityLogPage() {
     /* data */
     const [rows, setRows] = useState<AuditRow[]>([])
     const [users, setUsers] = useState<Record<string, UserInfo>>({})
+    const [suppliers, setSuppliers] = useState<Record<string, string>>({})
     const [loading, setLoading] = useState(true)
 
     /* fetch audit rows */
@@ -148,6 +149,32 @@ export default function ActivityLogPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rows])
 
+    /* fetch supplier names for any supplier_id UUIDs in rows */
+    useEffect(() => {
+        const ids = new Set<string>()
+        rows.forEach(r => {
+            const d = r.new_data ?? r.old_data
+            if (d?.supplier_id && typeof d.supplier_id === 'string') ids.add(d.supplier_id)
+            // also check old_data for UPDATE diffs
+            if (r.old_data?.supplier_id && typeof r.old_data.supplier_id === 'string') ids.add(r.old_data.supplier_id)
+        })
+        const missing = [...ids].filter(id => !suppliers[id])
+        if (missing.length === 0) return
+        async function loadSuppliers() {
+            const { data } = await supabase
+                .from('suppliers')
+                .select('id, name')
+                .in('id', missing)
+            if (data) {
+                const map: Record<string, string> = { ...suppliers }
+                data.forEach((s: any) => { map[String(s.id)] = s.name || String(s.id).slice(0, 8) })
+                setSuppliers(map)
+            }
+        }
+        loadSuppliers()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rows])
+
     /* search filter */
     const filtered = useMemo(() => {
         if (!qText.trim()) return rows
@@ -161,10 +188,10 @@ export default function ActivityLogPage() {
                 r.op.toLowerCase().includes(s) ||
                 r.table_name.toLowerCase().includes(s) ||
                 (r.row_id ?? '').toLowerCase().includes(s) ||
-                summarize(r, isEN).toLowerCase().includes(s)
+                summarize(r, isEN, suppliers).toLowerCase().includes(s)
             )
         })
-    }, [rows, qText, users, isEN])
+    }, [rows, qText, users, isEN, suppliers])
 
     /* unique tables in current data for the dropdown */
     const uniqueTables = useMemo(() => {
@@ -322,8 +349,8 @@ export default function ActivityLogPage() {
                                             {t.ops[r.op] ?? r.op}
                                         </span>
                                     </td>
-                                    <td className="p-2 text-gray-600 max-w-[400px] truncate" title={summarize(r, isEN)}>
-                                        {summarize(r, isEN)}
+                                    <td className="p-2 text-gray-600 max-w-[400px] truncate" title={summarize(r, isEN, suppliers)}>
+                                        {summarize(r, isEN, suppliers)}
                                     </td>
                                 </tr>
                             ))}
@@ -342,7 +369,7 @@ function getBranch(r: AuditRow): string {
     return String(d.branch_name || d.branch || '')
 }
 
-function summarize(r: AuditRow, _isEN: boolean): string {
+function summarize(r: AuditRow, _isEN: boolean, supplierMap?: Record<string, string>): string {
     /* Fields to always skip in UPDATE diffs */
     const SKIP = new Set(['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'branch', 'branch_name', 'branch_id', 'month_key', 'month_first', 'date', 'report_date'])
 
@@ -368,13 +395,17 @@ function summarize(r: AuditRow, _isEN: boolean): string {
             const nv = r.new_data[k]
             if (JSON.stringify(ov) === JSON.stringify(nv)) continue
             const label = FIELD_LABELS[k] ?? k
-            const fmtVal = (v: unknown) => {
+            const fmtVal = (v: unknown, fieldKey?: string) => {
                 if (v == null) return '∅'
                 if (typeof v === 'number') return fmt(v)
                 if (typeof v === 'object') return JSON.stringify(v).slice(0, 40)
+                // Resolve supplier_id UUID to name
+                if (fieldKey === 'supplier_id' && typeof v === 'string' && supplierMap?.[v]) {
+                    return supplierMap[v]
+                }
                 return String(v).slice(0, 40)
             }
-            diffs.push(`${label}: ${fmtVal(ov)} → ${fmtVal(nv)}`)
+            diffs.push(`${label}: ${fmtVal(ov, k)} → ${fmtVal(nv, k)}`)
         }
         const body = diffs.length > 0 ? diffs.join(' · ') : 'no visible changes'
         return datePrefix ? `${datePrefix} · ${body}` : body
@@ -400,6 +431,12 @@ function summarize(r: AuditRow, _isEN: boolean): string {
             if (p(d.description)) parts.push(String(d.description))
             if (p(d.amount)) parts.push(fmt(Number(d.amount)))
             if (p(d.category)) parts.push(String(d.category))
+            if (p(d.supplier_id)) {
+                const sName = supplierMap?.[String(d.supplier_id)]
+                if (sName) parts.push(`Supplier: ${sName}`)
+            } else if (p(d.supplier_name)) {
+                parts.push(`Supplier: ${String(d.supplier_name)}`)
+            }
             break
         case 'daily_report_bank_transfers':
             if (p(d.note)) parts.push(String(d.note))
