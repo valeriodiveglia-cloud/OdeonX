@@ -512,6 +512,9 @@ export async function exportSummaryPdf(opts: {
 
     const GUARD = Math.round(8 * domToCanvas)
     const MIN_SLICE = Math.round(24 * domToCanvas)
+    // If the leftover after a page cut is smaller than this, absorb it into the
+    // current page instead of creating a near-empty extra page.
+    const ORPHAN_THRESHOLD = Math.round(80 * domToCanvas)
 
     function findCutY(naiveEnd: number, startY: number): number {
       const target = Math.min(canvas.height, Math.max(startY + MIN_SLICE, naiveEnd - GUARD))
@@ -528,7 +531,14 @@ export async function exportSummaryPdf(opts: {
     let y = 0
     while (y < canvas.height) {
       const naiveEnd = Math.min(canvas.height, y + pageHeightPx)
-      const cutY = findCutY(naiveEnd, y)
+      let cutY = findCutY(naiveEnd, y)
+
+      // Prevent orphan pages: if leftover content is tiny, absorb it
+      const leftover = canvas.height - cutY
+      if (leftover > 0 && leftover <= ORPHAN_THRESHOLD) {
+        cutY = canvas.height
+      }
+
       const sliceH = Math.max(1, cutY - y)
 
       const pageCanvas = document.createElement('canvas')
