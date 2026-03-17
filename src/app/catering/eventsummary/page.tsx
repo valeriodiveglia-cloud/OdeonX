@@ -568,6 +568,7 @@ function renderTotalsHTML(opts: {
       ${totalsCostCell}
       <td style="${footTd} text-align:right;">${escHtml(fmtC(round0(grandPrice)))}</td>
     </tr>
+    ${discountsTotal > 0 ? `
     <tr>
       <td style="padding:6px 8px;border-top:1px solid #f3f4f6;text-align:right;color:#374151;">${escHtml(L.discounts)}</td>
       ${showCosts ? '<td style="padding:6px 8px;border-top:1px solid #f3f4f6;text-align:right;color:#9ca3af;">-</td>' : ''}
@@ -579,7 +580,7 @@ function renderTotalsHTML(opts: {
       ? `<td style="${footTd} text-align:right;">${escHtml(fmtC(round0(grandCost)))}</td>`
       : '<td style="padding:8px 8px;border-top:1px solid #e5e7eb;background:#f9fafb;color:#9ca3af;text-align:right;">-</td>'}
       <td style="${footTd} text-align:right;">${escHtml(fmtC(round0(priceAfterDiscounts)))}</td>
-    </tr>
+    </tr>` : ''}
   </tfoot>
 </table>`.trim()
 
@@ -3177,27 +3178,31 @@ function TotalsTable({
               {fmtC(grandPrice)}
             </td>
           </tr>
-          <tr className="border-t border-gray-100">
-            <td className="px-3 py-2 text-right text-gray-700">{t('Discounts', 'Discounts')}</td>
-            <td className="px-3 py-2 text-right text-gray-400 print-hide-costs">-</td>
-            <td className="price-col px-3 py-2 text-right font-semibold text-red-700 tabular-nums">
-              − {fmtC(discountsTotal)}
-            </td>
-          </tr>
-          <tr className="border-t border-gray-200 bg-gray-50">
-            <td className="px-3 py-3 text-right font-semibold">
-              {t('Total after discounts', 'Total after discounts')}
-            </td>
-            <td className="px-3 py-3 text-right font-semibold tabular-nums print-hide-costs">
-              {fmtC(grandCost)}{' '}
-              <span className="text-gray-500 text-xs ml-2 print-hide-costs">
-                ({costPctAfter.toFixed(1)}%)
-              </span>
-            </td>
-            <td className="price-col px-3 py-3 text-right font-semibold tabular-nums">
-              {fmtC(priceAfterDiscounts)}
-            </td>
-          </tr>
+          {discountsTotal > 0 && (
+            <>
+              <tr className="border-t border-gray-100">
+                <td className="px-3 py-2 text-right text-gray-700">{t('Discounts', 'Discounts')}</td>
+                <td className="px-3 py-2 text-right text-gray-400 print-hide-costs">-</td>
+                <td className="price-col px-3 py-2 text-right font-semibold text-red-700 tabular-nums">
+                  − {fmtC(discountsTotal)}
+                </td>
+              </tr>
+              <tr className="border-t border-gray-200 bg-gray-50">
+                <td className="px-3 py-3 text-right font-semibold">
+                  {t('Total after discounts', 'Total after discounts')}
+                </td>
+                <td className="px-3 py-3 text-right font-semibold tabular-nums print-hide-costs">
+                  {fmtC(grandCost)}{' '}
+                  <span className="text-gray-500 text-xs ml-2 print-hide-costs">
+                    ({costPctAfter.toFixed(1)}%)
+                  </span>
+                </td>
+                <td className="price-col px-3 py-3 text-right font-semibold tabular-nums">
+                  {fmtC(priceAfterDiscounts)}
+                </td>
+              </tr>
+            </>
+          )}
         </tfoot>
       </table>
     </div>
