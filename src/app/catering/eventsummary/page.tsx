@@ -1691,7 +1691,7 @@ export default function EventSummaryPage() {
               fmtC={fmtC}
             />
             <TotalsRow
-              label={`${labelUi('Staff')} (×${staffMarkup.toFixed(2)})`}
+              label={<>{labelUi('Staff')} <span className="markup-flag">(×{staffMarkup.toFixed(2)})</span></>}
               cost={staffTotals.cost}
               price={staffTotals.price}
               fmtC={fmtC}
@@ -1712,9 +1712,9 @@ export default function EventSummaryPage() {
               fmtC={fmtC}
             />
             <TotalsRow
-              label={`${labelUi('Transport')} (×${Number(
+              label={<>{labelUi('Transport')} <span className="markup-flag">(×{Number(
                 transportSettings.settings?.markup_x ?? 1
-              ).toFixed(2)})`}
+              ).toFixed(2)})</span></>}
               cost={transportTotals.cost}
               price={transportTotals.price}
               fmtC={fmtC}
@@ -3084,7 +3084,7 @@ function TotalsRow({
   price,
   fmtC,
 }: {
-  label: string
+  label: React.ReactNode
   cost: number
   price: number
   fmtC: (n: number | null | undefined) => string
