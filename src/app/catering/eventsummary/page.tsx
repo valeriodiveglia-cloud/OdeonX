@@ -2293,18 +2293,35 @@ function EventInfoDoc({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Item label={t('Payment term', 'Payment term')} value={paymentTerm} />
         <Item
-          label={t('Due by (deposit/balance)', 'Due by (deposit/balance)')}
-          value={`${t('Deposit', 'Deposit')}: ${formatDateDMY(
-            (header?.deposit_due_at ??
-              header?.deposit_due_date ??
-              header?.deposit_due_on ??
-              header?.due_deposit) as any
-          )} — ${t('Balance', 'Balance')}: ${formatDateDMY(
-            (header?.balance_due_at ??
-              header?.balance_due_date ??
-              header?.balance_due_on ??
-              header?.due_balance) as any
-          )}`}
+          label={
+            paymentPlan?.isFull
+              ? t('Due by', 'Due by')
+              : t('Due by (deposit/balance)', 'Due by (deposit/balance)')
+          }
+          value={
+            paymentPlan?.isFull
+              ? formatDateDMY(
+                  (header?.deposit_due_at ??
+                    header?.deposit_due_date ??
+                    header?.deposit_due_on ??
+                    header?.balance_due_at ??
+                    header?.balance_due_date ??
+                    header?.balance_due_on ??
+                    header?.due_deposit ??
+                    header?.due_balance) as any
+                )
+              : `${t('Deposit', 'Deposit')}: ${formatDateDMY(
+                  (header?.deposit_due_at ??
+                    header?.deposit_due_date ??
+                    header?.deposit_due_on ??
+                    header?.due_deposit) as any
+                )} — ${t('Balance', 'Balance')}: ${formatDateDMY(
+                  (header?.balance_due_at ??
+                    header?.balance_due_date ??
+                    header?.balance_due_on ??
+                    header?.due_balance) as any
+                )}`
+          }
         />
         <Item label={t('Branch provider', 'Branch provider')} value={branchProviderName} />
       </div>
@@ -3128,7 +3145,7 @@ function TotalsTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {sections.map((s) => (
+          {sections.filter(s => s.cost > 0 || s.price > 0).map((s) => (
             <tr key={s.label}>
               <td className="px-3 py-2">{s.label}</td>
               <td className="px-3 py-2 text-right tabular-nums print-hide-costs">
