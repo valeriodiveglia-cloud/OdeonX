@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import '@/styles/superdoc.css'
 import { SuperDoc } from 'superdoc'
+import JSZip from 'jszip'
 
 import { supabase } from '@/lib/supabase_shim'
 import { useEventHeader } from '@/app/catering/_data/useEventHeader'
@@ -1315,6 +1316,38 @@ export default function ContractPage() {
     }
   }, [buildVarsFromEvent])
 
+  /**
+   * Patch a DOCX file in-memory so that w:pgSz uses A4 dimensions.
+   * A4 in OOXML twips: width=11906  height=16838
+   */
+  const patchDocxToA4 = async (src: string | Blob): Promise<Blob> => {
+    const A4_W = '11906' // 210 mm in twips
+    const A4_H = '16838' // 297 mm in twips
+    try {
+      const buf = src instanceof Blob
+        ? await src.arrayBuffer()
+        : await fetch(src).then(r => r.arrayBuffer())
+      const zip = await JSZip.loadAsync(buf)
+      const docXml = zip.file('word/document.xml')
+      if (docXml) {
+        let xml = await docXml.async('string')
+        xml = xml.replace(
+          /(<w:pgSz\b)([^>]*?)\bw:w="(\d+)"([^>]*?)\bw:h="(\d+)"/g,
+          (_m, p1, p2, _oldW, p3, _oldH) => `${p1}${p2}w:w="${A4_W}"${p3}w:h="${A4_H}"`
+        )
+        xml = xml.replace(
+          /(<w:pgSz\b)([^>]*?)\bw:h="(\d+)"([^>]*?)\bw:w="(\d+)"/g,
+          (_m, p1, p2, _oldH, p3, _oldW) => `${p1}${p2}w:h="${A4_H}"${p3}w:w="${A4_W}"`
+        )
+        zip.file('word/document.xml', xml)
+      }
+      return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+    } catch (e) {
+      console.warn('[contract] patchDocxToA4 failed, using original:', e)
+      return src instanceof Blob ? src : await fetch(src).then(r => r.blob())
+    }
+  }
+
   /** ================== BOOT SUPERDOC =================== */
   useEffect(() => {
     let cancelled = false
@@ -1322,18 +1355,18 @@ export default function ContractPage() {
     const boot = async () => {
       setSdReady(false)
 
-      let documentSrc: string | File | Blob | null = null
+      let docxUrl: string | null = null
       if (eventId) {
         const folder = `events/${eventId}`
         const exists  = await fileExists(CONTRACTS_BUCKET, folder, 'contract.docx')
         if (exists) {
           const url = await signedUrl(CONTRACTS_BUCKET, CONTRACT_PATH(eventId))
-          if (url) documentSrc = url
+          if (url) docxUrl = url
         }
       }
 
       let templateHTML: string | null = null
-      if (!documentSrc) {
+      if (!docxUrl) {
         try {
           const { data } = await supabase
             .from('contract_templates')
@@ -1346,9 +1379,9 @@ export default function ContractPage() {
 
           if (row?.docx_path) {
             const url = await signedUrl(TEMPLATE_BUCKET, row.docx_path)
-            if (url) documentSrc = url
+            if (url) docxUrl = url
           }
-          if (!documentSrc && row?.html) {
+          if (!docxUrl && row?.html) {
             templateHTML = row.html
           }
         } catch (e) {
@@ -1356,10 +1389,21 @@ export default function ContractPage() {
         }
       }
 
-      if (!documentSrc) documentSrc = '/blank.docx'
+      if (!docxUrl) docxUrl = '/blank.docx'
+      const usedBlank = docxUrl === '/blank.docx'
+
+      // Patch the DOCX to use A4 page dimensions before SuperDoc parses it
+      const patchedBlob = await patchDocxToA4(docxUrl)
+      const documentSrc = new File([patchedBlob], 'contract.docx', {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      })
 
       try { sdRef.current?.destroy?.() } catch {}
       editorRef.current = null
+
+      // Small delay to let Vue fully clean up the previous instance
+      await new Promise(r => setTimeout(r, 50))
+      if (cancelled) return
 
       const sd = new SuperDoc({
         selector: '#sd-editor',
@@ -1368,6 +1412,7 @@ export default function ContractPage() {
         documentMode: 'editing',
         pagination: true,
         rulers: true,
+        comments: false,
         modules: { toolbar: { responsiveToContainer: true, hideButtons: false } },
         onReady: () => {
           if (cancelled) return
@@ -1382,7 +1427,7 @@ export default function ContractPage() {
         onEditorCreate: (ev: any) => {
           if (cancelled) return
           editorRef.current = ev?.editor || ev
-          if (documentSrc === '/blank.docx' && templateHTML) {
+          if (usedBlank && templateHTML) {
             try { editorRef.current?.commands?.insertContent(templateHTML, { contentType: 'html' }) } catch {}
           }
           setSdReady(true)
@@ -1396,6 +1441,88 @@ export default function ContractPage() {
       try { sdRef.current?.destroy?.() } catch {}
       sdRef.current = null
       editorRef.current = null
+    }
+  }, [eventId])
+
+  /* Post-render fix: correct the spacer heights so each visual page
+     between break-wrappers equals A4 content height.
+     SuperDoc's temp-container calculation differs from the real editor
+     layout, producing short first pages.  This observer watches for
+     pagination spacers and adjusts them after every render.         */
+  useEffect(() => {
+    const A4_H_PX = 11.693 * 96  // ~1122.5 px (A4 height at 96 DPI)
+
+    const fixSpacers = () => {
+      const container = document.getElementById('sd-editor')
+      if (!container) return
+
+      const breakWrappers = container.querySelectorAll('.pagination-break-wrapper')
+      if (breakWrappers.length < 2) return
+
+      // For each page: measure actual content height between consecutive
+      // break wrappers and adjust the spacer so the total equals the
+      // A4 content area (total - header decoration - footer decoration).
+      // The break wrappers themselves contain header/footer decorations,
+      // so the space BETWEEN them is the content area only.
+
+      // Read page margins from editor to determine header/footer sizes
+      const editor = editorRef.current as any
+      const margins = editor?.converter?.pageStyles?.pageMargins
+      const topMarginPx    = margins?.top    ? margins.top * 96    : 96  // default 1in
+      const bottomMarginPx = margins?.bottom ? margins.bottom * 96 : 96  // default 1in
+      const contentAreaTarget = A4_H_PX - topMarginPx - bottomMarginPx
+
+      for (let i = 0; i < breakWrappers.length - 1; i++) {
+        const bwTop    = breakWrappers[i] as HTMLElement
+        const bwBottom = breakWrappers[i + 1] as HTMLElement
+
+        // The spacer for this page is right before bwBottom
+        let spacer: HTMLElement | null = null
+        let prev = bwBottom.previousElementSibling
+        while (prev) {
+          if (prev.classList.contains('pagination-page-spacer')) { spacer = prev as HTMLElement; break }
+          prev = prev.previousElementSibling
+        }
+        if (!spacer) continue
+
+        // Measure current distance between break wrappers (includes spacer)
+        const origSpacerH = spacer.getBoundingClientRect().height
+        const bwTopBottom = bwTop.getBoundingClientRect().bottom
+        const bwBotTop    = bwBottom.getBoundingClientRect().top
+        const pageVisHeight = bwBotTop - bwTopBottom
+
+        // Target: content area = A4 height minus top/bottom margins
+        const diff = contentAreaTarget - pageVisHeight
+        if (Math.abs(diff) > 2) {
+          const newHeight = Math.max(0, origSpacerH + diff)
+          spacer.style.height = newHeight + 'px'
+        }
+      }
+    }
+
+    // Run after a delay (editor needs time to render decorations)
+    const timers = [
+      setTimeout(fixSpacers, 800),
+      setTimeout(fixSpacers, 1500),
+      setTimeout(fixSpacers, 3000),
+      setTimeout(fixSpacers, 5000),
+    ]
+
+    // Also watch for DOM mutations (re-pagination)
+    const container = document.getElementById('sd-editor')
+    let observer: MutationObserver | null = null
+    if (container) {
+      let debounce: ReturnType<typeof setTimeout> | null = null
+      observer = new MutationObserver(() => {
+        if (debounce) clearTimeout(debounce)
+        debounce = setTimeout(fixSpacers, 300)
+      })
+      observer.observe(container, { childList: true, subtree: true })
+    }
+
+    return () => {
+      timers.forEach(t => clearTimeout(t))
+      observer?.disconnect()
     }
   }, [eventId])
 

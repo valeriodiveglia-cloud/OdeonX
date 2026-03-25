@@ -3,24 +3,24 @@
 
 @layer superdoc {
   /* --- A4 a schermo ------------------------------------------------------- */
+  /* Non sovrascriviamo min-height: SuperDoc setta l'altezza inline in base
+     al pgSz del DOCX. Forziamo solo la larghezza A4 e lo stile visivo. */
   #sd-editor .sd-page,
   #sd-editor .page {
     width: 210mm !important;
-    min-height: 297mm !important;
-    height: auto !important;
-    margin: 12mm auto !important;     /* spazio tra pagine + centratura */
+    margin: 12mm auto !important;
     box-shadow: 0 2px 10px rgba(0,0,0,.06);
     background: #fff;
   }
 
-  /* Margini contenuto (simili ai "page margins") */
-  #sd-editor .sd-page .sd-content,
-  #sd-editor .page .sd-content,
-  #sd-editor .sd-frame {
-    padding: 18mm 14mm 18mm 14mm !important;
+  /* Force the outer SuperDoc wrapper (Vue sets this to US Letter) to A4 */
+  #sd-editor .super-editor {
+    width: 210mm !important;
+    min-width: 210mm !important;
+    max-width: 210mm !important;
   }
 
-  /* Rulers/viewport più docili */
+  /* Rulers/viewport */
   #sd-editor { background: transparent; }
   #sd-editor .sd-pages { margin: 0 auto; }
   #sd-editor .sd-ruler-top,
@@ -31,34 +31,17 @@
     background: inherit !important;
   }
 
-  /* --- Header fisso (evita che il logo sballi la paginazione) ------------- */
-  #sd-editor .sd-header,
-  #sd-editor .page-header {
-    height: 28mm !important;          /* regola 26–32mm se serve */
-    overflow: hidden !important;
-    display: flex !important;
-    align-items: center !important;
-  }
-  #sd-editor .sd-header img,
-  #sd-editor .page-header img {
-    max-height: 26mm !important;      /* <= header - qualche mm */
-    height: auto !important;
-    width: auto !important;
-    object-fit: contain !important;
-    display: inline-block !important;
-  }
-
-  /* --- Divisori di pagina (riattivati e allineati all'A4) ----------------- */
+  /* --- Divisori di pagina ------------------------------------------------- */
   #sd-editor .sd-page-break {
     display: block !important;
     height: 0 !important;
     border: 0;
     border-top: 1px dashed rgba(0,0,0,.15) !important;
-    margin: 12mm auto !important;     /* in fase di impaginazione “cade” tra le pagine */
+    margin: 12mm auto !important;
     width: 210mm !important;
   }
 
-  /* (opzionale) nascondi eventuali overlay o controlli extra ai lati */
+  /* (opzionale) nascondi eventuali overlay o controlli extra */
   #sd-editor .sd-page-controls,
   #sd-editor .sd-page-overlay {
     display: none !important;

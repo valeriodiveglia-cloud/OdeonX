@@ -1674,7 +1674,7 @@ export default function Page() {
 
       const { data: prepItemsData } = await supabase
         .from(TBL_PREP_ITEMS)
-        .select('prep_id, ref_type, ref_id, qty')
+        .select('prep_id, ref_type, ref_id, qty, cost')
 
       // Group items by prep_id
       const prepItemsMap = new Map<string, any[]>()
@@ -1694,14 +1694,9 @@ export default function Page() {
         let totalCost = 0
 
         for (const item of items) {
-          const qty = Number(item.qty) || 0
-          let unitCost = 0
-          if (item.ref_type === 'material' && item.ref_id) {
-            unitCost = matPricesMap.get(String(item.ref_id)) ?? 0
-          }
-          // Note: if prep references another prep, we would need recursive calculation
-          // For now, use saved cost as fallback for prep references
-          totalCost += qty * unitCost
+          // Use saved cost from DB to avoid UOM mismatch issues
+          // (e.g. material UOM=unit vs recipe qty in grams)
+          totalCost += Number(item.cost) || 0
         }
 
         // Calculate cost per unit (serving cost)
@@ -1739,7 +1734,7 @@ export default function Page() {
 
       const { data: finalItemsData } = await supabase
         .from(TBL_FINAL_ITEMS)
-        .select('final_id, ref_type, ref_id, qty')
+        .select('final_id, ref_type, ref_id, qty, cost')
 
       // Group items by final_id
       const finalItemsMap = new Map<string, any[]>()
@@ -1757,14 +1752,9 @@ export default function Page() {
         let totalCost = 0
 
         for (const item of items) {
-          const qty = Number(item.qty) || 0
-          let unitCost = 0
-          if (item.ref_type === 'material' && item.ref_id) {
-            unitCost = matPricesMap.get(String(item.ref_id)) ?? 0
-          } else if (item.ref_type === 'prep' && item.ref_id) {
-            unitCost = prepPricesMap.get(String(item.ref_id)) ?? 0
-          }
-          totalCost += qty * unitCost
+          // Use saved cost from DB to avoid UOM mismatch issues
+          // (e.g. material UOM=unit vs recipe qty in grams)
+          totalCost += Number(item.cost) || 0
         }
 
         const costUnitVnd = Math.round(totalCost)
