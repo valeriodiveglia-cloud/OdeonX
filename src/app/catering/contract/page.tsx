@@ -1331,6 +1331,8 @@ export default function ContractPage() {
       const docXml = zip.file('word/document.xml')
       if (docXml) {
         let xml = await docXml.async('string')
+
+        // 1. Force A4 page size
         xml = xml.replace(
           /(<w:pgSz\b)([^>]*?)\bw:w="(\d+)"([^>]*?)\bw:h="(\d+)"/g,
           (_m, p1, p2, _oldW, p3, _oldH) => `${p1}${p2}w:w="${A4_W}"${p3}w:h="${A4_H}"`
@@ -1339,6 +1341,29 @@ export default function ContractPage() {
           /(<w:pgSz\b)([^>]*?)\bw:h="(\d+)"([^>]*?)\bw:w="(\d+)"/g,
           (_m, p1, p2, _oldH, p3, _oldW) => `${p1}${p2}w:h="${A4_H}"${p3}w:w="${A4_W}"`
         )
+
+        // 2. Remove inline section breaks (sectPr inside pPr) entirely.
+        //    This merges all sections into one continuous flow so SuperDoc
+        //    paginates naturally at A4 boundaries instead of treating each
+        //    DOCX section as a separate content area.
+        xml = xml.replace(
+          /<w:pPr([^>]*)>([\s\S]*?)<\/w:pPr>/g,
+          (match, attrs, inner) => {
+            if (!/<w:sectPr\b/.test(inner)) return match
+            const cleaned = inner.replace(/<w:sectPr[\s\S]*?<\/w:sectPr>/g, '')
+            return `<w:pPr${attrs}>${cleaned}</w:pPr>`
+          }
+        )
+
+        // 3. Remove hard page breaks (w:br type="page" in any form)
+        xml = xml.replace(/<w:br[^>]*w:type="page"[^>]*\/?>/g, '')
+
+        // 4. Remove "page break before" paragraph property
+        //    This is the main culprit: Word sets this on headings to force a new page
+        xml = xml.replace(/<w:pageBreakBefore\s*\/>/g, '')
+        xml = xml.replace(/<w:pageBreakBefore\/>/g, '')
+        xml = xml.replace(/<w:pageBreakBefore><\/w:pageBreakBefore>/g, '')
+
         zip.file('word/document.xml', xml)
       }
       return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
@@ -1437,85 +1462,75 @@ export default function ContractPage() {
     }
 
     boot()
+
+    // Suppress SuperDoc internal unhandled [object Event] rejections
+    const onUnhandled = (e: PromiseRejectionEvent) => {
+      if (e.reason instanceof Event || (typeof e.reason === 'object' && e.reason && String(e.reason) === '[object Event]')) {
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('unhandledrejection', onUnhandled)
+
     return () => {
+      window.removeEventListener('unhandledrejection', onUnhandled)
       try { sdRef.current?.destroy?.() } catch {}
       sdRef.current = null
       editorRef.current = null
     }
   }, [eventId])
 
-  /* Post-render fix: correct the spacer heights so each visual page
-     between break-wrappers equals A4 content height.
-     SuperDoc's temp-container calculation differs from the real editor
-     layout, producing short first pages.  This observer watches for
-     pagination spacers and adjusts them after every render.         */
+  /* Collapse section-boundary breaks while keeping natural A4 page breaks.
+     Section breaks (DOCX header/body boundary) produce short pages (<900px).
+     Natural A4 page breaks produce full-height pages (~1050px+).
+     We only hide the break if the preceding content page is short. */
   useEffect(() => {
-    const A4_H_PX = 11.693 * 96  // ~1122.5 px (A4 height at 96 DPI)
-
-    const fixSpacers = () => {
+    const fixSectionBreaks = () => {
       const container = document.getElementById('sd-editor')
       if (!container) return
 
-      const breakWrappers = container.querySelectorAll('.pagination-break-wrapper')
-      if (breakWrappers.length < 2) return
-
-      // For each page: measure actual content height between consecutive
-      // break wrappers and adjust the spacer so the total equals the
-      // A4 content area (total - header decoration - footer decoration).
-      // The break wrappers themselves contain header/footer decorations,
-      // so the space BETWEEN them is the content area only.
-
-      // Read page margins from editor to determine header/footer sizes
-      const editor = editorRef.current as any
-      const margins = editor?.converter?.pageStyles?.pageMargins
-      const topMarginPx    = margins?.top    ? margins.top * 96    : 96  // default 1in
-      const bottomMarginPx = margins?.bottom ? margins.bottom * 96 : 96  // default 1in
-      const contentAreaTarget = A4_H_PX - topMarginPx - bottomMarginPx
-
-      for (let i = 0; i < breakWrappers.length - 1; i++) {
-        const bwTop    = breakWrappers[i] as HTMLElement
-        const bwBottom = breakWrappers[i + 1] as HTMLElement
-
-        // The spacer for this page is right before bwBottom
-        let spacer: HTMLElement | null = null
-        let prev = bwBottom.previousElementSibling
-        while (prev) {
-          if (prev.classList.contains('pagination-page-spacer')) { spacer = prev as HTMLElement; break }
-          prev = prev.previousElementSibling
+      const allBreaks = container.querySelectorAll('.pagination-break-wrapper')
+      allBreaks.forEach(bw => {
+        const el = bw as HTMLElement
+        let prev = el.previousElementSibling as HTMLElement | null
+        while (prev && prev.classList.contains('pagination-page-spacer')) {
+          prev = prev.previousElementSibling as HTMLElement | null
         }
-        if (!spacer) continue
+        if (!prev) return
 
-        // Measure current distance between break wrappers (includes spacer)
-        const origSpacerH = spacer.getBoundingClientRect().height
-        const bwTopBottom = bwTop.getBoundingClientRect().bottom
-        const bwBotTop    = bwBottom.getBoundingClientRect().top
-        const pageVisHeight = bwBotTop - bwTopBottom
-
-        // Target: content area = A4 height minus top/bottom margins
-        const diff = contentAreaTarget - pageVisHeight
-        if (Math.abs(diff) > 2) {
-          const newHeight = Math.max(0, origSpacerH + diff)
-          spacer.style.height = newHeight + 'px'
+        const pageHeight = prev.getBoundingClientRect().height
+        if (pageHeight < 900) {
+          el.style.height = '0px'
+          el.style.minHeight = '0px'
+          el.style.maxHeight = '0px'
+          el.style.overflow = 'hidden'
+          el.style.margin = '0'
+          el.style.padding = '0'
+          const spacerBefore = el.previousElementSibling as HTMLElement | null
+          if (spacerBefore?.classList.contains('pagination-page-spacer')) {
+            spacerBefore.style.height = '0px'
+          }
+          const spacerAfter = el.nextElementSibling as HTMLElement | null
+          if (spacerAfter?.classList.contains('pagination-page-spacer')) {
+            spacerAfter.style.height = '0px'
+          }
         }
-      }
+      })
     }
 
-    // Run after a delay (editor needs time to render decorations)
     const timers = [
-      setTimeout(fixSpacers, 800),
-      setTimeout(fixSpacers, 1500),
-      setTimeout(fixSpacers, 3000),
-      setTimeout(fixSpacers, 5000),
+      setTimeout(fixSectionBreaks, 500),
+      setTimeout(fixSectionBreaks, 1000),
+      setTimeout(fixSectionBreaks, 2000),
+      setTimeout(fixSectionBreaks, 4000),
     ]
 
-    // Also watch for DOM mutations (re-pagination)
     const container = document.getElementById('sd-editor')
     let observer: MutationObserver | null = null
     if (container) {
       let debounce: ReturnType<typeof setTimeout> | null = null
       observer = new MutationObserver(() => {
         if (debounce) clearTimeout(debounce)
-        debounce = setTimeout(fixSpacers, 300)
+        debounce = setTimeout(fixSectionBreaks, 300)
       })
       observer.observe(container, { childList: true, subtree: true })
     }

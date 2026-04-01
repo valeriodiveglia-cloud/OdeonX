@@ -6,6 +6,7 @@ import Link from 'next/link'
 
 // SuperDoc (solo JS; gli stili sono in src/styles/superdoc.css)
 import { SuperDoc } from 'superdoc'
+import JSZip from 'jszip'
 
 // Supabase
 import { supabase } from '@/lib/supabase_shim'
@@ -132,6 +133,59 @@ const EVENT_PLACEHOLDERS = [
   { key: 'signature.client.date', label: 'Signature: client date' },
   { key: 'signature.provider.date', label: 'Signature: provider date' },
 ]
+
+/* ==== DOCX → A4 patcher ==== */
+const patchDocxToA4 = async (src: string | Blob | File): Promise<Blob> => {
+  const A4_W = '11906' // 210 mm in twips
+  const A4_H = '16838' // 297 mm in twips
+  try {
+    const buf = src instanceof Blob
+      ? await src.arrayBuffer()
+      : await fetch(src).then(r => r.arrayBuffer())
+    const zip = await JSZip.loadAsync(buf)
+    const docXml = zip.file('word/document.xml')
+    if (docXml) {
+      let xml = await docXml.async('string')
+
+      // 1. Force A4 page size
+      xml = xml.replace(
+        /(<w:pgSz\b)([^>]*?)\bw:w="(\d+)"([^>]*?)\bw:h="(\d+)"/g,
+        (_m, p1, p2, _oldW, p3, _oldH) => `${p1}${p2}w:w="${A4_W}"${p3}w:h="${A4_H}"`
+      )
+      xml = xml.replace(
+        /(<w:pgSz\b)([^>]*?)\bw:h="(\d+)"([^>]*?)\bw:w="(\d+)"/g,
+        (_m, p1, p2, _oldH, p3, _oldW) => `${p1}${p2}w:h="${A4_H}"${p3}w:w="${A4_W}"`
+      )
+
+      // 2. Remove inline section breaks (sectPr inside pPr) entirely.
+      //    This merges all sections into one continuous flow so SuperDoc
+      //    paginates naturally at A4 boundaries instead of treating each
+      //    DOCX section as a separate content area.
+      xml = xml.replace(
+        /<w:pPr([^>]*)>([\s\S]*?)<\/w:pPr>/g,
+        (match, attrs, inner) => {
+          if (!/<w:sectPr\b/.test(inner)) return match
+          const cleaned = inner.replace(/<w:sectPr[\s\S]*?<\/w:sectPr>/g, '')
+          return `<w:pPr${attrs}>${cleaned}</w:pPr>`
+        }
+      )
+
+      // 3. Remove hard page breaks (w:br type="page" in any form)
+      xml = xml.replace(/<w:br[^>]*w:type="page"[^>]*\/?>/g, '')
+
+      // 4. Remove "page break before" paragraph property
+      xml = xml.replace(/<w:pageBreakBefore\s*\/>/g, '')
+      xml = xml.replace(/<w:pageBreakBefore\/>/g, '')
+      xml = xml.replace(/<w:pageBreakBefore><\/w:pageBreakBefore>/g, '')
+
+      zip.file('word/document.xml', xml)
+    }
+    return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+  } catch (e) {
+    console.warn('[contract-template] patchDocxToA4 failed, using original:', e)
+    return src instanceof Blob ? src : await fetch(src).then(r => r.blob())
+  }
+}
 
 /* ==== Util ==== */
 const DEFAULT_HTML = `
@@ -371,12 +425,30 @@ export default function ContractTemplatePage() {
       try { sdRef.current?.destroy?.() } catch {}
       editorRef.current = null
 
+      // Small delay to let Vue fully clean up the previous instance
+      await new Promise(r => setTimeout(r, 50))
+      if (cancelled) return
+
+      // Patch DOCX to A4 page dimensions if we have a signed URL
+      let documentSrc: File | undefined = undefined
+      if (signedUrl) {
+        console.log('[contract-template] PATCHING DOCX from signedUrl:', signedUrl.substring(0, 80))
+        const patchedBlob = await patchDocxToA4(signedUrl)
+        console.log('[contract-template] Patched blob size:', patchedBlob.size)
+        documentSrc = new File([patchedBlob], 'template.docx', {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        })
+      } else {
+        console.log('[contract-template] NO signedUrl, loading from HTML. dbDocxPath:', dbDocxPath, 'lsDocx:', lsDocx, 'dbHTML:', !!dbHTML, 'lsHTML:', !!lsHTML)
+      }
+
       const baseCfg: any = {
         selector: '#sd-editor',
         toolbar:  '#sd-toolbar',
         documentMode: 'editing',
         pagination: true,
         rulers: true,
+        comments: false,
         modules: { toolbar: { responsiveToContainer: true, hideButtons: false } },
 
         onReady: () => {
@@ -411,7 +483,7 @@ export default function ContractTemplatePage() {
           editorRef.current = ev?.editor || ev
           setSdReady(true)
 
-          if (!signedUrl) {
+          if (!documentSrc) {
             const html = dbHTML || lsHTML || DEFAULT_HTML
             setEditorHTML(editorRef.current, html)
           }
@@ -421,7 +493,7 @@ export default function ContractTemplatePage() {
         },
       }
 
-      const cfg = signedUrl ? { ...baseCfg, document: signedUrl } : baseCfg
+      const cfg = documentSrc ? { ...baseCfg, document: documentSrc } : baseCfg
       const sd = new SuperDoc(cfg)
       sdRef.current = sd
 
@@ -434,7 +506,17 @@ export default function ContractTemplatePage() {
     }
 
     boot()
+
+    // Suppress SuperDoc internal unhandled [object Event] rejections
+    const onUnhandled = (e: PromiseRejectionEvent) => {
+      if (e.reason instanceof Event || (typeof e.reason === 'object' && e.reason && String(e.reason) === '[object Event]')) {
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('unhandledrejection', onUnhandled)
+
     return () => {
+      window.removeEventListener('unhandledrejection', onUnhandled)
       try { moToolbar?.disconnect() } catch {}
       try { sdRef.current?.destroy?.() } catch {}
       sdRef.current = null
@@ -442,6 +524,73 @@ export default function ContractTemplatePage() {
       if (watchdog) window.clearTimeout(watchdog)
       if (retryTO) window.clearTimeout(retryTO)
       try { offBackspace?.() } catch {}
+    }
+  }, [bootTick])
+
+  /* Collapse section-boundary breaks while keeping natural A4 page breaks.
+     Section breaks (DOCX header/body boundary) produce short pages (<900px).
+     Natural A4 page breaks produce full-height pages (~1050px+).
+     We only hide the break if the preceding content page is short. */
+  useEffect(() => {
+    const fixSectionBreaks = () => {
+      const container = document.getElementById('sd-editor')
+      if (!container) return
+
+      const allBreaks = container.querySelectorAll('.pagination-break-wrapper')
+      allBreaks.forEach(bw => {
+        const el = bw as HTMLElement
+        // Find the preceding sibling that is a page container
+        let prev = el.previousElementSibling as HTMLElement | null
+        while (prev && prev.classList.contains('pagination-page-spacer')) {
+          prev = prev.previousElementSibling as HTMLElement | null
+        }
+        if (!prev) return
+
+        // If the preceding page is shorter than ~900px, it's a forced
+        // section break, not a natural A4 page overflow → collapse it
+        const pageHeight = prev.getBoundingClientRect().height
+        if (pageHeight < 900) {
+          el.style.height = '0px'
+          el.style.minHeight = '0px'
+          el.style.maxHeight = '0px'
+          el.style.overflow = 'hidden'
+          el.style.margin = '0'
+          el.style.padding = '0'
+          // Also collapse the spacer right before this break
+          const spacerBefore = el.previousElementSibling as HTMLElement | null
+          if (spacerBefore?.classList.contains('pagination-page-spacer')) {
+            spacerBefore.style.height = '0px'
+          }
+          // And the spacer right after
+          const spacerAfter = el.nextElementSibling as HTMLElement | null
+          if (spacerAfter?.classList.contains('pagination-page-spacer')) {
+            spacerAfter.style.height = '0px'
+          }
+        }
+      })
+    }
+
+    const timers = [
+      setTimeout(fixSectionBreaks, 500),
+      setTimeout(fixSectionBreaks, 1000),
+      setTimeout(fixSectionBreaks, 2000),
+      setTimeout(fixSectionBreaks, 4000),
+    ]
+
+    const container = document.getElementById('sd-editor')
+    let observer: MutationObserver | null = null
+    if (container) {
+      let debounce: ReturnType<typeof setTimeout> | null = null
+      observer = new MutationObserver(() => {
+        if (debounce) clearTimeout(debounce)
+        debounce = setTimeout(fixSectionBreaks, 300)
+      })
+      observer.observe(container, { childList: true, subtree: true })
+    }
+
+    return () => {
+      timers.forEach(t => clearTimeout(t))
+      observer?.disconnect()
     }
   }, [bootTick])
 
@@ -469,8 +618,13 @@ export default function ContractTemplatePage() {
     if (!f) return
     try {
       setSdReady(false)
+      // Patch imported DOCX to A4
+      const patchedBlob = await patchDocxToA4(f)
+      const patchedFile = new File([patchedBlob], f.name || 'imported.docx', {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      })
       if (typeof sdRef.current?.openDocument === 'function') {
-        await sdRef.current.openDocument(f)
+        await sdRef.current.openDocument(patchedFile)
         setSdReady(true)
         flash('DOCX imported')
         iconifyToolbarLabels()
@@ -479,14 +633,15 @@ export default function ContractTemplatePage() {
       } else {
         try { sdRef.current?.destroy?.() } catch {}
         editorRef.current = null
-        await new Promise<void>(r => requestAnimationFrame(() => r()))
+        await new Promise(r => setTimeout(r, 50))
         const sd = new SuperDoc({
           selector: '#sd-editor',
           toolbar:  '#sd-toolbar',
-          document: f,
+          document: patchedFile,
           documentMode: 'editing',
           pagination: true,
           rulers: true,
+          comments: false,
           modules: { toolbar: { responsiveToContainer: true, hideButtons: false } },
           onReady: () => { setSdReady(true); flash('DOCX imported'); iconifyToolbarLabels(); installBackspaceGuard() },
           onEditorCreate: (ev: any) => { editorRef.current = ev?.editor || ev },

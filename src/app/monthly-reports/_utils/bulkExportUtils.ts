@@ -305,14 +305,14 @@ async function buildWastageReport(year: number, month: number): Promise<Blob> {
         day: dow3(r.date),
         time: r.time || '',
         branch: r.branch_name || '',
-        type: r.type || '',
+        type: r.wtype || '',
         category: r.category_name || '',
         item: r.item_name || '',
         unit: r.unit || '',
         qty: toNum(r.qty),
-        unitCost: toNum(r.unit_cost),
-        totalCost: toNum(r.total_cost),
-        chargeTo: r.charge_to || '',
+        unitCost: toNum(r.unit_cost_vnd),
+        totalCost: toNum(r.total_cost_vnd),
+        chargeTo: r.charge_target || '',
     }))
 
     return (await exportToExcelTable('Wastage Report', 'bulk.xlsx', columns, excelData, undefined, true)) as Blob

@@ -1,4 +1,4 @@
-import LeftNavHR from '@/components/LeftNavHR'
+import LeftNavHRSwitch from '@/components/LeftNavHRSwitch'
 import { requireAuth } from '@/lib/auth-check'
 
 export default async function HRLayout({ children }: { children: React.ReactNode }) {
@@ -6,7 +6,7 @@ export default async function HRLayout({ children }: { children: React.ReactNode
 
     return (
         <div className="flex bg-slate-900 min-h-screen">
-            <LeftNavHR />
+            <LeftNavHRSwitch />
 
             {/* 
          The sidebar manages a CSS variable --leftnav-w.

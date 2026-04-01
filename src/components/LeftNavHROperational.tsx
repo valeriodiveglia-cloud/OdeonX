@@ -1,31 +1,28 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Activity, Users, Settings, Home, CalendarDays } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, Home } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
+const BASE = '/human-resources/operational'
 const NAV = [
-    { href: '/human-resources', label: 'Dashboard', icon: Home, exact: true },
-    { href: '/human-resources/recruitment', label: 'Recruitment', icon: Briefcase },
-    { href: '/human-resources/activity', label: 'Activity', icon: Activity },
-    { href: '/human-resources/candidates', label: 'Candidates', icon: Users },
-    { href: '/human-resources/operational', label: 'HR Operational', icon: CalendarDays },
-    { href: '/human-resources/settings', label: 'Settings', icon: Settings },
+    { href: BASE, label: 'Dashboard', icon: Home, exact: true },
+    { href: `${BASE}/roster`, label: 'Roster', icon: CalendarDays },
+    { href: `${BASE}/reports`, label: 'Reports', icon: BarChart3 },
+    { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
 ]
 
-// Reusing style constants
 const EXP_W_REM = 16
 const COLL_W_REM = 3.5
 
-export default function LeftNavHR() {
+export default function LeftNavHROperational() {
     const pathname = usePathname()
     const { language, setLanguage } = useSettings()
     const [open, setOpen] = React.useState(false)
 
-    // Layout handling for overlay
     React.useEffect(() => {
         const root = document.documentElement
         const width = open ? `${EXP_W_REM}rem` : `${COLL_W_REM}rem`
@@ -39,6 +36,8 @@ export default function LeftNavHR() {
     const isEN = language === 'en'
     const toggleLang = () => setLanguage(isEN ? 'vi' : 'en')
 
+    const norm = (s: string) => s.replace(/\/+$/, '')
+
     return (
         <div
             className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
@@ -48,18 +47,20 @@ export default function LeftNavHR() {
         >
             {/* Header */}
             <div className="h-16 flex items-center px-3 border-b border-white/10">
-                <Link href="/dashboard" className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`}>
+                <Link href="/human-resources" className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`}>
                     <Home className="w-5 h-5 text-white" />
                 </Link>
                 <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
-                    {open ? 'HR & Talent' : ''}
+                    {open ? 'HR Operational' : ''}
                 </div>
             </div>
 
             {/* Nav Items */}
             <nav className="p-2 space-y-1 mt-2">
                 {NAV.map((item) => {
-                    const active = item.exact ? pathname === item.href : pathname.startsWith(item.href)
+                    const active = item.exact
+                        ? norm(pathname) === norm(item.href)
+                        : pathname === item.href || pathname.startsWith(item.href + '/')
 
                     return (
                         <Link
@@ -90,7 +91,6 @@ export default function LeftNavHR() {
                     <ReactCountryFlag countryCode={isEN ? 'GB' : 'VN'} svg style={{ width: '1.2em', height: '1.2em' }} />
                 </button>
             </div>
-
         </div>
     )
 }

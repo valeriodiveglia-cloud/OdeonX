@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { Briefcase, Activity, Users, Settings } from 'lucide-react'
+import { Briefcase, Activity, Users, Settings, CalendarDays } from 'lucide-react'
 
 const MODULES = [
     { name: 'Recruitment', description: 'Manage hiring requests and candidates', href: '/human-resources/recruitment', icon: Briefcase, color: 'bg-blue-500' },
     { name: 'Activity', description: 'View HR activity timeline', href: '/human-resources/activity', icon: Activity, color: 'bg-green-500' },
     { name: 'Candidates', description: 'View and search all candidates', href: '/human-resources/candidates', icon: Users, color: 'bg-purple-500' },
+    { name: 'HR Operational', description: 'Staff scheduling, roster and shift management', href: '/human-resources/operational', icon: CalendarDays, color: 'bg-cyan-500' },
     { name: 'Settings', description: 'Configure HR module settings', href: '/human-resources/settings', icon: Settings, color: 'bg-gray-500' },
 ]
 
