@@ -79,14 +79,26 @@ export async function exportToExcelTable(
         rows: rows,
     })
 
-    // Apply formatting to columns (1-based in ExcelJS)
+    // Apply column widths (safe to set on the column object)
     columns.forEach((col, i) => {
         const sheetCol = sheet.getColumn(i + 1)
-        if (col.width) sheetCol.width = col.width
-        else sheetCol.width = 15
+        sheetCol.width = col.width || 15
+    })
 
-        if (col.fmt) sheetCol.numFmt = col.fmt
-        else if (col.total === true) sheetCol.numFmt = '#,##0'
+    // Apply numFmt cell-by-cell to avoid ExcelJS bug where column-level
+    // numFmt applied after addTable corrupts table cell values to 0.
+    const dataRowCount = data.length
+    columns.forEach((col, colIdx) => {
+        const fmt = col.fmt || (col.total === true ? '#,##0' : null)
+        if (!fmt) return
+        for (let rowIdx = 0; rowIdx < dataRowCount; rowIdx++) {
+            // Row 1 = header, data starts at row 2, totals at row dataRowCount+2
+            const cell = sheet.getCell(rowIdx + 2, colIdx + 1)
+            cell.numFmt = fmt
+        }
+        // Also format the totals row
+        const totalsCell = sheet.getCell(dataRowCount + 2, colIdx + 1)
+        totalsCell.numFmt = fmt
     })
 
     if (extraRows && extraRows.length > 0) {
