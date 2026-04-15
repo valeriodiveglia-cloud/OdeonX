@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { UserGroupIcon, HomeIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
-import { ChefHat, Utensils, Package, BarChart3, LineChart, Building2 } from 'lucide-react'
+import { ChefHat, Utensils, Package, BarChart3, LineChart, Building2, Handshake } from 'lucide-react'
 import React from 'react'
 
 // i18n
@@ -27,6 +27,7 @@ const NAV: Item[] = [
   { href: '/equipment', i18nKey: 'Equipment', fallback: 'Equipment', icon: Utensils },
   { href: '/equipment-history', i18nKey: 'EquipmentHistory', fallback: 'Equipment History', icon: LineChart },
   { href: '/suppliers', i18nKey: 'Suppliers', fallback: 'Suppliers', icon: Building2 },
+  { href: '/crm', i18nKey: 'CRM', fallback: 'CRM', icon: Handshake },
   { href: '/settings', i18nKey: 'Settings', fallback: 'Settings', icon: Cog6ToothIcon },
 ]
 

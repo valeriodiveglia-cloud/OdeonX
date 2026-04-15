@@ -407,7 +407,8 @@ function EditorModal({
   const [itemName, setItemName] = useState<string>(initialRow?.itemName || '')
 
   const [unit, setUnit] = useState<string>(initialRow?.unit || '')
-  const [qty, setQty] = useState<number>(initialRow?.qty || 0)
+  const [qtyInput, setQtyInput] = useState<string>(initialRow?.qty ? String(initialRow.qty) : '')
+  const qty = parseFloat(qtyInput.replace(',', '.')) || 0
 
   const [packageCost, setPackageCost] = useState<number>(0)
   const [unitCost, setUnitCost] = useState<number>(initialRow?.unitCost || 0)
@@ -572,7 +573,7 @@ function EditorModal({
       itemId: itemId || null,
       itemName: itemName || '',
       unit: unit || null,
-      qty: Math.round(qty || 0),
+      qty: qty || 0,
       unitCost: Math.round(unitCost || 0),
       totalCost: Math.round((unitCost || 0) * (qty || 0)),
       chargeTo,
@@ -615,7 +616,7 @@ function EditorModal({
                         setUnit('')
                         setPackageCost(0)
                         setUnitCost(0)
-                        setQty(0)
+                        setQtyInput('')
                       }}
                       className={`px-3 py-2 text-sm transition ${active ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 hover:bg-blue-50'} ${tt === 'Dish' ? '' : 'border-l border-blue-300'}`}
                       disabled={viewMode}
@@ -694,7 +695,7 @@ function EditorModal({
                       setItemName('')
                       setUnit('')
                       setUnitCost(0)
-                      setQty(0)
+                      setQtyInput('')
                     }}
                     disabled={viewMode}
                   >
@@ -738,13 +739,16 @@ function EditorModal({
             <div>
               <label className="text-sm text-gray-800">{t.fields.qty}</label>
               <input
-                type="number"
-                min={0}
-                step={1}
-                className="mt-1 w-full border rounded-lg px-3 h-11 bg-white text-right"
-                value={Number.isFinite(qty) ? qty : 0}
-                onChange={e => setQty(Math.max(0, Math.floor(Number(e.target.value || 0))))}
+                type="text"
+                inputMode="decimal"
+                className="mt-1 w-full border rounded-lg px-3 h-11 bg-white text-right tabular-nums"
+                value={qtyInput}
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9.,]/g, '')
+                  setQtyInput(val)
+                }}
                 disabled={viewMode}
+                placeholder="0"
               />
             </div>
             <div>

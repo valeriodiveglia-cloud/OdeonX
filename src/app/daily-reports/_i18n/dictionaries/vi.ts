@@ -248,6 +248,8 @@ const vi = {
       floatRemain: 'Quỹ còn lại',
       difference: 'Chênh lệch',
       targetFloat: 'Mục tiêu quỹ',
+      floatMismatchTitle: 'Sai Lệch Tiền Quỹ',
+      floatMismatchDesc: 'Số tiền còn lại không khớp chính xác với Mục tiêu quỹ. Bạn có thể cần các mệnh giá nhỏ hơn hoặc thay đổi số tiền lấy ra để đạt đúng giới hạn.',
       denoms: {
         d500k: '500k',
         d200k: '200k',

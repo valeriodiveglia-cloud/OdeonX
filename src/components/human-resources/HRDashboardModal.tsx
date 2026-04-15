@@ -63,16 +63,19 @@ export default function HRDashboardModal({ onClose }: HRDashboardModalProps) {
                                 </div>
 
                                 <div className="mt-4 space-y-3">
-                                    {/* Management - Future */}
-                                    <div className="flex items-center p-4 rounded-xl border border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed">
-                                        <div className="h-10 w-10 rounded-lg bg-gray-200 flex items-center justify-center text-gray-400 mr-4">
+                                    {/* Management - Active */}
+                                    <button
+                                        onClick={() => navigateTo('/human-resources/management/staff')}
+                                        className="w-full flex items-center p-4 rounded-xl border border-blue-100 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 transition text-left group"
+                                    >
+                                        <div className="h-10 w-10 rounded-lg bg-blue-600 text-white flex items-center justify-center mr-4 shadow-sm group-hover:scale-105 transition-transform">
                                             <ClipboardDocumentCheckIcon className="h-6 w-6" />
                                         </div>
                                         <div>
-                                            <h4 className="font-semibold text-gray-500">Management</h4>
-                                            <p className="text-xs text-gray-400">Employee records & contracts (Coming Soon)</p>
+                                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">Management</h4>
+                                            <p className="text-xs text-gray-600">Staff directory, positions & salaries</p>
                                         </div>
-                                    </div>
+                                    </button>
 
                                     {/* Recruitment - Active */}
                                     <button

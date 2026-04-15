@@ -16,7 +16,7 @@ import {
   ArrowRightStartOnRectangleIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
-import { LayoutDashboard, Boxes } from 'lucide-react'
+import { LayoutDashboard, Boxes, Handshake } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
@@ -214,6 +214,17 @@ export default function HomeDashboard() {
 
                     {/* Human Resources */}
                     <HRModuleCTA />
+
+                    {/* CRM Module - Only for Owner/Manager */}
+                    {role && ['owner', 'manager'].includes(role) && (
+                      <Link
+                        href="/crm"
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+                      >
+                        <Handshake className="h-6 w-6" />
+                        <span>CRM & Partnerships</span>
+                      </Link>
+                    )}
 
                     {/* Asset Inventory */}
                     <AssetBranchPickerCTA />

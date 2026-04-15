@@ -249,6 +249,8 @@ const en = {
       floatRemain: 'Float remain',
       difference: 'Difference',
       targetFloat: 'Target float',
+      floatMismatchTitle: 'Float Setup Mismatch',
+      floatMismatchDesc: 'The remaining amount does not exactly match the Target Float. You may need smaller denominations, or adjust the taken amounts to reach exactly the limit.',
       denoms: {
         d500k: '500k',
         d200k: '200k',

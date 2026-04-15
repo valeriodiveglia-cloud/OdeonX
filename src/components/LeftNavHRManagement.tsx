@@ -3,22 +3,22 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React from 'react'
-import { CalendarDays, BarChart3, Settings, Home } from 'lucide-react'
+import { Users, Home, Star, TrendingUp, Settings } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
-const BASE = '/human-resources/operational'
+const BASE = '/human-resources/management'
 const NAV = [
-    { href: BASE, label: 'Dashboard', icon: Home, exact: true },
-    { href: `${BASE}/roster`, label: 'Roster', icon: CalendarDays },
-    { href: `${BASE}/reports`, label: 'Reports', icon: BarChart3 },
+    { href: `${BASE}/staff`, label: 'Staff List', icon: Users },
+    { href: `${BASE}/performance`, label: 'Performance', icon: Star },
+    { href: `${BASE}/salary-history`, label: 'Salary History', icon: TrendingUp },
     { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
 ]
 
 const EXP_W_REM = 16
 const COLL_W_REM = 3.5
 
-export default function LeftNavHROperational() {
+export default function LeftNavHRManagement() {
     const pathname = usePathname()
     const { language, setLanguage } = useSettings()
     const [open, setOpen] = React.useState(false)
@@ -51,16 +51,14 @@ export default function LeftNavHROperational() {
                     <Home className="w-5 h-5 text-white" />
                 </Link>
                 <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
-                    {open ? 'HR Operational' : ''}
+                    {open ? 'HR Management' : ''}
                 </div>
             </div>
 
             {/* Nav Items */}
             <nav className="p-2 space-y-1 mt-2">
                 {NAV.map((item) => {
-                    const active = item.exact
-                        ? norm(pathname) === norm(item.href)
-                        : pathname === item.href || pathname.startsWith(item.href + '/')
+                    const active = pathname === item.href || pathname.startsWith(item.href + '/')
 
                     return (
                         <Link
@@ -82,7 +80,6 @@ export default function LeftNavHROperational() {
                 })}
             </nav>
 
-            {/* Footer */}
             <div className={`mt-auto p-3 flex items-center justify-between transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}>
                 <button
                     onClick={toggleLang}

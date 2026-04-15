@@ -1,7 +1,7 @@
 // app/daily-reports/cashier-closing/_cards/CashCountCard.tsx
 'use client'
 
-import { ReactNode, useEffect, useMemo, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { useDailyReportSettings } from '../../_data/useDailyReportSettings'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getDailyReportsDictionary } from '../../_i18n'
@@ -152,8 +152,6 @@ export default function CashCountCard(props: {
 
   const { settings, loading, branchName } = useDailyReportSettings()
 
-  /* Override live logic removed (redundant with useDailyReportSettings broadcast support) */
-
   /* Valore dal DB (supporta shape piatta o nidificata) */
   const dbFloat = useMemo(() => {
     const s: any = settings || {}
@@ -172,6 +170,53 @@ export default function CashCountCard(props: {
     return DEFAULT_FLOAT
   }, [dbFloat])
 
+  const computePlan = useCallback((
+    currentCash: CashShape,
+    targetFloat: number,
+    currentEdits: Partial<CashShape>,
+    activeEdits: Record<DenomKey, boolean>
+  ): CashShape => {
+    const total = sumValue(currentCash)
+    const target = Math.max(0, Math.min(targetFloat, total))
+    const remainToTakeTotal = total - target
+    
+    const plan = emptyBag()
+    let editedTotal = 0
+
+    for (const d of DENOMS) {
+      if (activeEdits[d.key]) {
+        const have = currentCash[d.key] || 0
+        const chosen = Math.min(have, currentEdits[d.key] || 0)
+        plan[d.key] = chosen
+        editedTotal += chosen * d.face
+      }
+    }
+
+    let remainForSuggest = Math.max(0, remainToTakeTotal - editedTotal)
+
+    for (const d of TAKE_ORDER) {
+      if (activeEdits[d.key]) continue
+      const have = currentCash[d.key] || 0
+      const suggest = Math.min(have, Math.floor(remainForSuggest / d.face))
+      plan[d.key] = suggest
+      remainForSuggest -= suggest * d.face
+    }
+
+    if (remainForSuggest > 0) {
+      for (let i = TAKE_ORDER.length - 1; i >= 0 && remainForSuggest > 0; i--) {
+        const { key: ki, face: fi } = TAKE_ORDER[i]
+        if (activeEdits[ki]) continue
+        const room = Math.max(0, (currentCash[ki] || 0) - plan[ki])
+        if (room > 0) {
+          const add = Math.min(room, Math.ceil(remainForSuggest / fi))
+          plan[ki] += add
+          remainForSuggest -= add * fi
+        }
+      }
+    }
+    return plan
+  }, [])
+
   /* Plan logica */
   const [planActive, setPlanActive] = useState(false)
 
@@ -180,6 +225,16 @@ export default function CashCountCard(props: {
     const hasValues = DENOMS.some(d => (floatPlan[d.key] || 0) > 0)
     if (hasValues) {
       setPlanActive(true)
+      setEdited(prev => {
+        if (Object.keys(prev).length === 0) {
+          const loadedEdits = {} as Record<DenomKey, boolean>
+          for (const d of DENOMS) {
+            if ((floatPlan[d.key] || 0) > 0) loadedEdits[d.key] = true
+          }
+          return loadedEdits
+        }
+        return prev
+      })
     }
   }, [floatPlan])
 
@@ -187,26 +242,8 @@ export default function CashCountCard(props: {
 
   const effectivePlan = useMemo(() => {
     if (!planActive) return emptyBag()
-    const total = sumValue(cash)
-    const target = Math.max(0, Math.min(floatTarget, total))
-    let remainToTake = total - target
-    const plan = emptyBag()
-
-    for (let i = 0; i < TAKE_ORDER.length; i++) {
-      const { key, face } = TAKE_ORDER[i]
-      const have = cash[key] || 0
-      if (edited[key]) {
-        const chosen = Math.max(0, Math.min((floatPlan[key] || 0), have, Math.floor(Math.max(0, remainToTake) / face)))
-        plan[key] = chosen
-        remainToTake -= chosen * face
-      } else {
-        const suggest = Math.min(have, Math.floor(Math.max(0, remainToTake) / face))
-        plan[key] = suggest
-        remainToTake -= suggest * face
-      }
-    }
-    return plan
-  }, [planActive, cash, floatTarget, floatPlan, edited])
+    return computePlan(cash, floatTarget, floatPlan, edited)
+  }, [planActive, cash, floatTarget, floatPlan, edited, computePlan])
 
   const totalToTake = useMemo(() => sumValue(effectivePlan), [effectivePlan])
 
@@ -249,49 +286,24 @@ export default function CashCountCard(props: {
         : 'bg-red-100 text-red-800 ring-1 ring-red-200'
 
   const changeCash = (key: DenomKey, qty: number) => {
-    onChangeCash({ ...cash, [key]: Number.isFinite(qty) ? qty : (cash[key] || 0) })
+    const safeVal = Number.isFinite(qty) ? qty : (cash[key] || 0)
+    const nextCash = { ...cash, [key]: safeVal }
+    onChangeCash(nextCash)
+    if (planActive) {
+      const fullPlan = computePlan(nextCash, floatTarget, floatPlan, edited)
+      onChangeFloatPlan(fullPlan)
+    }
   }
 
   const changeTake = (key: DenomKey, raw: number) => {
     setPlanActive(true)
-    const idx = TAKE_ORDER.findIndex(d => d.key === key)
-    if (idx < 0) return
-
     const safe = Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0
     const nextEdited = { ...edited, [key]: true }
-
-    const total = sumValue(cash)
-    const target = Math.max(0, Math.min(floatTarget, total))
-    let remainToTake = total - target
-    const nextPlan = emptyBag()
-
-    for (let i = 0; i < TAKE_ORDER.length; i++) {
-      const { key: k, face } = TAKE_ORDER[i]
-      const have = cash[k] || 0
-
-      if (i < idx) {
-        if (nextEdited[k]) {
-          const chosen = Math.max(0, Math.min((floatPlan[k] || 0), have, Math.floor(Math.max(0, remainToTake) / face)))
-          nextPlan[k] = chosen
-          remainToTake -= chosen * face
-        } else {
-          const suggest = Math.min(have, Math.floor(Math.max(0, remainToTake) / face))
-          nextPlan[k] = suggest
-          remainToTake -= suggest * face
-        }
-      } else if (i === idx) {
-        const capped = Math.min(have, Math.floor(Math.max(0, remainToTake) / face), safe)
-        nextPlan[k] = capped
-        remainToTake -= capped * face
-      } else {
-        const suggest = Math.min(have, Math.floor(Math.max(0, remainToTake) / face))
-        nextPlan[k] = suggest
-        remainToTake -= suggest * face
-      }
-    }
-
     setEdited(nextEdited)
-    onChangeFloatPlan(nextPlan)
+    
+    const nextEdits = { ...floatPlan, [key]: safe }
+    const fullPlan = computePlan(cash, floatTarget, nextEdits, nextEdited)
+    onChangeFloatPlan(fullPlan)
   }
 
   const doSuggest = () => {
@@ -401,11 +413,26 @@ export default function CashCountCard(props: {
             <div className="text-right text-sm font-semibold">{formatVND(sumValue(cash))}</div>
             <div className="text-right text-sm font-semibold">{formatVND(totalToTake)}</div>
             <div />
-            <div className="text-right text-sm font-semibold">{formatVND(totalRemain)}</div>
+            <div className={`text-right text-sm font-semibold ${Math.abs(totalRemain - floatTarget) > 999 ? 'text-amber-600' : ''}`}>{formatVND(totalRemain)}</div>
           </div>
         </div>
 
-        <div className="pt-3 grid grid-cols-5 gap-3">
+        {Math.abs(totalRemain - floatTarget) > 999 && (
+          <div className="mt-3 bg-amber-50 rounded-xl p-3 border border-amber-200 flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div className="text-sm text-amber-800 leading-snug">
+              <strong>{(t as any).floatMismatchTitle || 'Float Setup Mismatch'}</strong>
+              <br />
+              <span className="opacity-90">
+                {(t as any).floatMismatchDesc || `The remaining amount (${formatVND(totalRemain)}) differs from the Target Float (${formatVND(floatTarget)}). You may need smaller denominations to match the amount exactly.`}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3 grid grid-cols-5 gap-3">
           <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
             <div className="text-xs text-gray-600">{t.expectedDrawer}</div>
             <div className="font-semibold tabular-nums">{formatVND(expectedDrawerCash)}</div>

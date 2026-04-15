@@ -71,6 +71,10 @@ type Ctx = {
   equipmentCsvConfirm: boolean
   setEquipmentCsvConfirm: (v: boolean) => void
 
+  // HR Review Frequency
+  hrReviewFrequency: string
+  setHrReviewFrequency: (v: string) => void
+
   // Forzare ricarica
   reloadSettings: () => Promise<void>
 
@@ -112,6 +116,9 @@ const SettingsCtx = createContext<Ctx>({
   equipmentCsvConfirm: true,
   setEquipmentCsvConfirm: () => {},
 
+  hrReviewFrequency: 'Quarterly',
+  setHrReviewFrequency: () => {},
+
   reloadSettings: async () => {},
   revision: 0,
 })
@@ -144,6 +151,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [equipmentReviewMonths, setEquipmentReviewMonthsState] = useState<number>(4)
   const [equipmentCsvConfirm, setEquipmentCsvConfirmState] = useState<boolean>(true)
 
+  // HR
+  const [hrReviewFrequency, setHrReviewFrequencyState] = useState<string>('Quarterly')
+
   // Chiavi localStorage usate dall’app
   const LS_KEYS = [
     'app_materials_review_months',
@@ -175,6 +185,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     materialsExclusiveDefault?: boolean
     equipmentReviewMonths?: number
     equipmentCsvConfirm?: boolean
+    hrReviewFrequency?: string
   }) {
     const patch: Record<string, any> = { id: 'singleton' }
 
@@ -202,6 +213,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if ('equipmentReviewMonths' in partial) patch.equipment_review_months = partial.equipmentReviewMonths
     if ('equipmentCsvConfirm' in partial) patch.equipment_csv_require_confirm_refs = partial.equipmentCsvConfirm
 
+    if ('hrReviewFrequency' in partial) patch.hr_review_frequency = partial.hrReviewFrequency
+
     const { error } = await supabase.from('app_settings').upsert(patch, { onConflict: 'id' })
     if (error) {
       console.warn('Settings save error', error)
@@ -221,7 +234,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase
       .from('app_settings')
       .select(
-        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs'
+        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs, hr_review_frequency'
       )
       .eq('id', 'singleton')
       .maybeSingle()
@@ -280,6 +293,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         ? toBool((data as any).equipment_csv_require_confirm_refs, true)
         : undefined
 
+    const hrFreqDb = data?.hr_review_frequency ? String(data.hr_review_frequency) : undefined
+
     try {
       // Local overrides
       const storedMatReview = localStorage.getItem('app_materials_review_months')
@@ -319,6 +334,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setEquipmentCsvConfirmState(
         typeof eqCsvDb === 'boolean' ? eqCsvDb : storedEqCsv != null ? storedEqCsv === 'true' : true
       )
+
+      setHrReviewFrequencyState(hrFreqDb || 'Quarterly')
     } catch (e) {
       console.warn('Settings localStorage load error', e)
     }
@@ -496,6 +513,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     void saveToDb({ equipmentCsvConfirm: !!v })
   }
 
+  function setHrReviewFrequency(v: string) {
+    setHrReviewFrequencyState(v)
+    void saveToDb({ hrReviewFrequency: v })
+  }
+
   if (!hydrated) return null
 
   return (
@@ -534,6 +556,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setEquipmentReviewMonths,
         equipmentCsvConfirm,
         setEquipmentCsvConfirm,
+
+        hrReviewFrequency,
+        setHrReviewFrequency,
 
         reloadSettings,
         revision,

@@ -9,7 +9,7 @@ import {
     generateMockRoster, getStaffCrossBranchShifts, shiftsOverlap,
 } from '@/lib/hr-operational-data'
 import CircularLoader from '@/components/CircularLoader'
-import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User, Clock } from 'lucide-react'
 
 export default function RosterPage() {
     const [loading, setLoading] = useState(true)
@@ -20,6 +20,7 @@ export default function RosterPage() {
     const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([])
     const [editingCell, setEditingCell] = useState<{ staffId: string; date: string; staffName: string } | null>(null)
     const [staffDetailId, setStaffDetailId] = useState<string | null>(null)
+    const [dayDetailDate, setDayDetailDate] = useState<string | null>(null)
     const modalRef = useRef<HTMLDivElement>(null)
 
     // Load branches
@@ -255,14 +256,18 @@ export default function RosterPage() {
                                 return (
                                     <th
                                         key={ds}
-                                        className={`px-2 py-3 text-center border-b border-gray-200 min-w-[100px]
-                                            ${isToday ? 'bg-blue-50' : 'bg-gray-50'}`}
+                                        className={`px-2 py-3 text-center border-b border-gray-200 min-w-[100px] cursor-pointer group/day transition-colors
+                                            ${isToday ? 'bg-blue-50 hover:bg-blue-100/70' : 'bg-gray-50 hover:bg-gray-100'}`}
+                                        onClick={() => setDayDetailDate(ds)}
                                     >
-                                        <div className={`text-xs uppercase tracking-wider ${isToday ? 'text-blue-600' : 'text-gray-500'}`}>
+                                        <div className={`text-xs uppercase tracking-wider ${isToday ? 'text-blue-600' : 'text-gray-500'} group-hover/day:text-blue-600 transition-colors`}>
                                             {dayName(day)}
                                         </div>
-                                        <div className={`text-lg font-bold mt-0.5 ${isToday ? 'text-blue-700' : 'text-gray-800'}`}>
+                                        <div className={`text-lg font-bold mt-0.5 ${isToday ? 'text-blue-700' : 'text-gray-800'} group-hover/day:text-blue-700 transition-colors`}>
                                             {day.getDate()}
+                                        </div>
+                                        <div className="text-[9px] text-gray-400 opacity-0 group-hover/day:opacity-100 transition-opacity mt-0.5 flex items-center justify-center gap-0.5">
+                                            <Clock className="w-2.5 h-2.5" /> Timeline
                                         </div>
                                     </th>
                                 )
@@ -741,6 +746,275 @@ export default function RosterPage() {
                                         </tfoot>
                                     )}
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+                )
+            })()}
+
+            {/* Day Detail Timeline Modal */}
+            {dayDetailDate && (() => {
+                // Find the actual Date object from weekDays to avoid timezone mismatch
+                const dateObj = weekDays.find(d => formatDate(d) === dayDetailDate) || new Date(dayDetailDate + 'T12:00:00')
+                const dateLabel = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+                // Timeline from 06:00 to 02:00 next day = 20 hours
+                const TIMELINE_START = 6 // 06:00
+                const TIMELINE_END = 26  // 02:00 next day (= 24+2)
+                const TIMELINE_HOURS = TIMELINE_END - TIMELINE_START // 20 hours
+
+                const parseTime = (t: string): number => {
+                    const [h, m] = t.split(':').map(Number)
+                    let hour = h + m / 60
+                    // Times like 01:00, 02:00 are next day
+                    if (hour < TIMELINE_START) hour += 24
+                    return hour
+                }
+
+                const getBarStyle = (shift: ShiftType) => {
+                    if (shift.type !== 'work' || !shift.startTime || !shift.endTime) return null
+                    const start = parseTime(shift.startTime)
+                    const end = parseTime(shift.endTime)
+                    const left = ((start - TIMELINE_START) / TIMELINE_HOURS) * 100
+                    const width = ((end - start) / TIMELINE_HOURS) * 100
+                    return { left: `${Math.max(0, left)}%`, width: `${Math.min(100 - Math.max(0, left), width)}%` }
+                }
+
+                // Build staff rows with their shifts for this day across the selected branch
+                const staffRows = MOCK_STAFF.map(staff => {
+                    const key = rosterKey(selectedBranch, staff.id, dayDetailDate)
+                    const shiftId = roster[key]
+                    const shift = shiftId ? shiftTypes.find(s => s.id === shiftId) : null
+                    return { staff, shift }
+                }).filter((r): r is { staff: typeof r.staff; shift: NonNullable<typeof r.shift> } => r.shift !== null && r.shift !== undefined && r.shift.type === 'work') // only show staff with work shifts
+
+                // Compute coverage: count staff working at each 30-min slot
+                const SLOTS = TIMELINE_HOURS * 2 // 30-min slots
+                const coverage = new Array(SLOTS).fill(0)
+                staffRows.forEach(({ shift }) => {
+                    if (!shift || shift.type !== 'work' || !shift.startTime || !shift.endTime) return
+                    const start = parseTime(shift.startTime)
+                    const end = parseTime(shift.endTime)
+                    for (let i = 0; i < SLOTS; i++) {
+                        const slotTime = TIMELINE_START + i * 0.5
+                        if (slotTime >= start && slotTime < end) coverage[i]++
+                    }
+                })
+
+                // Find gap and overlap zones
+                const gaps: { start: number; end: number }[] = []
+                const overlaps: { start: number; end: number; count: number }[] = []
+                let gapStart = -1
+                let overlapStart = -1
+                let overlapCount = 0
+
+                // Only check coverage during operating hours (roughly 07:00-23:00 = slots 2..34)
+                const OP_START_SLOT = 2 // 07:00
+                const OP_END_SLOT = 34  // 23:00
+
+                for (let i = OP_START_SLOT; i < Math.min(OP_END_SLOT, SLOTS); i++) {
+                    // Gaps
+                    if (coverage[i] === 0 && gapStart === -1) gapStart = i
+                    if ((coverage[i] > 0 || i === OP_END_SLOT - 1) && gapStart !== -1) {
+                        gaps.push({ start: gapStart, end: coverage[i] === 0 ? i + 1 : i })
+                        gapStart = -1
+                    }
+                    // Overlaps (3+ staff at same time)
+                    if (coverage[i] >= 3) {
+                        if (overlapStart === -1) { overlapStart = i; overlapCount = coverage[i] }
+                    } else {
+                        if (overlapStart !== -1) {
+                            overlaps.push({ start: overlapStart, end: i, count: overlapCount })
+                            overlapStart = -1
+                        }
+                    }
+                }
+                if (overlapStart !== -1) overlaps.push({ start: overlapStart, end: OP_END_SLOT, count: overlapCount })
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDayDetailDate(null)}>
+                        <div
+                            className="bg-slate-800 rounded-2xl border border-white/10 shadow-2xl w-full max-w-5xl mx-4 overflow-hidden"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {/* Header */}
+                            <div className="px-6 py-5 border-b border-white/10">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center">
+                                            <Clock className="w-5 h-5 text-blue-400" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-white">Daily Timeline</h3>
+                                            <p className="text-sm text-slate-400">{dateLabel} · {getBranchName(selectedBranch)}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setDayDetailDate(null)} className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition">
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                {/* Quick stats */}
+                                <div className="flex items-center gap-6 mt-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
+                                            <User className="w-4 h-4 text-blue-400" />
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-slate-400">Staff On</div>
+                                            <div className="text-sm font-semibold text-white">{staffRows.length}</div>
+                                        </div>
+                                    </div>
+                                    {gaps.length > 0 && (
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center">
+                                                <AlertTriangle className="w-4 h-4 text-red-400" />
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-slate-400">Coverage Gaps</div>
+                                                <div className="text-sm font-semibold text-red-400">{gaps.length}</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {gaps.length === 0 && (
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                                                <span className="text-emerald-400 text-sm">✓</span>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-slate-400">Coverage</div>
+                                                <div className="text-sm font-semibold text-emerald-400">Full</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Timeline area */}
+                            <div className="px-6 py-4 overflow-x-auto">
+                                {/* Hour labels */}
+                                <div className="flex ml-[160px] mb-1">
+                                    {Array.from({ length: TIMELINE_HOURS + 1 }, (_, i) => {
+                                        const h = (TIMELINE_START + i) % 24
+                                        return (
+                                            <div
+                                                key={i}
+                                                className="text-[10px] text-slate-500 shrink-0"
+                                                style={{ width: i < TIMELINE_HOURS ? `${100 / TIMELINE_HOURS}%` : 0, minWidth: 0 }}
+                                            >
+                                                {String(h).padStart(2, '0')}:00
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+
+                                {/* Coverage heatmap bar */}
+                                <div className="flex ml-[160px] mb-3 h-3 rounded-full overflow-hidden bg-slate-700/50">
+                                    {coverage.map((count, i) => {
+                                        let bg = 'bg-transparent'
+                                        if (i >= OP_START_SLOT && i < OP_END_SLOT) {
+                                            if (count === 0) bg = 'bg-red-500/40'
+                                            else if (count === 1) bg = 'bg-amber-500/50'
+                                            else if (count === 2) bg = 'bg-emerald-500/50'
+                                            else bg = 'bg-blue-500/60'
+                                        }
+                                        return (
+                                            <div
+                                                key={i}
+                                                className={`${bg} transition-colors`}
+                                                style={{ width: `${100 / SLOTS}%` }}
+                                                title={`${String((TIMELINE_START + i * 0.5) % 24 | 0).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'} — ${count} staff`}
+                                            />
+                                        )
+                                    })}
+                                </div>
+
+                                {/* Coverage legend */}
+                                <div className="flex items-center gap-3 ml-[160px] mb-4">
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-red-500/40" /><span className="text-[10px] text-slate-500">No cover</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-amber-500/50" /><span className="text-[10px] text-slate-500">1 staff</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" /><span className="text-[10px] text-slate-500">2 staff</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-blue-500/60" /><span className="text-[10px] text-slate-500">3+ staff</span></div>
+                                </div>
+
+                                {/* Staff timeline rows */}
+                                <div className="space-y-1">
+                                    {staffRows.map(({ staff, shift }) => {
+                                        const barStyle = shift ? getBarStyle(shift) : null
+
+                                        return (
+                                            <div key={staff.id} className="flex items-center gap-0 h-10">
+                                                {/* Staff label */}
+                                                <div className="w-[160px] shrink-0 flex items-center gap-2 pr-3">
+                                                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                                                        {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="text-xs font-medium text-slate-200 truncate">{staff.name}</div>
+                                                        <div className="text-[10px] text-slate-500 truncate">{staff.role}</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Timeline bar area */}
+                                                <div className="flex-1 relative h-8 bg-slate-700/30 rounded-lg overflow-hidden">
+                                                    {/* Hour grid lines */}
+                                                    {Array.from({ length: TIMELINE_HOURS }, (_, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className="absolute top-0 bottom-0 border-l border-slate-600/30"
+                                                            style={{ left: `${(i / TIMELINE_HOURS) * 100}%` }}
+                                                        />
+                                                    ))}
+
+                                                    {/* Shift bar */}
+                                                    {barStyle && (
+                                                        <div
+                                                            className="absolute top-1 bottom-1 rounded-md flex items-center justify-center shadow-sm transition-all"
+                                                            style={{
+                                                                left: barStyle.left,
+                                                                width: barStyle.width,
+                                                                backgroundColor: shift!.color + 'CC',
+                                                            }}
+                                                        >
+                                                            <span className="text-[11px] font-bold text-white drop-shadow-sm">
+                                                                {shift!.code} {shift!.startTime}–{shift!.endTime}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+
+                                    {staffRows.length === 0 && (
+                                        <div className="py-12 text-center text-slate-500">
+                                            <Clock className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                                            <p>No shifts assigned for this day</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Gap warnings */}
+                                {gaps.length > 0 && (
+                                    <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                                        <div className="flex items-start gap-2">
+                                            <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                                            <div>
+                                                <p className="text-xs font-medium text-red-300">Coverage gaps detected</p>
+                                                {gaps.map((g, i) => {
+                                                    const startH = TIMELINE_START + g.start * 0.5
+                                                    const endH = TIMELINE_START + g.end * 0.5
+                                                    const fmtH = (h: number) => `${String(Math.floor(h % 24)).padStart(2, '0')}:${h % 1 === 0 ? '00' : '30'}`
+                                                    return (
+                                                        <p key={i} className="text-xs text-red-400/80 mt-0.5">
+                                                            No coverage: {fmtH(startH)} – {fmtH(endH)}
+                                                        </p>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
