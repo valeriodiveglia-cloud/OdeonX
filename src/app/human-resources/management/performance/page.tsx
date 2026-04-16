@@ -28,7 +28,7 @@ import {
    hr_rating_categories table via Settings page.
    ═══════════════════════════════════════════════════════════ */
 
-import PerformanceModal, { OVERALL_LABELS, RatingStars, computePeriodLabel } from '@/components/human-resources/PerformanceModal'
+import PerformanceModal, { OVERALL_LABELS, RatingStars, computePeriodLabel, computeAverage } from '@/components/human-resources/PerformanceModal'
 
 interface SelectStaffModalProps {
     open: boolean;

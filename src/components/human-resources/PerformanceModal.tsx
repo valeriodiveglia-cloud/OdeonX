@@ -17,7 +17,7 @@ export const OVERALL_LABELS: Record<number, { label: string; color: string; bg: 
     5: { label: 'Excellent',     color: 'text-emerald-700', bg: 'bg-emerald-50' },
 }
 
-function computeAverage(ratings: Record<string, number>): number {
+export function computeAverage(ratings: Record<string, number>): number {
     const vals = Object.values(ratings).filter(v => v > 0)
     if (vals.length === 0) return 0
     return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
