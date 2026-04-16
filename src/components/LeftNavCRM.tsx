@@ -24,6 +24,8 @@ export default function LeftNavCRM() {
     const { language, setLanguage } = useSettings()
     const [open, setOpen] = React.useState(false)
 
+    const [role, setRole] = React.useState<string | null>(null)
+
     // Layout handling for overlay
     React.useEffect(() => {
         const root = document.documentElement
@@ -32,11 +34,29 @@ export default function LeftNavCRM() {
         return () => root.style.setProperty('--leftnav-w', `${COLL_W_REM}rem`)
     }, [open])
 
+    React.useEffect(() => {
+        const fetchRole = async () => {
+            const { data: user } = await import('@/lib/supabase_shim').then(m => m.supabase.auth.getUser())
+            if (user?.user) {
+                const { data } = await import('@/lib/supabase_shim').then(m => m.supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single())
+                setRole(data?.role || 'staff')
+            }
+        }
+        fetchRole()
+    }, [])
+
     const handleMouseEnter = () => setOpen(true)
     const handleMouseLeave = () => setOpen(false)
 
     const isEN = language === 'en'
     const toggleLang = () => setLanguage(isEN ? 'vi' : 'en')
+
+    const filteredNav = NAV.filter(item => {
+        if (role === 'staff') {
+            return item.href === '/crm/referrals'
+        }
+        return true
+    })
 
     return (
         <div
@@ -57,7 +77,7 @@ export default function LeftNavCRM() {
 
             {/* Nav Items */}
             <nav className="p-2 space-y-1 mt-2">
-                {NAV.map((item) => {
+                {filteredNav.map((item) => {
                     const active = item.exact ? pathname === item.href : pathname.startsWith(item.href)
 
                     return (

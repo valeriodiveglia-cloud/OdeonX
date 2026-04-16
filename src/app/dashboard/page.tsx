@@ -16,7 +16,7 @@ import {
   ArrowRightStartOnRectangleIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
-import { LayoutDashboard, Boxes, Handshake } from 'lucide-react'
+import { LayoutDashboard, Boxes, Handshake, Target } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
@@ -223,6 +223,17 @@ export default function HomeDashboard() {
                       >
                         <Handshake className="h-6 w-6" />
                         <span>CRM & Partnerships</span>
+                      </Link>
+                    )}
+
+                    {/* Quick Referral - Visible to all with CRM access including staff */}
+                    {role && ['owner', 'admin', 'manager', 'staff'].includes(role) && (
+                      <Link
+                        href="/crm/referrals"
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
+                      >
+                        <Target className="h-6 w-6" />
+                        <span>Register Referral</span>
                       </Link>
                     )}
 

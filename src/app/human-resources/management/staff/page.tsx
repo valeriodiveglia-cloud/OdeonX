@@ -210,7 +210,12 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
-                            <select value={employmentType} onChange={e => setEmploymentType(e.target.value as EmploymentType)}
+                            <select value={employmentType} onChange={e => {
+                                const val = e.target.value as EmploymentType;
+                                setEmploymentType(val);
+                                if (val === 'part_time') setSalaryType('hourly');
+                                if (val === 'full_time') setSalaryType('fixed');
+                            }}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
                                 <option value="full_time">Full-time</option>
                                 <option value="part_time">Part-time</option>

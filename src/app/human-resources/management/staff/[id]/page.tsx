@@ -7,10 +7,13 @@ import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
 import {
     ArrowLeft, User, FileText, Activity, TrendingUp, Save, UploadCloud, ExternalLink,
-    Calendar, Building2, Briefcase, Plus, Loader2, Trash2, BadgeCheck, Lock, Unlock
+    Calendar, Building2, Briefcase, Plus, Loader2, Trash2, BadgeCheck, Lock, Unlock,
+    ChevronLeft, ChevronRight, Pencil
 } from 'lucide-react'
-import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus } from '@/types/human-resources'
+import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory } from '@/types/human-resources'
+import PerformanceModal, { computePeriodLabel } from '@/components/human-resources/PerformanceModal'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
+import { useSettings } from '@/contexts/SettingsContext'
 
 // === HELPERS ===
 const fmtVND = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
@@ -41,19 +44,21 @@ export default function StaffDetailPage() {
     const [salaryHistory, setSalaryHistory] = useState<HRStaffSalaryHistory[]>([])
     const [performances, setPerformances] = useState<HRStaffPerformance[]>([])
     const [providerBranches, setProviderBranches] = useState<{id: string, name: string}[]>([])
+    const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
 
     const fetchAll = useCallback(async () => {
         if (!id) return;
         setLoading(true)
         try {
-            const [staffRes, deptsRes, posRes, roleReq, salReq, perfReq, branchesReq] = await Promise.all([
+            const [staffRes, deptsRes, posRes, roleReq, salReq, perfReq, branchesReq, catReq] = await Promise.all([
                 supabase.from('hr_staff').select('*, hr_departments(*), hr_positions(*), hr_staff_branches(*)').eq('id', id).single(),
                 supabase.from('hr_departments').select('*').order('sort_order'),
                 supabase.from('hr_positions').select('*').order('sort_order'),
                 supabase.from('hr_staff_role_history').select('*, old_position:hr_positions!old_position_id(*), new_position:hr_positions!new_position_id(*)').eq('staff_id', id).order('effective_date', { ascending: false }),
                 supabase.from('hr_staff_salary_history').select('*').eq('staff_id', id).order('effective_date', { ascending: false }),
                 supabase.from('hr_staff_performance').select('*').eq('staff_id', id).order('review_date', { ascending: false }),
-                supabase.from('provider_branches').select('id, name').order('name')
+                supabase.from('provider_branches').select('id, name').order('name'),
+                supabase.from('hr_rating_categories').select('*').order('sort_order')
             ])
             if (staffRes.data) setStaff(staffRes.data as any)
             if (deptsRes.data) setDepartments(deptsRes.data)
@@ -62,6 +67,7 @@ export default function StaffDetailPage() {
             if (salReq.data) setSalaryHistory(salReq.data)
             if (perfReq.data) setPerformances(perfReq.data)
             if (branchesReq.data) setProviderBranches(branchesReq.data)
+            if (catReq.data) setAllCategories(catReq.data)
         } catch (err) {
             console.error('Error fetching staff data', err)
         }
@@ -150,7 +156,7 @@ export default function StaffDetailPage() {
                         {activeTab === 'profile' && <TabProfile staff={staff} departments={departments} positions={positions} branches={providerBranches} onUpdate={fetchAll} />}
                         {activeTab === 'documents' && <TabDocuments staff={staff} onUpdate={fetchAll} />}
                         {activeTab === 'timeline' && <TabTimeline staff={staff} roleHistory={roleHistory} salaryHistory={salaryHistory} positions={positions} onUpdate={fetchAll} />}
-                        {activeTab === 'performance' && <TabPerformance staff={staff} performances={performances} onUpdate={fetchAll} />}
+                        {activeTab === 'performance' && <TabPerformance staff={staff} performances={performances} onUpdate={fetchAll} allCategories={allCategories} />}
                     </div>
                 </div>
 
@@ -168,10 +174,10 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
     const [displaySalary, setDisplaySalary] = useState<string>('')
     const [saving, setSaving] = useState(false)
     const [unlockedFields, setUnlockedFields] = useState<Set<string>>(new Set())
-    const [unlockPrompt, setUnlockPrompt] = useState<'position' | 'salary' | null>(null)
+    const [unlockPrompt, setUnlockPrompt] = useState<'department' | 'position' | 'salary' | null>(null)
 
     const handleUnlock = (field: string) => {
-        setUnlockPrompt(field as 'position' | 'salary')
+        setUnlockPrompt(field as 'department' | 'position' | 'salary')
     }
 
     useEffect(() => {
@@ -185,7 +191,16 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
         }
     }, [staff])
 
-    const handleChange = (field: keyof HRStaffMember | 'salary_amount', val: any) => setFormData(p => ({ ...p, [field]: val }))
+    const handleChange = (field: keyof HRStaffMember | 'salary_amount', val: any) => {
+        setFormData(p => {
+            const newData = { ...p, [field]: val };
+            if (field === 'employment_type') {
+                if (val === 'part_time') newData.salary_type = 'hourly';
+                if (val === 'full_time') newData.salary_type = 'fixed';
+            }
+            return newData;
+        })
+    }
     
     const handleSave = async () => {
         setSaving(true)
@@ -242,11 +257,16 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Department</label>
-                    <select value={formData.department_id || ''} onChange={e => handleChange('department_id', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        <option value="">None</option>
-                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
+                    <div className="relative">
+                        <select disabled={!unlockedFields.has('department')} value={formData.department_id || ''} onChange={e => handleChange('department_id', e.target.value)}
+                            className="w-full px-3 py-2 pr-10 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed">
+                            <option value="">None</option>
+                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                        <button type="button" onClick={() => !unlockedFields.has('department')} onPointerDown={() => !unlockedFields.has('department') && handleUnlock('department')} className={`absolute right-8 top-1/2 -translate-y-1/2 transition-colors ${unlockedFields.has('department') ? 'text-blue-500' : 'text-gray-400 hover:text-amber-500'}`} title={unlockedFields.has('department') ? "Unlocked" : "Unlock to edit directly"}>
+                            {unlockedFields.has('department') ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                        </button>
+                    </div>
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Position</label>
@@ -393,7 +413,7 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                                 If you want to track a promotion, role transfer, or salary increase properly, please use the dedicated <strong className="font-semibold text-gray-900">Career Journey</strong> tab instead.
                             </p>
                             <p className="text-sm text-gray-900 font-medium mt-4">
-                                Are you sure you want to unlock and edit {unlockPrompt === 'position' ? 'the position' : 'the salary amount'} directly?
+                                Are you sure you want to unlock and edit {unlockPrompt === 'position' ? 'the position' : unlockPrompt === 'department' ? 'the department' : 'the salary amount'} directly?
                             </p>
                         </div>
                         <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2.5">
@@ -594,8 +614,11 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, onUpdate }:
 // ==========================================
 // TAB: Performance
 // ==========================================
-function TabPerformance({ staff, performances, onUpdate }: { staff: HRStaffMember, performances: HRStaffPerformance[], onUpdate: () => void }) {
-    
+function TabPerformance({ staff, performances, onUpdate, allCategories }: { staff: HRStaffMember, performances: HRStaffPerformance[], onUpdate: () => void, allCategories: HRRatingCategory[] }) {
+    const [modalOpen, setModalOpen] = useState(false);
+    const [editingReview, setEditingReview] = useState<HRStaffPerformance | null>(null);
+    const [saving, setSaving] = useState(false);
+
     // Setup chart data
     const chartData = useMemo(() => {
         return [...performances].reverse().map(p => ({
@@ -605,38 +628,45 @@ function TabPerformance({ staff, performances, onUpdate }: { staff: HRStaffMembe
         }))
     }, [performances])
 
-    const handleAddReview = async () => {
-        const ratingStr = prompt('Enter an overall rating (1-5):')
-        if (!ratingStr) return;
-        const rating = parseInt(ratingStr, 10);
-        if (rating < 1 || rating > 5) return alert('Rating must be between 1 and 5.')
-        const notes = prompt('Enter review notes:')
+    const handleSaveReview = async (data: any) => {
+        setSaving(true);
         try {
-            const { error } = await supabase.from('hr_staff_performance').insert({
-                staff_id: staff.id,
-                review_date: new Date().toISOString().split('T')[0],
-                rating: rating,
-                notes: notes,
-                reviewer_name: 'Admin'
-            })
-            if (error) throw error
-            onUpdate()
+            if (editingReview) {
+                const { error } = await supabase.from('hr_staff_performance').update(data).eq('id', editingReview.id);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('hr_staff_performance').insert([data]);
+                if (error) throw error;
+            }
+            onUpdate();
+            setModalOpen(false);
         } catch (err) {
-            console.error(err); alert('Failed to add review')
+            console.error(err);
+            alert('Failed to save review');
+        } finally {
+            setSaving(false);
         }
-    }
+    };
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Performance Tracking</h2>
                     <p className="text-sm text-gray-500 mt-1">Monitor growth, past reviews and key goals.</p>
                 </div>
-                <button onClick={handleAddReview} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition">
-                    <Plus className="w-3.5 h-3.5" /> Add Review
-                </button>
             </div>
+            
+            <PerformanceModal 
+                open={modalOpen} 
+                onClose={() => setModalOpen(false)} 
+                onSave={handleSaveReview}
+                review={editingReview}
+                staffList={[staff]}
+                allCategories={allCategories}
+                saving={saving}
+                preselectedStaffId={staff.id}
+            />
 
             {/* CHART */}
             {chartData.length > 0 ? (
@@ -671,15 +701,18 @@ function TabPerformance({ staff, performances, onUpdate }: { staff: HRStaffMembe
             {/* REVIEW LIST */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {performances.map(p => (
-                    <div key={p.id} className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm hover:shadow-md transition">
+                    <div key={p.id} onClick={() => { setEditingReview(p); setModalOpen(true); }} className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm hover:shadow-md transition cursor-pointer hover:border-emerald-200 group">
                         <div className="flex items-center justify-between mb-3 border-b border-gray-50 pb-3">
                             <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">{p.rating}</div>
                                 <div>
-                                    <h4 className="text-sm font-bold text-gray-900">{fmtDate(p.review_date)}</h4>
+                                    <h4 className="text-sm font-bold text-gray-900 group-hover:text-emerald-700 transition-colors">
+                                        {fmtDate(p.review_date)} <span className="text-xs font-normal text-gray-400 ml-1">({p.period})</span>
+                                    </h4>
                                     <p className="text-xs text-gray-500">By {p.reviewer_name || 'System'}</p>
                                 </div>
                             </div>
+                            <Pencil className="w-4 h-4 text-gray-300 group-hover:text-emerald-500 transition-colors" />
                         </div>
                         <p className="text-sm text-gray-700 leading-relaxed italic border-l-2 border-emerald-200 pl-3">
                             "{p.notes || 'No specific notes provided for this review segment.'}"

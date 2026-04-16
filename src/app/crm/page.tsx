@@ -17,6 +17,16 @@ export default function CRMDashboard() {
 
   useEffect(() => {
     async function fetchData() {
+      // Check role first
+      const { data: user } = await supabase.auth.getUser()
+      if (user?.user) {
+          const { data } = await supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single()
+          if (data?.role === 'staff') {
+              window.location.href = '/crm/referrals'
+              return
+          }
+      }
+
       // For dashboard, we fetch basic summary data
       const [partnersRes, referralsRes, payoutsRes] = await Promise.all([
         supabase.from('crm_partners').select('*').order('created_at', { ascending: false }),
