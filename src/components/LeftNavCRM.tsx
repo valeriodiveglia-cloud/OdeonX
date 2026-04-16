@@ -52,6 +52,7 @@ export default function LeftNavCRM() {
     const toggleLang = () => setLanguage(isEN ? 'vi' : 'en')
 
     const filteredNav = NAV.filter(item => {
+        if (role === null) return false; // Prevent flash of unauthorized icons while loading
         if (role === 'staff') {
             return item.href === '/crm/referrals'
         }
