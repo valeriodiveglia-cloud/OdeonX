@@ -11,7 +11,7 @@ export type AppAccount = {
     phone: string | null
     name: string | null
     position: string | null
-    role: 'owner' | 'admin' | 'staff'
+    role: 'owner' | 'admin' | 'staff' | 'manager'
     is_active: boolean
     created_at: string
 }

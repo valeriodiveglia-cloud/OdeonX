@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type Role = 'owner' | 'admin' | 'staff'
+type Role = 'owner' | 'admin' | 'staff' | 'manager'
 type UpsertBody = {
   id?: number | string | null
   email?: string
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     }
 
     let role: Role = (String(body?.role ?? 'staff').trim().toLowerCase() as Role)
-    if (!['owner', 'admin', 'staff'].includes(role)) {
+    if (!['owner', 'admin', 'staff', 'manager'].includes(role)) {
       role = 'staff'
     }
 
@@ -85,10 +85,10 @@ export async function POST(req: Request) {
 
     const idPresent = body?.id !== undefined && body?.id !== null && String(body?.id).length > 0
 
-    // Regola: un admin (non owner) può gestire solo account 'staff'
+    // Regola: un admin (non owner) può gestire solo account 'staff' e 'manager'
     if (isAdmin && !isOwner) {
-      if (payload.role !== 'staff') {
-        return NextResponse.json({ error: 'Admins can set role to staff only' }, { status: 403 })
+      if (payload.role !== 'staff' && payload.role !== 'manager') {
+        return NextResponse.json({ error: 'Admins can set role to staff or manager only' }, { status: 403 })
       }
       if (idPresent) {
         const { data: target, error: tErr } = await supabase
@@ -98,8 +98,8 @@ export async function POST(req: Request) {
           .maybeSingle()
         if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 })
         if (!target) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
-        if (String(target.role).toLowerCase() !== 'staff') {
-          return NextResponse.json({ error: 'Admins can modify staff only' }, { status: 403 })
+        if (String(target.role).toLowerCase() !== 'staff' && String(target.role).toLowerCase() !== 'manager') {
+          return NextResponse.json({ error: 'Admins can modify staff or manager only' }, { status: 403 })
         }
       }
     }

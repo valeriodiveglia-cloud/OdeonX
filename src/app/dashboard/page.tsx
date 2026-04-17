@@ -215,8 +215,8 @@ export default function HomeDashboard() {
                     {/* Human Resources */}
                     <HRModuleCTA />
 
-                    {/* CRM Module - Only for Owner/Manager */}
-                    {role && ['owner', 'manager'].includes(role) && (
+                    {/* CRM Module - Only for Owner/Admin/Manager */}
+                    {role && ['owner', 'admin', 'manager'].includes(role) && (
                       <Link
                         href="/crm"
                         className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
