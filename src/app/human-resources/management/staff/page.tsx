@@ -597,7 +597,11 @@ export default function StaffListPage() {
                                         .filter(Boolean)
 
                                     return (
-                                        <tr key={s.id} className={`border-t border-gray-100 hover:bg-gray-50/80 transition-colors ${idx % 2 === 0 ? 'bg-gray-50/30' : ''}`}>
+                                        <tr 
+                                            key={s.id} 
+                                            onClick={() => router.push(`/human-resources/management/staff/${s.id}`)}
+                                            className={`border-t border-gray-100 hover:bg-gray-50/80 transition-colors cursor-pointer ${idx % 2 === 0 ? 'bg-gray-50/30' : ''}`}
+                                        >
                                             <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-2.5">
@@ -646,15 +650,11 @@ export default function StaffListPage() {
                                             <td className="px-4 py-3 text-center">
                                                 <div className="flex items-center justify-center gap-1">
                                                     <button
-                                                        onClick={() => router.push(`/human-resources/management/staff/${s.id}`)}
-                                                        className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition"
-                                                        title="Manage Profile"
-                                                    >
-                                                        <ChevronRight className="w-5 h-5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setDeletingId(s.id)}
-                                                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setDeletingId(s.id)
+                                                        }}
+                                                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition relative z-10"
                                                         title="Delete"
                                                     >
                                                         <Trash2 className="w-4 h-4" />

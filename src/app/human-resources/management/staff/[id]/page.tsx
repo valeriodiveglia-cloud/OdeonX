@@ -8,9 +8,9 @@ import CircularLoader from '@/components/CircularLoader'
 import {
     ArrowLeft, User, FileText, Activity, TrendingUp, Save, UploadCloud, ExternalLink,
     Calendar, Building2, Briefcase, Plus, Loader2, Trash2, BadgeCheck, Lock, Unlock,
-    ChevronLeft, ChevronRight, Pencil
+    ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen
 } from 'lucide-react'
-import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory } from '@/types/human-resources'
+import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog } from '@/types/human-resources'
 import PerformanceModal, { computePeriodLabel } from '@/components/human-resources/PerformanceModal'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -25,6 +25,7 @@ const TABS = [
     { id: 'documents', label: 'Documents', icon: FileText, color: 'text-indigo-600', activeBg: 'bg-indigo-50 text-indigo-700' },
     { id: 'timeline', label: 'Career Journey', icon: Activity, color: 'text-purple-600', activeBg: 'bg-purple-50 text-purple-700' },
     { id: 'performance', label: 'Performance', icon: TrendingUp, color: 'text-emerald-600', activeBg: 'bg-emerald-50 text-emerald-700' },
+    { id: 'disciplinary', label: 'Disciplinary', icon: NotebookPen, color: 'text-orange-600', activeBg: 'bg-orange-50 text-orange-700' },
 ] as const;
 type TabId = typeof TABS[number]['id'];
 
@@ -157,6 +158,7 @@ export default function StaffDetailPage() {
                         {activeTab === 'documents' && <TabDocuments staff={staff} onUpdate={fetchAll} />}
                         {activeTab === 'timeline' && <TabTimeline staff={staff} roleHistory={roleHistory} salaryHistory={salaryHistory} positions={positions} onUpdate={fetchAll} />}
                         {activeTab === 'performance' && <TabPerformance staff={staff} performances={performances} onUpdate={fetchAll} allCategories={allCategories} />}
+                        {activeTab === 'disciplinary' && <TabDisciplinary staff={staff} />}
                     </div>
                 </div>
 
@@ -723,3 +725,377 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
         </div>
     )
 }
+
+// ==========================================
+// TAB: Disciplinary / Fines
+// ==========================================
+
+function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
+    const [fines, setFines] = useState<HRStaffFine[]>([])
+    const [catalog, setCatalog] = useState<HRDisciplinaryCatalog[]>([])
+    const [loading, setLoading] = useState(false)
+    const [modalOpen, setModalOpen] = useState(false)
+    const [editingNode, setEditingNode] = useState<HRStaffFine | null>(null)
+    
+    const now = new Date()
+    const [year, setYear] = useState<number>(now.getFullYear())
+    const [month, setMonth] = useState<number>(now.getMonth())
+
+    // Logged in user info for 'notified_by'
+    const [loggedUserName, setLoggedUserName] = useState<string>('')
+
+    useEffect(() => {
+        let isMounted = true
+        supabase.auth.getUser().then(({ data }) => {
+            if (data?.user && isMounted) {
+                supabase.from('app_accounts').select('name').eq('user_id', data.user.id).single()
+                    .then(res => {
+                        if (isMounted) setLoggedUserName(res.data?.name || data.user.user_metadata?.full_name || '')
+                    })
+            }
+        })
+        return () => { isMounted = false }
+    }, [])
+
+    const monthLabel = new Date(year, month).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    const monthInputValue = `${year}-${String(month + 1).padStart(2, '0')}`
+
+    const fetchFines = useCallback(async () => {
+        setLoading(true)
+        const endDate = new Date(year, month + 1, 0) // last day
+        
+        try {
+            const [finesRes, catRes] = await Promise.all([
+                supabase.from('hr_staff_fines')
+                    .select('*')
+                    .eq('staff_id', staff.id)
+                    .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
+                    .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`)
+                    .order('date', { ascending: false }),
+                supabase.from('hr_disciplinary_catalog')
+                    .select('*')
+                    .order('infraction_name', { ascending: true })
+            ])
+                
+            if (finesRes.error) throw finesRes.error
+            if (catRes.error) throw catRes.error
+            setFines(finesRes.data || [])
+            setCatalog(catRes.data || [])
+        } catch (err) {
+            console.error('Error fetching fines/catalog', err)
+        } finally {
+            setLoading(false)
+        }
+    }, [staff.id, year, month])
+
+    useEffect(() => {
+        fetchFines()
+    }, [fetchFines])
+
+    function prevMonth() {
+        setMonth(m => {
+            if (m === 0) { setYear(y => y - 1); return 11 }
+            return m - 1
+        })
+    }
+    function nextMonth() {
+        setMonth(m => {
+            if (m === 11) { setYear(y => y + 1); return 0 }
+            return m + 1
+        })
+    }
+    function onPickMonth(val: string) {
+        const [y, m] = val.split('-').map(Number)
+        if (Number.isInteger(y) && Number.isInteger(m)) {
+            setYear(y); setMonth(m - 1);
+        }
+    }
+
+    async function handleSave(formData: Partial<HRStaffFine>) {
+        try {
+            if (editingNode) {
+                const { error } = await supabase.from('hr_staff_fines').update(formData).eq('id', editingNode.id)
+                if (error) throw error
+            } else {
+                const { error } = await supabase.from('hr_staff_fines').insert([{
+                    ...formData,
+                    staff_id: staff.id
+                }])
+                if (error) throw error
+            }
+            fetchFines()
+            setModalOpen(false)
+        } catch (err) {
+            console.error(err)
+            alert('Failed to save fine')
+        }
+    }
+    
+    async function handleDelete(id: string) {
+        if (!window.confirm('Are you sure you want to delete this fine?')) return
+        try {
+            const { error } = await supabase.from('hr_staff_fines').delete().eq('id', id)
+            if (error) throw error
+            fetchFines()
+        } catch (err) {
+            console.error(err)
+            alert('Failed to delete fine')
+        }
+    }
+
+    async function handleStatusChange(id: string, newStatus: string) {
+        try {
+            setFines(prev => prev.map(f => f.id === id ? { ...f, status: newStatus as any } : f))
+            const { error } = await supabase.from('hr_staff_fines').update({ status: newStatus }).eq('id', id)
+            if (error) throw error
+        } catch(err) {
+            console.error(err)
+            alert('Failed to update status')
+            fetchFines()
+        }
+    }
+
+    const totalAmount = fines.reduce((sum, f) => sum + Number(f.amount || 0), 0)
+
+    const baseBtn = 'flex items-center gap-1 text-gray-500 hover:text-gray-900 transition'
+
+    return (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Disciplinary Actions & Fines</h2>
+                    <p className="text-sm text-gray-500 mt-1">Record infractions and associated deductions.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => { setEditingNode(null); setModalOpen(true); }} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all whitespace-nowrap">
+                        <Plus className="w-4 h-4" /> Add Disciplinary Action
+                    </button>
+                </div>
+            </div>
+
+            {/* Month Nav */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center justify-between">
+                <button type="button" onClick={prevMonth} className={baseBtn}>
+                    <ChevronLeft className="w-4 h-4" /> <span>Previous</span>
+                </button>
+                <div className="flex items-center gap-2 font-semibold text-gray-900">
+                    <span>{monthLabel}</span>
+                    <div className="relative w-5 h-5 group">
+                        <CalendarDays className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                        <input type="month" value={monthInputValue} onChange={e => onPickMonth(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </div>
+                </div>
+                <button type="button" onClick={nextMonth} className={baseBtn}>
+                    <span>Next</span> <ChevronRight className="w-4 h-4" />
+                </button>
+            </div>
+
+            {/* Table */}
+            <div className="border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
+                            <tr>
+                                <th className="px-4 py-3 border-r border-gray-100">Date</th>
+                                <th className="px-4 py-3 border-r border-gray-100">Infraction</th>
+                                <th className="px-4 py-3 border-r border-gray-100">Notified By</th>
+                                <th className="px-4 py-3 border-r border-gray-100">Source</th>
+                                <th className="px-4 py-3 border-r border-gray-100 text-center">Status</th>
+                                <th className="px-4 py-3 border-r border-gray-100 text-right">Amount (VND)</th>
+                                <th className="px-4 py-3 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {loading ? (
+                                <tr><td colSpan={7} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin text-blue-500 mx-auto" /></td></tr>
+                            ) : fines.length === 0 ? (
+                                <tr><td colSpan={7} className="text-center py-8 text-gray-400">No disciplinary actions recorded for this month.</td></tr>
+                            ) : (
+                                fines.map(f => (
+                                    <tr key={f.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">{fmtDate(f.date)}</td>
+                                        <td className="px-4 py-3 border-r border-gray-100 max-w-xs truncate" title={f.infraction}>{f.infraction}</td>
+                                        <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-600">{f.notified_by || '-'}</td>
+                                        <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-600 capitalize">{(f.deduction_source || '-').replace('_', ' ')}</td>
+                                        <td className="px-4 py-3 border-r border-gray-100 text-center">
+                                            <select 
+                                                value={f.status} 
+                                                onChange={(e) => handleStatusChange(f.id, e.target.value)}
+                                                className={`text-[10px] font-bold tracking-wider uppercase cursor-pointer rounded-full border px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-transparent hover:bg-white
+                                                    ${f.status === 'paid' ? 'text-emerald-600 border-emerald-200' : 
+                                                      f.status === 'waived' ? 'text-gray-600 border-gray-200' :
+                                                      f.status === 'disputed' ? 'text-red-600 border-red-200' :
+                                                      'text-amber-600 border-amber-200'}
+                                                `}
+                                            >
+                                                <option value="pending">PENDING</option>
+                                                <option value="paid">PAID</option>
+                                                <option value="waived">WAIVED</option>
+                                                <option value="disputed">DISPUTED</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-4 py-3 border-r border-gray-100 text-right font-mono font-medium text-orange-600">
+                                            {fmtVND(f.amount)}
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button onClick={() => { setEditingNode(f); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit"><Pencil className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDelete(f.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                        {!loading && fines.length > 0 && (
+                            <tfoot className="bg-gray-50 border-t border-gray-200 text-sm font-bold text-gray-900">
+                                <tr>
+                                    <td colSpan={5} className="px-4 py-3 text-right">Total Fines</td>
+                                    <td className="px-4 py-3 text-right text-orange-600 font-mono">{fmtVND(totalAmount)}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        )}
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal */}
+            {modalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-900">{editingNode ? 'Edit Disciplinary Action' : 'Add Disciplinary Action'}</h3>
+                            <button onClick={() => setModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-900 transition-colors"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            <FormFine 
+                                initialData={editingNode} 
+                                catalog={catalog}
+                                loggedUserName={loggedUserName} 
+                                onSave={handleSave} 
+                                onCancel={() => setModalOpen(false)} 
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function FormFine({ initialData, catalog, loggedUserName, onSave, onCancel }: { initialData: HRStaffFine | null, catalog: HRDisciplinaryCatalog[], loggedUserName: string, onSave: (d: Partial<HRStaffFine>) => void, onCancel: () => void }) {
+    const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0])
+    const [infraction, setInfraction] = useState(initialData?.infraction || '')
+    const [amount, setAmount] = useState(initialData?.amount || 0)
+    const [notifiedBy, setNotifiedBy] = useState(initialData?.notified_by || loggedUserName)
+    const [deductionSource, setDeductionSource] = useState(initialData?.deduction_source || 'salary')
+    const [displayAmount, setDisplayAmount] = useState(initialData?.amount ? initialData.amount.toLocaleString('en-US') : '')
+    const [submitting, setSubmitting] = useState(false)
+
+    useEffect(() => {
+        if (!initialData && !notifiedBy && loggedUserName) {
+            setNotifiedBy(loggedUserName)
+        }
+    }, [loggedUserName, initialData, notifiedBy])
+
+    function handleCatalogSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+        const val = e.target.value
+        setInfraction(val)
+        if (val) {
+            const catItem = catalog.find(c => c.infraction_name === val)
+            if (catItem) {
+                setAmount(Number(catItem.default_amount))
+                setDisplayAmount(Number(catItem.default_amount).toLocaleString('en-US'))
+            }
+        }
+    }
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!infraction || amount < 0 || !date) return
+        setSubmitting(true)
+        onSave({
+            date,
+            infraction,
+            amount,
+            notified_by: notifiedBy,
+            deduction_source: deductionSource,
+            // Only force 'pending' on new inserts. On edit, keep existing status so it isn't overwritten.
+            status: initialData ? initialData.status : 'pending'
+        })
+    }
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Date <span className="text-red-500">*</span></label>
+                    <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Deduction Source</label>
+                    <select value={deductionSource} onChange={e => setDeductionSource(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="salary">Salary Deduction</option>
+                        <option value="service_charge">Service Charge Deduction</option>
+                        <option value="cash">Direct Cash/Transfer</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Infraction <span className="text-red-500">*</span></label>
+                <select required value={infraction} onChange={handleCatalogSelect} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="" disabled>Select an infraction...</option>
+                    {catalog.map(c => (
+                        <option key={c.id} value={c.infraction_name}>{c.infraction_name}</option>
+                    ))}
+                    {initialData && !catalog.find(c => c.infraction_name === initialData.infraction) && (
+                        <option value={initialData.infraction}>{initialData.infraction} (Legacy/Manual)</option>
+                    )}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">Selecting an infraction automatically sets the default fine amount.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount (VND) <span className="text-red-500">*</span></label>
+                    <input type="text" required value={displayAmount} 
+                        onChange={e => {
+                            let val = e.target.value.replace(/[^0-9]/g, '');
+                            if (val) {
+                                setDisplayAmount(parseInt(val, 10).toLocaleString('en-US'))
+                                setAmount(parseInt(val, 10))
+                            } else {
+                                setDisplayAmount('')
+                                setAmount(0)
+                            }
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Notified By</label>
+                    <div className="flex items-center gap-2">
+                        <input type="text" value={notifiedBy || ''} onChange={e => setNotifiedBy(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Name of person enforcing the fine" />
+                    </div>
+                </div>
+            </div>
+            {!notifiedBy && loggedUserName && (
+                <div className="flex justify-end">
+                    <button type="button" onClick={() => setNotifiedBy(loggedUserName)} className="px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs font-medium hover:bg-blue-100 transition whitespace-nowrap">
+                        Fill my name
+                    </button>
+                </div>
+            )}
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
+                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition">Cancel</button>
+                <button type="submit" disabled={submitting || !infraction || amount < 0} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    {submitting ? 'Saving...' : 'Save Fine'}
+                </button>
+            </div>
+        </form>
+    )
+}
+

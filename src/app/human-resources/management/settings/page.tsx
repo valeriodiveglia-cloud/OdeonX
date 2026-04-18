@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRDepartment, HRPosition, HRRatingCategory, RatingCategoryScope } from '@/types/human-resources'
+import { HRDepartment, HRPosition, HRRatingCategory, RatingCategoryScope, HRDisciplinaryCategory } from '@/types/human-resources'
 import { useSettings } from '@/contexts/SettingsContext'
 import CircularLoader from '@/components/CircularLoader'
 import {
     Settings, Building2, Briefcase, Star, Plus, Pencil, Trash2, X,
-    Check, Globe, ChevronRight, Calendar,
+    Check, Globe, ChevronRight, Calendar, NotebookPen
 } from 'lucide-react'
 
 /* ═══════════════════════════════════════════════
@@ -17,6 +17,7 @@ const TABS = [
     { key: 'departments' as const, label: 'Departments',        icon: Building2 },
     { key: 'positions'   as const, label: 'Positions',          icon: Briefcase },
     { key: 'categories'  as const, label: 'Rating Categories',  icon: Star },
+    { key: 'fines_categories' as const, label: 'Disciplinary Categories', icon: NotebookPen },
     { key: 'periods'     as const, label: 'Review Periods',     icon: Calendar },
 ]
 type TabKey = typeof TABS[number]['key']
@@ -546,6 +547,99 @@ function ReviewPeriodsTab() {
 }
 
 /* ═══════════════════════════════════════════════════
+   DISCIPLINARY CATEGORIES TAB
+   ═══════════════════════════════════════════════════ */
+function DisciplinaryCategoriesTab({ categories, onRefresh }: {
+    categories: HRDisciplinaryCategory[]; onRefresh: () => void
+}) {
+    const [adding, setAdding]       = useState(false)
+    const [editId, setEditId]       = useState<string | null>(null)
+    const [saving, setSaving]       = useState(false)
+    const [deleteId, setDeleteId]   = useState<string | null>(null)
+    const [deleting, setDeleting]   = useState(false)
+
+    const handleAdd = async (name: string) => {
+        setSaving(true)
+        await supabase.from('hr_disciplinary_categories').insert([{ name }])
+        setAdding(false); setSaving(false); onRefresh()
+    }
+    const handleEdit = async (id: string, name: string) => {
+        setSaving(true)
+        await supabase.from('hr_disciplinary_categories').update({ name }).eq('id', id)
+        setEditId(null); setSaving(false); onRefresh()
+    }
+    const handleDelete = async () => {
+        if (!deleteId) return
+        setDeleting(true)
+        await supabase.from('hr_disciplinary_categories').delete().eq('id', deleteId)
+        setDeleteId(null); setDeleting(false); onRefresh()
+    }
+
+    return (
+        <div>
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h2 className="text-lg font-semibold text-white">Disciplinary Categories</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Manage categories for fines/disciplinary actions (e.g., Attendance, Hygiene, Performance).</p>
+                </div>
+                <button onClick={() => setAdding(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition">
+                    <Plus className="w-4 h-4" /> Add
+                </button>
+            </div>
+
+            <div className="rounded-xl bg-white shadow-md overflow-hidden">
+                <table className="w-full">
+                    <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-8">#</th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Category Name</th>
+                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {adding && (
+                            <tr className="border-t border-gray-100 bg-blue-50/30">
+                                <td className="px-4 py-2 text-sm text-gray-400">—</td>
+                                <td className="px-4 py-2">
+                                    <InlineForm value="" onSave={handleAdd} onCancel={() => setAdding(false)} placeholder="e.g. Behavioral" saving={saving} />
+                                </td>
+                                <td />
+                            </tr>
+                        )}
+                        {categories.map((c, idx) => (
+                            <tr key={c.id} className={`border-t border-gray-100 hover:bg-gray-50/80 transition ${idx % 2 === 0 ? 'bg-gray-50/30' : ''}`}>
+                                <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
+                                <td className="px-4 py-3">
+                                    {editId === c.id ? (
+                                        <InlineForm value={c.name} onSave={(n) => handleEdit(c.id, n)} onCancel={() => setEditId(null)} placeholder="Category name…" saving={saving} />
+                                    ) : (
+                                        <span className="text-sm font-medium text-gray-900">{c.name}</span>
+                                    )}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                        <button onClick={() => setEditId(c.id)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition"><Pencil className="w-4 h-4" /></button>
+                                        <button onClick={() => setDeleteId(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {categories.length === 0 && !adding && (
+                            <tr><td colSpan={3} className="px-4 py-12 text-center text-gray-400 text-sm">
+                                No disciplinary categories yet. <button onClick={() => setAdding(true)} className="text-blue-600 hover:text-blue-700 font-medium">Add your first</button>
+                            </td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {deleteId && <DeleteConfirm label={categories.find(c => c.id === deleteId)?.name || ''} onConfirm={handleDelete} onCancel={() => setDeleteId(null)} deleting={deleting} />}
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════
    MAIN SETTINGS PAGE
    ═══════════════════════════════════════════════════ */
 export default function HRManagementSettingsPage() {
@@ -554,17 +648,20 @@ export default function HRManagementSettingsPage() {
     const [departments, setDepartments] = useState<HRDepartment[]>([])
     const [positions, setPositions]     = useState<HRPosition[]>([])
     const [categories, setCategories]   = useState<HRRatingCategory[]>([])
+    const [finesCategories, setFinesCategories] = useState<HRDisciplinaryCategory[]>([])
 
     const fetchAll = useCallback(async () => {
         setLoading(true)
-        const [dRes, pRes, cRes] = await Promise.all([
+        const [dRes, pRes, cRes, fRes] = await Promise.all([
             supabase.from('hr_departments').select('*').order('sort_order'),
             supabase.from('hr_positions').select('*').order('sort_order'),
             supabase.from('hr_rating_categories').select('*').order('sort_order'),
+            supabase.from('hr_disciplinary_categories').select('*').order('name', { ascending: true })
         ])
         if (dRes.data) setDepartments(dRes.data as HRDepartment[])
         if (pRes.data) setPositions(pRes.data as HRPosition[])
         if (cRes.data) setCategories(cRes.data as HRRatingCategory[])
+        if (fRes.data) setFinesCategories(fRes.data as HRDisciplinaryCategory[])
         setLoading(false)
     }, [])
 
@@ -585,10 +682,10 @@ export default function HRManagementSettingsPage() {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-1 bg-slate-800 rounded-xl p-1 mb-6 border border-white/5">
+                <div className="flex overflow-x-auto no-scrollbar gap-1 bg-slate-800 rounded-xl p-1 mb-6 border border-white/5">
                     {TABS.map(tab => (
                         <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition ${
+                            className={`flex-1 min-w-max flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
                                 activeTab === tab.key
                                     ? 'bg-blue-600 text-white shadow-md'
                                     : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -603,6 +700,7 @@ export default function HRManagementSettingsPage() {
                 {activeTab === 'departments' && <DepartmentsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
                 {activeTab === 'positions'   && <PositionsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
                 {activeTab === 'categories'  && <CategoriesTab departments={departments} positions={positions} categories={categories} onRefresh={fetchAll} />}
+                {activeTab === 'fines_categories' && <DisciplinaryCategoriesTab categories={finesCategories} onRefresh={fetchAll} />}
                 {activeTab === 'periods'     && <ReviewPeriodsTab />}
             </div>
         </div>

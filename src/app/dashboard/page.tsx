@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase_shim'
@@ -16,12 +16,13 @@ import {
   ArrowRightStartOnRectangleIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
-import { LayoutDashboard, Boxes, Handshake, Target } from 'lucide-react'
+import { LayoutDashboard, Boxes, Handshake, Target, Settings2, Save, Bell } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 import HRDashboardModal from '@/components/human-resources/HRDashboardModal'
-
+import { APP_PAGES_DIRECTORY, getPageByHref, getDefaultQuickAccess, AppPage } from '@/lib/appPages'
+import { CheckIcon } from '@heroicons/react/24/solid'
 type ProviderBranch = {
   id: string
   name: string
@@ -126,6 +127,172 @@ export default function HomeDashboard() {
     window.location.href = '/auth/signout'
   }
 
+  const [recentVisits, setRecentVisits] = useState<AppPage[]>([])
+  const [quickAccessIds, setQuickAccessIds] = useState<string[]>([])
+  const [isQaModalOpen, setIsQaModalOpen] = useState(false)
+  const [moduleOrder, setModuleOrder] = useState<string[]>([])
+  const [isEditingLayout, setIsEditingLayout] = useState(false)
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+
+  // Load user specific info
+  useEffect(() => {
+    if (!user) return
+    const qaKey = `dashboard.quickAccess.${user.id}`
+    const recentKey = `dashboard.recent.${user.id}`
+    const orderKey = `dashboard.moduleOrder.${user.id}`
+    
+    try {
+      // Recent Visits
+      const storedRecent = localStorage.getItem(recentKey)
+      if (storedRecent) {
+        const paths: string[] = JSON.parse(storedRecent)
+        const matched = paths.map(getPageByHref).filter(Boolean) as AppPage[]
+        setRecentVisits(matched)
+      }
+      
+      // Quick Access
+      const storedQa = localStorage.getItem(qaKey)
+      if (storedQa) {
+        setQuickAccessIds(JSON.parse(storedQa).slice(0, 6))
+      } else {
+        setQuickAccessIds(getDefaultQuickAccess(role))
+      }
+      
+      // Module Order
+      const storedOrder = localStorage.getItem(orderKey)
+      if (storedOrder) {
+        setModuleOrder(JSON.parse(storedOrder))
+      }
+    } catch (e) {
+      // quiet
+    }
+  }, [user, role])
+
+  // Also listen for recent visits updates globally
+  useEffect(() => {
+    const handleRecentUpdate = () => {
+      if (!user) return
+      const recentKey = `dashboard.recent.${user.id}`
+      try {
+        const storedRecent = localStorage.getItem(recentKey)
+        if (storedRecent) {
+          const paths: string[] = JSON.parse(storedRecent)
+          const matched = paths.map(getPageByHref).filter(Boolean) as AppPage[]
+          setRecentVisits(matched)
+        }
+      } catch (e) {}
+    }
+    
+    window.addEventListener('recent_visits_updated', handleRecentUpdate)
+    return () => window.removeEventListener('recent_visits_updated', handleRecentUpdate)
+  }, [user])
+
+  const saveQuickAccess = (newIds: string[]) => {
+    if (!user) return
+    const qaKey = `dashboard.quickAccess.${user.id}`
+    localStorage.setItem(qaKey, JSON.stringify(newIds))
+    setQuickAccessIds(newIds)
+    setIsQaModalOpen(false)
+  }
+
+  const quickAccessPages = quickAccessIds
+    .map(id => APP_PAGES_DIRECTORY.find(p => p.id === id))
+    .filter(Boolean).slice(0, 6) as AppPage[]
+
+  const saveModuleOrder = (newOrder: string[]) => {
+    if (!user) return
+    const orderKey = `dashboard.moduleOrder.${user.id}`
+    localStorage.setItem(orderKey, JSON.stringify(newOrder))
+    setModuleOrder(newOrder)
+  }
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    if (!draggedId || draggedId === targetId) return
+    
+    // We want to reorder based on the current sortedModules sequence
+    const currentList = sortedModules.map(m => m.id)
+    const draggedIdx = currentList.indexOf(draggedId)
+    const targetIdx = currentList.indexOf(targetId)
+    
+    if (draggedIdx !== -1 && targetIdx !== -1) {
+      const newList = [...currentList]
+      // SWAP behavior: "spostiamo solo il contenuto e non cambiamo il layout"
+      // Swapping preserves exact locations and prevents cascade column jumping
+      newList[draggedIdx] = currentList[targetIdx]
+      newList[targetIdx] = currentList[draggedIdx]
+      saveModuleOrder(newList)
+    }
+    setDraggedId(null)
+  }
+
+  const defaultModules = [
+    // Column 1
+    { id: 'costing', href: '/materials', icon: CalculatorIcon, title: t(language, 'Costing') },
+    { id: 'crm', href: '/crm', icon: Handshake, title: 'CRM & Partnerships', roles: ['owner', 'admin', 'manager'] },
+    { id: 'referrals', href: '/crm/referrals', icon: Target, title: 'Register Referral', roles: ['owner', 'admin', 'manager', 'staff'] },
+    
+    // Column 2
+    { id: 'catering', href: '/catering', icon: BuildingOffice2Icon, title: t(language, 'Catering') },
+    { id: 'settings', href: '/general-settings', icon: Cog6ToothIcon, title: t(language, 'Settings') },
+    
+    // Column 3
+    { id: 'loyalty', href: '/loyalty-manager', icon: UserGroupIcon, title: 'Loyalty Manager' },
+    { id: 'asset-branch-picker', Component: AssetBranchPickerCTA, title: 'Asset Inventory', icon: Boxes },
+    
+    // Column 4
+    { id: 'branch-picker', Component: BranchPickerCTA, title: 'Check In System', icon: MapPinIcon },
+    { id: 'monthly-reports', href: '/monthly-reports', icon: LayoutDashboard, title: 'Monthly Reports', roles: ['owner', 'admin'] },
+    { id: 'hr-module', Component: HRModuleCTA, title: t(language, 'HumanResources') || 'Human Resources', icon: UserGroupIcon },
+  ]
+
+  // Filter based on roles
+  const permittedModules = defaultModules.filter(m => !m.roles || (role && m.roles.includes(role)))
+
+  // Sort based on saved order
+  const sortedModules = [...permittedModules].sort((a, b) => {
+    const indexA = moduleOrder.indexOf(a.id)
+    const indexB = moduleOrder.indexOf(b.id)
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB
+    if (indexA !== -1) return -1
+    if (indexB !== -1) return 1
+    return 0 // Keep original index for new or unordered modules
+  })
+
+  // Distribute sequentially into 4 columns (chunking top-down to preserve layout structure)
+  const cols: typeof sortedModules[] = [[], [], [], []]
+  let colSizes = [0, 0, 0, 0]
+  
+  if (sortedModules.length === 10) {
+    // Force the exact 3-2-2-3 layout pattern as the original design for exact visual symmetry
+    colSizes = [3, 2, 2, 3]
+  } else {
+    // If modules are reduced due to roles, distribute evenly top-to-bottom
+    const minItems = Math.floor(sortedModules.length / 4)
+    let remainder = sortedModules.length % 4
+    for (let i = 0; i < 4; i++) {
+      colSizes[i] = minItems + (remainder > 0 ? 1 : 0)
+      remainder--
+    }
+  }
+
+  let currIdx = 0
+  for (let i = 0; i < 4; i++) {
+    cols[i] = sortedModules.slice(currIdx, currIdx + colSizes[i])
+    currIdx += colSizes[i]
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-blue-50">
@@ -135,149 +302,230 @@ export default function HomeDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <div className="h-screen w-full flex flex-col bg-[#0B1537] overflow-hidden font-sans">
       <Topbar userEmail={user?.email ?? ''} onLogout={handleLogout} />
 
-      <main className="relative">
-        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-20 -right-24 h-72 w-72 rounded-full bg-blue-200/40 blur-3xl" />
-          <div className="absolute bottom-0 -left-24 h-72 w-72 rounded-full bg-indigo-200/40 blur-3xl" />
+      <main className="flex-1 w-full h-full min-h-0 relative flex justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden z-0">
+          <div className="absolute top-[5%] left-[10%] h-[500px] w-[500px] rounded-full bg-blue-500/20 blur-[100px]" />
+          <div className="absolute bottom-[5%] right-[10%] h-[500px] w-[500px] rounded-full bg-indigo-500/20 blur-[100px]" />
         </div>
 
-        <section className="relative max-w-6xl mx-auto px-4 py-16">
-          <div className="mx-auto max-w-4xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-gray-600 bg-white/60 backdrop-blur">
-              <span className="h-2 w-2 rounded-full bg-green-500" />
-              {t(language, 'DashboardReady')}
+        <div className="relative z-10 w-full h-full min-h-[600px] max-w-[1500px] flex gap-5 lg:gap-8 justify-center items-stretch">
+          
+          {/* Left Column: QUICK ACCESS */}
+          <div className="w-[160px] xl:w-[200px] shrink-0 flex flex-col h-full hidden lg:flex">
+            <div className="flex items-center justify-center mb-4 px-1 relative z-[60]">
+              <h2 className="text-xs font-bold tracking-[0.15em] text-blue-100 uppercase text-center">Quick Access</h2>
+              <button 
+                onClick={() => setIsQaModalOpen(true)}
+                className="absolute right-0 w-7 h-7 flex items-center justify-center rounded-full bg-white text-slate-500 hover:text-blue-600 hover:bg-blue-50 shadow-md border border-blue-100 transition-all"
+                aria-label="Configure Quick Access"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+              </button>
             </div>
-
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900">
-              {t(language, 'WelcomeTo')} <span className="text-blue-700">OddsOff</span>
-            </h1>
-            <p className="mt-3 text-gray-600">{t(language, 'DashboardSubtitle')}</p>
-
-            {/* Main Card */}
-            <div className="mt-8 rounded-2xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden">
-              <div className="grid sm:grid-cols-[1fr,220px]">
-                {/* Left: CTA */}
-                <div className="p-6 sm:p-8">
-                  <div className="flex flex-wrap gap-3">
-                    {/* Daily Reports → apre modale branch picker */}
-                    <BranchPickerCTA />
-
-
-
-                    {/* Monthly Reports - Only for Owner/Admin */}
-                    {role && ['owner', 'admin'].includes(role) && (
-                      <Link
-                        href="/monthly-reports"
-                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-                      >
-                        <LayoutDashboard className="h-6 w-6" />
-                        <span>Monthly Reports</span>
-                      </Link>
-                    )}
-
-                    <Link
-                      href="/materials"
-                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-                    >
-                      <CalculatorIcon className="h-6 w-6" />
-                      <span>{t(language, 'Costing')}</span>
-                    </Link>
-
-                    <Link
-                      href="/catering"
-                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-                    >
-                      <BuildingOffice2Icon className="h-6 w-6" />
-                      <span>{t(language, 'Catering')}</span>
-                    </Link>
-
-                    {/* App Settings → /general-settings */}
-                    <Link
-                      href="/general-settings"
-                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-                    >
-                      <Cog6ToothIcon className="h-6 w-6" />
-                      <span>{t(language, 'Settings')}</span>
-                    </Link>
-
-                    {/* Loyalty Manager */}
-                    <Link
-                      href="/loyalty-manager"
-                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-                    >
-                      <UserGroupIcon className="h-6 w-6" />
-                      <span>Loyalty Manager</span>
-                    </Link>
-
-                    {/* Human Resources */}
-                    <HRModuleCTA />
-
-                    {/* CRM Module - Only for Owner/Admin/Manager */}
-                    {role && ['owner', 'admin', 'manager'].includes(role) && (
-                      <Link
-                        href="/crm"
-                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-                      >
-                        <Handshake className="h-6 w-6" />
-                        <span>CRM & Partnerships</span>
-                      </Link>
-                    )}
-
-                    {/* Quick Referral - Visible to all with CRM access including staff */}
-                    {role && ['owner', 'admin', 'manager', 'staff'].includes(role) && (
-                      <Link
-                        href="/crm/referrals"
-                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-                      >
-                        <Target className="h-6 w-6" />
-                        <span>Register Referral</span>
-                      </Link>
-                    )}
-
-                    {/* Asset Inventory */}
-                    <AssetBranchPickerCTA />
-                  </div>
-                </div>
-
-                {/* Right: pattern */}
-                <div className="relative hidden sm:block bg-gradient-to-br from-blue-50 to-indigo-50">
-                  <svg viewBox="0 0 200 200" className="absolute inset-0 h-full w-full opacity-60" aria-hidden>
-                    <defs>
-                      <pattern id="dots" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
-                        <circle cx="1" cy="1" r="1" fill="#93c5fd" />
-                      </pattern>
-                    </defs>
-                    <rect width="100%" height="100%" fill="url(#dots)" />
-                  </svg>
+            <div className="flex-1 bg-gradient-to-b from-white/90 to-blue-50/60 backdrop-blur-xl rounded-[2.5rem] shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 flex flex-col overflow-hidden">
+              <div className="flex-1 flex flex-col p-4 w-full h-full overflow-hidden">
+                <div className="flex-1 flex flex-col gap-3 w-full h-full justify-evenly">
+                  {quickAccessPages.length > 0 ? (
+                    quickAccessPages.map(page => (
+                       <ModuleButton key={page.id} href={page.href} title={page.title} icon={page.icon} />
+                    ))
+                  ) : (
+                    <div className="text-[12px] text-blue-400 px-3 italic flex-1 flex items-center justify-center text-center">Settings</div>
+                  )}
                 </div>
               </div>
             </div>
-
-            <p className="mt-6 text-xs text-gray-400">{t(language, 'SoonMoreModules')}</p>
           </div>
-        </section>
+
+          {/* Center Column: ALL MODULES */}
+          <div className="flex-1 max-w-[900px] flex flex-col h-full min-w-0">
+            {/* Header Outside */}
+            <div className="mb-4 shrink-0 flex items-center justify-center flex-col text-center">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-green-400/30 px-2.5 py-1 text-[10px] font-bold text-green-400 bg-green-500/10 shadow-sm uppercase tracking-wide mb-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                {t(language, 'DashboardReady') || 'Dashboard ready'}
+              </div>
+              <h1 className="text-3xl lg:text-4xl font-medium tracking-tight text-white mb-1">
+                {t(language, 'WelcomeTo')} <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">OddsOff</span>
+              </h1>
+              <p className="text-blue-100/70 text-[13px] font-medium">{t(language, 'DashboardSubtitle') || 'Central hub for your modules.'}</p>
+            </div>
+
+            {/* Container */}
+            <div className={`flex-1 min-h-0 bg-gradient-to-br from-white/90 via-white/80 to-blue-50/60 backdrop-blur-xl rounded-[3rem] shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 p-6 lg:p-10 flex flex-col relative overflow-hidden transition-all ${isEditingLayout ? 'bg-blue-500/20 ring-4 ring-blue-400' : ''}`}>
+              <div className="flex items-center justify-center mb-6 relative z-[60]">
+                <h2 className="text-[11px] font-bold tracking-[0.2em] bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-500 text-center uppercase shrink-0">
+                  All Modules
+                </h2>
+                {role === 'owner' && (
+                  <button 
+                    onClick={() => setIsEditingLayout(!isEditingLayout)}
+                    className={`absolute right-0 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full shadow-sm border transition-all ${isEditingLayout ? 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700 hover:scale-110' : 'bg-white text-slate-400 border-slate-200 hover:text-blue-600 hover:bg-blue-50'}`}
+                    title={isEditingLayout ? "Save Layout" : "Edit Layout"}
+                  >
+                    {isEditingLayout ? <Save className="w-3.5 h-3.5" /> : <Settings2 className="w-3 h-3" />}
+                  </button>
+                )}
+              </div>
+              
+              <div className="flex-1 min-h-[400px] overflow-y-auto custom-scrollbar px-5 pt-8 pb-8 -mt-8 -mb-5">
+                <div className="flex flex-col lg:flex-row gap-4 lg:gap-5 h-full">
+                  
+                  {cols.map((columnModules, colIdx) => (
+                    <div key={colIdx} className="flex-1 flex flex-col gap-4 lg:gap-5 h-full relative">
+                      {columnModules.map(mod => {
+                        const content = mod.Component ? (
+                          // Mod.Component wraps itself in flex/h-full so we must wrap IT if we want it identical
+                          <mod.Component key={mod.id} />
+                        ) : (
+                          <ModuleButton 
+                            key={mod.id} 
+                            href={mod.href} 
+                            icon={mod.icon} 
+                            title={mod.title || ''} 
+                          />
+                        )
+
+                        if (!isEditingLayout) {
+                          return <Fragment key={mod.id}>{content}</Fragment>
+                        }
+
+                        return (
+                          <div
+                            key={mod.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, mod.id)}
+                            onDragOver={(e) => handleDragOver(e, mod.id)}
+                            onDrop={(e) => handleDrop(e, mod.id)}
+                            onDragEnd={() => setDraggedId(null)}
+                            className={`flex flex-col flex-1 min-h-[110px] w-full cursor-grab active:cursor-grabbing rounded-[2rem] transition-all duration-300 ring-2 ring-offset-4 ring-offset-transparent ${draggedId === mod.id ? 'opacity-40 scale-95 ring-blue-500 shadow-inner' : 'ring-gray-300/50 hover:ring-blue-400 hover:scale-[1.02] bg-white/50 shadow-sm'}`}
+                          >
+                            <div className="pointer-events-none flex-1 flex flex-col w-full h-full opacity-80 mix-blend-luminosity grayscale-[30%]">
+                              {content}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: RECENTLY VISITED */}
+          <div className="w-[160px] xl:w-[200px] shrink-0 flex flex-col h-full hidden lg:flex">
+            <div className="flex items-center justify-center mb-4 px-1 relative z-[60]">
+              <h2 className="text-xs font-bold tracking-[0.15em] text-blue-100 uppercase text-center">Recent</h2>
+            </div>
+            <div className="flex-1 bg-gradient-to-b from-white/90 to-blue-50/60 backdrop-blur-xl rounded-[2.5rem] shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 flex flex-col overflow-hidden">
+              <div className="flex-1 flex flex-col p-4 w-full h-full overflow-hidden">
+                <div className="flex-1 flex flex-col gap-3 w-full h-full justify-evenly">
+                  {recentVisits.length > 0 ? (
+                    recentVisits.map((page, idx) => (
+                      <ModuleButton 
+                        key={`${page.id}-${idx}`} 
+                        href={page.href} 
+                        title={page.title} 
+                        icon={page.icon} 
+                      />
+                    ))
+                  ) : (
+                    <div className="text-[12px] text-blue-400 px-3 italic flex-1 flex items-center justify-center text-center">Nothing recently visited.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </main>
+
+      {/* Configuration Modal */}
+      {isQaModalOpen && (
+        <QuickAccessModal 
+          availablePages={APP_PAGES_DIRECTORY.filter(p => !p.requiresRole || p.requiresRole.includes(role || 'staff'))}
+          selectedIds={quickAccessIds}
+          onSave={saveQuickAccess}
+          onClose={() => setIsQaModalOpen(false)}
+        />
+      )}
+
     </div>
   )
 }
 
+
+
+
+/* ---------- Module Button Component ---------- */
+function ModuleButton({
+  icon: Icon,
+  title,
+  onClick,
+  href,
+  active,
+  badge
+}: {
+  icon: any
+  title: string
+  onClick?: () => void
+  href?: string
+  active?: boolean
+  badge?: string
+}) {
+  const inner = (
+    <div className={`relative flex flex-col items-center justify-center p-3 h-full w-full rounded-[1.5rem] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] origin-bottom z-10 group-hover/btn:z-50 cursor-pointer ${
+      active 
+      ? 'bg-blue-50 shadow-md ring-2 ring-blue-500 scale-[1.05] border border-blue-200' 
+      : 'bg-white shadow-sm border border-slate-100 group-hover/btn:shadow-[0_20px_40px_-5px_rgba(37,99,235,0.15)] group-hover/btn:-translate-y-1 group-hover/btn:scale-[1.04] group-hover/btn:border-blue-200 group-hover/btn:bg-white'
+    }`}>
+      {badge && (
+        <span className="absolute -top-3 -right-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-[11px] font-extrabold px-3 py-1 rounded-full shadow-[0_5px_15px_rgba(37,99,235,0.5)] z-10 tracking-widest border-2 border-white">
+          {badge}
+        </span>
+      )}
+      <div className={`w-14 h-14 flex items-center justify-center mb-3 rounded-[1rem] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] shadow-sm ${
+        active 
+        ? 'bg-blue-600 text-white scale-110' 
+        : 'bg-blue-50 border border-blue-100/50 text-blue-600 group-hover/btn:bg-blue-600 group-hover/btn:text-white group-hover/btn:shadow-[0_8px_20px_rgba(37,99,235,0.25)] group-hover/btn:border-blue-500 group-hover/btn:scale-[1.10]'
+      }`}>
+        <Icon className="w-6 h-6 stroke-[2] transition-colors duration-300" />
+      </div>
+      <span className={`text-[13px] font-bold text-center transition-colors px-1 pb-1 ${
+        active ? 'text-blue-900' : 'text-blue-800 group-hover/btn:text-blue-600'
+      }`}>
+        {title}
+      </span>
+    </div>
+  )
+
+  // the wrapper creates the flex resizing dynamic
+  const wrapClass = "flex flex-col w-full h-full flex-1 min-h-[70px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:flex-[1.5] group/btn"
+
+  if (href) {
+    return <Link href={href} className={wrapClass}>{inner}</Link>
+  }
+  return <button onClick={onClick} type="button" className={`${wrapClass} text-left outline-none`}>{inner}</button>
+}
+
 /* ---------- CTA + Modal Branch Picker ---------- */
-function BranchPickerCTA() {
+function BranchPickerCTA({ badge, active }: { badge?: string; active?: boolean }) {
   const [open, setOpen] = useState(false)
   const { language } = useSettings()
   return (
     <>
-      <button
-        type="button"
+      <ModuleButton 
+        icon={DocumentTextIcon} 
+        title={t(language, 'DailyReports')} 
         onClick={() => setOpen(true)}
-        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-      >
-        <DocumentTextIcon className="h-6 w-6" />
-        <span>{t(language, 'DailyReports')}</span>
-      </button>
+        badge={badge}
+        active={active}
+      />
       {open && <BranchPickerModal onClose={() => setOpen(false)} />}
     </>
   )
@@ -427,19 +675,18 @@ function BranchPickerModal({ onClose }: { onClose: () => void }) {
 }
 
 /* ---------- Asset Inventory Branch Picker ---------- */
-function AssetBranchPickerCTA() {
+function AssetBranchPickerCTA({ badge, active }: { badge?: string; active?: boolean }) {
   const [open, setOpen] = useState(false)
   const { language } = useSettings()
   return (
     <>
-      <button
-        type="button"
+      <ModuleButton 
+        icon={Boxes} 
+        title="Asset Inventory" 
         onClick={() => setOpen(true)}
-        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-      >
-        <Boxes className="h-6 w-6" />
-        <span>Asset Inventory</span>
-      </button>
+        badge={badge}
+        active={active}
+      />
       {open && <AssetBranchPickerModal onClose={() => setOpen(false)} />}
     </>
   )
@@ -610,20 +857,21 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
 /* ---------- Topbar ---------- */
 function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => void }) {
   const { language, setLanguage } = useSettings()
+  const [showNotif, setShowNotif] = useState(false)
   const isEN = language === 'en'
   const countryCode = isEN ? 'GB' : 'VN'
   const nextLang = isEN ? 'vi' : 'en'
   const label = isEN ? t(language, 'SwitchToVi') : t(language, 'SwitchToEn')
 
   return (
-    <header className="sticky top-0 bg-white/80 backdrop-blur border-b">
-      <div className="h-14 max-w-6xl mx-auto px-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="relative h-14 w-52">
+    <header className="bg-white/80 backdrop-blur-md shadow-[0_4px_30px_rgb(0,0,0,0.05)] border-b border-gray-100/50 sticky top-0 z-50 rounded-b-[2rem] mx-2">
+      <div className="h-16 max-w-[1500px] mx-auto px-6 flex items-center justify-between">
+        <div className="flex flex-1 items-center gap-2">
+          <div className="relative h-12 w-32 sm:w-40">
             <img src="/logo.svg" alt="OddsOff Logo" className="h-full w-full object-contain object-left" />
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-shrink-0 items-center gap-3 sm:gap-4">
           <button
             type="button"
             onClick={() => setLanguage(nextLang as 'en' | 'vi')}
@@ -637,13 +885,39 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
             />
           </button>
 
-          <span className="text-sm text-gray-600 hidden sm:inline">{userEmail}</span>
+          <span className="text-[13px] font-medium text-gray-600 hidden sm:block">{userEmail}</span>
           <button
             onClick={onLogout}
-            className="bg-blue-600 text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 transition"
+            className="flex items-center justify-center bg-gradient-to-b from-blue-400 to-blue-600 text-white px-5 py-2 rounded-full text-xs font-bold tracking-wide hover:from-blue-500 hover:to-blue-700 transition-all shadow-[0_2px_10px_rgba(37,99,235,0.3)]"
           >
-            {t(language, 'Logout')}
+            Logout
           </button>
+          
+          <div className="h-6 w-px bg-gray-200 mx-1 hidden sm:block"></div>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowNotif(!showNotif)}
+              onBlur={() => setTimeout(() => setShowNotif(false), 200)}
+              className="relative p-2 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors focus:outline-none"
+              aria-label="Notifications"
+            >
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border border-white"></span>
+            </button>
+
+            {showNotif && (
+              <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-100 shadow-xl rounded-2xl p-4 z-[100] animate-in fade-in slide-in-from-top-2 origin-top-right">
+                <div className="flex justify-center mb-2">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
+                    <Bell className="w-5 h-5" />
+                  </div>
+                </div>
+                <div className="text-sm font-bold text-gray-900 text-center">Notifications</div>
+                <div className="text-xs text-gray-500 text-center mt-1">Coming soon!</div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
@@ -651,20 +925,134 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
 }
 
 /* ---------- HR Module CTA ---------- */
-function HRModuleCTA() {
+function HRModuleCTA({ badge, active }: { badge?: string; active?: boolean }) {
   const [open, setOpen] = useState(false)
   const { language } = useSettings()
   return (
     <>
-      <button
-        type="button"
+      <ModuleButton 
+        icon={UserGroupIcon} 
+        title={t(language, 'HumanResources') || 'Human Resources'} 
         onClick={() => setOpen(true)}
-        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow"
-      >
-        <UserGroupIcon className="h-6 w-6" />
-        <span>{t(language, 'HumanResources') || 'Human Resources'}</span>
-      </button>
+        badge={badge}
+        active={active}
+      />
       {open && <HRDashboardModal onClose={() => setOpen(false)} />}
     </>
   )
 }
+
+
+/* ---------- Compact Sidebar Link ---------- */
+function CompactLink({ icon: Icon, title, href, badge }: { icon: any, title: string, href: string, badge?: string }) {
+  return (
+    <Link 
+      href={href} 
+      className="group relative flex items-center gap-3 w-full p-2.5 rounded-[1.2rem] bg-transparent hover:bg-white/60 hover:shadow-sm border border-transparent hover:border-white transition-all duration-200"
+    >
+      <div className="w-9 h-9 rounded-xl bg-white shadow-sm border border-gray-100 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:text-blue-600 transition-all">
+        <Icon className="w-4.5 h-4.5 stroke-[1.5] text-slate-700 group-hover:text-blue-600" />
+      </div>
+      <span className="text-[13px] font-medium text-slate-700 group-hover:text-blue-900 flex-1 truncate">{title}</span>
+      {badge && (
+        <span className="absolute top-1 right-1 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md shadow-sm">
+          {badge}
+        </span>
+      )}
+    </Link>
+  )
+}
+
+function QuickAccessModal({ 
+  availablePages, 
+  selectedIds, 
+  onSave, 
+  onClose 
+}: { 
+  availablePages: AppPage[], 
+  selectedIds: string[], 
+  onSave: (ids: string[]) => void, 
+  onClose: () => void 
+}) {
+  const validIds = availablePages.map(p => p.id)
+  const initialIds = selectedIds.filter(id => validIds.includes(id))
+  const [draftIds, setDraftIds] = useState<string[]>(initialIds)
+
+  const toggleId = (id: string) => {
+    if (draftIds.includes(id)) {
+      setDraftIds(draftIds.filter(i => i !== id))
+    } else {
+      if (draftIds.length >= 6) {
+        alert('You can only select up to 6 quick access pages.')
+        return
+      }
+      setDraftIds([...draftIds, id])
+    }
+  }
+
+  // Group pages by module
+  const grouped = availablePages.reduce((acc, page) => {
+    if (!acc[page.module]) acc[page.module] = []
+    acc[page.module].push(page)
+    return acc
+  }, {} as Record<string, AppPage[]>)
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl flex flex-col max-h-[85vh] border border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-3xl">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Configure Quick Access</h3>
+            <p className="text-xs text-gray-500">Select the pages you want pinned to your sidebar.</p>
+          </div>
+          <button onClick={onClose} className="p-2 bg-white rounded-full shadow-sm hover:bg-gray-100"><XMarkIcon className="w-5 h-5" /></button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          {Object.entries(grouped).map(([moduleName, pages]) => (
+            <div key={moduleName}>
+              <h4 className="text-sm font-semibold tracking-wide text-blue-900 mb-3 uppercase flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span> {moduleName}
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {pages.map(page => {
+                  const isSelected = draftIds.includes(page.id)
+                  const Icon = page.icon
+                  return (
+                    <button
+                      key={page.id}
+                      onClick={() => toggleId(page.id)}
+                      className={`flex items-center gap-3 p-3 rounded-2xl border text-left transition-all ${
+                        isSelected 
+                        ? 'border-blue-500 bg-blue-50/50 shadow-sm ring-1 ring-blue-500/20' 
+                        : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className={`p-2 rounded-xl shrink-0 ${isSelected ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                        <Icon className="w-4 h-4 stroke-[1.5]" />
+                      </div>
+                      <span className={`text-[13px] font-medium flex-1 ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
+                        {page.title}
+                      </span>
+                      {isSelected && <CheckIcon className="w-4 h-4 text-blue-600 shrink-0" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 rounded-b-3xl flex justify-between items-center">
+          <span className="text-xs text-gray-500">{draftIds.length}/6 items selected</span>
+          <div className="flex gap-3">
+             <button onClick={onClose} className="px-5 py-2 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-200">Cancel</button>
+             <button onClick={() => onSave(draftIds)} className="px-5 py-2 outline-none rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm">Save Preferences</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React from 'react'
-import { Users, Home, Star, TrendingUp, Settings } from 'lucide-react'
+import { Users, Home, Star, TrendingUp, Settings, NotebookPen } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
@@ -12,6 +12,7 @@ const NAV = [
     { href: `${BASE}/staff`, label: 'Staff List', icon: Users },
     { href: `${BASE}/performance`, label: 'Performance', icon: Star },
     { href: `${BASE}/salary-history`, label: 'Salary History', icon: TrendingUp },
+    { href: `${BASE}/fines`, label: 'Fines Table', icon: NotebookPen },
     { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
 ]
 

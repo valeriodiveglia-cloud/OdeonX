@@ -176,6 +176,41 @@ export interface HRStaffPerformance {
   hr_staff?: HRStaffMember;
 }
 
+export interface HRDisciplinaryCategory {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HRDisciplinaryCatalog {
+  id: string;
+  infraction_name: string;
+  default_amount: number;
+  category_id: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  category?: HRDisciplinaryCategory | null;
+}
+
+export type FineStatus = 'pending' | 'paid' | 'waived' | 'disputed';
+
+export interface HRStaffFine {
+  id: string;
+  staff_id: string;
+  date: string;
+  infraction: string;
+  amount: number;
+  notified_by: string | null;
+  deduction_source: string | null;
+  status: FineStatus;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  hr_staff?: HRStaffMember;
+}
+
 export interface HRStaffSalaryHistory {
   id: string;
   staff_id: string;
