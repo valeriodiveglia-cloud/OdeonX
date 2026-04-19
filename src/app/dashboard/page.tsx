@@ -133,6 +133,9 @@ export default function HomeDashboard() {
   const [moduleOrder, setModuleOrder] = useState<string[]>([])
   const [isEditingLayout, setIsEditingLayout] = useState(false)
   const [draggedId, setDraggedId] = useState<string | null>(null)
+  
+  // Intercept navigation for branch picking
+  const [pendingBranchDest, setPendingBranchDest] = useState<string | null>(null)
 
   // Load user specific info
   useEffect(() => {
@@ -329,9 +332,20 @@ export default function HomeDashboard() {
               <div className="flex-1 flex flex-col p-4 w-full h-full overflow-hidden">
                 <div className="flex-1 flex flex-col gap-3 w-full h-full justify-evenly">
                   {quickAccessPages.length > 0 ? (
-                    quickAccessPages.map(page => (
-                       <ModuleButton key={page.id} href={page.href} title={page.title} icon={page.icon} />
-                    ))
+                    quickAccessPages.map(page => {
+                      const needsBranch = page.module === 'Daily Reports' || page.module === 'Monthly Reports'
+                      return (
+                        <ModuleButton 
+                          key={page.id} 
+                          onClick={() => {
+                            if (needsBranch) setPendingBranchDest(page.href)
+                            else router.push(page.href)
+                          }} 
+                          title={page.title} 
+                          icon={page.icon} 
+                        />
+                      )
+                    })
                   ) : (
                     <div className="text-[12px] text-blue-400 px-3 italic flex-1 flex items-center justify-center text-center">Settings</div>
                   )}
@@ -426,14 +440,20 @@ export default function HomeDashboard() {
               <div className="flex-1 flex flex-col p-4 w-full h-full overflow-hidden">
                 <div className="flex-1 flex flex-col gap-3 w-full h-full justify-evenly">
                   {recentVisits.length > 0 ? (
-                    recentVisits.map((page, idx) => (
-                      <ModuleButton 
-                        key={`${page.id}-${idx}`} 
-                        href={page.href} 
-                        title={page.title} 
-                        icon={page.icon} 
-                      />
-                    ))
+                    recentVisits.map((page, idx) => {
+                      const needsBranch = page.module === 'Daily Reports' || page.module === 'Monthly Reports'
+                      return (
+                        <ModuleButton 
+                          key={`${page.id}-${idx}`} 
+                          onClick={() => {
+                            if (needsBranch) setPendingBranchDest(page.href)
+                            else router.push(page.href)
+                          }} 
+                          title={page.title} 
+                          icon={page.icon} 
+                        />
+                      )
+                    })
                   ) : (
                     <div className="text-[12px] text-blue-400 px-3 italic flex-1 flex items-center justify-center text-center">Nothing recently visited.</div>
                   )}
@@ -452,6 +472,14 @@ export default function HomeDashboard() {
           selectedIds={quickAccessIds}
           onSave={saveQuickAccess}
           onClose={() => setIsQaModalOpen(false)}
+        />
+      )}
+
+      {/* Intercepted Branch Picker */}
+      {pendingBranchDest && (
+        <BranchPickerModal 
+          destination={pendingBranchDest}
+          onClose={() => setPendingBranchDest(null)} 
         />
       )}
 
@@ -531,7 +559,7 @@ function BranchPickerCTA({ badge, active }: { badge?: string; active?: boolean }
   )
 }
 
-function BranchPickerModal({ onClose }: { onClose: () => void }) {
+function BranchPickerModal({ onClose, destination }: { onClose: () => void, destination?: string }) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [branches, setBranches] = useState<ProviderBranch[]>([])
@@ -587,8 +615,8 @@ function BranchPickerModal({ onClose }: { onClose: () => void }) {
       localStorage.setItem(LS_BRANCH_LEGACY, b.name)    // legacy nome semplice
     } catch { }
     onClose()
-    // Qui andiamo direttamente alla lista dei closing
-    router.push('/daily-reports/closinglist')
+    
+    router.push(destination || '/daily-reports/closinglist')
   }
 
   return (
