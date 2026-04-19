@@ -505,7 +505,7 @@ function ModuleButton({
   )
 
   // the wrapper creates the flex resizing dynamic
-  const wrapClass = "flex flex-col w-full h-full flex-1 min-h-[70px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:flex-[1.5] group/btn"
+  const wrapClass = "flex flex-col w-full h-full flex-1 min-h-[70px] max-h-[140px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:flex-[1.5] group/btn"
 
   if (href) {
     return <Link href={href} className={wrapClass}>{inner}</Link>
