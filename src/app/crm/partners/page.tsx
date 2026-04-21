@@ -586,7 +586,7 @@ export default function CRMPartnersPage() {
                                         value={formData.contact_name}
                                         onChange={e => setFormData({...formData, contact_name: e.target.value})}
                                         className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
-                                        placeholder="e.g. Mario Rossi"
+                                        placeholder=""
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -596,7 +596,7 @@ export default function CRMPartnersPage() {
                                         value={formData.location}
                                         onChange={e => setFormData({...formData, location: e.target.value})}
                                         className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
-                                        placeholder="e.g. Centro Storico"
+                                        placeholder="Add address..."
                                     />
                                 </div>
                                 <div className="space-y-2">
