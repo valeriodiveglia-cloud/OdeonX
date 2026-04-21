@@ -337,14 +337,13 @@ function LoginView({
               {pT(lang, 'PartnerCodeOrPhone')}
             </label>
             <div className="flex items-center gap-0">
-              <span className="px-3 py-2.5 bg-[#dcefe9] border border-r-0 border-[#8C673D] rounded-l-xl text-sm font-mono font-bold text-[#149372] select-none">PT-</span>
               <input
                 id="partner-identifier"
                 type="text"
                 value={identifier}
                 onChange={e => setIdentifier(e.target.value)}
-                placeholder="A3BBZL3L"
-                className="w-full px-4 py-2.5 rounded-r-xl border border-[#8C673D] text-[#3E2C19] placeholder-[#A38562] bg-[#fbf5e6] focus:outline-none focus:ring-2 focus:ring-[#149372]/50 transition-all text-sm font-mono uppercase"
+                placeholder={pT(lang, 'PartnerCodeOrPhone')}
+                className="w-full px-4 py-2.5 rounded-xl border border-[#8C673D] text-[#3E2C19] placeholder-[#A38562] bg-[#fbf5e6] focus:outline-none focus:ring-2 focus:ring-[#149372]/50 transition-all text-sm font-mono uppercase"
                 autoComplete="username"
                 required
               />

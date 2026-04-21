@@ -28,8 +28,7 @@ export async function POST(req: NextRequest) {
       console.log('[partner-portal/login] phone lookup:', { trimmed, data: !!data, error })
       partner = data
     } else {
-      // Auto-prepend PT- if missing
-      const code = trimmed.toUpperCase().startsWith('PT-') ? trimmed.toUpperCase() : `PT-${trimmed.toUpperCase()}`
+      const code = trimmed.toUpperCase()
       console.log('[partner-portal/login] code lookup:', { input: trimmed, resolved: code })
       const { data, error } = await supabaseAdmin
         .from('crm_partners')
