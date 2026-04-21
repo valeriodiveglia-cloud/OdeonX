@@ -345,7 +345,7 @@ function LoginView({
                 value={identifier}
                 onChange={e => setIdentifier(e.target.value)}
                 placeholder={pT(lang, 'PartnerCodeOrPhone')}
-                className="w-full px-4 py-2.5 rounded-xl border border-[#8C673D] text-[#3E2C19] placeholder-[#A38562] bg-[#fbf5e6] focus:outline-none focus:ring-2 focus:ring-[#149372]/50 transition-all text-sm font-mono uppercase"
+                className="w-full px-4 py-2.5 rounded-xl border border-[#8C673D] text-[#3E2C19] placeholder-[#A38562] bg-[#fbf5e6] focus:outline-none focus:ring-2 focus:ring-[#149372]/50 transition-all text-sm uppercase placeholder:normal-case"
                 autoComplete="username"
                 required
               />
