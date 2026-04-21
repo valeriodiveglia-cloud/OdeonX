@@ -575,6 +575,11 @@ export default function CRMPartnersPage() {
                                         <option value="Concierge">{t(language, 'Concierge')}</option>
                                         <option value="Corporate">{t(language, 'Corporate')}</option>
                                         <option value="Influencer">{t(language, 'Influencer')}</option>
+                                        <option value="Guesthouse">{t(language, 'Guesthouse')}</option>
+                                        <option value="Homestay">{t(language, 'Homestay')}</option>
+                                        <option value="Coffee Shop">{t(language, 'CoffeeShop')}</option>
+                                        <option value="Restaurant">{t(language, 'Restaurant')}</option>
+                                        <option value="Bus Company">{t(language, 'BusCompany')}</option>
                                         <option value="Other">{t(language, 'Other')}</option>
                                     </select>
                                 </div>
@@ -586,7 +591,7 @@ export default function CRMPartnersPage() {
                                         value={formData.contact_name}
                                         onChange={e => setFormData({...formData, contact_name: e.target.value})}
                                         className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
-                                        placeholder=""
+                                        placeholder="Add name..."
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -616,7 +621,7 @@ export default function CRMPartnersPage() {
                                         value={formData.phone}
                                         onChange={e => setFormData({...formData, phone: e.target.value})}
                                         className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
-                                        placeholder="+39 333 1234567"
+                                        placeholder="Add phone number..."
                                     />
                                 </div>
                             </div>
