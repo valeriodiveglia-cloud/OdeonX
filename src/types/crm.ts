@@ -60,6 +60,7 @@ export type CRMReferral = {
   commission_value: number
   advisor_commission_value?: number | null
   validation_notes: string | null
+  created_by?: string | null
 }
 
 export type CRMInteraction = {

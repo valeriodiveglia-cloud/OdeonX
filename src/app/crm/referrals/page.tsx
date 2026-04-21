@@ -291,7 +291,8 @@ export default function CRMReferralsPage() {
                         commission_value: calculatedCommission,
                         status: formData.status,
                         sale_advisor_id: targetSaleAdvisorId,
-                        advisor_commission_value: advisor_commission_value
+                        advisor_commission_value: advisor_commission_value,
+                        created_by: currentUser?.id
                     }
                 ])
                 if (error) throw error
@@ -513,7 +514,14 @@ export default function CRMReferralsPage() {
                                                 <div className="flex items-center gap-2 font-medium">
                                                     <Calendar className="w-4 h-4 text-gray-400"/> {ref.arrival_date ? new Date(ref.arrival_date).toLocaleDateString() : 'N/A'}
                                                 </div>
-                                                <div className="text-xs text-gray-500 mt-0.5 uppercase font-mono">{ref.id.split('-')[0]}</div>
+                                                <div className="flex flex-col gap-0.5 mt-1">
+                                                    <div className="text-[11px] text-gray-500 uppercase font-mono">{ref.id.split('-')[0]}</div>
+                                                    {ref.created_by && (
+                                                        <div className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded w-fit mt-0.5" title={t(language, 'RegisteredBy') || 'Registered by'}>
+                                                            {accountsMap[ref.created_by] || t(language, 'Unknown')}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="p-2 whitespace-nowrap">
                                                 <div className="font-semibold text-gray-900">
