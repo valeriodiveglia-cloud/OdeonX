@@ -9,6 +9,8 @@ import { CRMReferral } from '@/types/crm'
 
 interface ExtendedReferral extends CRMReferral {
     sale_advisor_id?: string
+    payout_id?: string | null
+    advisor_payout_id?: string | null
     crm_partners: {
         name: string
         owner_id?: string
