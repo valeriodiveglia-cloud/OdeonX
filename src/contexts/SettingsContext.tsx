@@ -75,6 +75,19 @@ type Ctx = {
   hrReviewFrequency: string
   setHrReviewFrequency: (v: string) => void
 
+  // CRM Global Settings
+  crmAdvisorCommissionPct: number
+  setCrmAdvisorCommissionPct: (p: number) => void
+  crmCommissionType: string
+  setCrmCommissionType: (t: string) => void
+  crmCommissionRules: any
+  setCrmCommissionRules: (r: any) => void
+
+  crmPartnerRules: any
+  setCrmPartnerRules: (r: any) => void
+
+  saveAllCrmSettings: (type: string, rules: any, partnerRules: any) => void
+
   // Forzare ricarica
   reloadSettings: () => Promise<void>
 
@@ -119,6 +132,18 @@ const SettingsCtx = createContext<Ctx>({
   hrReviewFrequency: 'Quarterly',
   setHrReviewFrequency: () => {},
 
+  crmAdvisorCommissionPct: 10,
+  setCrmAdvisorCommissionPct: () => {},
+  crmCommissionType: 'Acquisition + Maintenance',
+  setCrmCommissionType: () => {},
+  crmCommissionRules: { acquisition_pct: 10, maintenance_pct: 4 },
+  setCrmCommissionRules: () => {},
+
+  crmPartnerRules: { has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '' },
+  setCrmPartnerRules: () => {},
+
+  saveAllCrmSettings: () => {},
+
   reloadSettings: async () => {},
   revision: 0,
 })
@@ -154,6 +179,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   // HR
   const [hrReviewFrequency, setHrReviewFrequencyState] = useState<string>('Quarterly')
 
+  // CRM
+  const [crmAdvisorCommissionPct, setCrmAdvisorCommissionPctState] = useState<number>(10)
+  const [crmCommissionType, setCrmCommissionTypeState] = useState<string>('Acquisition + Maintenance')
+  const [crmCommissionRules, setCrmCommissionRulesState] = useState<any>({ acquisition_pct: 10, maintenance_pct: 4 })
+  const [crmPartnerRules, setCrmPartnerRulesState] = useState<any>({ has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '' })
+
   // Chiavi localStorage usate dall’app
   const LS_KEYS = [
     'app_materials_review_months',
@@ -186,6 +217,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     equipmentReviewMonths?: number
     equipmentCsvConfirm?: boolean
     hrReviewFrequency?: string
+    crmAdvisorCommissionPct?: number
+    crmCommissionType?: string
+    crmCommissionRules?: any
+    crmPartnerRules?: any
   }) {
     const patch: Record<string, any> = { id: 'singleton' }
 
@@ -215,14 +250,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     if ('hrReviewFrequency' in partial) patch.hr_review_frequency = partial.hrReviewFrequency
 
+    if ('crmAdvisorCommissionPct' in partial) patch.crm_advisor_commission_pct = partial.crmAdvisorCommissionPct
+    if ('crmCommissionType' in partial) patch.crm_commission_type = partial.crmCommissionType
+    if ('crmCommissionRules' in partial) patch.crm_commission_rules = partial.crmCommissionRules
+    if ('crmPartnerRules' in partial) patch.crm_partner_rules = partial.crmPartnerRules
+
     const { error } = await supabase.from('app_settings').upsert(patch, { onConflict: 'id' })
     if (error) {
       console.warn('Settings save error', error)
       return
     }
 
-    // 🔔 notifica TUTTI i tab/componenti
-    try { window.dispatchEvent(new CustomEvent('settings-changed')) } catch {}
+    // 🔔 notifica ALTRI tab
     try { new BroadcastChannel('app-events').postMessage('settings-changed') } catch {}
 
     // 🔁 bump revision per forzare re-render immediato nel tab corrente
@@ -234,7 +273,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase
       .from('app_settings')
       .select(
-        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs, hr_review_frequency'
+        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs, hr_review_frequency, crm_advisor_commission_pct, crm_commission_type, crm_commission_rules, crm_partner_rules'
       )
       .eq('id', 'singleton')
       .maybeSingle()
@@ -261,7 +300,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       typeof data?.default_markup_pct === 'number' ? data.default_markup_pct : Number(data?.default_markup_pct)
     setDefaultMarkupPctState(Number.isFinite(parsedMarkupPct) ? clampPct(parsedMarkupPct) : 30)
 
-    // Moltiplicatore × attrezzature
+    const parsedCrmPct = typeof data?.crm_advisor_commission_pct === 'number' ? data.crm_advisor_commission_pct : Number(data?.crm_advisor_commission_pct)
+    setCrmAdvisorCommissionPctState(Number.isFinite(parsedCrmPct) ? clampPct(parsedCrmPct) : 10)
+    setCrmCommissionTypeState(data?.crm_commission_type || 'Acquisition + Maintenance')
+    setCrmCommissionRulesState(data?.crm_commission_rules || { acquisition_pct: 10, maintenance_pct: 4 })
+    setCrmPartnerRulesState(data?.crm_partner_rules || { has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '' })
+
     const parsedEquipMul =
       typeof data?.default_markup_equipment_pct === 'number'
         ? data.default_markup_equipment_pct
@@ -518,6 +562,35 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     void saveToDb({ hrReviewFrequency: v })
   }
 
+  function setCrmAdvisorCommissionPct(p: number) {
+    setCrmAdvisorCommissionPctState(p)
+    void saveToDb({ crmAdvisorCommissionPct: p })
+  }
+  function setCrmCommissionType(t: string) {
+    setCrmCommissionTypeState(t)
+    void saveToDb({ crmCommissionType: t })
+  }
+  function setCrmCommissionRules(r: any) {
+    setCrmCommissionRulesState(r)
+    void saveToDb({ crmCommissionRules: r })
+  }
+
+  function setCrmPartnerRules(r: any) {
+    setCrmPartnerRulesState(r)
+    void saveToDb({ crmPartnerRules: r })
+  }
+
+  function saveAllCrmSettings(type: string, rules: any, partnerRules: any) {
+    setCrmCommissionTypeState(type)
+    setCrmCommissionRulesState(rules)
+    setCrmPartnerRulesState(partnerRules)
+    void saveToDb({
+      crmCommissionType: type,
+      crmCommissionRules: rules,
+      crmPartnerRules: partnerRules
+    })
+  }
+
   if (!hydrated) return null
 
   return (
@@ -559,6 +632,17 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
         hrReviewFrequency,
         setHrReviewFrequency,
+
+        crmAdvisorCommissionPct,
+        setCrmAdvisorCommissionPct,
+        crmCommissionType,
+        setCrmCommissionType,
+        crmCommissionRules,
+        setCrmCommissionRules,
+
+        crmPartnerRules,
+        setCrmPartnerRules,
+        saveAllCrmSettings,
 
         reloadSettings,
         revision,

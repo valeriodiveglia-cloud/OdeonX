@@ -1,7 +1,7 @@
 // src/lib/server/auth.ts
 import { createClient } from '@supabase/supabase-js'
 
-export type AccountRole = 'owner' | 'admin' | 'staff' | 'manager'
+export type AccountRole = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor'
 
 // client anonimo per validare il JWT dell’Authorization
 const supaAnon = createClient(

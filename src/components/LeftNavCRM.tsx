@@ -1,26 +1,32 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Activity, Users, Settings, Home, Target, HandCoins, CalendarCheck2 } from 'lucide-react'
+import { Briefcase, Activity, Users, Settings, Home, Target, HandCoins, CalendarCheck2, LogOut } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
+import { t } from '@/lib/i18n'
 
 const NAV = [
-    { href: '/crm', label: 'Dashboard', icon: Home, exact: true },
-    { href: '/crm/partners', label: 'Partners & Pipeline', icon: Users },
-    { href: '/crm/referrals', label: 'Referrals', icon: Target },
-    { href: '/crm/commissions', label: 'Commissions & Payouts', icon: HandCoins },
-    { href: '/crm/tasks', label: 'Tasks & Follow-ups', icon: CalendarCheck2 },
+    { href: '/crm', key: 'CRMDashboardTitle', icon: Home, exact: true },
+    { href: '/crm/partners', key: 'PartnersAndPipeline', icon: Users },
+    { href: '/crm/referrals', key: 'Referrals', icon: Target },
+    { href: '/crm/commissions', key: 'Commissions', icon: Activity },
+    { href: '/crm/payouts', key: 'Payouts', icon: HandCoins },
+    { href: '/crm/tasks', key: 'TasksAndFollowUps', icon: CalendarCheck2 },
+    { href: '/crm/settings', key: 'Settings', icon: Settings },
 ]
 
 // Reusing style constants
 const EXP_W_REM = 16
 const COLL_W_REM = 3.5
 
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v0.0'
+
 export default function LeftNavCRM() {
     const pathname = usePathname()
+    const router = useRouter()
     const { language, setLanguage } = useSettings()
     const [open, setOpen] = React.useState(false)
 
@@ -51,10 +57,19 @@ export default function LeftNavCRM() {
     const isEN = language === 'en'
     const toggleLang = () => setLanguage(isEN ? 'vi' : 'en')
 
+    const handleLogout = async () => {
+        const { supabase } = await import('@/lib/supabase_shim')
+        await supabase.auth.signOut()
+        router.push('/login')
+    }
+
     const filteredNav = NAV.filter(item => {
         if (role === null) return false; // Prevent flash of unauthorized icons while loading
         if (role === 'staff') {
             return item.href === '/crm/referrals'
+        }
+        if (role === 'sale advisor') {
+            return item.href === '/crm/partners' || item.href === '/crm/tasks' || item.href === '/crm/commissions' || item.href === '/crm/payouts'
         }
         return true
     })
@@ -68,11 +83,17 @@ export default function LeftNavCRM() {
         >
             {/* Header */}
             <div className="h-16 flex items-center px-3 border-b border-white/10">
-                <Link href="/dashboard" className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`}>
-                    <Home className="w-5 h-5 text-white" />
-                </Link>
+                {role !== 'sale advisor' ? (
+                    <Link href="/dashboard" className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`} title={t(language, 'BackToDashboard')}>
+                        <Home className="w-5 h-5 text-white" />
+                    </Link>
+                ) : (
+                    <div className={`p-2 rounded-xl bg-white/5 shrink-0 ${open ? '' : 'mx-auto'}`}>
+                        <Users className="w-5 h-5 text-blue-400" />
+                    </div>
+                )}
                 <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
-                    {open ? 'CRM & Partners' : ''}
+                    {open ? t(language, 'CRMAndPartners') : ''}
                 </div>
             </div>
 
@@ -93,7 +114,7 @@ export default function LeftNavCRM() {
                             <item.icon className={`w-5 h-5 ${active ? 'text-blue-400' : 'text-slate-400'}`} />
                             {open && (
                                 <span className={`whitespace-nowrap overflow-hidden transition-opacity ${active ? 'text-blue-100 font-medium' : 'text-slate-300'}`}>
-                                    {item.label}
+                                    {t(language, item.key)}
                                 </span>
                             )}
                         </Link>
@@ -102,13 +123,37 @@ export default function LeftNavCRM() {
             </nav>
 
             {/* Footer */}
-            <div className={`mt-auto p-3 flex items-center justify-between transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}>
-                <button
-                    onClick={toggleLang}
-                    className="w-8 h-8 rounded-full overflow-hidden border border-white/20 hover:bg-white/10 flex items-center justify-center p-0"
-                >
-                    <ReactCountryFlag countryCode={isEN ? 'GB' : 'VN'} svg style={{ width: '1.2em', height: '1.2em' }} />
-                </button>
+            <div className="mt-auto p-2 flex flex-col gap-1 border-t border-white/10">
+                {role === 'sale advisor' && (
+                    <button
+                        onClick={handleLogout}
+                        className={`flex items-center h-11 w-full rounded-xl transition-colors hover:bg-white/10 text-slate-400 hover:text-red-400 font-medium ${open ? 'gap-3 px-3' : 'justify-center px-0'}`}
+                        title={t(language, 'Logout')}
+                    >
+                        <LogOut className="w-5 h-5 shrink-0" />
+                        {open && <span className="whitespace-nowrap overflow-hidden transition-opacity">{t(language, 'Logout')}</span>}
+                    </button>
+                )}
+                <div className={`p-1 flex items-center justify-between transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}>
+                    <button
+                        onClick={toggleLang}
+                        className="w-8 h-8 rounded-full overflow-hidden border border-white/20 hover:bg-white/10 flex items-center justify-center p-0"
+                    >
+                        <ReactCountryFlag 
+                            countryCode={isEN ? 'GB' : 'VN'} 
+                            svg 
+                            style={{
+                                width: '110%',
+                                height: '110%',
+                                objectFit: 'cover',
+                                display: 'block',
+                            }} 
+                        />
+                    </button>
+                    {open && (
+                        <div className="text-xs text-slate-300 px-2">{appVersion}</div>
+                    )}
+                </div>
             </div>
 
         </div>

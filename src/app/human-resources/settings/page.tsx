@@ -22,7 +22,7 @@ const SETTINGS_SECTIONS = [
 
 export default function HRSettingsPage() {
     return (
-        <div className="min-h-screen bg-slate-900">
+        <div className="min-h-screen">
             <header className="border-b border-white/10">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     <div className="flex items-center gap-4">

@@ -83,7 +83,7 @@ export default function RecruitmentPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 p-4">
+        <div className="min-h-screen text-gray-100 p-4">
             {/* Header */}
             <header className="mb-6">
                 <div className="max-w-none mx-auto">

@@ -78,12 +78,12 @@ export default function StaffDetailPage() {
     useEffect(() => { fetchAll() }, [fetchAll])
 
     if (loading) {
-        return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><CircularLoader /></div>
+        return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
     }
 
     if (!staff) {
         return (
-            <div className="min-h-screen bg-slate-900 p-8 text-center text-white">
+            <div className="min-h-screen p-8 text-center text-white">
                 <p>Staff member not found.</p>
                 <Link href="/human-resources/management/staff" className="mt-4 text-blue-400 hover:underline">Go back</Link>
             </div>
@@ -91,7 +91,7 @@ export default function StaffDetailPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 flex flex-col">
+        <div className="min-h-screen text-gray-100 flex flex-col">
             {/* Top Navigation & Header */}
             <div className="bg-slate-900 border-b border-white/10 sticky top-0 z-20">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">

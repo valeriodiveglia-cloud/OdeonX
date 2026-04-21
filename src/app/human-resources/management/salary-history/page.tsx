@@ -334,10 +334,10 @@ export default function SalaryHistoryPage() {
         setDeleteLoading(false)
     }
 
-    if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><CircularLoader /></div>
+    if (loading) return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
 
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 p-6">
+        <div className="min-h-screen text-gray-100 p-6">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">

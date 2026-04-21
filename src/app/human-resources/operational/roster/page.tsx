@@ -203,7 +203,17 @@ export default function RosterPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-900 max-w-none mx-auto p-4 text-gray-100">
+        <div className="min-h-screen bg-\[#0b1530\] max-w-none mx-auto p-4 text-gray-100 animate-in fade-in duration-300">
+            {/* Page Title */}
+            <div className="mb-6 ml-2">
+                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                    Roster Management
+                </h1>
+                <p className="text-sm text-slate-400 mt-1">
+                    Manage weekly shift assignments and coverage across branches.
+                </p>
+            </div>
+
             {/* Header */}
             <div className="mb-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">

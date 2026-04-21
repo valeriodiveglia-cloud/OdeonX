@@ -164,7 +164,7 @@ export default function ReportsPage() {
     const goToday = () => setRefDate(new Date())
 
     if (loading) {
-        return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><CircularLoader /></div>
+        return <div className="min-h-screen bg-\[#0b1530\] flex items-center justify-center"><CircularLoader /></div>
     }
 
     const summaryCards = [
@@ -179,7 +179,7 @@ export default function ReportsPage() {
     const sortedDays = Object.entries(stats.byDay).sort(([a], [b]) => a.localeCompare(b))
 
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 p-6">
+        <div className="min-h-screen bg-\[#0b1530\] text-gray-100 p-6">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="mb-6">

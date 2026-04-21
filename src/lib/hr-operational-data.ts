@@ -22,6 +22,13 @@ export interface StaffMember {
   role: string
 }
 
+export interface OvertimeSettings {
+  overtime_multiplier_salary: number;
+  overtime_multiplier_leave: number;
+  public_holiday_multiplier_salary: number;
+  public_holiday_multiplier_leave: number;
+}
+
 // ── Default shift types ──
 export const DEFAULT_SHIFT_TYPES: ShiftType[] = [
   { id: 'st-1', name: 'Morning',      code: 'M',  startTime: '07:00', endTime: '15:00', color: '#3B82F6', type: 'work',  hours: 8,  allowParallel: true,  globalAcrossBranches: false },
@@ -51,6 +58,7 @@ export const MOCK_STAFF: StaffMember[] = [
 // ── LocalStorage keys ──
 const SHIFT_TYPES_KEY = 'hr_operational_shift_types'
 const ROSTER_KEY = 'hr_operational_roster'
+const OVERTIME_SETTINGS_KEY = 'hr_operational_overtime_settings'
 
 // ── Helpers ──
 export function getShiftTypes(): ShiftType[] {
@@ -64,6 +72,30 @@ export function getShiftTypes(): ShiftType[] {
 
 export function saveShiftTypes(types: ShiftType[]): void {
   localStorage.setItem(SHIFT_TYPES_KEY, JSON.stringify(types))
+}
+
+export function getOvertimeSettings(): OvertimeSettings {
+  const defaultSettings: OvertimeSettings = {
+    overtime_multiplier_salary: 1.5,
+    overtime_multiplier_leave: 1.0,
+    public_holiday_multiplier_salary: 2.0,
+    public_holiday_multiplier_leave: 1.5
+  }
+  if (typeof window === 'undefined') return defaultSettings
+  const stored = localStorage.getItem(OVERTIME_SETTINGS_KEY)
+  if (stored) {
+    try { 
+      const parsed = JSON.parse(stored)
+      return { ...defaultSettings, ...parsed } // Merge with defaults to gracefully handle old schema
+    } catch { 
+      return defaultSettings 
+    }
+  }
+  return defaultSettings
+}
+
+export function saveOvertimeSettings(settings: OvertimeSettings): void {
+  localStorage.setItem(OVERTIME_SETTINGS_KEY, JSON.stringify(settings))
 }
 
 export function getRosterData(): Record<string, string> {

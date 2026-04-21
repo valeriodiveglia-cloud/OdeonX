@@ -25,11 +25,18 @@ const MODULES = [
         icon: Settings,
         color: 'bg-gray-500',
     },
+    {
+        name: 'Service Charge',
+        description: 'Calculate and distribute monthly service charges',
+        href: '/human-resources/operational/service-charge',
+        icon: CalendarDays,
+        color: 'bg-indigo-500',
+    },
 ]
 
 export default function HROperationalDashboard() {
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 p-6">
+        <div className="min-h-screen bg-\[#0b1530\] text-gray-100 p-6">
             <div className="max-w-5xl mx-auto">
                 <div className="mb-8">
                     <h1 className="text-2xl font-bold text-white sm:text-3xl tracking-tight">

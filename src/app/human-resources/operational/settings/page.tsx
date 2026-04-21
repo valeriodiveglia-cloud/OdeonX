@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ShiftType, getShiftTypes, saveShiftTypes, DEFAULT_SHIFT_TYPES } from '@/lib/hr-operational-data'
-import { Plus, Pencil, Trash2, X, RotateCcw, GitBranch, Globe } from 'lucide-react'
+import { ShiftType, getShiftTypes, saveShiftTypes, DEFAULT_SHIFT_TYPES, getOvertimeSettings, saveOvertimeSettings } from '@/lib/hr-operational-data'
+import { Plus, Pencil, Trash2, X, RotateCcw, GitBranch, Globe, Briefcase, Clock } from 'lucide-react'
 
 const PRESET_COLORS = [
     '#3B82F6', '#F59E0B', '#8B5CF6', '#10B981', '#06B6D4',
@@ -20,8 +20,13 @@ export default function HROperationalSettingsPage() {
     const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([])
     const [editing, setEditing] = useState<ShiftType | null>(null)
     const [isNew, setIsNew] = useState(false)
+    const [activeTab, setActiveTab] = useState<'shifts' | 'overtime'>('shifts')
+    const [overtimeSettings, setOvertimeSettings] = useState({ overtime_multiplier: 1.5, public_holiday_multiplier: 2.0 })
 
-    useEffect(() => { setShiftTypes(getShiftTypes()) }, [])
+    useEffect(() => { 
+        setShiftTypes(getShiftTypes()) 
+        setOvertimeSettings(getOvertimeSettings())
+    }, [])
 
     const openNew = () => {
         const newShift: ShiftType = { id: `st-${Date.now()}`, ...emptyShift() }
@@ -87,16 +92,45 @@ export default function HROperationalSettingsPage() {
         setEditing(updated as ShiftType)
     }
 
+    const handleSaveOvertime = (newSettings: any) => {
+        setOvertimeSettings(newSettings)
+        saveOvertimeSettings(newSettings)
+    }
+
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 p-6">
+        <div className="min-h-screen bg-\[#0b1530\] text-gray-100 p-6 animate-in fade-in duration-300">
             <div className="max-w-4xl mx-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Operational Settings</h1>
-                        <p className="text-sm text-slate-400 mt-1">Configure shift types and scheduling parameters.</p>
+                        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                            Operational Settings
+                        </h1>
+                        <p className="text-sm text-slate-400 mt-1">Configure shift types, scheduling parameters, and overtime factors.</p>
                     </div>
-                    <div className="flex gap-2">
+                </div>
+
+                {/* Tabs */}
+                <div className="flex overflow-x-auto no-scrollbar gap-1 bg-slate-800 rounded-xl p-1 mb-6 border border-white/5 w-fit">
+                    <button onClick={() => setActiveTab('shifts')}
+                        className={`min-w-[120px] flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                            activeTab === 'shifts' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}>
+                        <Briefcase className="w-4 h-4" />
+                        Shifts
+                    </button>
+                    <button onClick={() => setActiveTab('overtime')}
+                        className={`min-w-[120px] flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                            activeTab === 'overtime' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}>
+                        <Clock className="w-4 h-4" />
+                        Overtime
+                    </button>
+                </div>
+
+                {activeTab === 'shifts' && (
+                    <>
+                        <div className="flex justify-end gap-2 mb-4">
                         <button
                             onClick={resetDefaults}
                             className="flex items-center gap-2 px-3 py-2 text-xs rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 transition"
@@ -112,7 +146,6 @@ export default function HROperationalSettingsPage() {
                             Add Shift Type
                         </button>
                     </div>
-                </div>
 
                 {/* Shift Types Table */}
                 <div className="rounded-2xl bg-white shadow-md overflow-hidden">
@@ -189,6 +222,104 @@ export default function HROperationalSettingsPage() {
                         </tbody>
                     </table>
                 </div>
+                </>
+                )}
+
+                {activeTab === 'overtime' && (
+                    <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 text-gray-900 w-full max-w-4xl">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-blue-50 rounded-lg">
+                                <Clock className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-900">Overtime Multipliers</h2>
+                                <p className="text-sm text-gray-500">Configure multipliers for overtime compensation via Salary or Annual Leave.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            {/* Salary Card */}
+                            <div className="p-5 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors">
+                                <label className="block text-base font-semibold text-gray-800 mb-1">Paid via Salary</label>
+                                <p className="text-xs text-gray-500 mb-5 h-8">
+                                    Multipliers applied when overtime hours are paid through the normal payroll.
+                                </p>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center justify-between">
+                                            <span>Standard Overtime</span>
+                                        </label>
+                                        <div className="relative">
+                                            <input 
+                                                type="number" step="0.5" min="1"
+                                                value={overtimeSettings.overtime_multiplier_salary}
+                                                onChange={e => handleSaveOvertime({ ...overtimeSettings, overtime_multiplier_salary: Number(e.target.value) })}
+                                                className="w-full pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 font-medium transition-shadow hover:border-gray-300 outline-none"
+                                            />
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400 text-sm font-medium">x</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center justify-between">
+                                            <span>Public Holiday Overtime</span>
+                                        </label>
+                                        <div className="relative">
+                                            <input 
+                                                type="number" step="0.5" min="1"
+                                                value={overtimeSettings.public_holiday_multiplier_salary}
+                                                onChange={e => handleSaveOvertime({ ...overtimeSettings, public_holiday_multiplier_salary: Number(e.target.value) })}
+                                                className="w-full pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 font-medium transition-shadow hover:border-gray-300 outline-none"
+                                            />
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400 text-sm font-medium">x</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Annual Leave Card */}
+                            <div className="p-5 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors">
+                                <label className="block text-base font-semibold text-gray-800 mb-1">Compensated via Annual Leave</label>
+                                <p className="text-xs text-gray-500 mb-5 h-8">
+                                    Multipliers applied when overtime is converted into time off (ROL / Holidays).
+                                </p>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center justify-between">
+                                            <span>Standard Overtime</span>
+                                        </label>
+                                        <div className="relative">
+                                            <input 
+                                                type="number" step="0.5" min="1"
+                                                value={overtimeSettings.overtime_multiplier_leave}
+                                                onChange={e => handleSaveOvertime({ ...overtimeSettings, overtime_multiplier_leave: Number(e.target.value) })}
+                                                className="w-full pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 font-medium transition-shadow hover:border-gray-300 outline-none"
+                                            />
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400 text-sm font-medium">x</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center justify-between">
+                                            <span>Public Holiday Overtime</span>
+                                        </label>
+                                        <div className="relative">
+                                            <input 
+                                                type="number" step="0.5" min="1"
+                                                value={overtimeSettings.public_holiday_multiplier_leave}
+                                                onChange={e => handleSaveOvertime({ ...overtimeSettings, public_holiday_multiplier_leave: Number(e.target.value) })}
+                                                className="w-full pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 font-medium transition-shadow hover:border-gray-300 outline-none"
+                                            />
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400 text-sm font-medium">x</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Edit/New Modal */}
                 {editing && (

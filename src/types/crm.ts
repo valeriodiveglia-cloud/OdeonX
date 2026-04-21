@@ -8,10 +8,12 @@ export type CRMPartner = {
   email: string | null
   phone: string | null
   location: string | null
-  status: 'Lead' | 'Negotiating' | 'Active' | 'Paused' | string
-  pipeline_stage: 'New Leads' | 'Approached' | 'Negotiating' | 'Active' | string
+  status: 'Leads' | 'Approached' | 'Waiting for Material' | 'Waiting for Activation' | 'Active' | 'Inactive/Paused' | 'Rejected' | string
+  pipeline_stage: 'Leads' | 'Approached' | 'Waiting for Material' | 'Waiting for Activation' | 'Active' | 'Inactive/Paused' | 'Rejected' | string
   owner_id: string | null
   notes: string | null
+  rejection_reason?: string | null
+  is_deleted?: boolean
   partner_code: string | null
   partner_password_hash?: string | null
 }
@@ -31,6 +33,18 @@ export type CRMAgreement = {
   valid_until: string | null
 }
 
+export type CRMAdvisorAgreement = {
+  id: string
+  created_at: string
+  updated_at: string
+  partner_id: string
+  commission_type: string
+  commission_rules: any
+  status: 'Draft' | 'Active' | 'Expired' | string
+  valid_until: string | null
+  notes: string | null
+}
+
 export type CRMReferral = {
   id: string
   created_at: string
@@ -43,6 +57,7 @@ export type CRMReferral = {
   status: 'Pending' | 'Validated' | 'Disputed' | 'Cancelled' | string
   revenue_generated: number
   commission_value: number
+  advisor_commission_value?: number | null
   validation_notes: string | null
 }
 

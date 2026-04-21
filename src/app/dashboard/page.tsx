@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase_shim'
 import type { User } from '@supabase/supabase-js'
-import { t } from '@/lib/i18n'
+import { t, tDynamic } from '@/lib/i18n'
 import {
   CalculatorIcon,
   BuildingOffice2Icon,
@@ -82,6 +82,7 @@ export default function HomeDashboard() {
     let mounted = true
 
     const init = async () => {
+      let isRedirecting = false
       try {
         const { data } = await supabase.auth.getUser()
         if (!mounted) return
@@ -97,12 +98,17 @@ export default function HomeDashboard() {
 
           if (mounted) {
             setRole(acc?.role || null)
+            if (acc?.role === 'sale advisor') {
+              isRedirecting = true
+              router.replace('/crm/partners')
+              return
+            }
           }
         }
       } catch (err) {
         console.error('Dashboard init error:', err)
       } finally {
-        if (mounted) {
+        if (mounted && !isRedirecting) {
           setLoading(false)
         }
       }
@@ -243,20 +249,20 @@ export default function HomeDashboard() {
   const defaultModules = [
     // Column 1
     { id: 'costing', href: '/materials', icon: CalculatorIcon, title: t(language, 'Costing') },
-    { id: 'crm', href: '/crm', icon: Handshake, title: 'CRM & Partnerships', roles: ['owner', 'admin', 'manager'] },
-    { id: 'referrals', href: '/crm/referrals', icon: Target, title: 'Register Referral', roles: ['owner', 'admin', 'manager', 'staff'] },
+    { id: 'crm', href: '/crm', icon: Handshake, title: t(language, 'CRMPartnerships') || 'CRM & Partnerships', roles: ['owner', 'admin', 'manager'] },
+    { id: 'referrals', href: '/crm/referrals', icon: Target, title: t(language, 'RegisterReferral') || 'Register Referral', roles: ['owner', 'admin', 'manager', 'staff'] },
     
     // Column 2
     { id: 'catering', href: '/catering', icon: BuildingOffice2Icon, title: t(language, 'Catering') },
     { id: 'settings', href: '/general-settings', icon: Cog6ToothIcon, title: t(language, 'Settings') },
     
     // Column 3
-    { id: 'loyalty', href: '/loyalty-manager', icon: UserGroupIcon, title: 'Loyalty Manager' },
-    { id: 'asset-branch-picker', Component: AssetBranchPickerCTA, title: 'Asset Inventory', icon: Boxes },
+    { id: 'loyalty', href: '/loyalty-manager', icon: UserGroupIcon, title: t(language, 'LoyaltyManager') || 'Loyalty Manager' },
+    { id: 'asset-branch-picker', Component: AssetBranchPickerCTA, title: t(language, 'AssetInventory') || 'Asset Inventory', icon: Boxes },
     
     // Column 4
-    { id: 'branch-picker', Component: BranchPickerCTA, title: 'Check In System', icon: MapPinIcon },
-    { id: 'monthly-reports', href: '/monthly-reports', icon: LayoutDashboard, title: 'Monthly Reports', roles: ['owner', 'admin'] },
+    { id: 'branch-picker', Component: BranchPickerCTA, title: t(language, 'CheckInSystem') || 'Check In System', icon: MapPinIcon },
+    { id: 'monthly-reports', href: '/monthly-reports', icon: LayoutDashboard, title: t(language, 'MonthlyReports') || 'Monthly Reports', roles: ['owner', 'admin'] },
     { id: 'hr-module', Component: HRModuleCTA, title: t(language, 'HumanResources') || 'Human Resources', icon: UserGroupIcon },
   ]
 
@@ -319,7 +325,7 @@ export default function HomeDashboard() {
           {/* Left Column: QUICK ACCESS */}
           <div className="w-[160px] xl:w-[200px] shrink-0 flex flex-col h-full hidden lg:flex">
             <div className="flex items-center justify-center mb-4 px-1 relative z-[60]">
-              <h2 className="text-xs font-bold tracking-[0.15em] text-blue-100 uppercase text-center">Quick Access</h2>
+              <h2 className="text-xs font-bold tracking-[0.15em] text-blue-100 uppercase text-center">{t(language, 'QuickAccess') || 'Quick Access'}</h2>
               <button 
                 onClick={() => setIsQaModalOpen(true)}
                 className="absolute right-0 w-7 h-7 flex items-center justify-center rounded-full bg-white text-slate-500 hover:text-blue-600 hover:bg-blue-50 shadow-md border border-blue-100 transition-all"
@@ -341,14 +347,14 @@ export default function HomeDashboard() {
                             if (needsBranch) setPendingBranchDest(page.href)
                             else router.push(page.href)
                           }} 
-                          title={page.title} 
+                          title={tDynamic(language, page.title)} 
                           icon={page.icon} 
                           className="max-h-[140px]"
                         />
                       )
                     })
                   ) : (
-                    <div className="text-[12px] text-blue-400 px-3 italic flex-1 flex items-center justify-center text-center">Settings</div>
+                    <div className="text-[12px] text-blue-400 px-3 italic flex-1 flex items-center justify-center text-center">{t(language, 'Settings')}</div>
                   )}
                 </div>
               </div>
@@ -373,7 +379,7 @@ export default function HomeDashboard() {
             <div className={`flex-1 min-h-0 bg-gradient-to-br from-white/90 via-white/80 to-blue-50/60 backdrop-blur-xl rounded-[3rem] shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 p-6 lg:p-10 flex flex-col relative overflow-hidden transition-all ${isEditingLayout ? 'bg-blue-500/20 ring-4 ring-blue-400' : ''}`}>
               <div className="flex items-center justify-center mb-6 relative z-[60]">
                 <h2 className="text-[11px] font-bold tracking-[0.2em] bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-500 text-center uppercase shrink-0">
-                  All Modules
+                  {t(language, 'AllModules') || 'All Modules'}
                 </h2>
                 {role === 'owner' && (
                   <button 
@@ -435,7 +441,7 @@ export default function HomeDashboard() {
           {/* Right Column: RECENTLY VISITED */}
           <div className="w-[160px] xl:w-[200px] shrink-0 flex flex-col h-full hidden lg:flex">
             <div className="flex items-center justify-center mb-4 px-1 relative z-[60]">
-              <h2 className="text-xs font-bold tracking-[0.15em] text-blue-100 uppercase text-center">Recent</h2>
+              <h2 className="text-xs font-bold tracking-[0.15em] text-blue-100 uppercase text-center">{t(language, 'RecentVisits') || 'Recent'}</h2>
             </div>
             <div className="flex-1 bg-gradient-to-b from-white/90 to-blue-50/60 backdrop-blur-xl rounded-[2.5rem] shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 flex flex-col overflow-hidden">
               <div className="flex-1 flex flex-col p-4 w-full h-full overflow-hidden">
@@ -450,14 +456,14 @@ export default function HomeDashboard() {
                             if (needsBranch) setPendingBranchDest(page.href)
                             else router.push(page.href)
                           }} 
-                          title={page.title} 
+                          title={tDynamic(language, page.title)} 
                           icon={page.icon} 
                           className="max-h-[140px]"
                         />
                       )
                     })
                   ) : (
-                    <div className="text-[12px] text-blue-400 px-3 italic flex-1 flex items-center justify-center text-center">Nothing recently visited.</div>
+                    <div className="text-[12px] text-blue-400 px-3 italic flex-1 flex items-center justify-center text-center">{t(language, 'NothingRecentlyVisited') || 'Nothing recently visited.'}</div>
                   )}
                 </div>
               </div>
@@ -474,6 +480,7 @@ export default function HomeDashboard() {
           selectedIds={quickAccessIds}
           onSave={saveQuickAccess}
           onClose={() => setIsQaModalOpen(false)}
+          language={language}
         />
       )}
 
@@ -798,7 +805,7 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
                   <Boxes className="w-5 h-5" />
                 </span>
-                <div className="text-lg font-semibold text-gray-900">Select Branch for Inventory</div>
+                <div className="text-lg font-semibold text-gray-900">{t(language, 'SelectBranchForInventory') || 'Select Branch for Inventory'}</div>
               </div>
               <button
                 onClick={onClose}
@@ -839,7 +846,7 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
                       <Boxes className="w-5 h-5" />
                     </span>
                     <div className="min-w-0 flex items-center h-10">
-                      <div className="font-bold text-slate-800 text-lg">All Branches</div>
+                      <div className="font-bold text-slate-800 text-lg">{t(language, 'AllBranches') || 'All Branches'}</div>
                     </div>
                   </div>
                 </button>
@@ -922,7 +929,7 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
             onClick={onLogout}
             className="flex items-center justify-center bg-gradient-to-b from-blue-400 to-blue-600 text-white px-5 py-2 rounded-full text-xs font-bold tracking-wide hover:from-blue-500 hover:to-blue-700 transition-all shadow-[0_2px_10px_rgba(37,99,235,0.3)]"
           >
-            Logout
+            {t(language, 'Logout') || 'Logout'}
           </button>
           
           <div className="h-6 w-px bg-gray-200 mx-1 hidden sm:block"></div>
@@ -945,8 +952,8 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
                     <Bell className="w-5 h-5" />
                   </div>
                 </div>
-                <div className="text-sm font-bold text-gray-900 text-center">Notifications</div>
-                <div className="text-xs text-gray-500 text-center mt-1">Coming soon!</div>
+                <div className="text-sm font-bold text-gray-900 text-center">{t(language, 'Notifications') || 'Notifications'}</div>
+                <div className="text-xs text-gray-500 text-center mt-1">{t(language, 'ComingSoon') || 'Coming soon!'}</div>
               </div>
             )}
           </div>
@@ -999,23 +1006,25 @@ function QuickAccessModal({
   availablePages, 
   selectedIds, 
   onSave, 
-  onClose 
+  onClose,
+  language
 }: { 
   availablePages: AppPage[], 
   selectedIds: string[], 
   onSave: (ids: string[]) => void, 
-  onClose: () => void 
+  onClose: () => void,
+  language: string
 }) {
   const validIds = availablePages.map(p => p.id)
   const initialIds = selectedIds.filter(id => validIds.includes(id))
   const [draftIds, setDraftIds] = useState<string[]>(initialIds)
 
-  const toggleId = (id: string) => {
+    const toggleId = (id: string) => {
     if (draftIds.includes(id)) {
       setDraftIds(draftIds.filter(i => i !== id))
     } else {
       if (draftIds.length >= 6) {
-        alert('You can only select up to 6 quick access pages.')
+        alert(t(language, 'QuickAccessLimit') || 'You can only select up to 6 quick access pages.')
         return
       }
       setDraftIds([...draftIds, id])
@@ -1035,8 +1044,8 @@ function QuickAccessModal({
       <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl flex flex-col max-h-[85vh] border border-gray-100">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-3xl">
           <div>
-            <h3 className="text-lg font-bold text-gray-900">Configure Quick Access</h3>
-            <p className="text-xs text-gray-500">Select the pages you want pinned to your sidebar.</p>
+            <h3 className="text-lg font-bold text-gray-900">{t(language, 'ConfigureQuickAccess') || 'Configure Quick Access'}</h3>
+            <p className="text-xs text-gray-500">{t(language, 'QuickAccessDesc') || 'Select the pages you want pinned to your sidebar.'}</p>
           </div>
           <button onClick={onClose} className="p-2 bg-white rounded-full shadow-sm hover:bg-gray-100"><XMarkIcon className="w-5 h-5" /></button>
         </div>
@@ -1045,7 +1054,7 @@ function QuickAccessModal({
           {Object.entries(grouped).map(([moduleName, pages]) => (
             <div key={moduleName}>
               <h4 className="text-sm font-semibold tracking-wide text-blue-900 mb-3 uppercase flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span> {moduleName}
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span> {tDynamic(language, moduleName)}
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {pages.map(page => {
@@ -1065,7 +1074,7 @@ function QuickAccessModal({
                         <Icon className="w-4 h-4 stroke-[1.5]" />
                       </div>
                       <span className={`text-[13px] font-medium flex-1 ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
-                        {page.title}
+                        {tDynamic(language, page.title)}
                       </span>
                       {isSelected && <CheckIcon className="w-4 h-4 text-blue-600 shrink-0" />}
                     </button>
@@ -1077,10 +1086,10 @@ function QuickAccessModal({
         </div>
 
         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 rounded-b-3xl flex justify-between items-center">
-          <span className="text-xs text-gray-500">{draftIds.length}/6 items selected</span>
+          <span className="text-xs text-gray-500">{draftIds.length}/6 {t(language, 'ItemsSelected') || 'items selected'}</span>
           <div className="flex gap-3">
-             <button onClick={onClose} className="px-5 py-2 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-200">Cancel</button>
-             <button onClick={() => onSave(draftIds)} className="px-5 py-2 outline-none rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm">Save Preferences</button>
+             <button onClick={onClose} className="px-5 py-2 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-200">{t(language, 'Cancel') || 'Cancel'}</button>
+             <button onClick={() => onSave(draftIds)} className="px-5 py-2 outline-none rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm">{t(language, 'SavePreferences') || 'Save Preferences'}</button>
           </div>
         </div>
       </div>

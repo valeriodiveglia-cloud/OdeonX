@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase_shim'
 import type { CRMTask, CRMPartner } from '@/types/crm'
 import CircularLoader from '@/components/CircularLoader'
 import { format, formatDistanceToNow, isPast, isToday } from 'date-fns'
+import { useSettings } from '@/contexts/SettingsContext'
+import { t } from '@/lib/i18n'
 
 interface ExtendedTask extends CRMTask {
     crm_partners: {
@@ -22,6 +24,7 @@ const COLUMNS: { id: string, label: string, color: string }[] = [
 ]
 
 export default function CRMTasksPage() {
+    const { language } = useSettings()
     const [searchTerm, setSearchTerm] = useState('')
     const [tasks, setTasks] = useState<ExtendedTask[]>([])
     const [partners, setPartners] = useState<{id: string, name: string}[]>([])
@@ -29,6 +32,7 @@ export default function CRMTasksPage() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [dragActiveCol, setDragActiveCol] = useState<string | null>(null)
+    const [currentUser, setCurrentUser] = useState<{ id: string, role?: string } | null>(null)
 
     // Form State
     const [formData, setFormData] = useState({
@@ -56,6 +60,15 @@ export default function CRMTasksPage() {
     }
 
     useEffect(() => {
+        const fetchUser = async () => {
+            const { data } = await supabase.auth.getUser()
+            if (data?.user) {
+                const { data: acc } = await supabase.from('app_accounts').select('role').eq('user_id', data.user.id).maybeSingle()
+                setCurrentUser({ id: data.user.id, role: acc?.role })
+            }
+        }
+        fetchUser()
+        
         // Since crm_tasks might not exist until migration is applied, we capture error safely
         fetchTasksAndPartners().catch(err => {
             console.error("Error fetching tasks, implies table might not exist yet:", err)
@@ -77,6 +90,12 @@ export default function CRMTasksPage() {
     const handleDrop = async (e: React.DragEvent, newStatus: string) => {
         e.preventDefault()
         setDragActiveCol(null)
+        
+        if (currentUser?.role === 'owner') {
+            alert(t(language, 'OwnersCannotModifyTasks'))
+            return
+        }
+
         const taskId = e.dataTransfer.getData('taskId')
         if (!taskId) return
 
@@ -97,7 +116,7 @@ export default function CRMTasksPage() {
             if (error) throw error
         } catch (error) {
             console.error('Error updating task status:', error)
-            alert('Failed to update status. Please make sure the database migration was applied.')
+            alert(t(language, 'FailedUpdateStatus'))
             fetchTasksAndPartners() // revert
         }
     }
@@ -137,7 +156,7 @@ export default function CRMTasksPage() {
             fetchTasksAndPartners()
         } catch (error) {
             console.error('Error saving task:', error)
-            alert('Error saving task. Please ensure the database migration was applied.')
+            alert(t(language, 'FailedSaveTask'))
         } finally {
             setIsSubmitting(false)
         }
@@ -158,7 +177,7 @@ export default function CRMTasksPage() {
 
     const handleDeleteTask = async () => {
         if (!formData.id) return
-        if (!confirm('Are you sure you want to delete this task?')) return
+        if (!confirm(t(language, 'ConfirmDeleteTask'))) return
         try {
             const { error } = await supabase.from('crm_tasks').delete().eq('id', formData.id)
             if (error) throw error
@@ -166,7 +185,7 @@ export default function CRMTasksPage() {
             setIsModalOpen(false)
         } catch (error) {
             console.error('Error deleting task:', error)
-            alert('Failed to delete task.')
+            alert(t(language, 'FailedDeleteTask'))
         }
     }
 
@@ -174,8 +193,8 @@ export default function CRMTasksPage() {
         <div className="p-6 max-w-[1600px] h-screen flex flex-col mx-auto relative">
             <div className="flex justify-between items-end mb-6 shrink-0">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Tasks & Follow-ups</h1>
-                    <p className="text-slate-500 mt-1">Track actionable items, meetings, and deadlines for your partners.</p>
+                    <h1 className="text-3xl font-bold text-slate-900">{t(language, 'TasksAndFollowups')}</h1>
+                    <p className="text-slate-500 mt-1">{t(language, 'TasksDesc')}</p>
                 </div>
                 <button 
                     onClick={() => {
@@ -185,7 +204,7 @@ export default function CRMTasksPage() {
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2"
                 >
                     <Plus className="w-4 h-4" />
-                    New Task
+                    {t(language, 'NewTask')}
                 </button>
             </div>
 
@@ -196,7 +215,7 @@ export default function CRMTasksPage() {
                         <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                             type="text"
-                            placeholder="Search tasks or partners..."
+                            placeholder={t(language, 'SearchTasksPartners')}
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                             className="pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white w-64 shadow-sm"
@@ -222,7 +241,7 @@ export default function CRMTasksPage() {
                                 onDrop={(e) => handleDrop(e, col.id)}
                             >
                                 <div className={`px-3 py-1.5 rounded-lg border text-sm font-semibold mb-3 flex justify-between items-center ${col.color}`}>
-                                    <span>{col.label}</span>
+                                    <span>{t(language, col.id.replace(/\s+/g, '') as any)}</span>
                                     <span className="bg-white/50 px-2 py-0.5 rounded-full text-xs">
                                         {filteredTasks.filter(t => t.status === col.id).length}
                                     </span>
@@ -232,6 +251,7 @@ export default function CRMTasksPage() {
                                         <TaskCard 
                                             key={task.id} 
                                             task={task} 
+                                            language={language}
                                             onEdit={() => openEditModal(task)}
                                         />
                                     ))}
@@ -247,7 +267,7 @@ export default function CRMTasksPage() {
                 <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
-                            <h2 className="text-xl font-bold text-slate-900">{formData.id ? 'Edit Task' : 'New Task'}</h2>
+                            <h2 className="text-xl font-bold text-slate-900">{formData.id ? t(language, 'EditTask') : t(language, 'NewTask')}</h2>
                             <button 
                                 onClick={() => setIsModalOpen(false)}
                                 className="text-slate-400 hover:text-slate-600 p-2"
@@ -259,25 +279,25 @@ export default function CRMTasksPage() {
                         <form onSubmit={handleSaveTask} className="p-6 space-y-6">
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Title *</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'TitleStar')}</label>
                                     <input 
                                         type="text" 
                                         required
                                         value={formData.title}
                                         onChange={e => setFormData({...formData, title: e.target.value})}
                                         className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
-                                        placeholder="e.g. Call to finalize agreement"
+                                        placeholder={t(language, 'TaskTitlePlaceholder')}
                                     />
                                 </div>
                                 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Related Partner</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'RelatedPartner')}</label>
                                     <select 
                                         value={formData.partner_id}
                                         onChange={e => setFormData({...formData, partner_id: e.target.value})}
                                         className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
                                     >
-                                        <option value="">-- No specific partner (Internal) --</option>
+                                        <option value="">{t(language, 'NoSpecificPartner')}</option>
                                         {partners.map(p => (
                                             <option key={p.id} value={p.id}>{p.name}</option>
                                         ))}
@@ -286,7 +306,7 @@ export default function CRMTasksPage() {
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'DueDate')}</label>
                                         <input 
                                             type="date" 
                                             value={formData.due_date}
@@ -295,41 +315,41 @@ export default function CRMTasksPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'Priority')}</label>
                                         <select 
                                             value={formData.priority}
                                             onChange={e => setFormData({...formData, priority: e.target.value})}
                                             className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
                                         >
-                                            <option value="Low">Low</option>
-                                            <option value="Medium">Medium</option>
-                                            <option value="High">High</option>
+                                            <option value="Low">{t(language, 'Low')}</option>
+                                            <option value="Medium">{t(language, 'Medium')}</option>
+                                            <option value="High">{t(language, 'High')}</option>
                                         </select>
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'TaskStatus')}</label>
                                     <select 
                                         value={formData.status}
                                         onChange={e => setFormData({...formData, status: e.target.value})}
                                         className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
                                     >
-                                        <option value="Pending">Pending</option>
-                                        <option value="In Progress">In Progress</option>
-                                        <option value="Completed">Completed</option>
-                                        <option value="Cancelled">Cancelled</option>
+                                        <option value="Pending">{t(language, 'Pending')}</option>
+                                        <option value="In Progress">{t(language, 'InProgress')}</option>
+                                        <option value="Completed">{t(language, 'Completed')}</option>
+                                        <option value="Cancelled">{t(language, 'Cancelled')}</option>
                                     </select>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'DescriptionLabel')}</label>
                                     <textarea 
                                         rows={3}
                                         value={formData.description}
                                         onChange={e => setFormData({...formData, description: e.target.value})}
                                         className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition resize-none"
-                                        placeholder="Add any extra details, zoom links, or notes..."
+                                        placeholder={t(language, 'TaskDescPlaceholder')}
                                     />
                                 </div>
                             </div>
@@ -342,7 +362,7 @@ export default function CRMTasksPage() {
                                             onClick={handleDeleteTask}
                                             className="px-4 py-2 rounded-xl text-red-600 font-medium hover:bg-red-50 transition"
                                         >
-                                            Delete
+                                            {t(language, 'Delete')}
                                         </button>
                                     )}
                                 </div>
@@ -352,7 +372,7 @@ export default function CRMTasksPage() {
                                         onClick={() => setIsModalOpen(false)}
                                         className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition"
                                     >
-                                        Cancel
+                                        {t(language, 'Cancel')}
                                     </button>
                                     <button 
                                         type="submit"
@@ -362,9 +382,9 @@ export default function CRMTasksPage() {
                                         {isSubmitting ? (
                                             <>
                                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                Saving...
+                                                {t(language, 'Saving')}
                                             </>
-                                        ) : 'Save Task'}
+                                        ) : t(language, 'SaveTask')}
                                     </button>
                                 </div>
                             </div>
@@ -376,7 +396,7 @@ export default function CRMTasksPage() {
     )
 }
 
-function TaskCard({ task, onEdit }: { task: ExtendedTask, onEdit: () => void }) {
+function TaskCard({ task, onEdit, language }: { task: ExtendedTask, onEdit: () => void, language: string }) {
     
     // Check if task is overdue
     let isOverdue = false;
@@ -401,7 +421,7 @@ function TaskCard({ task, onEdit }: { task: ExtendedTask, onEdit: () => void }) 
             
             {task.crm_partners && (
                <div className="text-sm font-medium text-slate-600 mb-2 truncate">
-                   Partner: <Link href={`/crm/partners/${task.partner_id}`} className="text-blue-600 hover:underline">{task.crm_partners.name}</Link>
+                   {t(language, 'Partner')}: <Link href={`/crm/partners/${task.partner_id}`} className="text-blue-600 hover:underline">{task.crm_partners.name}</Link>
                </div>
             )}
             
@@ -418,7 +438,7 @@ function TaskCard({ task, onEdit }: { task: ExtendedTask, onEdit: () => void }) 
                         task.priority === 'Medium' ? 'bg-amber-100 text-amber-700' :
                         'bg-slate-100 text-slate-600'
                     }`}>
-                        {task.priority}
+                        {t(language, task.priority as any)}
                     </span>
                 </div>
                 

@@ -68,7 +68,7 @@ export default function FinesTablePage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-900 flex flex-col p-6 animate-in fade-in duration-300">
+        <div className="min-h-screen flex flex-col p-6 animate-in fade-in duration-300">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div>

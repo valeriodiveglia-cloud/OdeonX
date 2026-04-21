@@ -45,7 +45,7 @@ export default function EditHiringRequestPage() {
     if (!request) return <div className="p-8 text-center">Request not found</div>
 
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 p-4">
+        <div className="min-h-screen text-gray-100 p-4">
             <div className="max-w-5xl mx-auto mb-6">
                 <div className="flex items-center">
                     <Link

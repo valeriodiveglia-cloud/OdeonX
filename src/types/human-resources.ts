@@ -246,3 +246,46 @@ export interface HRStaffRoleHistory {
   old_department?: HRDepartment;
   new_department?: HRDepartment;
 }
+export interface HRStaffAttendanceMonthly {
+  id: string;
+  staff_id: string;
+  month_id: string;
+  lates_count: number;
+  lates_minutes: number;
+  no_shows_count: number;
+  annual_leaves: number;
+  sick_leaves: number;
+  unpaid_leaves: number;
+  other_leaves: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  hr_staff?: HRStaffMember;
+}
+
+export interface HRStaffOvertime {
+  id: string;
+  staff_id: string;
+  date: string;
+  hours: number;
+  reason: string;
+  compensation_type: 'salary' | 'annual_leave';
+  created_at: string;
+  hr_staff?: HRStaffMember;
+}
+
+export interface HRServiceCharge {
+  month_id: string;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HRServiceChargeStaff {
+  id: string;
+  month_id: string;
+  staff_id: string;
+  hours_worked: number;
+  created_at: string;
+  updated_at: string;
+}

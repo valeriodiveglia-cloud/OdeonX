@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type Role = 'owner' | 'admin' | 'staff' | 'manager'
+type Role = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor'
 type UpsertBody = {
   id?: number | string | null
   email?: string
@@ -70,25 +70,35 @@ export async function POST(req: Request) {
     }
 
     let role: Role = (String(body?.role ?? 'staff').trim().toLowerCase() as Role)
-    if (!['owner', 'admin', 'staff', 'manager'].includes(role)) {
+    if (!['owner', 'admin', 'staff', 'manager', 'sale advisor'].includes(role)) {
       role = 'staff'
     }
 
-    const payload = {
+    const idPresent = body?.id !== undefined && body?.id !== null && String(body?.id).length > 0
+    const isSaleAdvisor = role === 'sale advisor'
+    let generatedReferralCode = null
+    if (isSaleAdvisor && !idPresent) {
+      const parts = (body?.name || rawEmail || 'Advisor').split(' ')
+      const first = parts[0].replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+      generatedReferralCode = `${first}10`
+    }
+
+    const payload: any = {
       email: rawEmail,
       phone: body?.phone ?? null,
       name: body?.name ?? null,
       position: body?.position ?? null,
       role,
       is_active: Boolean(body?.is_active ?? true),
+      ...(isSaleAdvisor && !idPresent ? { referral_code: generatedReferralCode } : {}),
     }
 
-    const idPresent = body?.id !== undefined && body?.id !== null && String(body?.id).length > 0
 
-    // Regola: un admin (non owner) può gestire solo account 'staff' e 'manager'
+
+    // Regola: un admin (non owner) può gestire solo account 'staff', 'manager', 'sale advisor'
     if (isAdmin && !isOwner) {
-      if (payload.role !== 'staff' && payload.role !== 'manager') {
-        return NextResponse.json({ error: 'Admins can set role to staff or manager only' }, { status: 403 })
+      if (payload.role !== 'staff' && payload.role !== 'manager' && payload.role !== 'sale advisor') {
+        return NextResponse.json({ error: 'Admins can set role to staff, manager, or sale advisor only' }, { status: 403 })
       }
       if (idPresent) {
         const { data: target, error: tErr } = await supabase
@@ -98,8 +108,8 @@ export async function POST(req: Request) {
           .maybeSingle()
         if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 })
         if (!target) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
-        if (String(target.role).toLowerCase() !== 'staff' && String(target.role).toLowerCase() !== 'manager') {
-          return NextResponse.json({ error: 'Admins can modify staff or manager only' }, { status: 403 })
+        if (String(target.role).toLowerCase() !== 'staff' && String(target.role).toLowerCase() !== 'manager' && String(target.role).toLowerCase() !== 'sale advisor') {
+          return NextResponse.json({ error: 'Admins can modify staff, manager, or sale advisor only' }, { status: 403 })
         }
       }
     }

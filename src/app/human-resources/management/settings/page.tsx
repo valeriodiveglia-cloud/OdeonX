@@ -667,10 +667,10 @@ export default function HRManagementSettingsPage() {
 
     useEffect(() => { fetchAll() }, [fetchAll])
 
-    if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><CircularLoader /></div>
+    if (loading) return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
 
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 p-6">
+        <div className="min-h-screen text-gray-100 p-6">
             <div className="max-w-5xl mx-auto">
                 {/* Header */}
                 <div className="mb-6">

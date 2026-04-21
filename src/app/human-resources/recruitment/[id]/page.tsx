@@ -68,7 +68,7 @@ export default function HiringRequestDetailPage() {
     if (!request) return <div className="p-8 text-center bg-slate-900 text-gray-100 min-h-screen">Request not found</div>
 
     return (
-        <div className="min-h-screen bg-slate-900">
+        <div className="min-h-screen">
             <header className="shadow-none border-b border-white/10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     <div className="flex items-center gap-4">

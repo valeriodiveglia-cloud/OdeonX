@@ -294,14 +294,14 @@ export default function PostingPlatformsPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+            <div className="min-h-screen flex items-center justify-center">
                 <CircularLoader />
             </div>
         )
     }
 
     return (
-        <div className="min-h-screen bg-slate-900">
+        <div className="min-h-screen">
             {/* Header */}
             <header className="border-b border-white/10">
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

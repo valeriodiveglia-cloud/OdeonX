@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React from 'react'
-import { CalendarDays, BarChart3, Settings, Home } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, Home, Clock, Timer } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
@@ -12,6 +12,9 @@ const NAV = [
     { href: BASE, label: 'Dashboard', icon: Home, exact: true },
     { href: `${BASE}/roster`, label: 'Roster', icon: CalendarDays },
     { href: `${BASE}/reports`, label: 'Reports', icon: BarChart3 },
+    { href: `${BASE}/attendance`, label: 'Attendance', icon: Clock },
+    { href: `${BASE}/overtime`, label: 'Overtime', icon: Timer },
+    { href: `${BASE}/service-charge`, label: 'Service Charge', icon: CalendarDays },
     { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
 ]
 

@@ -6,7 +6,7 @@ import { HiringRequestForm } from '@/components/human-resources/HiringRequestFor
 
 export default function NewHiringRequestPage() {
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 p-4">
+        <div className="min-h-screen text-gray-100 p-4">
             <div className="max-w-5xl mx-auto mb-6">
                 <div className="flex items-center gap-4">
                     <Link
