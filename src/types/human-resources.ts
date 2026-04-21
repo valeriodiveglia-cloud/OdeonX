@@ -270,6 +270,7 @@ export interface HRStaffOvertime {
   hours: number;
   reason: string;
   compensation_type: 'salary' | 'annual_leave';
+  is_public_holiday: boolean;
   created_at: string;
   hr_staff?: HRStaffMember;
 }

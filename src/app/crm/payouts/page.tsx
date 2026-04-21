@@ -222,8 +222,8 @@ export default function CRMPayoutsPage() {
                 alert('No payouts were generated (amounts were 0).')
             }
         } catch (error: any) {
-            console.error('Error generating payouts:', err)
-            alert('Failed to generate payouts: ' + err.message)
+            console.error('Error generating payouts:', error)
+            alert('Failed to generate payouts: ' + error.message)
         }
         setIsGenerating(false)
     }

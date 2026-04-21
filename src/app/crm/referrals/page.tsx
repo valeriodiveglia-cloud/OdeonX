@@ -308,7 +308,7 @@ export default function CRMReferralsPage() {
 
             setIsModalOpen(false)
             setFormData({
-                id: undefined, sourceType: 'partner', partner_id: '', advisor_user_id: '', arrival_date: new Date().toISOString().split('T')[0],
+                id: undefined, sourceType: 'partner', partner_id: '', advisor_user_id: '', referral_code: '', arrival_date: new Date().toISOString().split('T')[0],
                 party_size: 2, revenue_generated: 0, status: 'Pending'
             })
             setRevenueInput('')

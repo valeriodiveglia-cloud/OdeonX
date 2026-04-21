@@ -21,7 +21,7 @@ export default function HROperationalSettingsPage() {
     const [editing, setEditing] = useState<ShiftType | null>(null)
     const [isNew, setIsNew] = useState(false)
     const [activeTab, setActiveTab] = useState<'shifts' | 'overtime'>('shifts')
-    const [overtimeSettings, setOvertimeSettings] = useState({ overtime_multiplier: 1.5, public_holiday_multiplier: 2.0 })
+    const [overtimeSettings, setOvertimeSettings] = useState({ overtime_multiplier_salary: 1.5, public_holiday_multiplier_salary: 2.0, overtime_multiplier_leave: 1.0, public_holiday_multiplier_leave: 1.0 })
 
     useEffect(() => { 
         setShiftTypes(getShiftTypes()) 
