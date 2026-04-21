@@ -49,6 +49,7 @@ const PORTAL_DICT = {
     ShowMore: 'Show all ({n})',
     ShowLess: 'Show less',
     FooterInfo: 'For questions, contact us directly · Data shown is read-only',
+    TotalBill: 'Total Bill',
     Language: 'Language',
     Connecting: 'Connecting...',
     Saving: 'Saving...'
@@ -85,6 +86,7 @@ const PORTAL_DICT = {
     ShowMore: 'Hiển thị tất cả ({n})',
     ShowLess: 'Ẩn bớt',
     FooterInfo: 'Vui lòng liên hệ trực tiếp cho mọi câu hỏi · Dữ liệu chỉ dùng để xem',
+    TotalBill: 'Tổng Hóa Đơn',
     Language: 'Ngôn ngữ',
     Connecting: 'Đang kết nối...',
     Saving: 'Đang lưu...'
@@ -491,9 +493,9 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
   const displayedPayouts = showAllPayouts ? payouts : payouts.slice(0, 5)
 
   return (
-    <div className="flex-1 bg-[#eedebf] min-h-screen pb-10">
+    <div className="flex-1 bg-[#f9f4ea] min-h-screen pb-10">
       {/* Header aligned with main app */}
-      <header className="bg-[#fbf5e6] border-b border-[#C2A580] sticky top-0 z-20 shadow-sm">
+      <header className="bg-white border-b border-[#e1d5c3] sticky top-0 z-20 shadow-[0_1px_3px_0_rgba(0,0,0,0.05)]">
         <div className="max-w-4xl mx-auto px-4 h-16 flex justify-between items-center">
           <div className="flex items-center gap-4">
              {logoUrl && <img src={logoUrl} alt="Logo" className="h-8 w-auto object-contain" />}
@@ -523,11 +525,11 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
 
         {/* Agreement Info */}
         {agreement && (
-          <div className="bg-[#fbf5e6] rounded-2xl border border-[#C2A580] p-5 shadow-sm">
+          <div className="bg-white rounded-2xl border border-[#e1d5c3] p-5 shadow-sm">
             <h2 className="text-[15px] font-bold text-[#3E2C19] mb-4 tracking-tight">{pT(lang, 'ActiveAgreement')}</h2>
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-[#eedebf] border border-[#D9BD9C] rounded-xl p-4">
-                <p className="text-xs font-semibold text-[#755533] uppercase tracking-wide">{pT(lang, 'Commission')}</p>
+              <div className="bg-[#f9f4ea] border border-[#e1d5c3] rounded-xl p-4">
+                <p className="text-xs font-semibold text-[#8c673d] uppercase tracking-wide">{pT(lang, 'Commission')}</p>
                 <p className="text-2xl font-black text-[#3E2C19] mt-0.5">
                   {agreement.commission_value}{agreement.commission_type === 'Percentage' ? '%' : ''}
                 </p>
@@ -542,7 +544,7 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
               )}
             </div>
             {agreement.valid_until && (
-              <p className="text-xs font-medium text-[#755533] mt-3 flex items-center gap-1.5 bg-[#eedebf] p-2 rounded-lg inline-flex">
+              <p className="text-xs font-medium text-[#755533] mt-3 flex items-center gap-1.5 bg-[#f9f4ea] p-2 rounded-lg inline-flex">
                 <Clock className="w-4 h-4 text-[#8C6B45]" />
                 {pT(lang, 'ValidUntil', { date: fmtDate(agreement.valid_until) })}
               </p>
@@ -551,28 +553,28 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
         )}
 
         {/* Referrals */}
-        <div className="bg-[#fbf5e6] rounded-2xl border border-[#C2A580] p-5 shadow-sm">
+        <div className="bg-white rounded-2xl border border-[#e1d5c3] p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[15px] font-bold text-[#3E2C19] flex items-center gap-2">
               <Users className="w-5 h-5 text-[#149372]" /> {pT(lang, 'Referrals')} ({summary.totalReferrals})
             </h2>
-            <div className="flex gap-2 text-[13px] font-semibold bg-[#eedebf] px-3 py-1.5 rounded-lg border border-[#D9BD9C]">
+            <div className="flex gap-2 text-[13px] font-semibold bg-[#f9f4ea] px-3 py-1.5 rounded-lg border border-[#e1d5c3]">
               <span className="text-[#149372]">{summary.validatedReferrals} {pT(lang, 'Validated')}</span>
-              <span className="text-[#AD8F6B]">|</span>
+              <span className="text-[#a48866]">|</span>
               <span className="text-[#149372]">{summary.pendingReferrals} {pT(lang, 'Pending')}</span>
             </div>
           </div>
 
           {referrals.length === 0 ? (
-            <div className="text-center py-10 bg-[#eedebf] rounded-xl border border-[#D9BD9C] border-dashed">
+            <div className="text-center py-10 bg-[#f9f4ea] rounded-xl border border-[#e1d5c3] border-dashed">
               <p className="text-sm font-medium text-[#755533]">{pT(lang, 'NoReferrals')}</p>
             </div>
           ) : (
             <div className="space-y-3">
               {displayedReferrals.map(r => (
-                <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#eedebf] border border-[#D9BD9C] rounded-xl p-4 gap-3 sm:gap-0 hover:border-[#C2A580] transition-colors">
+                <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-[#e1d5c3] rounded-xl p-4 gap-3 sm:gap-0 hover:border-[#d2c2ad] hover:shadow-sm transition-all">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-bold text-[#3E2C19] truncate">{r.guest_name}</p>
+                    <p className="text-[15px] font-bold text-[#3E2C19] truncate">{pT(lang, 'TotalBill')}: {fmtCurrency(r.revenue_generated)}</p>
                     <p className="text-[13px] font-medium text-[#755533] mt-0.5">{fmtDate(r.arrival_date)} · {r.party_size} pax</p>
                   </div>
                   <div className="flex items-center gap-4 shrink-0 sm:ml-4 justify-between sm:justify-end">
@@ -594,19 +596,19 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
         </div>
 
         {/* Payouts */}
-        <div className="bg-[#fbf5e6] rounded-2xl border border-[#C2A580] p-5 shadow-sm">
+        <div className="bg-white rounded-2xl border border-[#e1d5c3] p-5 shadow-sm">
           <h2 className="text-[15px] font-bold text-[#3E2C19] flex items-center gap-2 mb-4">
             <DollarSign className="w-5 h-5 text-[#149372]" /> {pT(lang, 'PayoutHistory')} ({payouts.length})
           </h2>
 
           {payouts.length === 0 ? (
-            <div className="text-center py-10 bg-[#eedebf] rounded-xl border border-[#D9BD9C] border-dashed">
+            <div className="text-center py-10 bg-[#f9f4ea] rounded-xl border border-[#e1d5c3] border-dashed">
                <p className="text-sm font-medium text-[#755533]">{pT(lang, 'NoPayouts')}</p>
             </div>
           ) : (
             <div className="space-y-3">
               {displayedPayouts.map(p => (
-                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#eedebf] border border-[#D9BD9C] rounded-xl p-4 gap-3 sm:gap-0 hover:border-[#C2A580] transition-colors">
+                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-[#e1d5c3] rounded-xl p-4 gap-3 sm:gap-0 hover:border-[#d2c2ad] hover:shadow-sm transition-all">
                   <div className="min-w-0 flex-1">
                     <p className="text-[15px] font-bold text-[#3E2C19]">{p.period}</p>
                     <p className="text-[13px] font-medium text-[#755533] mt-0.5">
@@ -633,7 +635,7 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
         </div>
 
         {/* Footer */}
-        <p className="text-center text-[12px] font-medium text-[#8C6B45] pt-4 pb-8">
+        <p className="text-center text-[12px] font-medium text-[#a48866] pt-4 pb-8">
           {pT(lang, 'FooterInfo')}
         </p>
       </div>
@@ -644,16 +646,16 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
 /* ── Summary Card ── */
 function SummaryCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   const colorMap: Record<string, string> = {
-    amber: 'bg-[#dcefe9] border-orange-100',
-    emerald: 'bg-[#eef8f5] border-[#c1e8dd]',
+    amber: 'bg-[#fefaf0] border-[#ede0c9]',
+    emerald: 'bg-[#f4faf8] border-[#c1e8dd]',
   }
   return (
-    <div className={`${colorMap[color]} shadow-sm border rounded-2xl p-4 sm:p-5 flex flex-col items-center sm:items-start text-center sm:text-left`}>
+    <div className={`${colorMap[color]} shadow-[0_2px_8px_-4px_rgba(0,0,0,0.1)] border rounded-2xl p-4 sm:p-5 flex flex-col items-center sm:items-start text-center sm:text-left`}>
       <div className="sm:hidden mb-2">{icon}</div>
-      <div className="hidden sm:flex items-center gap-2 mb-3 bg-[#fbf5e6] p-1.5 rounded-lg border border-[#D9BD9C] shadow-sm self-start">
+      <div className="hidden sm:flex items-center gap-2 mb-3 bg-white p-1.5 rounded-lg border border-[#ede0c9] shadow-sm self-start">
          {icon} 
       </div>
-      <p className="text-[11px] sm:text-[12px] font-bold uppercase tracking-wider text-[#755533]">{label}</p>
+      <p className="text-[11px] sm:text-[12px] font-bold uppercase tracking-wider text-[#8c673d]">{label}</p>
       <p className="text-xl sm:text-3xl font-black text-[#3E2C19] mt-1">{value}</p>
     </div>
   )
