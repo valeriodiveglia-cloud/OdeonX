@@ -11,6 +11,7 @@ export type CRMPartner = {
   status: 'Leads' | 'Approached' | 'Waiting for Material' | 'Waiting for Activation' | 'Active' | 'Inactive/Paused' | 'Rejected' | string
   pipeline_stage: 'Leads' | 'Approached' | 'Waiting for Material' | 'Waiting for Activation' | 'Active' | 'Inactive/Paused' | 'Rejected' | string
   owner_id: string | null
+  created_by?: string | null
   notes: string | null
   rejection_reason?: string | null
   is_deleted?: boolean
