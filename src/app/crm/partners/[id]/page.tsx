@@ -210,13 +210,7 @@ export default function PartnerDetail() {
         return parts.slice(0, 2).join('.');
     }
 
-    const handleCommissionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setAgreementFormData({ ...agreementFormData, commission_value: formatCurrencyInput(e.target.value) });
-    }
 
-    const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setAgreementFormData({ ...agreementFormData, client_discount_value: formatCurrencyInput(e.target.value) });
-    }
     const [editFormData, setEditFormData] = useState({
         name: '',
         type: '',
