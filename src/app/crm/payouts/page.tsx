@@ -315,7 +315,7 @@ export default function CRMPayoutsPage() {
                     <p className="text-slate-500 mt-1">{t(language, 'PayoutsDesc')}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    {currentUser?.role !== 'sale advisor' && (
+                    {currentUser && currentUser.role !== 'sale advisor' && (
                         <button 
                             onClick={generatePayouts}
                             disabled={isGenerating}
