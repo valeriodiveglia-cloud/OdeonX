@@ -63,13 +63,21 @@ export default function LeftNavCRM() {
         router.push('/login')
     }
 
-    const filteredNav = NAV.filter(item => {
+    const filteredNav = NAV.map(item => {
+        if (role === 'sale advisor' && item.key === 'Settings') {
+            return { ...item, href: '/crm/settings/password' }
+        }
+        return item
+    }).filter(item => {
         if (role === null) return false; // Prevent flash of unauthorized icons while loading
         if (role === 'staff') {
             return item.href === '/crm/referrals'
         }
+        if (role === 'admin' || role === 'manager') {
+            if (item.href === '/crm/tasks') return false;
+        }
         if (role === 'sale advisor') {
-            return item.href === '/crm/partners' || item.href === '/crm/tasks' || item.href === '/crm/commissions' || item.href === '/crm/payouts'
+            return item.href === '/crm/partners' || item.href === '/crm/tasks' || item.href === '/crm/commissions' || item.href === '/crm/payouts' || item.href === '/crm/settings/password'
         }
         return true
     })
