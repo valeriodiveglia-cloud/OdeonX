@@ -92,12 +92,48 @@ export default function HomeDashboard() {
         if (data.user) {
           const { data: acc } = await supabase
             .from('app_accounts')
-            .select('role')
+            .select('role, preferences')
             .eq('user_id', data.user.id)
             .single()
 
           if (mounted) {
             setRole(acc?.role || null)
+            // Two-way sync: Upgrade DB if local storage has data but DB is empty
+            let prefs = acc?.preferences || {};
+            let prefsUpdated = false;
+
+            const localQa = localStorage.getItem(`dashboard.quickAccess.${data.user.id}`);
+            const localRecent = localStorage.getItem(`dashboard.recent.${data.user.id}`);
+            const localOrder = localStorage.getItem(`dashboard.moduleOrder.${data.user.id}`);
+
+            if (!prefs.quickAccessIds && localQa) {
+              try { prefs.quickAccessIds = JSON.parse(localQa); prefsUpdated = true; } catch(e){}
+            }
+            if (!prefs.recentVisits && localRecent) {
+              try { prefs.recentVisits = JSON.parse(localRecent); prefsUpdated = true; } catch(e){}
+            }
+            if (!prefs.moduleOrder && localOrder) {
+              try { prefs.moduleOrder = JSON.parse(localOrder); prefsUpdated = true; } catch(e){}
+            }
+
+            if (prefsUpdated) {
+               await supabase.rpc('update_user_preferences', { prefs });
+            }
+
+            // Sync preferences FROM DB TO localStorage to ensure other browsers get the correct data
+            if (prefs.quickAccessIds) {
+              localStorage.setItem(`dashboard.quickAccess.${data.user.id}`, JSON.stringify(prefs.quickAccessIds));
+            }
+            if (prefs.recentVisits) {
+              localStorage.setItem(`dashboard.recent.${data.user.id}`, JSON.stringify(prefs.recentVisits));
+            }
+            if (prefs.moduleOrder) {
+              localStorage.setItem(`dashboard.moduleOrder.${data.user.id}`, JSON.stringify(prefs.moduleOrder));
+            }
+
+            // Force state to reload with new local storage values
+            window.dispatchEvent(new Event('dashboard_preferences_updated'));
+
             if (acc?.role === 'sale advisor') {
               isRedirecting = true
               router.replace('/crm/partners')
@@ -146,34 +182,80 @@ export default function HomeDashboard() {
   // Load user specific info
   useEffect(() => {
     if (!user) return
-    const qaKey = `dashboard.quickAccess.${user.id}`
-    const recentKey = `dashboard.recent.${user.id}`
-    const orderKey = `dashboard.moduleOrder.${user.id}`
     
-    try {
-      // Recent Visits
-      const storedRecent = localStorage.getItem(recentKey)
-      if (storedRecent) {
-        const paths: string[] = JSON.parse(storedRecent)
-        const matched = paths.map(getPageByHref).filter(Boolean) as AppPage[]
-        setRecentVisits(matched)
-      }
+    const loadLocalPrefs = () => {
+      const qaKey = `dashboard.quickAccess.${user.id}`
+      const recentKey = `dashboard.recent.${user.id}`
+      const orderKey = `dashboard.moduleOrder.${user.id}`
       
-      // Quick Access
-      const storedQa = localStorage.getItem(qaKey)
-      if (storedQa) {
-        setQuickAccessIds(JSON.parse(storedQa).slice(0, 6))
-      } else {
-        setQuickAccessIds(getDefaultQuickAccess(role))
+      try {
+        // Recent Visits
+        const storedRecent = localStorage.getItem(recentKey)
+        if (storedRecent) {
+          const paths: string[] = JSON.parse(storedRecent)
+          const matched = paths.map(getPageByHref).filter(Boolean) as AppPage[]
+          setRecentVisits(matched)
+        }
+        
+        // Quick Access
+        const storedQa = localStorage.getItem(qaKey)
+        if (storedQa) {
+          setQuickAccessIds(JSON.parse(storedQa).slice(0, 6))
+        } else {
+          setQuickAccessIds(getDefaultQuickAccess(role))
+        }
+        
+        // Module Order
+        const storedOrder = localStorage.getItem(orderKey)
+        if (storedOrder) {
+          setModuleOrder(JSON.parse(storedOrder))
+        }
+      } catch (e) {
+        // quiet
       }
-      
-      // Module Order
-      const storedOrder = localStorage.getItem(orderKey)
-      if (storedOrder) {
-        setModuleOrder(JSON.parse(storedOrder))
-      }
-    } catch (e) {
-      // quiet
+    }
+
+    loadLocalPrefs()
+
+    window.addEventListener('dashboard_preferences_updated', loadLocalPrefs)
+
+    // Add real-time listener to keep multiple open browsers in sync
+    const channel = supabase.channel(`app_accounts_changes_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'app_accounts',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const newPrefs = payload.new.preferences || {}
+          
+          let updated = false
+          if (newPrefs.quickAccessIds) {
+            localStorage.setItem(`dashboard.quickAccess.${user.id}`, JSON.stringify(newPrefs.quickAccessIds))
+            updated = true
+          }
+          if (newPrefs.recentVisits) {
+            localStorage.setItem(`dashboard.recent.${user.id}`, JSON.stringify(newPrefs.recentVisits))
+            updated = true
+          }
+          if (newPrefs.moduleOrder) {
+            localStorage.setItem(`dashboard.moduleOrder.${user.id}`, JSON.stringify(newPrefs.moduleOrder))
+            updated = true
+          }
+          
+          if (updated) {
+            window.dispatchEvent(new Event('dashboard_preferences_updated'))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      window.removeEventListener('dashboard_preferences_updated', loadLocalPrefs)
+      supabase.removeChannel(channel)
     }
   }, [user, role])
 
@@ -196,12 +278,31 @@ export default function HomeDashboard() {
     return () => window.removeEventListener('recent_visits_updated', handleRecentUpdate)
   }, [user])
 
+  const updatePreferences = async (newPrefs: any) => {
+    if (!user) return
+    try {
+      const { data: accData } = await supabase
+        .from('app_accounts')
+        .select('preferences')
+        .eq('user_id', user.id)
+        .single()
+        
+      const currentPrefs = accData?.preferences || {}
+      const updatedPrefs = { ...currentPrefs, ...newPrefs }
+      
+      await supabase.rpc('update_user_preferences', { prefs: updatedPrefs })
+    } catch (err) {
+      console.error('Failed to update preferences', err)
+    }
+  }
+
   const saveQuickAccess = (newIds: string[]) => {
     if (!user) return
     const qaKey = `dashboard.quickAccess.${user.id}`
     localStorage.setItem(qaKey, JSON.stringify(newIds))
     setQuickAccessIds(newIds)
     setIsQaModalOpen(false)
+    updatePreferences({ quickAccessIds: newIds })
   }
 
   const quickAccessPages = quickAccessIds
@@ -213,6 +314,7 @@ export default function HomeDashboard() {
     const orderKey = `dashboard.moduleOrder.${user.id}`
     localStorage.setItem(orderKey, JSON.stringify(newOrder))
     setModuleOrder(newOrder)
+    updatePreferences({ moduleOrder: newOrder })
   }
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
