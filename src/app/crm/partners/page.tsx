@@ -259,7 +259,7 @@ export default function CRMPartnersPage() {
                     pipeline_stage: formData.pipeline_stage,
                     priority: 'Medium',
                     notes: formData.notes || null,
-                    owner_id: currentUser?.role === 'sale advisor' ? currentUser.id : undefined,
+                    owner_id: currentUser?.id || null,
                     created_by: currentUser?.id || null,
                 }
             ])
