@@ -107,4 +107,5 @@ export type CRMTask = {
   due_date: string | null
   priority: 'Low' | 'Medium' | 'High' | string
   status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled' | string
+  created_by?: string | null
 }
