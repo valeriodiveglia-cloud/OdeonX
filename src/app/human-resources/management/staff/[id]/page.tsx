@@ -780,7 +780,17 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
             if (finesRes.error) throw finesRes.error
             if (catRes.error) throw catRes.error
             setFines(finesRes.data || [])
-            setCatalog(catRes.data || [])
+            
+            // Filter catalog based on applicability
+            const allCatalog = (catRes.data as HRDisciplinaryCatalog[]) || []
+            const filteredCatalog = allCatalog.filter(c => {
+                if (!c.applicability_type || c.applicability_type === 'global') return true;
+                if (c.applicability_type === 'department' && c.target_id === staff.department_id) return true;
+                if (c.applicability_type === 'position' && c.target_id === staff.position_id) return true;
+                return false;
+            })
+            
+            setCatalog(filteredCatalog)
         } catch (err) {
             console.error('Error fetching fines/catalog', err)
         } finally {

@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Plus, Loader2, Trash2, Pencil, NotebookPen, X, CheckCircle, Tag } from 'lucide-react'
+import { Plus, Loader2, Trash2, Pencil, NotebookPen, X, CheckCircle, Tag, Globe, Building2, Briefcase } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRDisciplinaryCatalog, HRDisciplinaryCategory } from '@/types/human-resources'
+import { HRDisciplinaryCatalog, HRDisciplinaryCategory, HRDepartment, HRPosition } from '@/types/human-resources'
 
 const fmt = (n: number | null) => {
     if (n === null || isNaN(n)) return '0'
@@ -13,6 +13,8 @@ const fmt = (n: number | null) => {
 export default function FinesTablePage() {
     const [catalog, setCatalog] = useState<HRDisciplinaryCatalog[]>([])
     const [categories, setCategories] = useState<HRDisciplinaryCategory[]>([])
+    const [departments, setDepartments] = useState<HRDepartment[]>([])
+    const [positions, setPositions] = useState<HRPosition[]>([])
     const [loading, setLoading] = useState(true)
     const [modalOpen, setModalOpen] = useState(false)
     const [editingNode, setEditingNode] = useState<HRDisciplinaryCatalog | null>(null)
@@ -20,13 +22,20 @@ export default function FinesTablePage() {
     const fetchCatalog = useCallback(async () => {
         setLoading(true)
         try {
-            const [cRes, catRes] = await Promise.all([
+            const [cRes, catRes, deptRes, posRes] = await Promise.all([
                 supabase.from('hr_disciplinary_catalog').select('*, category:hr_disciplinary_categories(*)').order('infraction_name', { ascending: true }),
-                supabase.from('hr_disciplinary_categories').select('*').order('name', { ascending: true })
+                supabase.from('hr_disciplinary_categories').select('*').order('name', { ascending: true }),
+                supabase.from('hr_departments').select('*').order('name', { ascending: true }),
+                supabase.from('hr_positions').select('*').order('name', { ascending: true })
             ])
-            if (cRes.error) throw cRes.error
+            if (cRes.error) {
+                console.error("PostgREST Error:", cRes.error)
+                throw cRes.error
+            }
             setCatalog(cRes.data as HRDisciplinaryCatalog[] || [])
             setCategories(catRes.data as HRDisciplinaryCategory[] || [])
+            setDepartments(deptRes.data as HRDepartment[] || [])
+            setPositions(posRes.data as HRPosition[] || [])
         } catch (err) {
             console.error('Error fetching catalog', err)
         } finally {
@@ -91,18 +100,19 @@ export default function FinesTablePage() {
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
                             <tr>
-                                <th className="px-6 py-4 border-r border-gray-100 w-1/2">Infraction / Reason</th>
-                                <th className="px-6 py-4 border-r border-gray-100 w-1/4">Category</th>
+                                <th className="px-6 py-4 border-r border-gray-100 w-2/5">Infraction / Reason</th>
+                                <th className="px-6 py-4 border-r border-gray-100 w-1/5">Category</th>
+                                <th className="px-6 py-4 border-r border-gray-100 w-1/5">Applicability</th>
                                 <th className="px-6 py-4 border-r border-gray-100 text-right">Default Amount (VND)</th>
                                 <th className="px-6 py-4 text-center w-32">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {loading ? (
-                                <tr><td colSpan={3} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></td></tr>
+                                <tr><td colSpan={5} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></td></tr>
                             ) : catalog.length === 0 ? (
                                 <tr>
-                                    <td colSpan={3} className="text-center py-12 text-gray-400">
+                                    <td colSpan={5} className="text-center py-12 text-gray-400">
                                         No infractions found. Add one to build the disciplinary catalog.
                                     </td>
                                 </tr>
@@ -119,6 +129,23 @@ export default function FinesTablePage() {
                                                 </span>
                                             ) : (
                                                 <span className="text-gray-400 text-xs italic">—</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 border-r border-gray-100">
+                                            {c.applicability_type === 'global' && (
+                                                <div className="flex items-center gap-1.5 text-gray-600">
+                                                    <Globe className="w-3.5 h-3.5" /> <span className="text-sm font-medium">Global</span>
+                                                </div>
+                                            )}
+                                            {c.applicability_type === 'department' && (
+                                                <div className="flex items-center gap-1.5 text-blue-600">
+                                                    <Building2 className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{departments.find(d => d.id === c.target_id)?.name || 'Unknown Department'}</span>
+                                                </div>
+                                            )}
+                                            {c.applicability_type === 'position' && (
+                                                <div className="flex items-center gap-1.5 text-purple-600">
+                                                    <Briefcase className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{positions.find(p => p.id === c.target_id)?.name || 'Unknown Position'}</span>
+                                                </div>
                                             )}
                                         </td>
                                         <td className="px-6 py-4 border-r border-gray-100 text-right font-mono">
@@ -156,6 +183,8 @@ export default function FinesTablePage() {
                             <FormCatalog 
                                 initialData={editingNode} 
                                 categories={categories}
+                                departments={departments}
+                                positions={positions}
                                 onSave={handleSave} 
                                 onCancel={() => setModalOpen(false)} 
                             />
@@ -167,21 +196,43 @@ export default function FinesTablePage() {
     )
 }
 
-function FormCatalog({ initialData, categories, onSave, onCancel }: { initialData: HRDisciplinaryCatalog | null, categories: HRDisciplinaryCategory[], onSave: (d: Partial<HRDisciplinaryCatalog>) => void, onCancel: () => void }) {
+function FormCatalog({ 
+    initialData, 
+    categories, 
+    departments,
+    positions,
+    onSave, 
+    onCancel 
+}: { 
+    initialData: HRDisciplinaryCatalog | null, 
+    categories: HRDisciplinaryCategory[], 
+    departments: HRDepartment[],
+    positions: HRPosition[],
+    onSave: (d: Partial<HRDisciplinaryCatalog>) => void, 
+    onCancel: () => void 
+}) {
     const [name, setName] = useState(initialData?.infraction_name || '')
     const [amount, setAmount] = useState(initialData?.default_amount || 0)
     const [categoryId, setCategoryId] = useState(initialData?.category_id || '')
+    const [applicabilityType, setApplicabilityType] = useState<'global' | 'department' | 'position'>(initialData?.applicability_type || 'global')
+    const [targetId, setTargetId] = useState(initialData?.target_id || '')
     const [displayAmount, setDisplayAmount] = useState(initialData?.default_amount ? Number(initialData.default_amount).toLocaleString('en-US') : '')
     const [submitting, setSubmitting] = useState(false)
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (!name || amount < 0) return
+        if (applicabilityType !== 'global' && !targetId) {
+            alert('Please select a target department or position.')
+            return
+        }
         setSubmitting(true)
         onSave({
             infraction_name: name,
             default_amount: amount,
-            category_id: categoryId || null
+            category_id: categoryId || null,
+            applicability_type: applicabilityType,
+            target_id: applicabilityType === 'global' ? null : targetId
         })
     }
 
@@ -199,39 +250,103 @@ function FormCatalog({ initialData, categories, onSave, onCancel }: { initialDat
                 />
             </div>
 
-            <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
-                <select 
-                    value={categoryId} 
-                    onChange={e => setCategoryId(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                    <option value="">No Category</option>
-                    {categories.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                </select>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
+                    <select 
+                        value={categoryId} 
+                        onChange={e => setCategoryId(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="">No Category</option>
+                        {categories.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Default Fine (VND) <span className="text-red-500">*</span></label>
+                    <input 
+                        type="text" 
+                        required 
+                        value={displayAmount} 
+                        onChange={e => {
+                            let val = e.target.value.replace(/[^0-9]/g, '');
+                            if (val) {
+                                setDisplayAmount(parseInt(val, 10).toLocaleString('en-US'))
+                                setAmount(parseInt(val, 10))
+                            } else {
+                                setDisplayAmount('')
+                                setAmount(0)
+                            }
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" 
+                        placeholder="0" 
+                    />
+                </div>
             </div>
-            
-            <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Default Fine Amount (VND) <span className="text-red-500">*</span></label>
-                <input 
-                    type="text" 
-                    required 
-                    value={displayAmount} 
-                    onChange={e => {
-                        let val = e.target.value.replace(/[^0-9]/g, '');
-                        if (val) {
-                            setDisplayAmount(parseInt(val, 10).toLocaleString('en-US'))
-                            setAmount(parseInt(val, 10))
-                        } else {
-                            setDisplayAmount('')
-                            setAmount(0)
-                        }
-                    }}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" 
-                    placeholder="0" 
-                />
+
+            <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-3">Applicability Scope</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('global'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'global' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Globe className="w-4 h-4" /> Global
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('department'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'department' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Building2 className="w-4 h-4" /> Department
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('position'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'position' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Briefcase className="w-4 h-4" /> Position
+                        </button>
+                    </div>
+                </div>
+
+                {applicabilityType === 'department' && (
+                    <div className="animate-in fade-in slide-in-from-top-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Target Department <span className="text-red-500">*</span></label>
+                        <select 
+                            required
+                            value={targetId} 
+                            onChange={e => setTargetId(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">Select Department...</option>
+                            {departments.map(d => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                {applicabilityType === 'position' && (
+                    <div className="animate-in fade-in slide-in-from-top-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Target Position <span className="text-red-500">*</span></label>
+                        <select 
+                            required
+                            value={targetId} 
+                            onChange={e => setTargetId(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">Select Position...</option>
+                            {positions.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
             <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">

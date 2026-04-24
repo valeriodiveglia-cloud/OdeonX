@@ -13,7 +13,11 @@ import { t } from '@/lib/i18n'
 interface ExtendedTask extends CRMTask {
     crm_partners: {
         name: string
-    } | null
+    } | null;
+    creator?: {
+        name: string;
+        email: string;
+    } | null;
 }
 
 const COLUMNS: { id: string, label: string, color: string }[] = [
@@ -49,7 +53,7 @@ export default function CRMTasksPage() {
         setLoading(true)
         const [tasksRes, partnersRes] = await Promise.all([
             // Use maybeSingle or let it just return array depending on row.
-            supabase.from('crm_tasks').select(`*, crm_partners(name)`).order('created_at', { ascending: false }),
+            supabase.from('crm_tasks').select(`*, crm_partners(name), creator:app_accounts!crm_tasks_created_by_fkey(name, email)`).order('created_at', { ascending: false }),
             supabase.from('crm_partners').select('id, name').order('name')
         ])
 
@@ -91,16 +95,16 @@ export default function CRMTasksPage() {
         e.preventDefault()
         setDragActiveCol(null)
         
-        if (currentUser?.role === 'owner') {
-            alert(t(language, 'OwnersCannotModifyTasks'))
-            return
-        }
-
         const taskId = e.dataTransfer.getData('taskId')
         if (!taskId) return
 
         const task = tasks.find(t => t.id === taskId)
-        if (task && task.status === newStatus) return
+        if (!task || (task.created_by !== currentUser?.id && currentUser?.role !== 'owner')) {
+            alert(t(language, 'OwnersCannotModifyTasks') || 'Only the creator or owner can move this task.');
+            return;
+        }
+
+        if (task.status === newStatus) return
 
         // Optimistic update
         setTasks(prev => prev.map(t => 
@@ -141,13 +145,17 @@ export default function CRMTasksPage() {
 
             let req
             if (formData.id) {
-                req = supabase.from('crm_tasks').update(payload).eq('id', formData.id)
+                req = supabase.from('crm_tasks').update(payload).eq('id', formData.id).select()
             } else {
-                req = supabase.from('crm_tasks').insert([payload])
+                req = supabase.from('crm_tasks').insert([payload]).select()
             }
 
-            const { error } = await req
+            const { data, error } = await req
             if (error) throw error
+            if (!data || data.length === 0) {
+                alert(t(language, 'FailedSaveTask') + ' (Permission denied)')
+                return
+            }
 
             setIsModalOpen(false)
             setFormData({
@@ -179,8 +187,12 @@ export default function CRMTasksPage() {
         if (!formData.id) return
         if (!confirm(t(language, 'ConfirmDeleteTask'))) return
         try {
-            const { error } = await supabase.from('crm_tasks').delete().eq('id', formData.id)
+            const { data, error } = await supabase.from('crm_tasks').delete().eq('id', formData.id).select()
             if (error) throw error
+            if (!data || data.length === 0) {
+                alert(t(language, 'FailedDeleteTask') + ' (Permission denied)')
+                return
+            }
             setTasks(tasks.filter(t => t.id !== formData.id))
             setIsModalOpen(false)
         } catch (error) {
@@ -252,6 +264,7 @@ export default function CRMTasksPage() {
                                             key={task.id} 
                                             task={task} 
                                             language={language}
+                                            canEdit={currentUser?.id === task.created_by || currentUser?.role === 'owner'}
                                             onEdit={() => openEditModal(task)}
                                         />
                                     ))}
@@ -267,7 +280,11 @@ export default function CRMTasksPage() {
                 <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
-                            <h2 className="text-xl font-bold text-slate-900">{formData.id ? t(language, 'EditTask') : t(language, 'NewTask')}</h2>
+                            <h2 className="text-xl font-bold text-slate-900">
+                                {formData.id ? 
+                                    ((tasks.find(t => t.id === formData.id)?.created_by === currentUser?.id || currentUser?.role === 'owner') ? t(language, 'EditTask') : t(language, 'TaskDetails') || 'Task Details') 
+                                    : t(language, 'NewTask')}
+                            </h2>
                             <button 
                                 onClick={() => setIsModalOpen(false)}
                                 className="text-slate-400 hover:text-slate-600 p-2"
@@ -283,9 +300,10 @@ export default function CRMTasksPage() {
                                     <input 
                                         type="text" 
                                         required
+                                        disabled={formData.id ? (tasks.find(t => t.id === formData.id)?.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                         value={formData.title}
                                         onChange={e => setFormData({...formData, title: e.target.value})}
-                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                         placeholder={t(language, 'TaskTitlePlaceholder')}
                                     />
                                 </div>
@@ -294,8 +312,9 @@ export default function CRMTasksPage() {
                                     <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'RelatedPartner')}</label>
                                     <select 
                                         value={formData.partner_id}
+                                        disabled={formData.id ? (tasks.find(t => t.id === formData.id)?.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                         onChange={e => setFormData({...formData, partner_id: e.target.value})}
-                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                     >
                                         <option value="">{t(language, 'NoSpecificPartner')}</option>
                                         {partners.map(p => (
@@ -309,17 +328,19 @@ export default function CRMTasksPage() {
                                         <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'DueDate')}</label>
                                         <input 
                                             type="date" 
+                                            disabled={formData.id ? (tasks.find(t => t.id === formData.id)?.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                             value={formData.due_date}
                                             onChange={e => setFormData({...formData, due_date: e.target.value})}
-                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'Priority')}</label>
                                         <select 
                                             value={formData.priority}
+                                            disabled={formData.id ? (tasks.find(t => t.id === formData.id)?.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                             onChange={e => setFormData({...formData, priority: e.target.value})}
-                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                         >
                                             <option value="Low">{t(language, 'Low')}</option>
                                             <option value="Medium">{t(language, 'Medium')}</option>
@@ -332,8 +353,9 @@ export default function CRMTasksPage() {
                                     <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'TaskStatus')}</label>
                                     <select 
                                         value={formData.status}
+                                        disabled={formData.id ? (tasks.find(t => t.id === formData.id)?.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                         onChange={e => setFormData({...formData, status: e.target.value})}
-                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                     >
                                         <option value="Pending">{t(language, 'Pending')}</option>
                                         <option value="In Progress">{t(language, 'InProgress')}</option>
@@ -346,9 +368,10 @@ export default function CRMTasksPage() {
                                     <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'DescriptionLabel')}</label>
                                     <textarea 
                                         rows={3}
+                                        disabled={formData.id ? (tasks.find(t => t.id === formData.id)?.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                         value={formData.description}
                                         onChange={e => setFormData({...formData, description: e.target.value})}
-                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition resize-none"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition resize-none disabled:opacity-60"
                                         placeholder={t(language, 'TaskDescPlaceholder')}
                                     />
                                 </div>
@@ -356,7 +379,7 @@ export default function CRMTasksPage() {
 
                             <div className="flex justify-between items-center pt-4 border-t border-slate-100">
                                 <div>
-                                    {formData.id && (
+                                    {formData.id && (tasks.find(t => t.id === formData.id)?.created_by === currentUser?.id || currentUser?.role === 'owner') && (
                                         <button 
                                             type="button"
                                             onClick={handleDeleteTask}
@@ -372,20 +395,22 @@ export default function CRMTasksPage() {
                                         onClick={() => setIsModalOpen(false)}
                                         className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition"
                                     >
-                                        {t(language, 'Cancel')}
+                                        {(!formData.id || tasks.find(t => t.id === formData.id)?.created_by === currentUser?.id || currentUser?.role === 'owner') ? t(language, 'Cancel') : (t(language, 'Close') || 'Close')}
                                     </button>
-                                    <button 
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                    >
-                                        {isSubmitting ? (
-                                            <>
-                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                {t(language, 'Saving')}
-                                            </>
-                                        ) : t(language, 'SaveTask')}
-                                    </button>
+                                    {(!formData.id || tasks.find(t => t.id === formData.id)?.created_by === currentUser?.id || currentUser?.role === 'owner') && (
+                                        <button 
+                                            type="submit"
+                                            disabled={isSubmitting}
+                                            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                        >
+                                            {isSubmitting ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                    {t(language, 'Saving')}
+                                                </>
+                                            ) : t(language, 'SaveTask')}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </form>
@@ -396,7 +421,7 @@ export default function CRMTasksPage() {
     )
 }
 
-function TaskCard({ task, onEdit, language }: { task: ExtendedTask, onEdit: () => void, language: string }) {
+function TaskCard({ task, onEdit, language, canEdit }: { task: ExtendedTask, onEdit: () => void, language: string, canEdit: boolean }) {
     
     // Check if task is overdue
     let isOverdue = false;
@@ -410,10 +435,10 @@ function TaskCard({ task, onEdit, language }: { task: ExtendedTask, onEdit: () =
 
     return (
         <div 
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData('taskId', task.id) }}
+            draggable={canEdit}
+            onDragStart={(e) => { if(canEdit) e.dataTransfer.setData('taskId', task.id) }}
             onClick={onEdit}
-            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer group block"
+            className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer group block ${!canEdit ? 'opacity-90' : ''}`}
         >
             <div className="flex pr-2 justify-between items-start mb-2 relative">
                 <div className="font-semibold text-slate-900 leading-snug">{task.title}</div>
@@ -428,6 +453,12 @@ function TaskCard({ task, onEdit, language }: { task: ExtendedTask, onEdit: () =
             {task.description && (
                 <div className="text-xs text-slate-500 mb-3 line-clamp-2">
                     {task.description}
+                </div>
+            )}
+            
+            {task.creator && (
+                <div className="text-[11px] font-medium text-slate-400 mb-2 truncate">
+                    {t(language, 'CreatedBy') || 'Created by'}: <span className="text-slate-500">{task.creator.name || task.creator.email}</span>
                 </div>
             )}
             

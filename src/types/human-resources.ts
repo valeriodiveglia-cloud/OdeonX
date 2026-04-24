@@ -188,10 +188,14 @@ export interface HRDisciplinaryCatalog {
   infraction_name: string;
   default_amount: number;
   category_id: string | null;
+  applicability_type: 'global' | 'department' | 'position';
+  target_id: string | null;
   created_at: string;
   updated_at: string;
   // Joined
   category?: HRDisciplinaryCategory | null;
+  hr_departments?: HRDepartment | null;
+  hr_positions?: HRPosition | null;
 }
 
 export type FineStatus = 'pending' | 'paid' | 'waived' | 'disputed';

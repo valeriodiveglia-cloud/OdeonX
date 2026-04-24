@@ -169,8 +169,12 @@ export default function PartnerDetail() {
                 status: taskFormData.status,
             }
             if (taskFormData.id) {
-                const { error } = await supabase.from('crm_tasks').update(payload).eq('id', taskFormData.id)
+                const { data, error } = await supabase.from('crm_tasks').update(payload).eq('id', taskFormData.id).select().single()
                 if (error) throw error
+                if (!data) {
+                    alert('Failed to save task. (Permission denied)')
+                    return
+                }
                 setTasks(tasks.map(t => t.id === taskFormData.id ? { ...t, ...payload } as CRMTask : t))
             } else {
                 const { data, error } = await supabase.from('crm_tasks').insert([payload]).select().single()
@@ -191,8 +195,12 @@ export default function PartnerDetail() {
         if (!taskFormData.id) return
         if (!confirm('Are you sure you want to delete this task?')) return
         try {
-            const { error } = await supabase.from('crm_tasks').delete().eq('id', taskFormData.id)
+            const { data, error } = await supabase.from('crm_tasks').delete().eq('id', taskFormData.id).select()
             if (error) throw error
+            if (!data || data.length === 0) {
+                alert('Failed to delete task. (Permission denied)')
+                return
+            }
             setTasks(tasks.filter(t => t.id !== taskFormData.id))
             setIsTaskModalOpen(false)
         } catch (error) {
@@ -423,7 +431,7 @@ export default function PartnerDetail() {
                 supabase.from('crm_interactions').select('*').eq('partner_id', partnerId).order('date', { ascending: false }),
                 supabase.from('crm_referrals').select('*').eq('partner_id', partnerId),
                 supabase.from('crm_documents').select('*').eq('partner_id', partnerId).order('created_at', { ascending: false }),
-                supabase.from('crm_tasks').select('*').eq('partner_id', partnerId).order('created_at', { ascending: false })
+                supabase.from('crm_tasks').select('*, creator:app_accounts!crm_tasks_created_by_fkey(name, email)').eq('partner_id', partnerId).order('created_at', { ascending: false })
             ])
 
             if (partnerRes.data) setPartner(partnerRes.data)
@@ -1233,12 +1241,17 @@ export default function PartnerDetail() {
                                     </div>
                                 ) : (
                                     tasks.map(task => (
-                                        <div key={task.id} onClick={() => { if(canEdit) { setTaskFormData(task); setIsTaskModalOpen(true); } }} className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${canEdit ? 'hover:border-blue-300 hover:shadow-md cursor-pointer' : ''}`}>
+                                        <div key={task.id} onClick={() => { setTaskFormData(task); setIsTaskModalOpen(true); }} className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-blue-300 hover:shadow-md cursor-pointer ${(task.created_by !== currentUser?.id && currentUser?.role !== 'owner') ? 'opacity-90' : ''}`}>
                                             <div className="flex flex-col">
                                                 <div className="font-semibold text-slate-900 leading-snug">{task.title}</div>
                                                 {task.description && (
                                                     <div className="text-sm text-slate-500 line-clamp-1 mt-0.5">
                                                         {task.description}
+                                                    </div>
+                                                )}
+                                                {(task as any).creator && (
+                                                    <div className="text-[11px] font-medium text-slate-400 mt-1">
+                                                        {t(language, 'CreatedBy') || 'Created by'}: <span className="text-slate-500">{(task as any).creator.name || (task as any).creator.email}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -1601,7 +1614,11 @@ export default function PartnerDetail() {
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
-                            <h2 className="text-xl font-bold text-slate-900">{taskFormData.id ? t(language, 'EditTask') : t(language, 'NewTask')}</h2>
+                            <h2 className="text-xl font-bold text-slate-900">
+                                {taskFormData.id ? 
+                                    ((taskFormData.created_by === currentUser?.id || currentUser?.role === 'owner') ? t(language, 'EditTask') : t(language, 'TaskDetails') || 'Task Details') 
+                                    : t(language, 'NewTask')}
+                            </h2>
                             <button 
                                 onClick={() => setIsTaskModalOpen(false)}
                                 className="text-slate-400 hover:text-slate-600 p-2"
@@ -1617,9 +1634,10 @@ export default function PartnerDetail() {
                                     <input 
                                         type="text" 
                                         required
+                                        disabled={taskFormData.id ? (taskFormData.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                         value={taskFormData.title || ''}
                                         onChange={e => setTaskFormData({...taskFormData, title: e.target.value})}
-                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                         placeholder={t(language, 'TaskTitlePlaceholder')}
                                     />
                                 </div>
@@ -1629,17 +1647,19 @@ export default function PartnerDetail() {
                                         <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'DueDate')}</label>
                                         <input 
                                             type="date" 
+                                            disabled={taskFormData.id ? (taskFormData.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                             value={taskFormData.due_date ? taskFormData.due_date.split('T')[0] : ''}
                                             onChange={e => setTaskFormData({...taskFormData, due_date: e.target.value})}
-                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'Priority')}</label>
                                         <select 
+                                            disabled={taskFormData.id ? (taskFormData.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                             value={taskFormData.priority}
                                             onChange={e => setTaskFormData({...taskFormData, priority: e.target.value})}
-                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                         >
                                             <option value="Low">{t(language, 'Low')}</option>
                                             <option value="Medium">{t(language, 'Medium')}</option>
@@ -1651,9 +1671,10 @@ export default function PartnerDetail() {
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'TaskStatus')}</label>
                                     <select 
+                                        disabled={taskFormData.id ? (taskFormData.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                         value={taskFormData.status}
                                         onChange={e => setTaskFormData({...taskFormData, status: e.target.value})}
-                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition disabled:opacity-60"
                                     >
                                         <option value="Pending">{t(language, 'Pending')}</option>
                                         <option value="In Progress">{t(language, 'InProgress')}</option>
@@ -1666,9 +1687,10 @@ export default function PartnerDetail() {
                                     <label className="block text-sm font-medium text-slate-700 mb-1">{t(language, 'TaskDescription')}</label>
                                     <textarea 
                                         rows={3}
+                                        disabled={taskFormData.id ? (taskFormData.created_by !== currentUser?.id && currentUser?.role !== 'owner') : false}
                                         value={taskFormData.description || ''}
                                         onChange={e => setTaskFormData({...taskFormData, description: e.target.value})}
-                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition resize-none"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition resize-none disabled:opacity-60"
                                         placeholder={t(language, 'TaskDescPlaceholder')}
                                     />
                                 </div>
@@ -1676,7 +1698,7 @@ export default function PartnerDetail() {
 
                             <div className="flex justify-between items-center pt-4 border-t border-slate-100">
                                 <div>
-                                    {taskFormData.id && (
+                                    {taskFormData.id && (taskFormData.created_by === currentUser?.id || currentUser?.role === 'owner') && (
                                         <button 
                                             type="button"
                                             onClick={handleTaskDelete}
@@ -1692,20 +1714,22 @@ export default function PartnerDetail() {
                                         onClick={() => setIsTaskModalOpen(false)}
                                         className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition"
                                     >
-                                        {t(language, 'Cancel')}
+                                        {(!taskFormData.id || taskFormData.created_by === currentUser?.id || currentUser?.role === 'owner') ? t(language, 'Cancel') : (t(language, 'Close') || 'Close')}
                                     </button>
-                                    <button 
-                                        type="submit"
-                                        disabled={isSubmittingTask}
-                                        className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                    >
-                                        {isSubmittingTask ? (
-                                            <>
-                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                {t(language, 'Saving')}
-                                            </>
-                                        ) : t(language, 'SaveTask')}
-                                    </button>
+                                    {(!taskFormData.id || taskFormData.created_by === currentUser?.id || currentUser?.role === 'owner') && (
+                                        <button 
+                                            type="submit"
+                                            disabled={isSubmittingTask}
+                                            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                        >
+                                            {isSubmittingTask ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                    {t(language, 'Saving')}
+                                                </>
+                                            ) : t(language, 'SaveTask')}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </form>

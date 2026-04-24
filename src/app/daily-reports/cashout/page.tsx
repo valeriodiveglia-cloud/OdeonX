@@ -1003,7 +1003,7 @@ export default function CashoutPage() {
                       </td>
                       <td className="p-2 whitespace-nowrap">{fmtDateDMY(r.date)}</td>
                       <td className="p-2 whitespace-nowrap">{r.created_at ? extractHHMM(r.created_at) : ''}</td>
-                      <td className="p-2">{r.description}</td>
+                      <td className="p-2 whitespace-normal break-words min-w-[15rem] max-w-sm">{r.description}</td>
                       <td className="p-2 whitespace-nowrap">{r.category || '-'}</td>
                       <td className="p-2 text-right tabular-nums">{fmtInt(r.amount)}</td>
                       <td className="p-2 whitespace-nowrap">{r.supplier_name || '-'}</td>

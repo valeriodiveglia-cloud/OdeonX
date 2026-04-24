@@ -305,7 +305,7 @@ export default function MonthlyCashoutPage() {
                             <tr key={r.id} className="border-t hover:bg-blue-50/40">
                                 <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
                                 <td className="p-2 whitespace-nowrap text-gray-500">{extractHHMM(r.created_at)}</td>
-                                <td className="p-2 whitespace-nowrap font-medium">{r.description}</td>
+                                <td className="p-2 whitespace-normal break-words min-w-[15rem] max-w-sm font-medium">{r.description}</td>
                                 <td className="p-2 whitespace-nowrap text-gray-600">{r.category}</td>
                                 <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold">{fmt(r.amount)}</td>
                                 <td className="p-2 whitespace-nowrap text-gray-600">{r.supplier_name}</td>
