@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, UserPlus, Target, MessageSquare, HandCoins, FileText, Activity, MapPin, Mail, Phone, Calendar, Plus, Clock, Check, CheckCircle2, AlertCircle, XCircle, X, Download, Trash2, UploadCloud, Edit3, ChevronLeft, ChevronRight, CalendarCheck2, Briefcase, MoreHorizontal, User } from 'lucide-react'
+import { ArrowLeft, UserPlus, Target, MessageSquare, HandCoins, FileText, Activity, MapPin, Mail, Phone, Calendar, Plus, Clock, Check, CheckCircle2, AlertCircle, XCircle, X, Download, Trash2, UploadCloud, Edit3, ChevronLeft, ChevronRight, CalendarCheck2, Briefcase, MoreHorizontal, User, Landmark, CreditCard } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Menu } from '@headlessui/react'
 import { supabase } from '@/lib/supabase_shim'
@@ -227,7 +227,10 @@ export default function PartnerDetail() {
         phone: '',
         location: '',
         notes: '',
-        owner_id: ''
+        owner_id: '',
+        bank_name: '',
+        bank_account_name: '',
+        bank_account_number: ''
     })
 
     const handleUpdatePartner = async (e: React.FormEvent) => {
@@ -243,6 +246,9 @@ export default function PartnerDetail() {
                 location: editFormData.location || null,
                 notes: editFormData.notes || null,
                 owner_id: editFormData.owner_id || null,
+                bank_name: editFormData.bank_name || null,
+                bank_account_name: editFormData.bank_account_name || null,
+                bank_account_number: editFormData.bank_account_number || null,
             }
 
             const isDowngradingAccess = currentUser?.role === 'sale advisor' && upd.owner_id !== currentUser.id;
@@ -587,7 +593,10 @@ export default function PartnerDetail() {
                                             phone: partner.phone || '',
                                             location: partner.location || '',
                                             notes: partner.notes || '',
-                                            owner_id: partner.owner_id || ''
+                                            owner_id: partner.owner_id || '',
+                                            bank_name: partner.bank_name || '',
+                                            bank_account_name: partner.bank_account_name || '',
+                                            bank_account_number: partner.bank_account_number || ''
                                         })
                                         setIsEditModalOpen(true)
                                     }}
@@ -712,13 +721,13 @@ export default function PartnerDetail() {
                         <div className="max-w-2xl mx-auto mt-8">
                             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                                 <h3 className="font-bold text-slate-900 mb-6">{t(language, 'ContactInfo')}</h3>
-                                <div className="space-y-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                     <div className="flex items-start gap-4 text-slate-600 text-sm">
                                         <div className="p-3 bg-slate-50 rounded-xl text-slate-400 shrink-0">
                                             <User className="w-5 h-5" />
                                         </div>
-                                        <div className="py-1">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5">{partner.contact_name || '-'}</div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate">{partner.contact_name || '-'}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'ContactPerson')}</div>
                                         </div>
                                     </div>
@@ -726,8 +735,8 @@ export default function PartnerDetail() {
                                         <div className="p-3 bg-slate-50 rounded-xl text-slate-400 shrink-0">
                                             <Phone className="w-5 h-5" />
                                         </div>
-                                        <div className="py-1">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5">{partner.phone || '-'}</div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate">{partner.phone || '-'}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'PhoneNumber')}</div>
                                         </div>
                                     </div>
@@ -735,8 +744,8 @@ export default function PartnerDetail() {
                                         <div className="p-3 bg-slate-50 rounded-xl text-slate-400 shrink-0">
                                             <Mail className="w-5 h-5" />
                                         </div>
-                                        <div className="py-1">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5">{partner.email || '-'}</div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate">{partner.email || '-'}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'EmailAddress')}</div>
                                         </div>
                                     </div>
@@ -744,18 +753,51 @@ export default function PartnerDetail() {
                                         <div className="p-3 bg-slate-50 rounded-xl text-slate-400 shrink-0">
                                             <MapPin className="w-5 h-5" />
                                         </div>
-                                        <div className="py-1">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5">{partner.location || '-'}</div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate">{partner.location || '-'}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'LocationZone')}</div>
                                         </div>
                                     </div>
-                                    <div className="border-t border-slate-100 my-2 pt-2"></div>
+
+                                    {/* Bank Details */}
+                                    <div className="col-span-1 sm:col-span-2 border-t border-slate-100 my-2 pt-2"></div>
+                                    
+                                    <div className="flex items-start gap-4 text-slate-600 text-sm">
+                                        <div className="p-3 bg-slate-50 rounded-xl text-slate-400 shrink-0">
+                                            <Landmark className="w-5 h-5" />
+                                        </div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_name}>{partner.bank_name || '-'}</div>
+                                            <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'BankName')}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-4 text-slate-600 text-sm">
+                                        <div className="p-3 bg-slate-50 rounded-xl text-slate-400 shrink-0">
+                                            <CreditCard className="w-5 h-5" />
+                                        </div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_account_number}>{partner.bank_account_number || '-'}</div>
+                                            <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'BankAccountNumber')}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-4 text-slate-600 text-sm sm:col-span-2">
+                                        <div className="p-3 bg-slate-50 rounded-xl text-slate-400 shrink-0">
+                                            <User className="w-5 h-5" />
+                                        </div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_account_name}>{partner.bank_account_name || '-'}</div>
+                                            <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'BankAccountName')}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="col-span-1 sm:col-span-2 border-t border-slate-100 my-2 pt-2"></div>
+
                                     <div className="flex items-start gap-4 text-slate-600 text-sm">
                                         <div className="p-3 bg-indigo-50 rounded-xl text-indigo-500 shrink-0">
                                             <Briefcase className="w-5 h-5" />
                                         </div>
-                                        <div className="py-1">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5">{ownerName || t(language, 'UnassignedCompany')}</div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate">{ownerName || t(language, 'UnassignedCompany')}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'AssignedTo')}</div>
                                         </div>
                                     </div>
@@ -763,8 +805,8 @@ export default function PartnerDetail() {
                                         <div className="p-3 bg-slate-50 rounded-xl text-slate-400 shrink-0">
                                             <UserPlus className="w-5 h-5" />
                                         </div>
-                                        <div className="py-1">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5">{createdByName || t(language, 'System')}</div>
+                                        <div className="py-1 min-w-0">
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate">{createdByName || t(language, 'System')}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'Creator')}</div>
                                         </div>
                                     </div>
@@ -780,13 +822,15 @@ export default function PartnerDetail() {
                                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm shrink-0">
                                     <h3 className="font-bold text-slate-900 mb-4">{t(language, 'ContactInfo')}</h3>
                                     <div className="space-y-3">
-                                        <div className="flex items-center gap-2.5 text-slate-600 text-sm">
-                                            <User className="w-4 h-4 text-slate-400 shrink-0" />
-                                            <div className="font-medium text-slate-900 truncate" title={partner.contact_name || undefined}>{partner.contact_name || '-'}</div>
-                                        </div>
-                                        <div className="flex items-center gap-2.5 text-slate-600 text-sm">
-                                            <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-                                            <div className="font-medium text-slate-900 truncate" title={partner.phone || undefined}>{partner.phone || '-'}</div>
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="flex items-center gap-2.5 text-slate-600 text-sm flex-1 min-w-0">
+                                                <User className="w-4 h-4 text-slate-400 shrink-0" />
+                                                <div className="font-medium text-slate-900 truncate" title={partner.contact_name || undefined}>{partner.contact_name || '-'}</div>
+                                            </div>
+                                            <div className="flex items-center gap-2.5 text-slate-600 text-sm flex-1 min-w-0">
+                                                <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                                                <div className="font-medium text-slate-900 truncate" title={partner.phone || undefined}>{partner.phone || '-'}</div>
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-2.5 text-slate-600 text-sm">
                                             <Mail className="w-4 h-4 text-slate-400 shrink-0" />
@@ -794,18 +838,37 @@ export default function PartnerDetail() {
                                         </div>
                                         <div className="flex items-start gap-2.5 text-slate-600 text-sm">
                                             <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                                            <div className="font-medium text-slate-900 line-clamp-2" title={partner.location || undefined}>{partner.location || '-'}</div>
+                                            <div className="font-medium text-slate-900 line-clamp-1" title={partner.location || undefined}>{partner.location || '-'}</div>
                                         </div>
+                                        
                                         <div className="border-t border-slate-100 my-2"></div>
-                                        <div className="flex items-center gap-2.5 text-slate-600 text-sm">
-                                            <Briefcase className="w-4 h-4 text-indigo-400 shrink-0" />
-                                            <div className="text-xs text-slate-500 mr-1">{t(language, 'Advisor')}:</div>
-                                            <div className="font-medium text-slate-900 truncate">{ownerName || t(language, 'Unassigned')}</div>
+                                        
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="flex items-center gap-2.5 text-slate-600 text-sm flex-1 min-w-0">
+                                                <Landmark className="w-4 h-4 text-slate-400 shrink-0" />
+                                                <div className="font-medium text-slate-900 truncate" title={partner.bank_name || undefined}>{partner.bank_name || '-'}</div>
+                                            </div>
+                                            <div className="flex items-center gap-2.5 text-slate-600 text-sm flex-1 min-w-0">
+                                                <CreditCard className="w-4 h-4 text-slate-400 shrink-0" />
+                                                <div className="font-medium text-slate-900 truncate" title={partner.bank_account_number || undefined}>{partner.bank_account_number || '-'}</div>
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-2.5 text-slate-600 text-sm">
-                                            <UserPlus className="w-4 h-4 text-slate-400 shrink-0" />
-                                            <div className="text-xs text-slate-500 mr-1">{t(language, 'Creator')}:</div>
-                                            <div className="font-medium text-slate-900 truncate">{createdByName || t(language, 'System')}</div>
+                                            <User className="w-4 h-4 text-slate-400 shrink-0" />
+                                            <div className="font-medium text-slate-900 truncate" title={partner.bank_account_name || undefined}>{partner.bank_account_name || '-'}</div>
+                                        </div>
+
+                                        <div className="border-t border-slate-100 my-2"></div>
+                                        
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="flex items-center gap-2.5 text-slate-600 text-sm flex-1 min-w-0">
+                                                <Briefcase className="w-4 h-4 text-indigo-400 shrink-0" />
+                                                <div className="font-medium text-slate-900 truncate" title={ownerName}>{ownerName || t(language, 'Unassigned')}</div>
+                                            </div>
+                                            <div className="flex items-center gap-2.5 text-slate-600 text-sm flex-1 min-w-0">
+                                                <UserPlus className="w-4 h-4 text-slate-400 shrink-0" />
+                                                <div className="font-medium text-slate-900 truncate" title={createdByName}>{createdByName || t(language, 'System')}</div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1470,7 +1533,44 @@ export default function PartnerDetail() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
+                            {/* Bank Details Section */}
+                            <div className="pt-4 border-t border-slate-100">
+                                <h3 className="text-sm font-semibold text-slate-800 mb-4">{t(language, 'BankDetails')}</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t(language, 'BankName')}</label>
+                                        <input 
+                                            type="text" 
+                                            value={editFormData.bank_name}
+                                            onChange={e => setEditFormData({...editFormData, bank_name: e.target.value})}
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            placeholder="Add bank name..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t(language, 'BankAccountName')}</label>
+                                        <input 
+                                            type="text" 
+                                            value={editFormData.bank_account_name}
+                                            onChange={e => setEditFormData({...editFormData, bank_account_name: e.target.value})}
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            placeholder="Add account holder name..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2 lg:col-span-1 sm:col-span-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t(language, 'BankAccountNumber')}</label>
+                                        <input 
+                                            type="text" 
+                                            value={editFormData.bank_account_number}
+                                            onChange={e => setEditFormData({...editFormData, bank_account_number: e.target.value})}
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            placeholder="Add account number..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 pt-4 border-t border-slate-100">
                                 <label className="block text-sm font-medium text-slate-700">{t(language, 'AssignedAdvisor')}</label>
                                 <select 
                                     value={editFormData.owner_id}

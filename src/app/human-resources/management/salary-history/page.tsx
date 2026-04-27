@@ -2,228 +2,58 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRStaffSalaryHistory, HRStaffMember, SalaryType } from '@/types/human-resources'
+import { HRStaffSalaryHistory, HRStaffMember, SalaryType, HRDepartment, HRPosition } from '@/types/human-resources'
+import { useSettings } from '@/contexts/SettingsContext'
 import CircularLoader from '@/components/CircularLoader'
+import SalaryModal from '@/components/human-resources/SalaryModal'
 import {
     TrendingUp, Plus, Search, X, Pencil, Trash2,
-    ArrowUpRight, DollarSign, Calendar, Users
+    ArrowUpRight, DollarSign, Calendar, Users, Briefcase, TrendingDown
 } from 'lucide-react'
 
 /* ─── Helpers ─── */
-const fmt = (n: number) => new Intl.NumberFormat('en-US').format(n)
+const fmt = (n: number) => new Intl.NumberFormat('en-US').format(Math.round(n))
 
-function ChangeIndicator({ prev, next }: { prev: number; next: number }) {
+function ChangeIndicator({ prev, next, type, incType, incValue, prevType, newType }: { prev: number; next: number; type: string; incType?: string | null; incValue?: number | null; prevType?: string | null; newType?: string | null }) {
     if (prev === 0) return <span className="text-xs text-gray-400">New</span>
+    
+    if (prevType && newType && prevType !== newType) {
+        return (
+            <div className="flex flex-col items-center">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                    <TrendingDown className="w-3 h-3" /> Type Changed
+                </span>
+            </div>
+        )
+    }
+
     const diff = next - prev
     const pct = ((diff / prev) * 100).toFixed(1)
     const isUp = diff > 0
+    const isDown = diff < 0
+    
     return (
-        <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${isUp ? 'text-emerald-600' : 'text-red-600'}`}>
-            <ArrowUpRight className={`w-3 h-3 ${isUp ? '' : 'rotate-180'}`} />
-            {isUp ? '+' : ''}{pct}%
-        </span>
-    )
-}
-
-/* ─── Modal ─── */
-interface SalaryModalProps {
-    open: boolean
-    onClose: () => void
-    onSave: (data: Partial<HRStaffSalaryHistory>) => Promise<void>
-    entry: HRStaffSalaryHistory | null
-    staffList: HRStaffMember[]
-    saving: boolean
-}
-
-function SalaryModal({ open, onClose, onSave, entry, staffList, saving }: SalaryModalProps) {
-    const [staffId, setStaffId]           = useState('')
-    const [effectiveDate, setEffectiveDate] = useState('')
-    const [prevAmount, setPrevAmount]     = useState('')
-    const [newAmount, setNewAmount]       = useState('')
-    const [salaryType, setSalaryType]     = useState<SalaryType>('fixed')
-    const [reason, setReason]             = useState('')
-    const [approvedBy, setApprovedBy]     = useState('')
-    const [notes, setNotes]               = useState('')
-
-    // When staff is selected and it's a new entry, auto-fill previous amount
-    useEffect(() => {
-        if (!entry && staffId) {
-            const staff = staffList.find(s => s.id === staffId)
-            if (staff) {
-                setPrevAmount(staff.salary_amount ? new Intl.NumberFormat('en-US').format(staff.salary_amount) : '')
-                setSalaryType(staff.salary_type)
-            }
-        }
-    }, [staffId, entry, staffList])
-
-    useEffect(() => {
-        if (entry) {
-            setStaffId(entry.staff_id)
-            setEffectiveDate(entry.effective_date || '')
-            setPrevAmount(entry.previous_amount ? new Intl.NumberFormat('en-US').format(entry.previous_amount) : '')
-            setNewAmount(entry.new_amount ? new Intl.NumberFormat('en-US').format(entry.new_amount) : '')
-            setSalaryType(entry.salary_type as SalaryType)
-            setReason(entry.reason || '')
-            setApprovedBy(entry.approved_by || '')
-            setNotes(entry.notes || '')
-        } else {
-            setStaffId(''); setEffectiveDate(new Date().toISOString().slice(0, 10))
-            setPrevAmount(''); setNewAmount(''); setSalaryType('fixed')
-            setReason(''); setApprovedBy(''); setNotes('')
-        }
-    }, [entry, open])
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        await onSave({
-            staff_id: staffId,
-            effective_date: effectiveDate,
-            previous_amount: Number(prevAmount.replace(/,/g, '')) || 0,
-            new_amount: Number(newAmount.replace(/,/g, '')) || 0,
-            salary_type: salaryType,
-            reason: reason.trim() || null,
-            approved_by: approvedBy.trim() || null,
-            notes: notes.trim() || null,
-        })
-    }
-
-    const changePreview = prevAmount && newAmount && Number(prevAmount.replace(/,/g, '')) > 0 && Number(newAmount.replace(/,/g, '')) > 0
-        ? (((Number(newAmount.replace(/,/g, '')) - Number(prevAmount.replace(/,/g, ''))) / Number(prevAmount.replace(/,/g, ''))) * 100).toFixed(1)
-        : null
-
-    if (!open) return null
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                    <h2 className="text-lg font-semibold text-gray-900">
-                        {entry ? 'Edit Salary Change' : 'Record Salary Change'}
-                    </h2>
-                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                    {/* Staff + Date */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Staff Member *</label>
-                            <select required value={staffId} onChange={e => setStaffId(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="">Select staff…</option>
-                                {staffList.filter(s => s.status === 'active').map(s => (
-                                    <option key={s.id} value={s.id}>{s.full_name} — {s.position}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Effective Date *</label>
-                            <input type="date" required value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                    </div>
-
-                    {/* Salary Type */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Salary Type</label>
-                        <div className="flex gap-3">
-                            <button type="button" onClick={() => setSalaryType('fixed')}
-                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition
-                                    ${salaryType === 'fixed' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                                Fixed / Month
-                            </button>
-                            <button type="button" onClick={() => setSalaryType('hourly')}
-                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition
-                                    ${salaryType === 'hourly' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                                Hourly
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Previous + New Amount */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Previous Amount (VND) *</label>
-                            <input type="text" required value={prevAmount} onChange={e => {
-                                const val = e.target.value.replace(/\D/g, '')
-                                setPrevAmount(val ? new Intl.NumberFormat('en-US').format(parseInt(val, 10)) : '')
-                            }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">New Amount (VND) *</label>
-                            <input type="text" required value={newAmount} onChange={e => {
-                                const val = e.target.value.replace(/\D/g, '')
-                                setNewAmount(val ? new Intl.NumberFormat('en-US').format(parseInt(val, 10)) : '')
-                            }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                    </div>
-
-                    {/* Change Preview */}
-                    {changePreview && (
-                        <div className={`flex items-center gap-2 p-3 rounded-lg ${Number(changePreview) >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                            <ArrowUpRight className={`w-4 h-4 ${Number(changePreview) >= 0 ? 'text-emerald-600' : 'text-red-600 rotate-180'}`} />
-                            <span className={`text-sm font-medium ${Number(changePreview) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                                {Number(changePreview) >= 0 ? '+' : ''}{changePreview}% change
-                                ({fmt(Number(newAmount.replace(/,/g, '')) - Number(prevAmount.replace(/,/g, '')))} VND {salaryType === 'fixed' ? '/month' : '/hour'})
-                            </span>
-                        </div>
-                    )}
-
-                    {/* Reason + Approved By */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                            <input value={reason} onChange={e => setReason(e.target.value)}
-                                placeholder="e.g. Annual review, Promotion…"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Approved By</label>
-                            <input value={approvedBy} onChange={e => setApprovedBy(e.target.value)}
-                                placeholder="e.g. Manager Name"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                    </div>
-
-                    {/* Notes */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none" />
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-                        <button type="button" onClick={onClose}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                            Cancel
-                        </button>
-                        <button type="submit" disabled={saving || !staffId || !effectiveDate || !newAmount}
-                            className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                            {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                            {entry ? 'Update' : 'Record'}
-                        </button>
-                    </div>
-                </form>
-            </div>
+        <div className="flex flex-col items-center">
+            <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${isUp ? 'text-emerald-600' : isDown ? 'text-red-600' : 'text-gray-500'}`}>
+                {isUp ? <ArrowUpRight className="w-3 h-3" /> : isDown ? <TrendingDown className="w-3 h-3" /> : null}
+                {isUp ? '+' : ''}{diff === 0 ? 'No Change' : `${pct}%`}
+            </span>
+            {incType === 'percentage' && incValue && (
+                <span className="text-[10px] text-gray-400">({incValue}%)</span>
+            )}
         </div>
     )
 }
 
-/* ─── Delete Confirm ─── */
 function DeleteConfirm({ label, onConfirm, onCancel, deleting }: {
     label: string; onConfirm: () => void; onCancel: () => void; deleting: boolean
 }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Salary Record</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Record</h3>
                 <p className="text-sm text-gray-600 mb-6">
-                    Are you sure you want to delete this salary change for <strong>{label}</strong>? This cannot be undone.
+                    Are you sure you want to delete this record for <strong>{label}</strong>? This cannot be undone.
                 </p>
                 <div className="flex justify-end gap-3">
                     <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
@@ -240,12 +70,16 @@ function DeleteConfirm({ label, onConfirm, onCancel, deleting }: {
 
 /* ─── Main Page ─── */
 export default function SalaryHistoryPage() {
+    const { language } = useSettings()
     const [loading, setLoading]       = useState(true)
-    const [entries, setEntries]       = useState<(HRStaffSalaryHistory & { hr_staff: HRStaffMember })[]>([])
+    const [entries, setEntries]       = useState<(HRStaffSalaryHistory)[]>([])
     const [staffList, setStaffList]   = useState<HRStaffMember[]>([])
+    const [departments, setDepartments] = useState<HRDepartment[]>([])
+    const [positions, setPositions]   = useState<HRPosition[]>([])
 
     const [search, setSearch]         = useState('')
     const [filterStaff, setFilterStaff]   = useState('all')
+    const [filterType, setFilterType] = useState('all')
 
     const [modalOpen, setModalOpen]       = useState(false)
     const [editingEntry, setEditingEntry] = useState<HRStaffSalaryHistory | null>(null)
@@ -254,15 +88,41 @@ export default function SalaryHistoryPage() {
     const [deletingId, setDeletingId]     = useState<string | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
 
+    const [loggedUserName, setLoggedUserName] = useState<string>('')
+
+    useEffect(() => {
+        let isMounted = true
+        supabase.auth.getUser().then(({ data }) => {
+            if (data?.user && isMounted) {
+                supabase.from('app_accounts').select('name').eq('user_id', data.user.id).single()
+                    .then(res => {
+                        if (isMounted) setLoggedUserName(res.data?.name || data.user.user_metadata?.full_name || '')
+                    })
+            }
+        })
+        return () => { isMounted = false }
+    }, [])
+
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            const [staffRes, histRes] = await Promise.all([
+            const [staffRes, histRes, deptRes, posRes] = await Promise.all([
                 supabase.from('hr_staff').select('*').order('full_name'),
-                supabase.from('hr_staff_salary_history').select('*, hr_staff(*)').order('effective_date', { ascending: false }),
+                supabase.from('hr_staff_salary_history').select(`
+                    *, 
+                    hr_staff(*),
+                    previous_position:hr_positions!hr_staff_salary_history_previous_position_id_fkey(name),
+                    new_position:hr_positions!hr_staff_salary_history_new_position_id_fkey(name),
+                    previous_department:hr_departments!hr_staff_salary_history_previous_department_id_fkey(name),
+                    new_department:hr_departments!hr_staff_salary_history_new_department_id_fkey(name)
+                `).order('effective_date', { ascending: false }),
+                supabase.from('hr_departments').select('*').order('name'),
+                supabase.from('hr_positions').select('*').order('name')
             ])
             if (staffRes.data) setStaffList(staffRes.data as HRStaffMember[])
             if (histRes.data) setEntries(histRes.data as any)
+            if (deptRes.data) setDepartments(deptRes.data as HRDepartment[])
+            if (posRes.data) setPositions(posRes.data as HRPosition[])
         } catch (err) { console.error(err) }
         setLoading(false)
     }, [])
@@ -277,26 +137,22 @@ export default function SalaryHistoryPage() {
                 if (!name.toLowerCase().includes(q) && !(e.reason || '').toLowerCase().includes(q)) return false
             }
             if (filterStaff !== 'all' && e.staff_id !== filterStaff) return false
+            if (filterType !== 'all' && e.record_type !== filterType) return false
             return true
         })
-    }, [entries, search, filterStaff])
+    }, [entries, search, filterStaff, filterType])
 
     /* Summary */
     const totalChanges = entries.length
-    const avgRaise = entries.length > 0
-        ? (entries.reduce((sum, e) => {
-            if (e.previous_amount === 0) return sum
-            return sum + ((e.new_amount - e.previous_amount) / e.previous_amount * 100)
-        }, 0) / entries.filter(e => e.previous_amount > 0).length).toFixed(1)
-        : '—'
     const raisesCount = entries.filter(e => e.new_amount > e.previous_amount).length
+    const promotionCount = entries.filter(e => e.record_type === 'promotion').length
     const uniqueStaff = new Set(entries.map(e => e.staff_id)).size
 
     const summaryCards = [
-        { label: 'Total Changes',  value: totalChanges, icon: TrendingUp,    color: 'text-blue-600',    bg: 'bg-blue-50' },
-        { label: 'Avg Raise %',    value: avgRaise === '—' ? '—' : `${avgRaise}%`, icon: ArrowUpRight, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { label: 'Raises',         value: raisesCount,  icon: DollarSign,    color: 'text-amber-600',   bg: 'bg-amber-50' },
-        { label: 'Staff Affected', value: uniqueStaff,  icon: Users,         color: 'text-purple-600',  bg: 'bg-purple-50' },
+        { label: 'Total Events',   value: totalChanges, icon: TrendingUp,    color: 'text-blue-600',    bg: 'bg-blue-50' },
+        { label: 'Promotions',     value: promotionCount, icon: Briefcase,   color: 'text-purple-600',  bg: 'bg-purple-50' },
+        { label: 'Gross Salary Raises',  value: raisesCount,  icon: DollarSign,    color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { label: 'Staff Affected', value: uniqueStaff,  icon: Users,         color: 'text-amber-600',   bg: 'bg-amber-50' },
     ]
 
     const handleSave = async (data: Partial<HRStaffSalaryHistory>) => {
@@ -309,12 +165,30 @@ export default function SalaryHistoryPage() {
                 const { error } = await supabase.from('hr_staff_salary_history').insert([data])
                 if (error) throw error
 
-                // Also update the staff's current salary
-                if (data.staff_id && data.new_amount != null) {
-                    await supabase.from('hr_staff').update({
-                        salary_amount: data.new_amount,
-                        salary_type: data.salary_type,
-                    }).eq('id', data.staff_id)
+                // If new, update the staff's current profile too
+                if (data.staff_id) {
+                    const updatePayload: any = {}
+                    if (data.new_amount != null) {
+                        updatePayload.salary_amount = data.new_amount
+                        updatePayload.salary_type = data.salary_type
+                    }
+                    if (data.record_type === 'promotion' && data.new_position_id) {
+                        updatePayload.position_id = data.new_position_id
+                        const posName = positions.find(p => p.id === data.new_position_id)?.name
+                        if (posName) updatePayload.position = posName
+                        
+                        if (data.new_department_id) {
+                            updatePayload.department_id = data.new_department_id
+                            const deptName = departments.find(d => d.id === data.new_department_id)?.name
+                            if (deptName) updatePayload.department = deptName
+                        } else {
+                            updatePayload.department_id = null
+                            updatePayload.department = null
+                        }
+                    }
+                    if (Object.keys(updatePayload).length > 0) {
+                        await supabase.from('hr_staff').update(updatePayload).eq('id', data.staff_id)
+                    }
                 }
             }
             setModalOpen(false); setEditingEntry(null)
@@ -337,28 +211,28 @@ export default function SalaryHistoryPage() {
     if (loading) return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
 
     return (
-        <div className="min-h-screen text-gray-100 p-6">
+        <div className="min-h-screen text-gray-100 p-6 animate-in fade-in duration-300">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Salary History</h1>
-                        <p className="text-sm text-slate-400 mt-1">Track salary changes and raises for your team.</p>
+                        <h1 className="text-2xl font-bold text-white">Salary & Promotions</h1>
+                        <p className="text-sm text-slate-400 mt-1">Track role changes, promotions, and gross salary adjustments for your team.</p>
                     </div>
                     <button onClick={() => { setEditingEntry(null); setModalOpen(true) }}
                         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg shrink-0">
                         <Plus className="w-4 h-4" />
-                        Record Change
+                        Record Event
                     </button>
                 </div>
 
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                     {summaryCards.map(c => (
-                        <div key={c.label} className="rounded-xl bg-white shadow-sm p-4">
+                        <div key={c.label} className="rounded-xl bg-white shadow-sm p-4 border border-gray-100">
                             <div className="flex items-center gap-2 mb-2">
                                 <div className={`p-1.5 rounded-lg ${c.bg}`}><c.icon className={`w-4 h-4 ${c.color}`} /></div>
-                                <span className="text-xs text-gray-500">{c.label}</span>
+                                <span className="text-xs font-semibold uppercase text-gray-500">{c.label}</span>
                             </div>
                             <div className={`text-2xl font-bold ${c.color}`}>{c.value}</div>
                         </div>
@@ -374,64 +248,86 @@ export default function SalaryHistoryPage() {
                         {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"><X className="w-3 h-3 text-slate-400" /></button>}
                     </div>
                     <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)}
-                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none">
                         <option value="all">All Staff</option>
                         {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                    </select>
+                    <select value={filterType} onChange={e => setFilterType(e.target.value)}
+                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none">
+                        <option value="all">All Event Types</option>
+                        <option value="promotion">Promotions</option>
+                        <option value="salary_increase">Gross Salary Increases</option>
                     </select>
                     <span className="text-xs text-slate-500 ml-auto">{filtered.length} of {entries.length} shown</span>
                 </div>
 
                 {/* Table */}
-                <div className="rounded-2xl bg-white shadow-md overflow-hidden">
+                <div className="rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
-                                <tr className="bg-gray-50 border-b border-gray-200">
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">#</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Staff Member</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Effective Date</th>
-                                    <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Previous</th>
-                                    <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-gray-500">New</th>
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Change</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Type</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Reason</th>
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Actions</th>
+                                <tr className="bg-gray-50 border-b border-gray-100">
+                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Event</th>
+                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Staff Member</th>
+                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Date</th>
+                                    <th className="text-right px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Old Gross Salary</th>
+                                    <th className="text-right px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">New Gross Salary</th>
+                                    <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Increase</th>
+                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Reason</th>
+                                    <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-gray-50">
                                 {filtered.map((e, idx) => {
-                                    const diff = e.new_amount - e.previous_amount
-                                    const isRaise = diff > 0
+                                    const isPromo = e.record_type === 'promotion'
                                     return (
-                                        <tr key={e.id} className={`border-t border-gray-100 hover:bg-gray-50/80 transition-colors ${idx % 2 === 0 ? 'bg-gray-50/30' : ''}`}>
-                                            <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                                        <tr key={e.id} className="hover:bg-gray-50/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                {isPromo ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-xs font-bold border border-purple-100">
+                                                        <Briefcase className="w-3.5 h-3.5" /> Promotion
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
+                                                        <TrendingUp className="w-3.5 h-3.5" /> Gross Salary Change
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 shrink-0">
                                                         {(e.hr_staff?.full_name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <span className="text-sm font-medium text-gray-900 block truncate">{e.hr_staff?.full_name}</span>
-                                                        <span className="text-xs text-gray-400 block">{e.hr_staff?.position}</span>
+                                                        <span className="text-sm font-bold text-gray-900 block truncate">{e.hr_staff?.full_name}</span>
+                                                        {isPromo ? (
+                                                            <div className="text-xs text-purple-600 mt-0.5 flex items-center gap-1">
+                                                                <span className="line-through text-gray-400">{e.previous_position?.name || 'No Position'}</span>
+                                                                <ArrowUpRight className="w-3 h-3" />
+                                                                <span className="font-semibold">{e.new_position?.name || 'No Position'}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-500 block">{e.hr_staff?.position}</span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600">{e.effective_date}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-500 text-right">{fmt(e.previous_amount)}</td>
-                                            <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{fmt(e.new_amount)}</td>
-                                            <td className="px-4 py-3 text-center">
-                                                <ChangeIndicator prev={e.previous_amount} next={e.new_amount} />
+                                            <td className="px-6 py-4 text-sm font-medium text-gray-600">{new Date(e.effective_date).toLocaleDateString('en-GB')}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-500 text-right font-mono">{fmt(e.previous_amount)}</td>
+                                            <td className="px-6 py-4 text-sm font-bold text-gray-900 text-right font-mono">{fmt(e.new_amount)}</td>
+                                            <td className="px-6 py-4 text-center">
+                                                <ChangeIndicator prev={e.previous_amount} next={e.new_amount} type={e.record_type} incType={e.increase_type} incValue={e.increase_value} prevType={e.previous_salary_type} newType={e.salary_type} />
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                                                    e.salary_type === 'fixed' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
-                                                }`}>
-                                                    {e.salary_type === 'fixed' ? 'Fixed' : 'Hourly'}
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm font-medium text-gray-700 block truncate max-w-[150px]">{e.reason || '—'}</span>
+                                                <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+                                                    {e.previous_salary_type && e.previous_salary_type !== e.salary_type 
+                                                        ? `${e.previous_salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'} → ${e.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'}` 
+                                                        : (e.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time')}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px] truncate">{e.reason || '—'}</td>
-                                            <td className="px-4 py-3 text-center">
-                                                <div className="flex items-center justify-center gap-1">
+                                            <td className="px-6 py-4 text-center">
+                                                <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
                                                     <button onClick={() => { setEditingEntry(e); setModalOpen(true) }}
                                                         className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition" title="Edit">
                                                         <Pencil className="w-4 h-4" />
@@ -447,15 +343,20 @@ export default function SalaryHistoryPage() {
                                 })}
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan={9} className="px-4 py-16 text-center">
-                                            <TrendingUp className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                                            <p className="text-gray-500 text-sm font-medium">
-                                                {entries.length === 0 ? 'No salary changes recorded yet' : 'No results match your filters'}
+                                        <td colSpan={8} className="px-6 py-16 text-center">
+                                            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
+                                                <Briefcase className="w-8 h-8 text-gray-300" />
+                                            </div>
+                                            <p className="text-gray-900 text-base font-bold mb-1">
+                                                {entries.length === 0 ? 'No history recorded' : 'No results found'}
+                                            </p>
+                                            <p className="text-gray-500 text-sm">
+                                                {entries.length === 0 ? 'Start tracking promotions and salary increases.' : 'Try adjusting your filters.'}
                                             </p>
                                             {entries.length === 0 && (
                                                 <button onClick={() => { setEditingEntry(null); setModalOpen(true) }}
-                                                    className="mt-3 text-sm text-blue-600 hover:text-blue-700 font-medium">
-                                                    + Record your first salary change
+                                                    className="mt-4 text-sm font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition">
+                                                    Record First Event
                                                 </button>
                                             )}
                                         </td>
@@ -468,7 +369,7 @@ export default function SalaryHistoryPage() {
             </div>
 
             <SalaryModal open={modalOpen} onClose={() => { setModalOpen(false); setEditingEntry(null) }}
-                onSave={handleSave} entry={editingEntry} staffList={staffList} saving={saving} />
+                onSave={handleSave} entry={editingEntry} staffList={staffList} departments={departments} positions={positions} saving={saving} loggedUserName={loggedUserName} />
 
             {deletingId && (
                 <DeleteConfirm

@@ -17,6 +17,9 @@ export type CRMPartner = {
   is_deleted?: boolean
   partner_code: string | null
   partner_password_hash?: string | null
+  bank_name?: string | null
+  bank_account_name?: string | null
+  bank_account_number?: string | null
 }
 
 export type CRMAgreement = {

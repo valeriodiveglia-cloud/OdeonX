@@ -10,14 +10,15 @@ import {
     Calendar, Building2, Briefcase, Plus, Loader2, Trash2, BadgeCheck, Lock, Unlock,
     ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen
 } from 'lucide-react'
-import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog } from '@/types/human-resources'
+import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog, HRStaffDocument } from '@/types/human-resources'
 import PerformanceModal, { computePeriodLabel } from '@/components/human-resources/PerformanceModal'
+import SalaryModal from '@/components/human-resources/SalaryModal'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
 import { useSettings } from '@/contexts/SettingsContext'
 
 // === HELPERS ===
 const fmtVND = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
-const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '-'
+// Removed static fmtDate, will define inside component
 
 // === TABS CONFIG ===
 const TABS = [
@@ -34,6 +35,9 @@ export default function StaffDetailPage() {
     const { id } = useParams() as { id: string }
     const router = useRouter()
 
+    const { currency, language } = useSettings()
+    const fmtDate = useCallback((d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '-', [])
+
     const [activeTab, setActiveTab] = useState<TabId>('profile')
     const [loading, setLoading] = useState(true)
     
@@ -46,20 +50,27 @@ export default function StaffDetailPage() {
     const [performances, setPerformances] = useState<HRStaffPerformance[]>([])
     const [providerBranches, setProviderBranches] = useState<{id: string, name: string}[]>([])
     const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
+    const [documents, setDocuments] = useState<HRStaffDocument[]>([])
+    const [loggedUserName, setLoggedUserName] = useState<string>('')
 
     const fetchAll = useCallback(async () => {
         if (!id) return;
         setLoading(true)
         try {
-            const [staffRes, deptsRes, posRes, roleReq, salReq, perfReq, branchesReq, catReq] = await Promise.all([
+            const [staffRes, deptsRes, posRes, roleReq, salReq, perfReq, branchesReq, catReq, docsReq] = await Promise.all([
                 supabase.from('hr_staff').select('*, hr_departments(*), hr_positions(*), hr_staff_branches(*)').eq('id', id).single(),
                 supabase.from('hr_departments').select('*').order('sort_order'),
                 supabase.from('hr_positions').select('*').order('sort_order'),
                 supabase.from('hr_staff_role_history').select('*, old_position:hr_positions!old_position_id(*), new_position:hr_positions!new_position_id(*)').eq('staff_id', id).order('effective_date', { ascending: false }),
-                supabase.from('hr_staff_salary_history').select('*').eq('staff_id', id).order('effective_date', { ascending: false }),
+                supabase.from('hr_staff_salary_history').select(`
+                    *,
+                    previous_position:hr_positions!hr_staff_salary_history_previous_position_id_fkey(name),
+                    new_position:hr_positions!hr_staff_salary_history_new_position_id_fkey(name)
+                `).eq('staff_id', id).order('effective_date', { ascending: false }),
                 supabase.from('hr_staff_performance').select('*').eq('staff_id', id).order('review_date', { ascending: false }),
                 supabase.from('provider_branches').select('id, name').order('name'),
-                supabase.from('hr_rating_categories').select('*').order('sort_order')
+                supabase.from('hr_rating_categories').select('*').order('sort_order'),
+                supabase.from('hr_staff_documents').select('*').eq('staff_id', id).order('uploaded_at', { ascending: false })
             ])
             if (staffRes.data) setStaff(staffRes.data as any)
             if (deptsRes.data) setDepartments(deptsRes.data)
@@ -69,11 +80,25 @@ export default function StaffDetailPage() {
             if (perfReq.data) setPerformances(perfReq.data)
             if (branchesReq.data) setProviderBranches(branchesReq.data)
             if (catReq.data) setAllCategories(catReq.data)
+            if (docsReq.data) setDocuments(docsReq.data)
         } catch (err) {
             console.error('Error fetching staff data', err)
         }
         setLoading(false)
     }, [id])
+
+    useEffect(() => {
+        let isMounted = true
+        supabase.auth.getUser().then(({ data }) => {
+            if (data?.user && isMounted) {
+                supabase.from('app_accounts').select('name').eq('user_id', data.user.id).single()
+                    .then(res => {
+                        if (isMounted) setLoggedUserName(res.data?.name || data.user.user_metadata?.full_name || '')
+                    })
+            }
+        })
+        return () => { isMounted = false }
+    }, [])
 
     useEffect(() => { fetchAll() }, [fetchAll])
 
@@ -155,8 +180,8 @@ export default function StaffDetailPage() {
                 <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-900 border border-gray-100">
                     <div className="p-6 sm:p-8">
                         {activeTab === 'profile' && <TabProfile staff={staff} departments={departments} positions={positions} branches={providerBranches} onUpdate={fetchAll} />}
-                        {activeTab === 'documents' && <TabDocuments staff={staff} onUpdate={fetchAll} />}
-                        {activeTab === 'timeline' && <TabTimeline staff={staff} roleHistory={roleHistory} salaryHistory={salaryHistory} positions={positions} onUpdate={fetchAll} />}
+                        {activeTab === 'documents' && <TabDocuments staff={staff} documents={documents} onUpdate={fetchAll} />}
+                        {activeTab === 'timeline' && <TabTimeline staff={staff} roleHistory={roleHistory} salaryHistory={salaryHistory} positions={positions} departments={departments} loggedUserName={loggedUserName} onUpdate={fetchAll} />}
                         {activeTab === 'performance' && <TabPerformance staff={staff} performances={performances} onUpdate={fetchAll} allCategories={allCategories} />}
                         {activeTab === 'disciplinary' && <TabDisciplinary staff={staff} />}
                     </div>
@@ -175,12 +200,7 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
     const [selectedBranches, setSelectedBranches] = useState<string[]>([])
     const [displaySalary, setDisplaySalary] = useState<string>('')
     const [saving, setSaving] = useState(false)
-    const [unlockedFields, setUnlockedFields] = useState<Set<string>>(new Set())
-    const [unlockPrompt, setUnlockPrompt] = useState<'department' | 'position' | 'salary' | null>(null)
-
-    const handleUnlock = (field: string) => {
-        setUnlockPrompt(field as 'department' | 'position' | 'salary')
-    }
+    const [isEditing, setIsEditing] = useState(false)
 
     useEffect(() => {
         setFormData({ ...staff })
@@ -208,6 +228,18 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
         setSaving(true)
         try {
             const { hr_staff_branches, hr_departments, hr_positions, ...updateData } = formData as any;
+            
+            // Sanitize empty strings to null for date and relation fields
+            const nullifyIfEmpty = (field: string) => {
+                if (updateData[field] === '') updateData[field] = null;
+            }
+            nullifyIfEmpty('start_date');
+            nullifyIfEmpty('contract_signing_date');
+            nullifyIfEmpty('contract_expiration_date');
+            nullifyIfEmpty('probation_end_date');
+            nullifyIfEmpty('department_id');
+            nullifyIfEmpty('position_id');
+
             const { error } = await supabase.from('hr_staff').update(updateData).eq('id', staff.id)
             if (error) throw error
 
@@ -218,6 +250,7 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
             }
 
             onUpdate()
+            setIsEditing(false)
         } catch (err) {
             console.error(err)
             alert('Failed to update details')
@@ -227,21 +260,39 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div>
-                <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">General Information</h2>
-                <p className="text-sm text-gray-500 mt-1">Basic contact and position details.</p>
+            <div className="flex items-start justify-between">
+                <div>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">General Information</h2>
+                    <p className="text-sm text-gray-500 mt-1">Basic contact and position details.</p>
+                </div>
+                <button 
+                    onClick={() => {
+                        if (isEditing) {
+                            // Reset changes if cancelling
+                            setFormData({ ...staff })
+                            setSelectedBranches((staff as any).hr_staff_branches?.map((b: any) => b.branch_id) || [])
+                            if (staff.salary_amount) setDisplaySalary(staff.salary_amount.toLocaleString('en-US', { maximumFractionDigits: 2 }))
+                            else setDisplaySalary('')
+                        }
+                        setIsEditing(!isEditing)
+                    }} 
+                    className={`p-2 rounded-xl border transition-all ${isEditing ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                    title={isEditing ? "Cancel Editing" : "Enable Editing"}
+                >
+                    <Pencil className="w-5 h-5" />
+                </button>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
-                    <input value={formData.full_name || ''} onChange={e => handleChange('full_name', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    <input disabled={!isEditing} value={formData.full_name || ''} onChange={e => handleChange('full_name', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
-                     <select value={formData.status || 'active'} onChange={e => handleChange('status', e.target.value)}
-                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                     <select disabled={!isEditing} value={formData.status || 'active'} onChange={e => handleChange('status', e.target.value)}
+                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed">
                          <option value="active">Active</option>
                          <option value="inactive">Inactive</option>
                          <option value="terminated">Terminated</option>
@@ -249,85 +300,100 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Phone</label>
-                    <input value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    <input disabled={!isEditing} value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
-                    <input type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    <input disabled={!isEditing} type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Department</label>
-                    <div className="relative">
-                        <select disabled={!unlockedFields.has('department')} value={formData.department_id || ''} onChange={e => handleChange('department_id', e.target.value)}
-                            className="w-full px-3 py-2 pr-10 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed">
-                            <option value="">None</option>
-                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                        </select>
-                        <button type="button" onClick={() => !unlockedFields.has('department')} onPointerDown={() => !unlockedFields.has('department') && handleUnlock('department')} className={`absolute right-8 top-1/2 -translate-y-1/2 transition-colors ${unlockedFields.has('department') ? 'text-blue-500' : 'text-gray-400 hover:text-amber-500'}`} title={unlockedFields.has('department') ? "Unlocked" : "Unlock to edit directly"}>
-                            {unlockedFields.has('department') ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                        </button>
-                    </div>
+                    <select disabled={!isEditing} value={formData.department_id || ''} onChange={e => handleChange('department_id', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed">
+                        <option value="">None</option>
+                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Position</label>
+                    <select disabled={!isEditing} value={formData.position_id || ''} onChange={e => handleChange('position_id', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed">
+                        <option value="">None</option>
+                        {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Start Date</label>
+                    <input disabled={!isEditing} type="date" value={formData.start_date || ''} onChange={e => {
+                        const newDate = e.target.value;
+                        handleChange('start_date', newDate);
+                        if (newDate && formData.probation_months && formData.probation_months > 0) {
+                            const d = new Date(newDate);
+                            d.setMonth(d.getMonth() + formData.probation_months);
+                            d.setDate(d.getDate() - 1);
+                            handleChange('probation_end_date', d.toISOString().split('T')[0]);
+                        }
+                    }}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Probation Time (Months)</label>
+                    <input disabled={!isEditing} type="number" min="0" value={formData.probation_months ?? ''} onChange={e => {
+                        const m = parseInt(e.target.value);
+                        handleChange('probation_months', isNaN(m) ? 0 : m);
+                        if (formData.start_date && !isNaN(m) && m > 0) {
+                            const d = new Date(formData.start_date);
+                            d.setMonth(d.getMonth() + m);
+                            d.setDate(d.getDate() - 1);
+                            handleChange('probation_end_date', d.toISOString().split('T')[0]);
+                        }
+                    }}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Probation End Date</label>
+                    <input disabled={!isEditing} type="date" value={formData.probation_end_date || ''} onChange={e => handleChange('probation_end_date', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Probation Salary (%)</label>
                     <div className="relative">
-                        <select disabled={!unlockedFields.has('position')} value={formData.position_id || ''} onChange={e => handleChange('position_id', e.target.value)}
-                            className="w-full px-3 py-2 pr-10 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed">
-                            <option value="">None</option>
-                            {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <button type="button" onClick={() => !unlockedFields.has('position') && handleUnlock('position')} className={`absolute right-8 top-1/2 -translate-y-1/2 transition-colors ${unlockedFields.has('position') ? 'text-blue-500' : 'text-gray-400 hover:text-amber-500'}`} title={unlockedFields.has('position') ? "Unlocked" : "Unlock to edit directly"}>
-                            {unlockedFields.has('position') ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                        </button>
+                        <input disabled={!isEditing} type="number" min="0" max="100" value={formData.probation_salary_pct ?? ''} onChange={e => handleChange('probation_salary_pct', parseFloat(e.target.value) || 100)}
+                            className="w-full px-3 py-2 pr-8 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
                     </div>
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Employment Type</label>
-                    <select value={formData.employment_type || 'full_time'} onChange={e => handleChange('employment_type', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <select disabled={!isEditing} value={formData.employment_type || 'full_time'} onChange={e => handleChange('employment_type', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed">
                         <option value="full_time">Full-time</option>
                         <option value="part_time">Part-time</option>
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Salary Type</label>
-                    <div className="relative">
-                        <select disabled={!unlockedFields.has('salary')} value={formData.salary_type || 'fixed'} onChange={e => handleChange('salary_type', e.target.value)}
-                            className="w-full px-3 py-2 pr-10 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed">
-                            <option value="fixed">Fixed</option>
-                            <option value="hourly">Hourly</option>
-                        </select>
-                        <button type="button" onClick={() => !unlockedFields.has('salary') && handleUnlock('salary')} className={`absolute right-8 top-1/2 -translate-y-1/2 transition-colors ${unlockedFields.has('salary') ? 'text-blue-500' : 'text-gray-400 hover:text-amber-500'}`} title={unlockedFields.has('salary') ? "Unlocked" : "Unlock to edit directly"}>
-                            {unlockedFields.has('salary') ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                        </button>
-                    </div>
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Salary Amount</label>
-                    <div className="relative">
-                        <input type="text" disabled={!unlockedFields.has('salary')} value={displaySalary} 
-                            onChange={e => {
-                                let val = e.target.value.replace(/[^0-9.]/g, '');
-                                const parts = val.split('.');
-                                let wholeNumber = parts[0];
-                                const decimal = parts.length > 1 ? '.' + parts[1] : '';
-                                
-                                if (wholeNumber) {
-                                    wholeNumber = parseInt(wholeNumber, 10).toLocaleString('en-US');
-                                }
-                                
-                                setDisplaySalary(wholeNumber + decimal);
-                                
-                                const rawFloat = parseFloat(val);
-                                handleChange('salary_amount', isNaN(rawFloat) ? null : rawFloat);
-                            }}
-                            className="w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-60 disabled:bg-gray-100 disabled:cursor-not-allowed" />
-                        <button type="button" onClick={() => !unlockedFields.has('salary') && handleUnlock('salary')} className={`absolute right-3 top-1/2 -translate-y-1/2 transition-colors ${unlockedFields.has('salary') ? 'text-blue-500' : 'text-gray-400 hover:text-amber-500'}`} title={unlockedFields.has('salary') ? "Unlocked" : "Unlock to edit directly"}>
-                            {unlockedFields.has('salary') ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                        </button>
-                    </div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Gross Salary (VND) <span className="lowercase text-gray-400">{formData.employment_type === 'full_time' ? '/month' : '/hour'}</span>
+                    </label>
+                    <input type="text" disabled={!isEditing} value={displaySalary} 
+                        onChange={e => {
+                            let val = e.target.value.replace(/[^0-9.]/g, '');
+                            const parts = val.split('.');
+                            let wholeNumber = parts[0];
+                            const decimal = parts.length > 1 ? '.' + parts[1] : '';
+                            
+                            if (wholeNumber) {
+                                wholeNumber = parseInt(wholeNumber, 10).toLocaleString('en-US');
+                            }
+                            
+                            setDisplaySalary(wholeNumber + decimal);
+                            
+                            const rawFloat = parseFloat(val);
+                            handleChange('salary_amount', isNaN(rawFloat) ? null : rawFloat);
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:bg-gray-100 disabled:cursor-not-allowed" />
                 </div>
             </div>
 
@@ -337,8 +403,8 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                 <h3 className="text-sm font-semibold text-gray-900 mb-3">Assigned Branches</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {branches.map(branch => (
-                        <label key={branch.id} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${selectedBranches.includes(branch.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                            <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500"
+                        <label key={branch.id} className={`flex items-center gap-2 p-2 rounded-lg border transition-colors ${selectedBranches.includes(branch.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'} ${isEditing ? 'cursor-pointer hover:bg-gray-50' : 'opacity-70 cursor-not-allowed'}`}>
+                            <input type="checkbox" disabled={!isEditing} className="rounded text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
                                 checked={selectedBranches.includes(branch.id)}
                                 onChange={(e) => {
                                     if (e.target.checked) setSelectedBranches(p => [...p, branch.id])
@@ -359,77 +425,31 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                 <p className="text-sm text-gray-500 mt-1">Employment timeline and contract milestones.</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Start Date</label>
-                    <input type="date" value={formData.start_date || ''} onChange={e => handleChange('start_date', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Contract Signing Date</label>
-                    <input type="date" value={formData.contract_signing_date || ''} onChange={e => handleChange('contract_signing_date', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Probation End Date</label>
-                    <input type="date" value={formData.probation_end_date || ''} onChange={e => handleChange('probation_end_date', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    <input disabled={!isEditing} type="date" value={formData.contract_signing_date || ''} onChange={e => handleChange('contract_signing_date', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Contract Expiration Date</label>
-                    <input type="date" value={formData.contract_expiration_date || ''} onChange={e => handleChange('contract_expiration_date', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    <input disabled={!isEditing} type="date" value={formData.contract_expiration_date || ''} onChange={e => handleChange('contract_expiration_date', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
             </div>
 
             <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 mt-5">Notes</label>
-                <textarea rows={3} value={formData.notes || ''} onChange={e => handleChange('notes', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Internal notes..."></textarea>
+                <textarea disabled={!isEditing} rows={3} value={formData.notes || ''} onChange={e => handleChange('notes', e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" placeholder="Internal notes..."></textarea>
             </div>
 
-            <div className="pt-4 flex justify-end">
-                <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save Changes
-                </button>
-            </div>
-
-            {/* Custom Warning Modal for Unlocking Fields */}
-            {unlockPrompt && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-amber-100">
-                        <div className="bg-amber-50/80 p-5 border-b border-amber-100 flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                                <Lock className="w-5 h-5 text-amber-600" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-amber-900 leading-tight">Direct Modification Warning</h3>
-                                <p className="text-sm text-amber-700 mt-1 leading-snug">
-                                    Modifying this field here will override the current value without keeping a historical record.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="p-5">
-                            <p className="text-sm text-gray-600 leading-relaxed">
-                                If you want to track a promotion, role transfer, or salary increase properly, please use the dedicated <strong className="font-semibold text-gray-900">Career Journey</strong> tab instead.
-                            </p>
-                            <p className="text-sm text-gray-900 font-medium mt-4">
-                                Are you sure you want to unlock and edit {unlockPrompt === 'position' ? 'the position' : unlockPrompt === 'department' ? 'the department' : 'the salary amount'} directly?
-                            </p>
-                        </div>
-                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2.5">
-                            <button type="button" onClick={() => setUnlockPrompt(null)} className="px-4 py-2 rounded-xl text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
-                                Cancel
-                            </button>
-                            <button type="button" onClick={() => {
-                                setUnlockedFields(prev => new Set(prev).add(unlockPrompt));
-                                setUnlockPrompt(null);
-                            }} className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 shadow-sm transition-colors">
-                                Unlock Field
-                            </button>
-                        </div>
-                    </div>
+            {isEditing && (
+                <div className="pt-4 flex justify-end">
+                    <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save Changes
+                    </button>
                 </div>
             )}
         </div>
@@ -439,83 +459,111 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
 // ==========================================
 // TAB: Documents
 // ==========================================
-function TabDocuments({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () => void }) {
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: 'cv_doc_url' | 'id_card_doc_url' | 'contract_doc_url') => {
-        const file = e.target.files?.[0]
-        if (!file) return;
+import DocumentUploadModal from '@/components/human-resources/DocumentUploadModal'
 
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${staff.id}/${fieldName}_${Date.now()}.${fileExt}`
+function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, documents: HRStaffDocument[], onUpdate: () => void }) {
+    const [uploadModalOpen, setUploadModalOpen] = useState(false)
 
+    const handleDelete = async (docId: string, fileUrl: string) => {
+        if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) return
+        
         try {
-            // Upload to storage
-            const { error: uploadError } = await supabase.storage.from('hr-documents').upload(fileName, file)
-            if (uploadError) throw uploadError
+            // Delete from storage
+            const urlPath = new URL(fileUrl).pathname
+            const segments = urlPath.split('/')
+            // The file path is everything after hr_documents bucket name
+            const bucketIndex = segments.indexOf('hr_documents')
+            if (bucketIndex !== -1) {
+                const filePath = segments.slice(bucketIndex + 1).join('/')
+                await supabase.storage.from('hr_documents').remove([filePath])
+            }
 
-            // Get public URL
-            const { data: publicUrlData } = supabase.storage.from('hr-documents').getPublicUrl(fileName)
-            const publicUrl = publicUrlData.publicUrl
-
-            // Update staff record
-            const { error: updateError } = await supabase.from('hr_staff').update({ [fieldName]: publicUrl }).eq('id', staff.id)
-            if (updateError) throw updateError
-
+            // Delete from DB
+            const { error } = await supabase.from('hr_staff_documents').delete().eq('id', docId)
+            if (error) throw error
+            
             onUpdate()
-            alert('File uploaded successfully!')
         } catch (err) {
-            console.error(err)
-            alert('Failed to upload document')
+            console.error('Error deleting document', err)
+            alert('Failed to delete document')
         }
     }
 
-    const DocumentCard = ({ title, fieldName, currentUrl }: { title: string, fieldName: any, currentUrl: string | null }) => (
-        <div className="border border-gray-200 rounded-2xl p-5 flex flex-col items-center justify-center bg-gray-50/50 hover:bg-gray-50 transition-colors text-center relative overflow-hidden group">
-            {currentUrl ? (
-                <>
-                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-3">
-                        <BadgeCheck className="w-6 h-6" />
-                    </div>
-                    <h3 className="font-semibold text-gray-900">{title}</h3>
-                    <p className="text-xs text-gray-500 mt-1">Uploaded and saved securely.</p>
-                    <div className="mt-4 flex gap-2">
-                        <a href={currentUrl} target="_blank" rel="noreferrer" className="inline-flex flex-1 justify-center items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition">
-                            <ExternalLink className="w-3.5 h-3.5" /> View
-                        </a>
-                        <label className="inline-flex flex-1 justify-center items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer">
-                            <UploadCloud className="w-3.5 h-3.5" /> Update
-                            <input type="file" className="hidden" onChange={e => handleUpload(e, fieldName)} />
-                        </label>
-                    </div>
-                </>
-            ) : (
-                <>
-                    <div className="w-12 h-12 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <FileText className="w-6 h-6" />
-                    </div>
-                    <h3 className="font-semibold text-gray-900">{title}</h3>
-                    <p className="text-xs text-gray-500 mt-1 mb-4">No document uploaded yet.</p>
-                    <label className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-xl text-sm font-medium hover:bg-indigo-100 transition cursor-pointer">
-                        <UploadCloud className="w-4 h-4" />
-                        Browse Files
-                        <input type="file" className="hidden" onChange={e => handleUpload(e, fieldName)} />
-                    </label>
-                </>
-            )}
-        </div>
-    )
+    const getCategoryColor = (category: string) => {
+        const colors: Record<string, string> = {
+            'CV': 'bg-blue-100 text-blue-700 border-blue-200',
+            'ID Card': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+            'Contract': 'bg-purple-100 text-purple-700 border-purple-200',
+            'Medical': 'bg-rose-100 text-rose-700 border-rose-200',
+            'Certification': 'bg-amber-100 text-amber-700 border-amber-200',
+            'Other': 'bg-gray-100 text-gray-700 border-gray-200',
+        }
+        return colors[category] || colors['Other']
+    }
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div>
-                <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Official Documents</h2>
-                <p className="text-sm text-gray-500 mt-1">Manage physical files relevant to the employee's tenure.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Official Documents</h2>
+                    <p className="text-sm text-gray-500 mt-1">Manage physical files relevant to the employee's tenure.</p>
+                </div>
+                <button onClick={() => setUploadModalOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition shadow hover:shadow-lg">
+                    <Plus className="w-4 h-4" /> Add Document
+                </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <DocumentCard title="Curriculum Vitae (CV)" fieldName="cv_doc_url" currentUrl={staff.cv_doc_url} />
-                <DocumentCard title="ID Verification" fieldName="id_card_doc_url" currentUrl={staff.id_card_doc_url} />
-                <DocumentCard title="Signed Contract" fieldName="contract_doc_url" currentUrl={staff.contract_doc_url} />
-            </div>
+            {documents.length === 0 ? (
+                <div className="border border-dashed border-gray-200 rounded-2xl p-12 text-center bg-gray-50/50">
+                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                        <FileText className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-gray-900 font-medium text-lg">No documents found</h3>
+                    <p className="text-gray-500 text-sm mt-1 max-w-sm mx-auto">Upload contracts, ID cards, medical checkups, and other important files here.</p>
+                    <button onClick={() => setUploadModalOpen(true)} className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition">
+                        <UploadCloud className="w-4 h-4" /> Upload First Document
+                    </button>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {documents.map(doc => (
+                        <div key={doc.id} className="border border-gray-200 rounded-2xl p-5 flex flex-col bg-white shadow-sm hover:shadow-md transition-shadow relative group">
+                            <button onClick={() => handleDelete(doc.id, doc.file_url)} className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                            
+                            <div className="flex items-start gap-4 mb-4">
+                                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                                    <FileText className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-gray-900 leading-tight pr-6 line-clamp-2">{doc.document_name}</h3>
+                                    <span className={`inline-flex mt-2 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${getCategoryColor(doc.document_category)}`}>
+                                        {doc.document_category}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div className="mt-auto pt-4 border-t border-gray-50 flex items-center justify-between">
+                                <span className="text-xs text-gray-400 flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {fmtDate(doc.uploaded_at)}
+                                </span>
+                                <a href={doc.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-xs font-medium transition">
+                                    <ExternalLink className="w-3.5 h-3.5" /> View
+                                </a>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <DocumentUploadModal 
+                open={uploadModalOpen} 
+                onClose={() => setUploadModalOpen(false)} 
+                staffId={staff.id} 
+                onSuccess={onUpdate} 
+            />
         </div>
     )
 }
@@ -523,8 +571,11 @@ function TabDocuments({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () 
 // ==========================================
 // TAB: Career Journey (Timeline)
 // ==========================================
-function TabTimeline({ staff, roleHistory, salaryHistory, positions, onUpdate }: { staff: HRStaffMember, roleHistory: HRStaffRoleHistory[], salaryHistory: HRStaffSalaryHistory[], positions: HRPosition[], onUpdate: () => void }) {
+function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments, loggedUserName, onUpdate }: { staff: HRStaffMember, roleHistory: HRStaffRoleHistory[], salaryHistory: HRStaffSalaryHistory[], positions: HRPosition[], departments: HRDepartment[], loggedUserName: string, onUpdate: () => void }) {
     
+    const [modalOpen, setModalOpen] = useState(false)
+    const [saving, setSaving] = useState(false)
+
     // Merge both histories into a unified timeline
     const timeline = useMemo(() => {
         const events: any[] = []
@@ -536,41 +587,75 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, onUpdate }:
         return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     }, [roleHistory, salaryHistory, staff.start_date])
 
-    const handleAddSalary = async () => {
-        // very basic prompt for demo purposes, ideally a modal
-        const amount = prompt('Enter new salary amount (VND):')
-        if (!amount) return
+    const handleSaveSalary = async (payload: Partial<HRStaffSalaryHistory>) => {
+        setSaving(true)
         try {
-            const { error } = await supabase.from('hr_staff_salary_history').insert({
-                staff_id: staff.id,
-                new_amount: parseInt(amount, 10),
-                previous_amount: staff.salary_amount || 0,
-                salary_type: staff.salary_type,
-                effective_date: new Date().toISOString().split('T')[0]
-            })
+            const { error } = await supabase.from('hr_staff_salary_history').insert([payload])
             if (error) throw error
-            // Update current salary
-            await supabase.from('hr_staff').update({ salary_amount: parseInt(amount, 10) }).eq('id', staff.id)
+
+            // Update hr_staff main record
+            const staffUpdates: Partial<HRStaffMember> = {
+                salary_amount: payload.new_amount,
+                salary_type: payload.salary_type
+            }
+            if (payload.new_department_id) staffUpdates.department_id = payload.new_department_id
+            if (payload.new_position_id) {
+                staffUpdates.position_id = payload.new_position_id
+                const newPos = positions.find(p => p.id === payload.new_position_id)
+                if (newPos) staffUpdates.position = newPos.name
+            }
+            
+            await supabase.from('hr_staff').update(staffUpdates).eq('id', payload.staff_id)
+            
+            // Also add role history if changed
+            if (payload.new_position_id || payload.new_department_id) {
+                await supabase.from('hr_staff_role_history').insert({
+                    staff_id: payload.staff_id,
+                    effective_date: payload.effective_date,
+                    old_department_id: payload.previous_department_id,
+                    old_position_id: payload.previous_position_id,
+                    new_department_id: payload.new_department_id,
+                    new_position_id: payload.new_position_id,
+                    reason: 'Promotion logged via Salary/Role change'
+                })
+            }
+
+            setModalOpen(false)
             onUpdate()
         } catch (err) {
-            console.error(err); alert('failed to add salary change')
+            console.error('Error saving salary record:', err)
+            alert('Failed to save record.')
+        } finally {
+            setSaving(false)
         }
     }
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Career Journey</h2>
-                    <p className="text-sm text-gray-500 mt-1">Timeline of salary increases and role promotions.</p>
+                    <p className="text-sm text-gray-500 mt-1">Timeline of gross salary increases and role promotions.</p>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={handleAddSalary} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-semibold hover:bg-purple-100 transition">
-                        <Plus className="w-3.5 h-3.5" /> Salary Update
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setModalOpen(true)} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all whitespace-nowrap">
+                        <Plus className="w-4 h-4" /> Record Change
                     </button>
-                    {/* Add Promotion button could also go here */}
                 </div>
             </div>
+
+            <SalaryModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                onSave={handleSaveSalary}
+                entry={null}
+                staffList={[staff]}
+                departments={departments}
+                positions={positions}
+                saving={saving}
+                loggedUserName={loggedUserName}
+                preselectedStaffId={staff.id}
+            />
 
             <div className="relative pl-6 border-l-2 border-gray-100 space-y-8 mt-8">
                 {timeline.length === 0 && <p className="text-sm text-gray-400">No events recorded.</p>}
@@ -578,7 +663,7 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, onUpdate }:
                 {timeline.map((event, i) => (
                     <div key={i} className="relative">
                         <div className={`absolute -left-[31px] w-4 h-4 rounded-full border-2 border-white flex items-center justify-center
-                            ${event.type === 'start' ? 'bg-emerald-500' : event.type === 'salary' ? 'bg-purple-500' : 'bg-blue-500'}`} 
+                            ${event.type === 'start' ? 'bg-emerald-500' : event.type === 'salary' ? 'bg-blue-500' : 'bg-blue-500'}`} 
                         />
                         <div className="bg-white border border-gray-100 shadow-sm rounded-xl p-4">
                             <span className="text-xs font-semibold text-gray-400 bg-gray-50 px-2 py-1 rounded-md mb-2 inline-block">
@@ -589,17 +674,38 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, onUpdate }:
                             )}
                             {event.type === 'salary' && (
                                 <div>
-                                    <p className="text-sm text-gray-900 font-medium tracking-tight">Salary Update <span className="text-gray-400 font-normal ml-1">({event.data.salary_type})</span></p>
+                                    <p className="text-sm text-gray-900 font-medium tracking-tight">
+                                        {event.data.record_type === 'promotion' ? 'Promotion & Gross Salary Change' : 'Gross Salary Change'}
+                                        <span className="text-gray-400 font-normal ml-1">
+                                            ({event.data.previous_salary_type && event.data.previous_salary_type !== event.data.salary_type 
+                                                ? `${event.data.previous_salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'} → ${event.data.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'}` 
+                                                : (event.data.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time')})
+                                        </span>
+                                    </p>
+                                    {event.data.record_type === 'promotion' && (
+                                        <p className="text-xs text-blue-600 mt-1.5 mb-2.5 flex items-center gap-1.5 font-medium bg-blue-50 w-fit px-2.5 py-1 rounded-md border border-blue-100">
+                                            {event.data.previous_position?.name || 'Unknown'} 
+                                            <ArrowLeft className="w-3 h-3 rotate-180" />
+                                            {event.data.new_position?.name || 'Unknown'}
+                                        </p>
+                                    )}
                                     <div className="flex items-center gap-3 mt-1.5 font-mono text-sm">
                                         <span className="line-through text-gray-400">{fmtVND(event.data.previous_amount)}</span>
                                         <ArrowLeft className="w-3 h-3 text-gray-300 rotate-180" />
                                         <span className="text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-md">{fmtVND(event.data.new_amount)}</span>
+                                        {event.data.increase_type === 'percentage' && event.data.increase_value && (
+                                            <span className="text-xs text-green-700 bg-green-100 px-1.5 py-0.5 rounded">+{event.data.increase_value}%</span>
+                                        )}
+                                        {event.data.previous_salary_type && event.data.previous_salary_type !== event.data.salary_type && (
+                                            <span className="text-xs font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Type Changed</span>
+                                        )}
                                     </div>
+                                    {event.data.reason && <p className="text-xs text-gray-500 mt-2 italic">"{event.data.reason}"</p>}
                                 </div>
                             )}
                             {event.type === 'role' && (
                                 <div>
-                                    <p className="text-sm text-gray-900 font-medium tracking-tight">Role Promotion / Transfer</p>
+                                    <p className="text-sm text-gray-900 font-medium tracking-tight">Role Transfer (Legacy)</p>
                                     <p className="text-sm text-gray-600 mt-1">
                                         Moved from <strong>{event.data.old_position?.name || 'Unknown'}</strong> to <strong className="text-blue-600">{event.data.new_position?.name || 'Unknown'}</strong>
                                     </p>
@@ -656,6 +762,11 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                 <div>
                     <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Performance Tracking</h2>
                     <p className="text-sm text-gray-500 mt-1">Monitor growth, past reviews and key goals.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => { setEditingReview(null); setModalOpen(true); }} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all whitespace-nowrap">
+                        <Plus className="w-4 h-4" /> Add Review
+                    </button>
                 </div>
             </div>
             
@@ -1046,7 +1157,7 @@ function FormFine({ initialData, catalog, loggedUserName, onSave, onCancel }: { 
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Deduction Source</label>
                     <select value={deductionSource} onChange={e => setDeductionSource(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        <option value="salary">Salary Deduction</option>
+                        <option value="salary">Gross Salary Deduction</option>
                         <option value="service_charge">Service Charge Deduction</option>
                         <option value="cash">Direct Cash/Transfer</option>
                     </select>

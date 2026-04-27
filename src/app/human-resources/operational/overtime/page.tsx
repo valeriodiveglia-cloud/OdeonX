@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRStaffMember, HRStaffOvertime } from '@/types/human-resources'
+import { HRStaffMember, HRStaffOvertime, HRStaffSalaryHistory } from '@/types/human-resources'
 import { ChevronLeft, ChevronRight, Users, Watch, X, Loader2, Save, Trash2, CalendarDays, Plus } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { getOvertimeSettings, OvertimeSettings } from '@/lib/hr-operational-data'
@@ -22,6 +22,7 @@ export default function OvertimeMonthlyPage() {
     // Data
     const [staffList, setStaffList] = useState<HRStaffMember[]>([])
     const [overtimeRecords, setOvertimeRecords] = useState<Record<string, HRStaffOvertime[]>>({})
+    const [salaryHistory, setSalaryHistory] = useState<HRStaffSalaryHistory[]>([])
     const [showSelectStaff, setShowSelectStaff] = useState(false)
     const [searchStaff, setSearchStaff] = useState('')
 
@@ -57,6 +58,15 @@ export default function OvertimeMonthlyPage() {
 
             setStaffList((staffRes as HRStaffMember[]) || [])
             
+            // Fetch salary history to determine past salaries
+            const { data: historyRes } = await supabase
+                .from('hr_staff_salary_history')
+                .select('*')
+                .order('effective_date', { ascending: false })
+            if (historyRes) {
+                setSalaryHistory(historyRes as HRStaffSalaryHistory[])
+            }
+
             const grouped: Record<string, HRStaffOvertime[]> = {}
             if (otRes) {
                 otRes.forEach((r: any) => {
@@ -76,13 +86,28 @@ export default function OvertimeMonthlyPage() {
         setSettings(getOvertimeSettings())
     }, [fetchAll])
 
-    const getHourlyRate = (staff: HRStaffMember) => {
-        if (!staff.salary_amount) return 0;
-        if (staff.salary_type === 'hourly') return staff.salary_amount;
+    const getHourlyRate = (staff: HRStaffMember, date: string) => {
+        let applicableSalary = staff.salary_amount;
         
-        // Fixed monthly salary: divide by days in month, then by 8 hours
-        const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-        return (staff.salary_amount / daysInMonth) / 8;
+        // Find if there were any salary changes AFTER this date
+        // Since salaryHistory is sorted by effective_date DESC:
+        const futureChanges = salaryHistory.filter(h => h.staff_id === staff.id && new Date(h.effective_date) > new Date(date));
+        
+        if (futureChanges.length > 0) {
+            // The salary on 'date' is the previous_amount of the EARLIEST future change
+            // Sort future changes ASC by effective_date
+            const sortedFuture = [...futureChanges].sort((a, b) => new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime());
+            applicableSalary = sortedFuture[0].previous_amount;
+        }
+
+        if (!applicableSalary) return 0;
+        if (staff.salary_type === 'hourly') return applicableSalary;
+        
+        // Fixed monthly salary: divide by (days in month - 4 days off), then by 8 hours
+        const recordDate = new Date(date);
+        const daysInMonth = new Date(recordDate.getFullYear(), recordDate.getMonth() + 1, 0).getDate();
+        const workingDays = Math.max(1, daysInMonth - 4); // Prevent division by zero just in case
+        return (applicableSalary / workingDays) / 8;
     }
 
     const calculateCost = (r: HRStaffOvertime, staff: HRStaffMember) => {
@@ -98,7 +123,7 @@ export default function OvertimeMonthlyPage() {
         if (r.compensation_type === 'annual_leave') {
             return eqHours / 8; // 8 hours = 1 leave day
         } else {
-            const hourlyRate = getHourlyRate(staff);
+            const hourlyRate = getHourlyRate(staff, r.date);
             return eqHours * hourlyRate; // Monetary cost
         }
     }
@@ -193,9 +218,9 @@ export default function OvertimeMonthlyPage() {
                     is_public_holiday: false
                 })
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error saving new overtime:', err)
-            alert('A network error occurred while saving.')
+            alert(`Error saving overtime: ${err?.message || 'A network error occurred.'}`)
         } finally {
             setSaving(false)
         }

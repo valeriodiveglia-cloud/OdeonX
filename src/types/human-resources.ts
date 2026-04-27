@@ -143,6 +143,8 @@ export interface HRStaffMember {
   status: StaffStatus;
   notes: string | null;
   contract_signing_date: string | null;
+  probation_months: number;
+  probation_salary_pct: number;
   probation_end_date: string | null;
   contract_expiration_date: string | null;
   contract_doc_url: string | null;
@@ -226,8 +228,23 @@ export interface HRStaffSalaryHistory {
   approved_by: string | null;
   notes: string | null;
   created_at: string;
+  
+  // New Columns for Promotions
+  record_type: 'salary_increase' | 'promotion';
+  increase_type: 'percentage' | 'fixed' | 'none' | null;
+  increase_value: number | null;
+  previous_salary_type: SalaryType | null;
+  previous_position_id: string | null;
+  new_position_id: string | null;
+  previous_department_id: string | null;
+  new_department_id: string | null;
+
   // Joined
   hr_staff?: HRStaffMember;
+  previous_position?: { name: string };
+  new_position?: { name: string };
+  previous_department?: { name: string };
+  new_department?: { name: string };
 }
 
 export interface HRStaffRoleHistory {
@@ -293,4 +310,17 @@ export interface HRServiceChargeStaff {
   hours_worked: number;
   created_at: string;
   updated_at: string;
+}
+
+export type DocumentCategory = 'CV' | 'ID Card' | 'Contract' | 'Medical' | 'Certification' | 'Other';
+
+export interface HRStaffDocument {
+  id: string;
+  staff_id: string;
+  document_name: string;
+  document_category: DocumentCategory | string;
+  file_url: string;
+  uploaded_at: string;
+  uploaded_by: string | null;
+  tags: string[];
 }

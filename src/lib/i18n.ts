@@ -613,6 +613,10 @@ const dict = {
     OverviewTab: 'Overview',
     AgreementsTab: 'Agreements',
     PartnersAndPipelineDesc: 'Your comprehensive view of active partnerships and potential leads.',
+    BankDetails: 'Bank Details',
+    BankName: 'Bank Name',
+    BankAccountName: 'Account Holder Name',
+    BankAccountNumber: 'Account Number',
 
     // Validation Statuses
     Validated: 'Validated',
@@ -1495,6 +1499,10 @@ const dict = {
     OverviewTab: 'Tổng quan',
     AgreementsTab: 'Thỏa thuận',
     PartnersAndPipelineDesc: 'Cái nhìn toàn diện của bạn về các mối quan hệ đối tác đang hoạt động và khách hàng tiềm năng.',
+    BankDetails: 'Chi tiết ngân hàng',
+    BankName: 'Tên ngân hàng',
+    BankAccountName: 'Tên chủ tài khoản',
+    BankAccountNumber: 'Số tài khoản',
 
     // Validation Statuses
     Validated: 'Đã xác nhận',

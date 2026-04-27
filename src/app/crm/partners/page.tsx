@@ -62,7 +62,10 @@ export default function CRMPartnersPage() {
         phone: '',
         location: '',
         pipeline_stage: 'Leads',
-        notes: ''
+        notes: '',
+        bank_name: '',
+        bank_account_name: '',
+        bank_account_number: ''
     })
 
     const handleDragOver = (e: React.DragEvent, colId: string) => {
@@ -261,6 +264,9 @@ export default function CRMPartnersPage() {
                     notes: formData.notes || null,
                     owner_id: currentUser?.id || null,
                     created_by: currentUser?.id || null,
+                    bank_name: formData.bank_name || null,
+                    bank_account_name: formData.bank_account_name || null,
+                    bank_account_number: formData.bank_account_number || null,
                 }
             ])
 
@@ -268,7 +274,7 @@ export default function CRMPartnersPage() {
 
             setIsModalOpen(false)
             setFormData({
-                name: '', type: '', contact_name: '', email: '', phone: '', location: '', pipeline_stage: 'Leads', notes: ''
+                name: '', type: '', contact_name: '', email: '', phone: '', location: '', pipeline_stage: 'Leads', notes: '', bank_name: '', bank_account_name: '', bank_account_number: ''
             })
             fetchPartners()
         } catch (error) {
@@ -626,7 +632,44 @@ export default function CRMPartnersPage() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
+                            {/* Bank Details Section */}
+                            <div className="pt-4 border-t border-slate-100">
+                                <h3 className="text-sm font-semibold text-slate-800 mb-4">{t(language, 'BankDetails')}</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t(language, 'BankName')}</label>
+                                        <input 
+                                            type="text" 
+                                            value={formData.bank_name}
+                                            onChange={e => setFormData({...formData, bank_name: e.target.value})}
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            placeholder="Add bank name..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t(language, 'BankAccountName')}</label>
+                                        <input 
+                                            type="text" 
+                                            value={formData.bank_account_name}
+                                            onChange={e => setFormData({...formData, bank_account_name: e.target.value})}
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            placeholder="Add account holder name..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2 lg:col-span-1 sm:col-span-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t(language, 'BankAccountNumber')}</label>
+                                        <input 
+                                            type="text" 
+                                            value={formData.bank_account_number}
+                                            onChange={e => setFormData({...formData, bank_account_number: e.target.value})}
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
+                                            placeholder="Add account number..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 pt-4 border-t border-slate-100">
                                 <label className="block text-sm font-medium text-slate-700">{t(language, 'NotesContext')}</label>
                                 <textarea 
                                     rows={3}

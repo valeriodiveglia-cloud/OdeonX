@@ -55,6 +55,8 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
     const [salaryType, setSalaryType]         = useState<SalaryType>('fixed')
     const [salaryAmount, setSalaryAmount]     = useState('')
     const [startDate, setStartDate]           = useState('')
+    const [probationMonths, setProbationMonths] = useState('')
+    const [probationSalaryPct, setProbationSalaryPct] = useState('100')
     const [status, setStatus]                 = useState<StaffStatus>('active')
     const [notes, setNotes]                   = useState('')
     const [selectedBranches, setSelectedBranches] = useState<string[]>([])
@@ -92,6 +94,8 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
             setSalaryType(staff.salary_type)
             setSalaryAmount(staff.salary_amount ? new Intl.NumberFormat('en-US').format(staff.salary_amount) : '')
             setStartDate(staff.start_date || '')
+            setProbationMonths(staff.probation_months ? staff.probation_months.toString() : '')
+            setProbationSalaryPct(staff.probation_salary_pct ? staff.probation_salary_pct.toString() : '100')
             setStatus(staff.status)
             setNotes(staff.notes || '')
             const branchIds = staff.hr_staff_branches?.map(b => b.branch_id) || []
@@ -100,7 +104,7 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
             setLastName(''); setMiddleName(''); setFirstName('')
             setDepartmentId(''); setPositionId(''); setPhone(''); setEmail('')
             setEmploymentType('full_time'); setSalaryType('fixed'); setSalaryAmount('')
-            setStartDate(''); setStatus('active'); setNotes('')
+            setStartDate(''); setProbationMonths(''); setProbationSalaryPct('100'); setStatus('active'); setNotes('')
             setSelectedBranches([])
         }
     }, [staff, open])
@@ -122,6 +126,16 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
             
         const deptName = departments.find(d => d.id === departmentId)?.name || null
         const posName = positions.find(p => p.id === positionId)?.name || ''
+        
+        let probationEndDate = null;
+        const probMonths = parseInt(probationMonths, 10);
+        if (startDate && !isNaN(probMonths) && probMonths > 0) {
+            const dateObj = new Date(startDate);
+            dateObj.setMonth(dateObj.getMonth() + probMonths);
+            dateObj.setDate(dateObj.getDate() - 1);
+            probationEndDate = dateObj.toISOString().split('T')[0];
+        }
+
         await onSave(
             {
                 full_name: buildFullName,
@@ -135,6 +149,9 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
                 salary_type: salaryType,
                 salary_amount: parseFloat(salaryAmount.replace(/,/g, '')) || 0,
                 start_date: startDate || null,
+                probation_months: isNaN(probMonths) ? 0 : probMonths,
+                probation_salary_pct: parseFloat(probationSalaryPct) || 100,
+                probation_end_date: probationEndDate,
                 status,
                 notes: notes.trim() || null,
             },
@@ -177,8 +194,22 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
                         </div>
                     </div>
 
-                    {/* Row 2: Department + Position + Status */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Row 2: Phone + Email */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                            <input value={phone} onChange={e => setPhone(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                        </div>
+                    </div>
+
+                    {/* Row 3: Department + Position + (Status if editing) */}
+                    <div className={`grid grid-cols-1 gap-4 ${staff ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                             <select value={departmentId} onChange={e => { setDepartmentId(e.target.value); setPositionId('') }}
@@ -195,19 +226,21 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
                                 {filteredPositions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                            <select value={status} onChange={e => setStatus(e.target.value as StaffStatus)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                                <option value="terminated">Terminated</option>
-                            </select>
-                        </div>
+                        {staff && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                <select value={status} onChange={e => setStatus(e.target.value as StaffStatus)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="terminated">Terminated</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Row 3: Employment + Salary */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Row 4: Employment + Salary */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
                             <select value={employmentType} onChange={e => {
@@ -222,16 +255,8 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Salary Type</label>
-                            <select value={salaryType} onChange={e => setSalaryType(e.target.value as SalaryType)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="fixed">Fixed Monthly</option>
-                                <option value="hourly">Hourly Rate</option>
-                            </select>
-                        </div>
-                        <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Amount (VND) {salaryType === 'fixed' ? '/month' : '/hour'}
+                                Amount (VND) {employmentType === 'full_time' ? '/month' : '/hour'}
                             </label>
                             <input type="text" value={salaryAmount} onChange={e => {
                                 const val = e.target.value.replace(/\D/g, '')
@@ -242,22 +267,27 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
                         </div>
                     </div>
 
-                    {/* Row 4: Phone + Email + Start Date */}
+                    {/* Row 5: Start Date + Probation */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                            <input value={phone} onChange={e => setPhone(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Probation Time (Months)</label>
+                            <input type="number" min="0" step="1" value={probationMonths} onChange={e => setProbationMonths(e.target.value)}
+                                placeholder="e.g. 2"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Probation Salary (%)</label>
+                            <div className="relative">
+                                <input type="number" min="0" max="100" step="1" value={probationSalaryPct} onChange={e => setProbationSalaryPct(e.target.value)}
+                                    placeholder="100"
+                                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                            </div>
                         </div>
                     </div>
 
