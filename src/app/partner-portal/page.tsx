@@ -137,7 +137,7 @@ const statusIcon = (status: string) => {
 export default function PartnerPortalPage() {
   const [view, setView] = useState<ViewState>('login')
   const [lang, setLang] = useState<Lang>('vi')
-  const [logoUrl, setLogoUrl] = useState<string>('/logologin.svg')
+  const [logoUrl, setLogoUrl] = useState<string>('')
 
   useEffect(() => {
     fetch('/api/partner-portal/logo').then(r => r.json()).then(j => { if (j.url) setLogoUrl(j.url) }).catch(() => {})

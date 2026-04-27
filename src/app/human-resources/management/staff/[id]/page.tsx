@@ -18,7 +18,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 
 // === HELPERS ===
 const fmtVND = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
-// Removed static fmtDate, will define inside component
+const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '-'
 
 // === TABS CONFIG ===
 const TABS = [
@@ -36,7 +36,7 @@ export default function StaffDetailPage() {
     const router = useRouter()
 
     const { currency, language } = useSettings()
-    const fmtDate = useCallback((d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '-', [])
+
 
     const [activeTab, setActiveTab] = useState<TabId>('profile')
     const [loading, setLoading] = useState(true)

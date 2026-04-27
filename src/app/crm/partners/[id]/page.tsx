@@ -767,7 +767,7 @@ export default function PartnerDetail() {
                                             <Landmark className="w-5 h-5" />
                                         </div>
                                         <div className="py-1 min-w-0">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_name}>{partner.bank_name || '-'}</div>
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_name || undefined}>{partner.bank_name || '-'}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'BankName')}</div>
                                         </div>
                                     </div>
@@ -776,7 +776,7 @@ export default function PartnerDetail() {
                                             <CreditCard className="w-5 h-5" />
                                         </div>
                                         <div className="py-1 min-w-0">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_account_number}>{partner.bank_account_number || '-'}</div>
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_account_number || undefined}>{partner.bank_account_number || '-'}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'BankAccountNumber')}</div>
                                         </div>
                                     </div>
@@ -785,7 +785,7 @@ export default function PartnerDetail() {
                                             <User className="w-5 h-5" />
                                         </div>
                                         <div className="py-1 min-w-0">
-                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_account_name}>{partner.bank_account_name || '-'}</div>
+                                            <div className="font-medium text-slate-900 text-base mb-0.5 truncate" title={partner.bank_account_name || undefined}>{partner.bank_account_name || '-'}</div>
                                             <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold">{t(language, 'BankAccountName')}</div>
                                         </div>
                                     </div>
