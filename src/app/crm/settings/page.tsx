@@ -327,70 +327,7 @@ export default function CRMSettingsPage() {
                                     </div>
                                 </div>
 
-                                {/* Client Discount Section */}
-                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="font-bold text-slate-800">{t(language, 'ClientDiscountTitle')}</h3>
-                                        <label className="flex items-center cursor-pointer">
-                                            <div className="relative">
-                                                <input type="checkbox" className="sr-only" 
-                                                    checked={advisorFormData.hasDirectDiscount}
-                                                    onChange={() => setAdvisorFormData(prev => ({...prev, hasDirectDiscount: !prev.hasDirectDiscount}))}
-                                                />
-                                                <div className={`block w-10 h-6 rounded-full transition-colors ${advisorFormData.hasDirectDiscount ? 'bg-indigo-500' : 'bg-slate-300'}`}></div>
-                                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${advisorFormData.hasDirectDiscount ? 'transform translate-x-4' : ''}`}></div>
-                                            </div>
-                                        </label>
-                                    </div>
 
-                                    {advisorFormData.hasDirectDiscount && (
-                                        <div className="grid grid-cols-2 gap-4 mt-3">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t(language, 'Type')}</label>
-                                                <select 
-                                                    value={advisorFormData.directDiscountType}
-                                                    onChange={e => setAdvisorFormData({...advisorFormData, directDiscountType: e.target.value})}
-                                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white text-slate-900 text-sm font-medium transition"
-                                                >
-                                                    <option value="Percentage">{t(language, 'PercentageLabel')}</option>
-                                                    <option value="Fixed">{t(language, 'FixedAmount')}</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t(language, 'Value')}</label>
-                                                <div className="relative">
-                                                    <input 
-                                                        type="number"
-                                                        required
-                                                        min="0"
-                                                        step={advisorFormData.directDiscountType === 'Percentage' ? "0.1" : "1"}
-                                                        value={advisorFormData.directDiscountValue}
-                                                        onChange={e => setAdvisorFormData({...advisorFormData, directDiscountValue: parseFloat(e.target.value) || 0})}
-                                                        className="w-full pl-3 pr-8 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white text-slate-900 text-sm font-bold transition"
-                                                    />
-                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">
-                                                        {advisorFormData.directDiscountType === 'Percentage' ? '%' : currency}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Base calculation for Advisor Direct Commission */}
-                                {(advisorFormData.hasDirectDiscount && advisorFormData.directCommissionType === 'Percentage') && (
-                                    <div className="mt-4">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'CommissionBaseStructure')}</label>
-                                        <select 
-                                            value={advisorFormData.directCommissionBase}
-                                            onChange={e => setAdvisorFormData({...advisorFormData, directCommissionBase: e.target.value})}
-                                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white text-slate-900 font-medium transition"
-                                        >
-                                            <option value="Before Discount">{t(language, 'BeforeDiscount')}</option>
-                                            <option value="After Discount">{t(language, 'AfterDiscount')}</option>
-                                        </select>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -420,22 +357,41 @@ export default function CRMSettingsPage() {
                                                 <div className="font-semibold text-slate-900">{adv.name || adv.email}</div>
                                                 <div className="text-xs text-slate-500">{adv.email}</div>
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-xs font-semibold text-slate-600 uppercase">{t(language, 'ReferralCode')}</span>
-                                                <input 
-                                                    type="text" 
-                                                    value={adv.referral_code || ''}
-                                                    onChange={async (e) => {
-                                                        const newVal = e.target.value.toUpperCase().replace(/\s/g, '')
-                                                        setAdvisors(prev => prev.map(a => a.id === adv.id ? {...a, referral_code: newVal} : a))
-                                                    }}
-                                                    onBlur={async (e) => {
-                                                        const newVal = e.target.value.toUpperCase().replace(/\s/g, '')
-                                                        await supabase.from('app_accounts').update({ referral_code: newVal || null }).eq('id', adv.id)
-                                                    }}
-                                                    placeholder={t(language, 'ReferralCodeExpl')}
-                                                    className="w-32 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                                                />
+                                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-semibold text-slate-600 uppercase">{t(language, 'ReferralCode')}</span>
+                                                    <input 
+                                                        type="text" 
+                                                        value={adv.referral_code || ''}
+                                                        onChange={async (e) => {
+                                                            const newVal = e.target.value.toUpperCase().replace(/\s/g, '')
+                                                            setAdvisors(prev => prev.map(a => a.id === adv.id ? {...a, referral_code: newVal} : a))
+                                                        }}
+                                                        onBlur={async (e) => {
+                                                            const newVal = e.target.value.toUpperCase().replace(/\s/g, '')
+                                                            await supabase.from('app_accounts').update({ referral_code: newVal || null }).eq('id', adv.id)
+                                                        }}
+                                                        placeholder={t(language, 'ReferralCodeExpl')}
+                                                        className="w-32 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
+                                                    <span className="text-xs font-semibold text-slate-600 uppercase">PIT DEDUCTION (10%)</span>
+                                                    <label className="flex items-center cursor-pointer">
+                                                        <div className="relative">
+                                                            <input type="checkbox" className="sr-only" 
+                                                                checked={adv.deduct_pit !== false}
+                                                                onChange={async (e) => {
+                                                                    const checked = e.target.checked
+                                                                    setAdvisors(prev => prev.map(a => a.id === adv.id ? {...a, deduct_pit: checked} : a))
+                                                                    await supabase.from('app_accounts').update({ deduct_pit: checked }).eq('id', adv.id)
+                                                                }}
+                                                            />
+                                                            <div className={`block w-10 h-6 rounded-full transition-colors ${adv.deduct_pit !== false ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${adv.deduct_pit !== false ? 'transform translate-x-4' : ''}`}></div>
+                                                        </div>
+                                                    </label>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -509,70 +465,7 @@ export default function CRMSettingsPage() {
                                 )}
                             </div>
 
-                            {/* Client Discount Section */}
-                            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-bold text-slate-800">{t(language, 'ClientDiscountTitle')}</h3>
-                                    <label className="flex items-center cursor-pointer">
-                                        <div className="relative">
-                                            <input type="checkbox" className="sr-only" 
-                                                checked={partnerFormData.has_discount}
-                                                onChange={e => setPartnerFormData({...partnerFormData, has_discount: e.target.checked})}
-                                            />
-                                            <div className={`block w-10 h-6 rounded-full transition-colors ${partnerFormData.has_discount ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
-                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${partnerFormData.has_discount ? 'transform translate-x-4' : ''}`}></div>
-                                        </div>
-                                    </label>
-                                </div>
 
-                                {partnerFormData.has_discount && (
-                                    <div className="grid grid-cols-2 gap-4 mt-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t(language, 'Type')}</label>
-                                            <select 
-                                                value={partnerFormData.client_discount_type}
-                                                onChange={e => setPartnerFormData({...partnerFormData, client_discount_type: e.target.value})}
-                                                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 text-sm font-medium transition"
-                                            >
-                                                <option value="Percentage">{t(language, 'PercentageLabel')}</option>
-                                                <option value="Fixed">{t(language, 'FixedAmount')}</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t(language, 'Value')}</label>
-                                            <div className="relative">
-                                                <input 
-                                                    type="number"
-                                                    required
-                                                    min="0"
-                                                    step={partnerFormData.client_discount_type === 'Percentage' ? "0.1" : "1"}
-                                                    value={partnerFormData.client_discount_value}
-                                                    onChange={e => setPartnerFormData({...partnerFormData, client_discount_value: parseFloat(e.target.value) || 0})}
-                                                    className="w-full pl-3 pr-8 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 text-sm font-bold transition"
-                                                />
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">
-                                                    {partnerFormData.client_discount_type === 'Percentage' ? '%' : currency}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Base calculation */}
-                            {(partnerFormData.has_commission && partnerFormData.has_discount && partnerFormData.commission_type === 'Percentage') && (
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'CommissionBaseStructure')}</label>
-                                    <select 
-                                        value={partnerFormData.commission_base}
-                                        onChange={e => setPartnerFormData({...partnerFormData, commission_base: e.target.value})}
-                                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white text-slate-900 font-medium transition"
-                                    >
-                                        <option value="Before Discount">{t(language, 'BeforeDiscount')}</option>
-                                        <option value="After Discount">{t(language, 'AfterDiscount')}</option>
-                                    </select>
-                                </div>
-                            )}
 
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'DealTerms')}</label>

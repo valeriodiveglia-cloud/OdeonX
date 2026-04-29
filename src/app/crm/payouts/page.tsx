@@ -13,6 +13,8 @@ interface ExtendedPayout extends CRMPayout {
     sale_advisor_id?: string
     crm_partners: {
         name: string
+        issues_vat_invoice?: boolean
+        crm_agreements?: { commission_value: number; commission_type: string }[]
     } | null
 }
 
@@ -23,7 +25,7 @@ function fmt(n: number) { return new Intl.NumberFormat('en-US', { maximumFractio
 
 export default function CRMPayoutsPage() {
     const router = useRouter()
-    const { currency, language } = useSettings()
+    const { currency, language, crmPartnerRules, crmCommissionRules, crmCommissionType, crmAdvisorCommissionPct } = useSettings()
     const [searchTerm, setSearchTerm] = useState('')
     const [payouts, setPayouts] = useState<ExtendedPayout[]>([])
     const [loading, setLoading] = useState(true)
@@ -39,7 +41,8 @@ export default function CRMPayoutsPage() {
     /* Modals State */
     const [selectedPayout, setSelectedPayout] = useState<ExtendedPayout | null>(null)
     const [modalMode, setModalMode] = useState<'none' | 'markPaid' | 'viewReceipt'>('none')
-    
+    const [receiptReferrals, setReceiptReferrals] = useState<any[]>([])
+    const [loadingReceipt, setLoadingReceipt] = useState(false)
     // Form fields for Mark Paid
     const [paymentDate, setPaymentDate] = useState('')
     const [paymentMethod, setPaymentMethod] = useState('Cash')
@@ -47,6 +50,7 @@ export default function CRMPayoutsPage() {
 
     const [currentUser, setCurrentUser] = useState<{ id: string, role?: string } | null>(null)
     const [accountsMap, setAccountsMap] = useState<Record<string, string>>({})
+    const [accountsDeductPitMap, setAccountsDeductPitMap] = useState<Record<string, boolean>>({})
 
     const fetchData = async () => {
         setLoading(true)
@@ -71,7 +75,12 @@ export default function CRMPayoutsPage() {
             .select(`
                 *,
                 crm_partners (
-                    name
+                    name,
+                    issues_vat_invoice,
+                    crm_agreements (
+                        commission_value,
+                        commission_type
+                    )
                 )
             `)
             .order('created_at', { ascending: false })
@@ -82,7 +91,7 @@ export default function CRMPayoutsPage() {
 
         const [payoutsRes, accountsRes] = await Promise.all([
             query,
-            supabase.from('app_accounts').select('user_id, name, email')
+            supabase.from('app_accounts').select('user_id, name, email, deduct_pit')
         ])
 
         if (payoutsRes.error) {
@@ -94,10 +103,15 @@ export default function CRMPayoutsPage() {
 
         if (accountsRes.data) {
             const map: Record<string, string> = {}
+            const deductMap: Record<string, boolean> = {}
             for (const acc of accountsRes.data) {
-                if (acc.user_id) map[acc.user_id] = acc.name || acc.email || 'Unknown User'
+                if (acc.user_id) {
+                    map[acc.user_id] = acc.name || acc.email || 'Unknown User'
+                    deductMap[acc.user_id] = acc.deduct_pit !== false
+                }
             }
             setAccountsMap(map)
+            setAccountsDeductPitMap(deductMap)
         }
 
         setLoading(false)
@@ -109,7 +123,10 @@ export default function CRMPayoutsPage() {
 
     /* Generate automatic payouts from pending referrals */
     const generatePayouts = async () => {
-        if (!confirm(`${t(language, 'AreYouSure')} ${activeTab} ${t(language, 'Payouts').toLowerCase()} ${t(language, 'For')} ${formatMonthLabel(monthCursor, language)}?`)) return
+        const confirmMsg = (t(language, 'ConfirmGeneratePayouts') || 'Are you sure you want to generate payouts for {type}s for {month}?')
+            .replace('{type}', activeTab)
+            .replace('{month}', formatMonthLabel(monthCursor, language))
+        if (!confirm(confirmMsg)) return
 
         setIsGenerating(true)
         try {
@@ -236,9 +253,26 @@ export default function CRMPayoutsPage() {
         setModalMode('markPaid')
     }
 
-    const openViewReceipt = (payout: ExtendedPayout) => {
+    const openViewReceipt = async (payout: ExtendedPayout) => {
         setSelectedPayout(payout)
         setModalMode('viewReceipt')
+        setLoadingReceipt(true)
+        
+        const isPartner = activeTab === 'partner'
+        const column = isPartner ? 'payout_id' : 'advisor_payout_id'
+        
+        const { data, error } = await supabase
+            .from('crm_referrals')
+            .select('*')
+            .eq(column, payout.id)
+            .order('created_at', { ascending: false })
+            
+        if (!error && data) {
+            setReceiptReferrals(data)
+        } else {
+            setReceiptReferrals([])
+        }
+        setLoadingReceipt(false)
     }
 
     const closeModal = () => {
@@ -442,7 +476,7 @@ export default function CRMPayoutsPage() {
                             </tr>
                         ) : (
                             filteredPayouts.map(payout => (
-                                <tr key={payout.id} className="border-t hover:bg-blue-50/40 transition">
+                                <tr key={payout.id} onClick={() => openViewReceipt(payout)} className="border-t hover:bg-blue-50/40 transition cursor-pointer">
                                     <td className="p-2 whitespace-nowrap">
                                         <div className="text-sm font-medium text-slate-700">{payout.id.slice(0, 8).toUpperCase()}</div>
                                     </td>
@@ -469,13 +503,13 @@ export default function CRMPayoutsPage() {
                                             {t(language, payout.status as any)}
                                         </span>
                                         {payout.payment_date && (
-                                            <div className="text-xs text-gray-500 mt-0.5">on {new Date(payout.payment_date).toLocaleDateString()}</div>
+                                            <div className="text-xs text-gray-500 mt-0.5">on {new Date(payout.payment_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
                                         )}
                                     </td>
                                     <td className="p-2 whitespace-nowrap text-right">
                                         {payout.status === 'Pending' && currentUser?.role !== 'sale advisor' && (
                                             <button
-                                                onClick={() => openMarkPaid(payout)}
+                                                onClick={(e) => { e.stopPropagation(); openMarkPaid(payout); }}
                                                 className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ml-auto"
                                             >
                                                 <CreditCard className="w-3.5 h-3.5"/> {t(language, 'MarkPaid')}
@@ -483,7 +517,7 @@ export default function CRMPayoutsPage() {
                                         )}
                                         {payout.status === 'Paid' && (
                                             <button 
-                                                onClick={() => openViewReceipt(payout)}
+                                                onClick={(e) => { e.stopPropagation(); openViewReceipt(payout); }}
                                                 className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ml-auto"
                                             >
                                                 <FileText className="w-3.5 h-3.5" /> {t(language, 'ViewReceipt')}
@@ -513,7 +547,7 @@ export default function CRMPayoutsPage() {
             {/* Modals */}
             {modalMode !== 'none' && selectedPayout && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className={`bg-white rounded-2xl shadow-xl w-full ${modalMode === 'viewReceipt' ? 'max-w-3xl' : 'max-w-md'} overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
                         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100">
                             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                                 {modalMode === 'markPaid' ? <CreditCard className="w-5 h-5 text-blue-500" /> : <FileText className="w-5 h-5 text-blue-500" />}
@@ -589,13 +623,23 @@ export default function CRMPayoutsPage() {
                         )}
 
                         {modalMode === 'viewReceipt' && (
-                            <div className="p-4 sm:p-6 flex flex-col gap-6">
+                            <div className="p-4 sm:p-6 flex flex-col gap-6 max-h-[85vh] overflow-y-auto">
                                 <div className="text-center">
-                                    <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 ${
+                                        selectedPayout.status === 'Paid' ? 'bg-emerald-100' :
+                                        selectedPayout.status === 'Processing' ? 'bg-blue-100' : 'bg-amber-100'
+                                    }`}>
+                                        {selectedPayout.status === 'Paid' ? <CheckCircle2 className="w-8 h-8 text-emerald-600" /> : <Clock className={`w-8 h-8 ${selectedPayout.status === 'Processing' ? 'text-blue-600' : 'text-amber-600'}`} />}
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900">{fmt(Number(selectedPayout.amount))} {currency}</h3>
-                                    <p className="text-sm font-semibold text-emerald-600 mt-1 uppercase tracking-wider">{t(language, 'TransactionSuccessful')}</p>
+                                    <h3 className="text-xl font-black text-slate-900">
+                                        {fmt(Number(selectedPayout.amount))} {currency}
+                                    </h3>
+                                    <p className={`text-sm font-semibold mt-1 uppercase tracking-wider ${
+                                        selectedPayout.status === 'Paid' ? 'text-emerald-600' :
+                                        selectedPayout.status === 'Processing' ? 'text-blue-600' : 'text-amber-600'
+                                    }`}>
+                                        {selectedPayout.status === 'Paid' ? t(language, 'TransactionSuccessful') || 'Transaction Successful' : t(language, selectedPayout.status as any)}
+                                    </p>
                                 </div>
 
                                 <div className="bg-slate-50 rounded-xl border border-slate-100 p-4 space-y-4">
@@ -610,18 +654,49 @@ export default function CRMPayoutsPage() {
                                     </div>
                                     <div className="flex justify-between items-center border-b border-slate-200/60 pb-3">
                                         <span className="text-sm text-slate-500">{t(language, 'Period')}</span>
-                                        <span className="text-sm font-semibold text-slate-900">{selectedPayout.period}</span>
+                                        <span className="text-sm font-semibold text-slate-900">{selectedPayout.period.split('-')[1]}/{selectedPayout.period.split('-')[0]}</span>
                                     </div>
-                                    <div className="flex justify-between items-center border-b border-slate-200/60 pb-3">
-                                        <span className="text-sm text-slate-500">{t(language, 'PaymentDate')}</span>
-                                        <span className="text-sm font-semibold text-slate-900">
-                                            {selectedPayout.payment_date ? new Date(selectedPayout.payment_date).toLocaleDateString() : 'N/A'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-sm text-slate-500">{t(language, 'PaymentMethod')}</span>
-                                        <span className="text-sm font-mono font-semibold text-slate-900">{selectedPayout.reference_number || t(language, 'Cash')}</span>
-                                    </div>
+                                    {activeTab === 'partner' && (selectedPayout.crm_partners?.crm_agreements?.[0] || crmPartnerRules) && (
+                                        <div className="flex justify-between items-center pt-3 border-t border-slate-200/60">
+                                            <span className="text-sm text-slate-500">Commission Rate</span>
+                                            <span className="text-sm font-semibold text-slate-900">
+                                                {selectedPayout.crm_partners?.crm_agreements?.[0]?.commission_value ?? crmPartnerRules?.commission_value}
+                                                {(selectedPayout.crm_partners?.crm_agreements?.[0]?.commission_type ?? crmPartnerRules?.commission_type) === 'Percentage' ? '%' : ` ${currency}`}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {activeTab === 'advisor' && (
+                                        <div className="pt-3 border-t border-slate-200/60 space-y-2">
+                                            {crmCommissionType === 'Standard Flat Percentage' ? (
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-sm text-slate-500">Commission Rate</span>
+                                                    <span className="text-sm font-semibold text-slate-900">{crmAdvisorCommissionPct}%</span>
+                                                </div>
+                                            ) : crmCommissionType === 'Acquisition + Maintenance' ? (
+                                                <>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-sm text-slate-500">Acquisition Commission</span>
+                                                        <span className="text-sm font-semibold text-slate-900">{crmCommissionRules?.acquisition_pct}%</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-sm text-slate-500">Maintenance Commission</span>
+                                                        <span className="text-sm font-semibold text-slate-900">{crmCommissionRules?.maintenance_pct}%</span>
+                                                    </div>
+                                                </>
+                                            ) : crmCommissionType === 'Fixed Activation Bonus + Maintenance' ? (
+                                                <>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-sm text-slate-500">Activation Bonus</span>
+                                                        <span className="text-sm font-semibold text-slate-900">{fmt(crmCommissionRules?.fixed_bonus || 0)} {currency}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-sm text-slate-500">Maintenance Commission</span>
+                                                        <span className="text-sm font-semibold text-slate-900">{crmCommissionRules?.maintenance_pct}%</span>
+                                                    </div>
+                                                </>
+                                            ) : null}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {selectedPayout.notes && (
@@ -630,6 +705,73 @@ export default function CRMPayoutsPage() {
                                         <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100">
                                             {selectedPayout.notes}
                                         </p>
+                                    </div>
+                                )}
+
+                                {/* New Referrals Breakdown */}
+                                <div className="space-y-3">
+                                    <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t(language, 'TransactionsIncluded') || 'Transactions Included'}</h4>
+                                    {loadingReceipt ? (
+                                        <div className="flex justify-center p-4"><div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div></div>
+                                    ) : receiptReferrals.length > 0 ? (
+                                        <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+                                            <table className="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                                                        <th className="p-3">{t(language, 'TransactionRef') || 'Ref'}</th>
+                                                        <th className="p-3">{t(language, 'Date') || 'Date'} & Time</th>
+                                                        <th className="p-3">{t(language, 'Pax') || 'Pax'}</th>
+                                                        <th className="p-3 text-right">{t(language, 'TotalBill') || 'Total Bill'}</th>
+                                                        <th className="p-3 text-right">Rate %</th>
+                                                        <th className="p-3 text-right">{t(language, 'GrossCommission') || 'Gross Comm.'}</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {receiptReferrals.map(r => {
+                                                        const gross = activeTab === 'partner' 
+                                                            ? (selectedPayout.crm_partners?.issues_vat_invoice === false ? Number(r.commission_value) / 0.9 : r.commission_value) 
+                                                            : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id] ? Number(r.advisor_commission_value) / 0.9 : r.advisor_commission_value)
+                                                        const pct = r.revenue_generated > 0 ? (gross / r.revenue_generated) * 100 : 0
+                                                        const displayRate = pct % 1 === 0 ? pct.toFixed(0) + '%' : pct.toFixed(1) + '%'
+
+                                                        return (
+                                                            <tr key={r.id} className="text-sm hover:bg-slate-50/50">
+                                                                <td className="p-3 font-mono text-xs text-slate-500 uppercase">{r.id.split('-')[0]}</td>
+                                                                <td className="p-3 text-slate-600 whitespace-nowrap">{new Date(r.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                                                                <td className="p-3 font-semibold text-slate-900">{r.party_size}</td>
+                                                                <td className="p-3 text-right text-slate-600">{fmt(r.revenue_generated)} đ</td>
+                                                                <td className="p-3 text-right font-semibold text-emerald-600 bg-slate-50/50 whitespace-nowrap">{displayRate}</td>
+                                                                <td className="p-3 text-right font-semibold text-emerald-600 whitespace-nowrap">
+                                                                    {fmt(gross)} đ
+                                                                </td>
+                                                            </tr>
+                                                        )
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center p-4 text-sm text-slate-500 bg-slate-50 rounded-xl border border-slate-100">
+                                            {t(language, 'NoTransactionsFound') || 'No transactions found.'}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Totals with deductions if partner or advisor */}
+                                {(activeTab === 'partner' ? selectedPayout.crm_partners?.issues_vat_invoice === false : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id])) && (
+                                    <div className="bg-rose-50/50 rounded-xl border border-rose-100 p-3 space-y-2 mt-4">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-600">{t(language, 'GrossCommission')}</span>
+                                            <span className="font-semibold text-slate-900">{fmt(Number(selectedPayout.amount) / 0.9)} đ</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-rose-600 flex items-center gap-2">{t(language, 'PITDeduction')} <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200">10%</span></span>
+                                            <span className="font-semibold text-rose-600">-{fmt((Number(selectedPayout.amount) / 0.9) - Number(selectedPayout.amount))} đ</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm font-bold pt-2 border-t border-rose-100">
+                                            <span className="text-slate-900">{t(language, 'NetCommission')}</span>
+                                            <span className="text-emerald-600">{fmt(Number(selectedPayout.amount))} đ</span>
+                                        </div>
                                     </div>
                                 )}
 

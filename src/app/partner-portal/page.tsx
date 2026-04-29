@@ -1,15 +1,15 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Eye, EyeOff, LogIn, Lock, TrendingUp, DollarSign, Users, Clock, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Eye, EyeOff, LogIn, Lock, TrendingUp, DollarSign, Users, Clock, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
 
 /* ────────────────────── types ────────────────────── */
 type PartnerData = {
-  partner: { id: string; name: string; type: string | null; contact_name: string | null; partner_code: string; phone: string | null }
+  partner: { id: string; name: string; type: string | null; contact_name: string | null; partner_code: string; phone: string | null; issues_vat_invoice?: boolean }
   agreement: { commission_type: string; commission_value: number; client_discount_type: string | null; client_discount_value: number | null; status: string; valid_until: string | null } | null
-  referrals: { id: string; guest_name: string; arrival_date: string | null; party_size: number; status: string; revenue_generated: number; commission_value: number; created_at: string }[]
-  payouts: { id: string; period: string; amount: number; status: string; payment_date: string | null; reference_number: string | null; created_at: string }[]
+  referrals: { id: string; guest_name: string; arrival_date: string | null; party_size: number; status: string; revenue_generated: number; commission_value: number; created_at: string; payout_id?: string | null; partner_payout?: { status: string } }[]
+  payouts: { id: string; period: string; amount: number; status: string; payment_date: string | null; reference_number: string | null; notes: string | null; created_at: string }[]
   summary: { totalCommissions: number; paidCommissions: number; pendingCommissions: number; totalReferrals: number; validatedReferrals: number; pendingReferrals: number }
 }
 
@@ -52,7 +52,21 @@ const PORTAL_DICT = {
     TotalBill: 'Total Bill',
     Language: 'Language',
     Connecting: 'Connecting...',
-    Saving: 'Saving...'
+    Saving: 'Saving...',
+    TransactionDetails: 'Transaction Details',
+    BaseRevenue: 'Base Revenue',
+    TransactionRef: 'Transaction Ref',
+    GrossCommission: 'Gross Commission',
+    NetCommission: 'Net Commission',
+    PITDeduction: 'PIT Deduction',
+    Processing: 'Processing',
+    NoPayout: 'No Payout',
+    Cancelled: 'Cancelled',
+    PartiallyPaid: 'Partially Paid',
+    InPayout: 'In Payout',
+    Close: 'Close',
+    Period: 'Period',
+    Notes: 'Notes'
   },
   vi: {
     Login: 'Đăng nhập',
@@ -89,7 +103,21 @@ const PORTAL_DICT = {
     TotalBill: 'Tổng Hóa Đơn',
     Language: 'Ngôn ngữ',
     Connecting: 'Đang kết nối...',
-    Saving: 'Đang lưu...'
+    Saving: 'Đang lưu...',
+    TransactionDetails: 'Chi Tiết Giao Dịch',
+    BaseRevenue: 'Doanh Thu Gốc',
+    TransactionRef: 'Mã Giao Dịch',
+    GrossCommission: 'Hoa Hồng Gộp',
+    NetCommission: 'Hoa Hồng Thực Nhận',
+    PITDeduction: 'Khấu Trừ Thuế (PIT)',
+    Processing: 'Đang xử lý',
+    NoPayout: 'Chưa thanh toán',
+    Cancelled: 'Đã hủy',
+    PartiallyPaid: 'Thanh toán một phần',
+    InPayout: 'Đang lên lịch',
+    Close: 'Đóng',
+    Period: 'Kỳ thanh toán',
+    Notes: 'Ghi chú'
   }
 }
 
@@ -489,6 +517,8 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
   const { partner, agreement, referrals, payouts, summary } = data
   const [showAllReferrals, setShowAllReferrals] = useState(false)
   const [showAllPayouts, setShowAllPayouts] = useState(false)
+  const [selectedReferral, setSelectedReferral] = useState<PartnerData['referrals'][0] | null>(null)
+  const [selectedPayout, setSelectedPayout] = useState<PartnerData['payouts'][0] | null>(null)
   const displayedReferrals = showAllReferrals ? referrals : referrals.slice(0, 5)
   const displayedPayouts = showAllPayouts ? payouts : payouts.slice(0, 5)
 
@@ -572,7 +602,7 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
           ) : (
             <div className="space-y-3">
               {displayedReferrals.map(r => (
-                <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-[#e1d5c3] rounded-xl p-4 gap-3 sm:gap-0 hover:border-[#d2c2ad] hover:shadow-sm transition-all">
+                <div key={r.id} onClick={() => setSelectedReferral(r)} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-[#e1d5c3] rounded-xl p-4 gap-3 sm:gap-0 hover:border-[#d2c2ad] hover:shadow-sm transition-all cursor-pointer">
                   <div className="min-w-0 flex-1">
                     <p className="text-[15px] font-bold text-[#3E2C19] truncate">{pT(lang, 'TotalBill')}: {fmtCurrency(r.revenue_generated)}</p>
                     <p className="text-[13px] font-medium text-[#755533] mt-0.5">{fmtDate(r.arrival_date)} · {r.party_size} pax</p>
@@ -608,7 +638,11 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
           ) : (
             <div className="space-y-3">
               {displayedPayouts.map(p => (
-                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-[#e1d5c3] rounded-xl p-4 gap-3 sm:gap-0 hover:border-[#d2c2ad] hover:shadow-sm transition-all">
+                <div 
+                  key={p.id} 
+                  onClick={() => setSelectedPayout(p)}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-[#e1d5c3] rounded-xl p-4 gap-3 sm:gap-0 hover:border-[#d2c2ad] hover:shadow-sm transition-all cursor-pointer"
+                >
                   <div className="min-w-0 flex-1">
                     <p className="text-[15px] font-bold text-[#3E2C19]">{p.period}</p>
                     <p className="text-[13px] font-medium text-[#755533] mt-0.5">
@@ -639,6 +673,243 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
           {pT(lang, 'FooterInfo')}
         </p>
       </div>
+
+      {/* Modal Breakdown */}
+      {selectedReferral && (
+        <div className="fixed inset-0 bg-[#3E2C19]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#f9f4ea] rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-[#e1d5c3]">
+            {/* Header */}
+            <div className="bg-white px-6 py-5 border-b border-[#e1d5c3] flex justify-between items-center sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#dcefe9] flex items-center justify-center border border-[#149372]/20">
+                  <DollarSign className="w-5 h-5 text-[#149372]" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-[#3E2C19]">{pT(lang, 'TransactionDetails')}</h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs font-medium text-[#755533] uppercase tracking-wider">{pT(lang, 'TransactionRef')}</span>
+                    <span className="text-xs font-mono bg-[#fefaf0] px-1.5 py-0.5 rounded text-[#8c673d] border border-[#ede0c9]">{selectedReferral.id.split('-')[0]}</span>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedReferral(null)}
+                className="p-2 text-[#a48866] hover:bg-[#fefaf0] rounded-full transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 sm:p-8 space-y-6 bg-[#fbf5e6] max-h-[80vh] overflow-y-auto">
+              {/* Revenue Header */}
+              <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#e1d5c3] shadow-sm flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-[#8c673d] text-sm font-semibold uppercase tracking-wider">{pT(lang, 'BaseRevenue')}</div>
+                    {(() => {
+                        let compositeStatus = pT(lang, 'Pending');
+                        let colorClass = 'bg-[#fefaf0] text-[#a48866] border-[#ede0c9]';
+                        if (selectedReferral.status === 'Cancelled') {
+                            compositeStatus = pT(lang, 'Cancelled');
+                            colorClass = 'bg-red-100 text-red-700 border-red-200';
+                        } else if (selectedReferral.payout_id) {
+                            if (selectedReferral.partner_payout?.status === 'Paid') {
+                                compositeStatus = pT(lang, 'Paid');
+                                colorClass = 'bg-[#dcefe9] text-[#149372] border-[#149372]/30';
+                            } else {
+                                compositeStatus = pT(lang, 'InPayout');
+                                colorClass = 'bg-[#f0f7ff] text-[#0369a1] border-[#bae6fd]';
+                            }
+                        }
+                        return <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider ${colorClass}`}>{compositeStatus}</span>;
+                    })()}
+                  </div>
+                  <div className="text-[#a48866] text-sm font-medium">{selectedReferral.party_size} pax · {fmtDate(selectedReferral.arrival_date)}</div>
+                </div>
+                <div className="text-3xl sm:text-4xl font-black text-[#3E2C19] tabular-nums whitespace-nowrap">
+                  {fmtCurrency(selectedReferral.revenue_generated)} <span className="text-xl sm:text-2xl font-semibold text-[#8c673d]">đ</span>
+                </div>
+              </div>
+
+              {/* Partner Card */}
+              <div className="bg-white p-5 rounded-2xl border border-[#e1d5c3] flex flex-col gap-3 shadow-sm">
+                <div className="flex justify-between items-start sm:items-center pb-3 border-b border-[#f9f4ea]">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <div className="w-2 h-2 rounded-full bg-[#149372]"></div>
+                      <span className="text-xs font-bold text-[#8c673d] uppercase tracking-wider">{partner.name}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {selectedReferral.payout_id ? (
+                        selectedReferral.partner_payout?.status === 'Paid' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-[#dcefe9] text-[#149372] border border-[#149372]/30 uppercase tracking-wider"><CheckCircle className="w-3 h-3"/> {pT(lang, 'Paid')}</span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-[#fefaf0] text-[#a48866] border border-[#ede0c9] uppercase tracking-wider">{pT(lang, 'Processing')}</span>
+                        )
+                    ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-stone-100 text-[#a48866] border border-[#e1d5c3] uppercase tracking-wider">{pT(lang, 'NoPayout')}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-[#755533] font-medium">{pT(lang, 'GrossCommission')}</span>
+                  <span className="font-semibold text-[#3E2C19] tabular-nums whitespace-nowrap">
+                    {fmtCurrency(partner.issues_vat_invoice === true ? selectedReferral.commission_value : selectedReferral.commission_value / 0.9)} đ
+                  </span>
+                </div>
+                {partner.issues_vat_invoice !== true && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-rose-600 font-medium flex items-center gap-2">
+                      {pT(lang, 'PITDeduction')} <span className="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md font-bold border border-rose-100 tracking-wider">10%</span>
+                    </span>
+                    <span className="font-semibold text-rose-600 tabular-nums whitespace-nowrap">
+                      -{fmtCurrency((selectedReferral.commission_value / 0.9) - selectedReferral.commission_value)} đ
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-2 mt-1 border-t border-[#f9f4ea]">
+                  <span className="text-sm font-bold text-[#3E2C19]">{pT(lang, 'NetCommission')}</span>
+                  <span className="font-black text-[#149372] text-xl tabular-nums whitespace-nowrap">
+                    {fmtCurrency(selectedReferral.commission_value)} <span className="text-sm font-semibold text-[#149372]/70">đ</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAYOUT MODAL */}
+      {selectedPayout && (
+        <div className="fixed inset-0 bg-[#3E2C19]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#fcfaf7] rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200 border border-[#e1d5c3]">
+            
+            {/* Header */}
+            <div className="p-6 sm:p-8 bg-white border-b border-[#e1d5c3] rounded-t-3xl relative">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-[#fefaf0] border border-[#ede0c9] flex items-center justify-center">
+                      {selectedPayout.status === 'Paid' ? <CheckCircle className="w-6 h-6 text-[#149372]" /> : <Clock className="w-6 h-6 text-[#a48866]" />}
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-[#3E2C19] tabular-nums">
+                        {fmtCurrency(selectedPayout.amount)} <span className="text-lg font-semibold text-[#8c673d]">đ</span>
+                      </h3>
+                      <p className={`text-xs font-bold mt-1 uppercase tracking-wider ${
+                        selectedPayout.status === 'Paid' ? 'text-[#149372]' : 'text-[#a48866]'
+                      }`}>
+                        {selectedPayout.status === 'Paid' ? pT(lang, 'Paid') : pT(lang, 'Processing')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedPayout(null)} className="p-2 hover:bg-[#f9f4ea] rounded-xl transition text-[#a38562]">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 sm:p-8 space-y-6">
+              <div className="bg-white rounded-2xl border border-[#e1d5c3] p-5 shadow-sm space-y-4">
+                <div className="flex justify-between items-center border-b border-[#f9f4ea] pb-3">
+                  <span className="text-sm font-medium text-[#755533]">{pT(lang, 'Period')}</span>
+                  <span className="text-sm font-bold text-[#3E2C19]">
+                    {selectedPayout.period.split('-')[1]}/{selectedPayout.period.split('-')[0]}
+                  </span>
+                </div>
+                {agreement && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-[#755533]">Commission Rate</span>
+                    <span className="text-sm font-bold text-[#3E2C19]">
+                      {agreement.commission_value}{agreement.commission_type === 'Percentage' ? '%' : ' đ'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {selectedPayout.notes && (
+                <div>
+                  <h4 className="text-[11px] font-bold text-[#8c673d] uppercase tracking-wider mb-2">{pT(lang, 'Notes')}</h4>
+                  <p className="text-sm text-[#3E2C19] bg-white p-4 rounded-xl border border-[#e1d5c3]">
+                    {selectedPayout.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Referrals Table */}
+              <div className="space-y-3">
+                <h4 className="text-[11px] font-bold text-[#8c673d] uppercase tracking-wider">Transactions Included</h4>
+                <div className="bg-white rounded-2xl border border-[#e1d5c3] overflow-x-auto shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-[#fefaf0] border-b border-[#e1d5c3]">
+                      <tr className="text-[11px] font-bold text-[#8c673d] uppercase tracking-wider">
+                        <th className="p-4">Ref</th>
+                        <th className="p-4">Date</th>
+                        <th className="p-4">Pax</th>
+                        <th className="p-4 text-right">Total Bill</th>
+                        <th className="p-4 text-right">Rate %</th>
+                        <th className="p-4 text-right">Gross Comm.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f9f4ea]">
+                      {referrals.filter(r => r.payout_id === selectedPayout.id).map(r => {
+                        const gross = partner.issues_vat_invoice === true ? r.commission_value : r.commission_value / 0.9
+                        const pct = r.revenue_generated > 0 ? (gross / r.revenue_generated) * 100 : 0
+                        const displayRate = pct % 1 === 0 ? pct.toFixed(0) + '%' : pct.toFixed(1) + '%'
+
+                        return (
+                          <tr key={r.id} className="text-sm hover:bg-[#fefaf0] transition-colors">
+                            <td className="p-4 font-mono text-xs text-[#a48866] uppercase">{r.id.split('-')[0]}</td>
+                            <td className="p-4 text-[#3E2C19] whitespace-nowrap">{r.arrival_date ? new Date(r.arrival_date).toLocaleDateString('en-GB') : new Date(r.created_at).toLocaleDateString('en-GB')}</td>
+                            <td className="p-4 font-bold text-[#3E2C19]">{r.party_size}</td>
+                            <td className="p-4 text-right text-[#3E2C19] whitespace-nowrap">{fmtCurrency(r.revenue_generated)} đ</td>
+                            <td className="p-4 text-right font-semibold text-[#a48866] whitespace-nowrap">{displayRate}</td>
+                            <td className="p-4 text-right font-black text-[#149372] whitespace-nowrap">
+                              {fmtCurrency(gross)} đ
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {referrals.filter(r => r.payout_id === selectedPayout.id).length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="p-6 text-center text-sm font-medium text-[#a48866]">
+                            No transactions found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Totals */}
+              {partner.issues_vat_invoice !== true && (
+                <div className="bg-[#fefaf0] rounded-2xl border border-[#ede0c9] p-5 space-y-3 mt-6">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="font-medium text-[#755533]">{pT(lang, 'GrossCommission')}</span>
+                    <span className="font-bold text-[#3E2C19]">{fmtCurrency(selectedPayout.amount / 0.9)} đ</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="font-medium text-rose-600 flex items-center gap-2">
+                      {pT(lang, 'PITDeduction')} <span className="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md font-bold border border-rose-100 tracking-wider">10%</span>
+                    </span>
+                    <span className="font-bold text-rose-600">-{fmtCurrency((selectedPayout.amount / 0.9) - selectedPayout.amount)} đ</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm pt-3 mt-1 border-t border-[#ede0c9]">
+                    <span className="font-bold text-[#3E2C19]">{pT(lang, 'NetCommission')}</span>
+                    <span className="font-black text-[#149372] text-lg">{fmtCurrency(selectedPayout.amount)} đ</span>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     // Fetch partner info
     const { data: partner, error: partnerError } = await supabaseAdmin
       .from('crm_partners')
-      .select('id, name, type, contact_name, email, phone, partner_code, status')
+      .select('id, name, type, contact_name, email, phone, partner_code, status, issues_vat_invoice')
       .eq('id', partnerId)
       .single()
 
@@ -38,14 +38,18 @@ export async function POST(req: NextRequest) {
     // Fetch all referrals
     const { data: referrals } = await supabaseAdmin
       .from('crm_referrals')
-      .select('id, guest_name, arrival_date, party_size, status, revenue_generated, commission_value, created_at')
+      .select(`
+        id, guest_name, arrival_date, party_size, status, revenue_generated, commission_value, created_at,
+        payout_id,
+        partner_payout:crm_payouts!payout_id(status)
+      `)
       .eq('partner_id', partnerId)
       .order('created_at', { ascending: false })
 
     // Fetch all payouts
     const { data: payouts } = await supabaseAdmin
       .from('crm_payouts')
-      .select('id, period, amount, status, payment_date, reference_number, created_at')
+      .select('id, period, amount, status, payment_date, reference_number, notes, created_at')
       .eq('partner_id', partnerId)
       .order('created_at', { ascending: false })
 

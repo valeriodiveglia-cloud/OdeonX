@@ -29,8 +29,9 @@ function formatMonthLabel(d: Date, language?: string) { return d.toLocaleString(
 export default function CRMReferralsPage() {
     const [searchTerm, setSearchTerm] = useState('')
     const [referrals, setReferrals] = useState<ExtendedReferral[]>([])
-    const [partners, setPartners] = useState<{id: string, name: string, owner_id?: string, partner_code?: string}[]>([])
+    const [partners, setPartners] = useState<{id: string, name: string, owner_id?: string, partner_code?: string, issues_vat_invoice?: boolean}[]>([])
     const [advisors, setAdvisors] = useState<any[]>([])
+    const [allAccounts, setAllAccounts] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -78,12 +79,12 @@ export default function CRMReferralsPage() {
                 .order('created_at', { ascending: false }),
             supabase
                 .from('crm_partners')
-                .select('id, name, owner_id, partner_code')
+                .select('id, name, owner_id, partner_code, issues_vat_invoice')
                 .or('pipeline_stage.eq.Waiting for Activation,pipeline_stage.eq.Active')
                 .order('name'),
             supabase
                 .from('app_accounts')
-                .select('id, user_id, name, email, referral_code, role')
+                .select('id, user_id, name, email, referral_code, role, deduct_pit')
         ])
 
         if (refsRes.error) {
@@ -98,6 +99,7 @@ export default function CRMReferralsPage() {
         }
         
         if (accountsRes.data) {
+            setAllAccounts(accountsRes.data)
             setAdvisors(accountsRes.data.filter(a => a.role === 'sale advisor' && a.referral_code))
 
             const map: Record<string, string> = {}
@@ -129,47 +131,38 @@ export default function CRMReferralsPage() {
         if (!crmPartnerRules?.has_commission || isNaN(formData.revenue_generated)) return 0;
         
         let baseAmount = formData.revenue_generated;
+        let gross = 0;
         if (crmPartnerRules.commission_type === 'Percentage') {
-            if (crmPartnerRules.commission_base === 'After Discount' && crmPartnerRules.has_discount) {
-                const discount = crmPartnerRules.client_discount_type === 'Percentage' 
-                    ? baseAmount * ((crmPartnerRules.client_discount_value || 0) / 100)
-                    : (crmPartnerRules.client_discount_value || 0);
-                baseAmount = Math.max(0, baseAmount - discount);
-            }
-            return baseAmount * ((crmPartnerRules.commission_value || 0) / 100);
-        }
-        return crmPartnerRules.commission_value || 0;
-    }, [formData.revenue_generated, crmPartnerRules, formData.sourceType]);
-
-    const calculatedDiscount = React.useMemo(() => {
-        if (isNaN(formData.revenue_generated)) return 0;
-        if (formData.sourceType === 'advisor') {
-            if (crmCommissionRules?.has_direct_discount === false) return 0;
-            if (crmCommissionRules?.direct_discount_type === 'Fixed') {
-                return crmCommissionRules.direct_discount_value || 0;
-            }
-            return formData.revenue_generated * ((crmCommissionRules?.direct_discount_value || crmCommissionRules?.direct_discount_pct || 0) / 100);
+            gross = baseAmount * ((crmPartnerRules.commission_value || 0) / 100);
+        } else {
+            gross = crmPartnerRules.commission_value || 0;
         }
 
-        if (!crmPartnerRules?.has_discount) return 0;
-        if (crmPartnerRules.client_discount_type === 'Percentage') {
-            return formData.revenue_generated * ((crmPartnerRules.client_discount_value || 0) / 100);
+        const partner = partners.find(p => p.id === formData.partner_id);
+        if (partner && !partner.issues_vat_invoice) {
+            return gross * 0.9; // Deduct 10% PIT
         }
-        return crmPartnerRules.client_discount_value || 0;
-    }, [formData.revenue_generated, crmPartnerRules, crmCommissionRules, formData.sourceType]);
+        return gross;
+    }, [formData.revenue_generated, crmPartnerRules, formData.sourceType, formData.partner_id, partners]);
+
+
 
     const calculatedAdvisorCommission = React.useMemo(() => {
         if (formData.sourceType !== 'advisor' || isNaN(formData.revenue_generated)) return 0;
         let baseAmount = formData.revenue_generated;
-        if (crmCommissionRules?.has_direct_discount !== false && crmCommissionRules?.direct_commission_base === 'After Discount') {
-            baseAmount = Math.max(0, baseAmount - calculatedDiscount);
-        }
+        let gross = 0;
         if (crmCommissionRules?.direct_commission_type === 'Fixed') {
-            return crmCommissionRules.direct_commission_value || 0;
+            gross = crmCommissionRules.direct_commission_value || 0;
         } else {
-            return baseAmount * ((crmCommissionRules?.direct_commission_value || crmCommissionRules?.direct_commission_pct || 10) / 100);
+            gross = baseAmount * ((crmCommissionRules?.direct_commission_value || crmCommissionRules?.direct_commission_pct || 10) / 100);
         }
-    }, [formData.revenue_generated, formData.sourceType, crmCommissionRules, calculatedDiscount]);
+        
+        const advisor = allAccounts.find(a => a.user_id === formData.advisor_user_id);
+        if (advisor?.deduct_pit !== false) {
+            return gross * 0.9; // Deduct 10% PIT for advisor
+        }
+        return gross;
+    }, [formData.revenue_generated, formData.sourceType, crmCommissionRules, formData.advisor_user_id, allAccounts]);
 
     const formatCurrencyInput = (val: string) => {
         const cleaned = val.replace(/[^\d.]/g, '');
@@ -224,7 +217,7 @@ export default function CRMReferralsPage() {
         try {
             let advisor_commission_value = 0
             let targetPartnerId = null
-            let targetSaleAdvisorId = null
+            let targetSaleAdvisorId: string | null = null
 
             if (formData.sourceType === 'advisor') {
                 targetSaleAdvisorId = formData.advisor_user_id || null
@@ -263,6 +256,12 @@ export default function CRMReferralsPage() {
                                 advisor_commission_value = formData.revenue_generated * ((activeRules?.maintenance_pct || 4) / 100)
                             }
                         }
+                    }
+                    
+                    // Deduct 10% PIT for advisor
+                    const advisor = allAccounts.find(a => a.user_id === targetSaleAdvisorId);
+                    if (advisor?.deduct_pit !== false) {
+                        advisor_commission_value *= 0.9;
                     }
                 }
             }
@@ -339,27 +338,7 @@ export default function CRMReferralsPage() {
         return sum + (r.advisor_commission_value || 0) + (r.commission_value || 0);
     }, 0)
     
-    // Check if either partner or advisor has discount
-    const hasDiscounts = filteredReferrals.some(r => 
-        (r.crm_partners?.crm_agreements?.some((a: any) => a.client_discount_value && a.client_discount_value > 0)) ||
-        (r.sale_advisor_id && crmCommissionRules?.has_direct_discount !== false && crmCommissionRules?.direct_discount_value > 0)
-    )
-    
-    // Note: totalDiscount is tricky because we didn't save historical discount values, we compute them dynamically!
-    const totalDiscount = hasDiscounts ? filteredReferrals.reduce((sum, r) => {
-        let discount = 0;
-        if (r.partner_id) {
-             const maxDiscount = Math.max(...(r.crm_partners?.crm_agreements?.map((a: any) => a.client_discount_value || 0) || [0]))
-             discount = (r.revenue_generated * (maxDiscount / 100))
-        } else if (r.sale_advisor_id && crmCommissionRules?.has_direct_discount !== false) {
-             if (crmCommissionRules?.direct_discount_type === 'Fixed') {
-                 discount = crmCommissionRules.direct_discount_value || 0;
-             } else {
-                 discount = (r.revenue_generated * ((crmCommissionRules?.direct_discount_value || 0) / 100));
-             }
-        }
-        return sum + discount;
-    }, 0) : 0
+
 
     const handleOpenEdit = () => {
         if (!selectedReferral) return;
@@ -480,9 +459,7 @@ export default function CRMReferralsPage() {
                                     <th className="p-2 whitespace-nowrap">{t(language, 'SalesAdvisor')}</th>
                                     <th className="p-2 whitespace-nowrap">{t(language, 'Pax')}</th>
                                     <th className="p-2 whitespace-nowrap text-right">{t(language, 'Revenue')} ({currency})</th>
-                                    {hasDiscounts && (
-                                        <th className="p-2 whitespace-nowrap text-right">{t(language, 'Discount')} ({currency})</th>
-                                    )}
+
                                     <th className="p-2 whitespace-nowrap text-right">{t(language, 'Commission')} ({currency})</th>
                                     <th className="p-2 whitespace-nowrap">{t(language, 'TaskStatus')}</th>
                                 </tr>
@@ -490,7 +467,7 @@ export default function CRMReferralsPage() {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={hasDiscounts ? 8 : 7} className="p-8 text-center text-gray-500">
+                                        <td colSpan={7} className="p-8 text-center text-gray-500">
                                             <div className="animate-pulse flex flex-col items-center">
                                                 <div className="h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-2"></div>
                                                 {t(language, 'Loading')}
@@ -499,7 +476,7 @@ export default function CRMReferralsPage() {
                                     </tr>
                                 ) : filteredReferrals.length === 0 ? (
                                     <tr>
-                                        <td colSpan={hasDiscounts ? 8 : 7} className="p-8 text-center text-gray-500">
+                                        <td colSpan={7} className="p-8 text-center text-gray-500">
                                             {t(language, 'NoReferralsFound')}
                                         </td>
                                     </tr>
@@ -512,7 +489,7 @@ export default function CRMReferralsPage() {
                                         >
                                             <td className="p-2 whitespace-nowrap">
                                                 <div className="flex items-center gap-2 font-medium">
-                                                    <Calendar className="w-4 h-4 text-gray-400"/> {ref.arrival_date ? new Date(ref.arrival_date).toLocaleDateString() : 'N/A'}
+                                                    <Calendar className="w-4 h-4 text-gray-400"/> {ref.arrival_date ? new Date(ref.arrival_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
                                                 </div>
                                                 <div className="flex flex-col gap-0.5 mt-1">
                                                     <div className="text-[11px] text-gray-500 uppercase font-mono">{ref.id.split('-')[0]}</div>
@@ -543,29 +520,7 @@ export default function CRMReferralsPage() {
                                             <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold">
                                                 {formatCurrencyInput(ref.revenue_generated.toFixed(0))}
                                             </td>
-                                            {hasDiscounts && (
-                                                <td className="p-2 whitespace-nowrap text-right">
-                                                    {(() => {
-                                                        if (ref.partner_id && ref.crm_partners?.crm_agreements?.some((a: any) => a.client_discount_value && a.client_discount_value > 0)) {
-                                                            return (
-                                                                <div className="font-semibold text-emerald-600 tabular-nums">
-                                                                    {formatCurrencyInput((ref.revenue_generated * (Math.max(...(ref.crm_partners?.crm_agreements?.map((a: any) => a.client_discount_value || 0) || [0])) / 100)).toFixed(0))}
-                                                                </div>
-                                                            )
-                                                        } else if (ref.sale_advisor_id && !ref.partner_id && crmCommissionRules?.has_direct_discount !== false && crmCommissionRules?.direct_discount_value > 0) {
-                                                            const discountAmt = crmCommissionRules.direct_discount_type === 'Fixed' 
-                                                                ? crmCommissionRules.direct_discount_value 
-                                                                : ref.revenue_generated * (crmCommissionRules.direct_discount_value / 100);
-                                                            return (
-                                                                <div className="font-semibold text-emerald-600 tabular-nums">
-                                                                    {formatCurrencyInput(discountAmt.toFixed(0))}
-                                                                </div>
-                                                            )
-                                                        }
-                                                        return null;
-                                                    })()}
-                                                </td>
-                                            )}
+
                                             <td className="p-2 whitespace-nowrap text-right text-amber-600 font-semibold tabular-nums">
                                                 {formatCurrencyInput((ref.partner_id ? (ref.commission_value || 0) : (ref.advisor_commission_value || 0)).toFixed(0))}
                                             </td>
@@ -611,7 +566,7 @@ export default function CRMReferralsPage() {
                             {!loading && filteredReferrals.length > 0 && (
                                 <tbody>
                                     <tr className="border-t bg-gray-50 font-semibold">
-                                        <td colSpan={2} className="p-2 text-right">
+                                        <td colSpan={3} className="p-2 text-right">
                                             {t(language, 'Totals')}
                                         </td>
                                         <td className="p-2">
@@ -620,11 +575,7 @@ export default function CRMReferralsPage() {
                                         <td className="p-2 text-right tabular-nums">
                                             {formatCurrencyInput(totalRevenue.toFixed(0))}
                                         </td>
-                                        {hasDiscounts && (
-                                            <td className="p-2 text-right text-emerald-600 tabular-nums">
-                                                {formatCurrencyInput(totalDiscount.toFixed(0))}
-                                            </td>
-                                        )}
+
                                         <td className="p-2 text-right text-amber-600 tabular-nums">
                                             {formatCurrencyInput(totalCommission.toFixed(0))}
                                         </td>
@@ -802,7 +753,7 @@ export default function CRMReferralsPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                                     <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">{t(language, 'ArrivalDateStar')}</div>
-                                    <div className="font-semibold text-slate-900">{new Date(selectedReferral.arrival_date || '').toLocaleDateString()}</div>
+                                    <div className="font-semibold text-slate-900">{new Date(selectedReferral.arrival_date || '').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
                                 </div>
                                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                                     <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">{t(language, 'Pax')}</div>

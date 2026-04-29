@@ -20,6 +20,7 @@ export type CRMPartner = {
   bank_name?: string | null
   bank_account_name?: string | null
   bank_account_number?: string | null
+  issues_vat_invoice?: boolean | null
 }
 
 export type CRMAgreement = {

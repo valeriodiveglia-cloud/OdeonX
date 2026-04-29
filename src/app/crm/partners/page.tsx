@@ -65,7 +65,8 @@ export default function CRMPartnersPage() {
         notes: '',
         bank_name: '',
         bank_account_name: '',
-        bank_account_number: ''
+        bank_account_number: '',
+        issues_vat_invoice: false
     })
 
     const handleDragOver = (e: React.DragEvent, colId: string) => {
@@ -267,6 +268,7 @@ export default function CRMPartnersPage() {
                     bank_name: formData.bank_name || null,
                     bank_account_name: formData.bank_account_name || null,
                     bank_account_number: formData.bank_account_number || null,
+                    issues_vat_invoice: formData.issues_vat_invoice
                 }
             ])
 
@@ -274,7 +276,7 @@ export default function CRMPartnersPage() {
 
             setIsModalOpen(false)
             setFormData({
-                name: '', type: '', contact_name: '', email: '', phone: '', location: '', pipeline_stage: 'Leads', notes: '', bank_name: '', bank_account_name: '', bank_account_number: ''
+                name: '', type: '', contact_name: '', email: '', phone: '', location: '', pipeline_stage: 'Leads', notes: '', bank_name: '', bank_account_name: '', bank_account_number: '', issues_vat_invoice: false
             })
             fetchPartners()
         } catch (error) {
@@ -665,6 +667,27 @@ export default function CRMPartnersPage() {
                                             className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
                                             placeholder="Add account number..."
                                         />
+                                    </div>
+                                    <div className="space-y-2 sm:col-span-2 lg:col-span-3 pt-2">
+                                        <label className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl bg-slate-50 cursor-pointer hover:bg-slate-100 transition">
+                                            <div className="relative inline-flex items-center cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="sr-only peer"
+                                                    checked={formData.issues_vat_invoice}
+                                                    onChange={e => setFormData({...formData, issues_vat_invoice: e.target.checked})}
+                                                />
+                                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-semibold text-slate-800">
+                                                    {formData.issues_vat_invoice ? "Partner issues VAT Invoice" : "Deduct 10% PIT (Personal Income Tax)"}
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                    {formData.issues_vat_invoice ? "No tax will be deducted from commissions." : "10% Personal Income Tax will be automatically deducted."}
+                                                </div>
+                                            </div>
+                                        </label>
                                     </div>
                                 </div>
                             </div>

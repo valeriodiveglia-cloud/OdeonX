@@ -323,7 +323,7 @@ export default function CRMDashboard() {
                                     {task.due_date && (
                                         <div className="flex items-center gap-1 mt-1.5 text-xs text-blue-200/60">
                                             <Clock className="w-3 h-3" />
-                                            {new Date(task.due_date).toLocaleDateString()}
+                                            {new Date(task.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                         </div>
                                     )}
                                 </div>

@@ -230,7 +230,8 @@ export default function PartnerDetail() {
         owner_id: '',
         bank_name: '',
         bank_account_name: '',
-        bank_account_number: ''
+        bank_account_number: '',
+        issues_vat_invoice: false
     })
 
     const handleUpdatePartner = async (e: React.FormEvent) => {
@@ -249,6 +250,7 @@ export default function PartnerDetail() {
                 bank_name: editFormData.bank_name || null,
                 bank_account_name: editFormData.bank_account_name || null,
                 bank_account_number: editFormData.bank_account_number || null,
+                issues_vat_invoice: editFormData.issues_vat_invoice
             }
 
             const isDowngradingAccess = currentUser?.role === 'sale advisor' && upd.owner_id !== currentUser.id;
@@ -479,13 +481,7 @@ export default function PartnerDetail() {
     const totalPax = filteredReferrals.reduce((sum, r) => sum + (r.party_size || 0), 0)
     const maturedRevenue = filteredReferrals.reduce((sum, r) => sum + (r.revenue_generated || 0), 0)
     
-    // Using filteredReferrals instead of referrals
-    const hasDiscounts = crmPartnerRules?.has_discount || false
     const totalCommission = filteredReferrals.reduce((sum, r) => sum + (r.commission_value || 0), 0)
-    const totalDiscount = hasDiscounts ? filteredReferrals.reduce((sum, r) => {
-        const discountValue = crmPartnerRules?.client_discount_value || 0
-        return sum + (r.revenue_generated * (discountValue / 100))
-    }, 0) : 0
 
     const completedReferrals = filteredReferrals.filter(r => r.status === 'Paid').length
     const validationRate = filteredReferrals.length > 0 ? Math.round((completedReferrals / filteredReferrals.length) * 100) : 0
@@ -494,8 +490,7 @@ export default function PartnerDetail() {
     const allTimeRevenue = referrals.reduce((sum, r) => sum + (r.revenue_generated || 0), 0)
     const allTimeReferrals = referrals.length
     
-    const maxDiscountAllTime = crmPartnerRules?.has_discount ? (crmPartnerRules.client_discount_value || 0) : 0
-    const allTimeDiscounts = maxDiscountAllTime > 0 ? referrals.reduce((sum, r) => sum + ((r.revenue_generated || 0) * (maxDiscountAllTime / 100)), 0) : 0
+
 
     const pendingCommissions = referrals.filter(r => r.status === 'Pending').reduce((sum, r) => sum + (r.commission_value || 0), 0)
     const paidCommissions = referrals.filter(r => r.status === 'Paid').reduce((sum, r) => sum + (r.commission_value || 0), 0)
@@ -596,7 +591,8 @@ export default function PartnerDetail() {
                                             owner_id: partner.owner_id || '',
                                             bank_name: partner.bank_name || '',
                                             bank_account_name: partner.bank_account_name || '',
-                                            bank_account_number: partner.bank_account_number || ''
+                                            bank_account_number: partner.bank_account_number || '',
+                                            issues_vat_invoice: partner.issues_vat_invoice || false
                                         })
                                         setIsEditModalOpen(true)
                                     }}
@@ -946,13 +942,7 @@ export default function PartnerDetail() {
                                         <div className="text-lg font-black text-slate-900 truncate" title={`${currency} ${paidCommissions.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}>{currency} {paidCommissions.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
                                     </div>
 
-                                    {/* Conditional Row */}
-                                    {(allTimeDiscounts > 0 || hasDiscounts) && (
-                                        <div className="col-span-2 lg:col-span-4 bg-cyan-50 border border-cyan-100 rounded-2xl p-4 sm:p-5 border-l-[4px] border-l-cyan-500 flex flex-col sm:flex-row justify-between sm:items-center mt-1">
-                                            <div className="text-cyan-700 text-xs font-bold uppercase tracking-wider mb-1 sm:mb-0">{t(language, 'TotalActiveDiscounts')}</div>
-                                            <div className="text-2xl font-black text-slate-900">{currency} {allTimeDiscounts.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-                                        </div>
-                                    )}
+
                                 </div>
 
                                 {chartData.length > 0 && (
@@ -1078,20 +1068,6 @@ export default function PartnerDetail() {
                                             </div>
                                         </div>
                                         )}
-                                        {crmPartnerRules?.has_discount && (
-                                        <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                            <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 font-semibold text-emerald-600">{t(language, 'ClientDiscount')}</div>
-                                            <div className="font-bold text-slate-900 text-3xl">
-                                                {crmPartnerRules.client_discount_type === 'Percentage' ? `${crmPartnerRules.client_discount_value}%` : `${currency} ${crmPartnerRules.client_discount_value}`}
-                                            </div>
-                                        </div>
-                                        )}
-                                        {(crmPartnerRules?.has_commission && crmPartnerRules?.has_discount && crmPartnerRules?.commission_type === 'Percentage') && (
-                                        <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                            <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{t(language, 'BaseStructure')}</div>
-                                            <div className="font-bold text-slate-900">{t(language, crmPartnerRules.commission_base?.replace(/\s+/g, '') as any) || crmPartnerRules.commission_base}</div>
-                                        </div>
-                                        )}
                                     </div>
                                     {crmPartnerRules?.details && (
                                         <div className="mt-4 text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100 whitespace-pre-wrap leading-relaxed">
@@ -1139,9 +1115,7 @@ export default function PartnerDetail() {
                                                 <th className="p-2 whitespace-nowrap">{t(language, 'DateRef')}</th>
                                                 <th className="p-2 whitespace-nowrap">{t(language, 'Pax')}</th>
                                                 <th className="p-2 whitespace-nowrap text-right">{t(language, 'Revenue')} ({currency})</th>
-                                                {hasDiscounts && (
-                                                    <th className="p-2 whitespace-nowrap text-right">{t(language, 'Discount')} ({currency})</th>
-                                                )}
+
                                                 <th className="p-2 whitespace-nowrap text-right">{t(language, 'Commission')} ({currency})</th>
                                                 <th className="p-2 whitespace-nowrap">{t(language, 'Status')}</th>
                                             </tr>
@@ -1149,7 +1123,7 @@ export default function PartnerDetail() {
                                         <tbody>
                                             {filteredReferrals.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={hasDiscounts ? 6 : 5} className="p-8 text-center text-gray-500">
+                                                    <td colSpan={5} className="p-8 text-center text-gray-500">
                                                         {t(language, 'NoReferralsFound')}
                                                     </td>
                                                 </tr>
@@ -1158,7 +1132,7 @@ export default function PartnerDetail() {
                                                     <tr key={ref.id} className="border-t hover:bg-blue-50/40">
                                                         <td className="p-2 whitespace-nowrap">
                                                             <div className="flex items-center gap-2 font-medium whitespace-nowrap">
-                                                                <Calendar className="w-4 h-4 text-gray-400"/> {ref.arrival_date ? new Date(ref.arrival_date).toLocaleDateString() : 'N/A'}
+                                                                <Calendar className="w-4 h-4 text-gray-400"/> {ref.arrival_date ? new Date(ref.arrival_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
                                                             </div>
                                                             <div className="text-xs text-gray-500 mt-0.5 uppercase font-mono">{ref.id.split('-')[0]}</div>
                                                         </td>
@@ -1168,13 +1142,7 @@ export default function PartnerDetail() {
                                                         <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold">
                                                             {formatCurrencyInput((ref.revenue_generated || 0).toFixed(0))}
                                                         </td>
-                                                        {hasDiscounts && (
-                                                            <td className="p-2 whitespace-nowrap text-right">
-                                                                <div className="font-semibold text-emerald-600 tabular-nums">
-                                                                    {formatCurrencyInput((ref.revenue_generated * ((crmPartnerRules?.client_discount_value || 0) / 100)).toFixed(0))}
-                                                                </div>
-                                                            </td>
-                                                        )}
+
                                                         <td className="p-2 whitespace-nowrap text-right text-amber-600 font-semibold tabular-nums">
                                                             {formatCurrencyInput((ref.commission_value || 0).toFixed(0))}
                                                         </td>
@@ -1207,11 +1175,7 @@ export default function PartnerDetail() {
                                                     <td className="p-2 text-right tabular-nums">
                                                         {formatCurrencyInput(maturedRevenue.toFixed(0))}
                                                     </td>
-                                                    {hasDiscounts && (
-                                                        <td className="p-2 text-right text-emerald-600 tabular-nums">
-                                                            {formatCurrencyInput(totalDiscount.toFixed(0))}
-                                                        </td>
-                                                    )}
+
                                                     <td className="p-2 text-right text-amber-600 tabular-nums">
                                                         {formatCurrencyInput(totalCommission.toFixed(0))}
                                                     </td>
@@ -1566,6 +1530,27 @@ export default function PartnerDetail() {
                                             className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-900 transition"
                                             placeholder="Add account number..."
                                         />
+                                    </div>
+                                    <div className="space-y-2 sm:col-span-2 lg:col-span-3 pt-2">
+                                        <label className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl bg-slate-50 cursor-pointer hover:bg-slate-100 transition">
+                                            <div className="relative inline-flex items-center cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="sr-only peer"
+                                                    checked={editFormData.issues_vat_invoice}
+                                                    onChange={e => setEditFormData({...editFormData, issues_vat_invoice: e.target.checked})}
+                                                />
+                                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-semibold text-slate-800">
+                                                    {editFormData.issues_vat_invoice ? "Partner issues VAT Invoice" : "Deduct 10% PIT (Personal Income Tax)"}
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                    {editFormData.issues_vat_invoice ? "No tax will be deducted from commissions." : "10% Personal Income Tax will be automatically deducted."}
+                                                </div>
+                                            </div>
+                                        </label>
                                     </div>
                                 </div>
                             </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Search, Calendar, CheckCircle2, Activity, RefreshCcw } from 'lucide-react'
+import { Search, Calendar, CheckCircle2, Activity, RefreshCcw, X, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
 import { t } from '@/lib/i18n'
@@ -30,8 +30,9 @@ export default function CRMCommissionsPage() {
     const [searchTerm, setSearchTerm] = useState('')
     const [referrals, setReferrals] = useState<ExtendedReferral[]>([])
     const [loading, setLoading] = useState(true)
-    const [accountsMap, setAccountsMap] = useState<Record<string, string>>({})
+    const [accountsMap, setAccountsMap] = useState<Record<string, {name: string, deduct_pit: boolean}>>({})
     const [currentUser, setCurrentUser] = useState<{ id: string, role?: string } | null>(null)
+    const [selectedReferral, setSelectedReferral] = useState<ExtendedReferral | null>(null)
     const { currency, crmPartnerRules, crmCommissionRules, language } = useSettings()
 
     /* month cursor */
@@ -57,7 +58,7 @@ export default function CRMCommissionsPage() {
             .from('crm_referrals')
             .select(`
                 *, 
-                crm_partners (name, owner_id, crm_agreements (client_discount_value)),
+                crm_partners (name, owner_id, issues_vat_invoice, crm_agreements (client_discount_value)),
                 partner_payout:crm_payouts!crm_referrals_payout_id_fkey(status),
                 advisor_payout:crm_payouts!crm_referrals_advisor_payout_id_fkey(status)
             `)
@@ -70,7 +71,7 @@ export default function CRMCommissionsPage() {
 
         const [refsRes, accountsRes] = await Promise.all([
             query,
-            supabase.from('app_accounts').select('id, user_id, name, email')
+            supabase.from('app_accounts').select('id, user_id, name, email, deduct_pit')
         ])
 
         if (refsRes.error) {
@@ -81,9 +82,12 @@ export default function CRMCommissionsPage() {
         }
 
         if (accountsRes.data) {
-            const map: Record<string, string> = {}
+            const map: Record<string, {name: string, deduct_pit: boolean}> = {}
             for (const acc of accountsRes.data) {
-                if (acc.user_id) map[acc.user_id] = acc.name || acc.email || 'Unknown User'
+                if (acc.user_id) map[acc.user_id] = {
+                    name: acc.name || acc.email || 'Unknown User',
+                    deduct_pit: acc.deduct_pit !== false
+                }
             }
             setAccountsMap(map)
         }
@@ -101,7 +105,7 @@ export default function CRMCommissionsPage() {
                 (ref.guest_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                 (ref.crm_partners?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                 ref.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (ref.sale_advisor_id && accountsMap[ref.sale_advisor_id]?.toLowerCase().includes(searchTerm.toLowerCase()))
+                (ref.sale_advisor_id && accountsMap[ref.sale_advisor_id]?.name.toLowerCase().includes(searchTerm.toLowerCase()))
             
             if (!matchesSearch) return false
 
@@ -222,10 +226,10 @@ export default function CRMCommissionsPage() {
                             </tr>
                         ) : (
                             filteredReferrals.map(ref => (
-                                <tr key={ref.id} className="border-t hover:bg-blue-50/40">
+                                <tr key={ref.id} onClick={() => setSelectedReferral(ref)} className="border-t hover:bg-blue-50/40 cursor-pointer transition">
                                     <td className="p-3 whitespace-nowrap">
                                         <div className="flex items-center gap-2 font-medium">
-                                            <Calendar className="w-4 h-4 text-gray-400"/> {ref.arrival_date ? new Date(ref.arrival_date).toLocaleDateString() : 'N/A'}
+                                            <Calendar className="w-4 h-4 text-gray-400"/> {ref.arrival_date ? new Date(ref.arrival_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
                                         </div>
                                         <div className="text-xs text-gray-500 mt-0.5 uppercase font-mono">{ref.id.split('-')[0]}</div>
                                     </td>
@@ -239,7 +243,7 @@ export default function CRMCommissionsPage() {
                                     <td className="p-3 whitespace-nowrap">
                                         {ref.sale_advisor_id ? (
                                             <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg w-fit text-xs font-medium border border-blue-100">
-                                                {accountsMap[ref.sale_advisor_id] || t(language, 'Unknown')}
+                                                {accountsMap[ref.sale_advisor_id]?.name || t(language, 'Unknown')}
                                             </div>
                                         ) : (
                                             <span className="text-slate-400 text-xs italic">{t(language, 'Unassigned')}</span>
@@ -328,6 +332,191 @@ export default function CRMCommissionsPage() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Modal Breakdown */}
+            {selectedReferral && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-white">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                                    <FileText className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-900">{t(language, 'TransactionDetails') || 'Transaction Details'}</h2>
+                                    <p className="text-xs text-slate-500 font-medium mt-0.5">REF: {selectedReferral.id.split('-')[0].toUpperCase()} • {new Date(selectedReferral.arrival_date || selectedReferral.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setSelectedReferral(null)} className="p-2 hover:bg-slate-100 rounded-xl transition text-slate-400">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        {/* Body */}
+                        <div className="p-6 sm:p-8 space-y-6 bg-slate-50/50 max-h-[80vh] overflow-y-auto">
+                            {/* Revenue Header - Clean & Simple */}
+                            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="text-slate-500 text-sm font-semibold uppercase tracking-wider">{t(language, 'BaseRevenue')}</div>
+                                        {(() => {
+                                            if (selectedReferral.status === 'Cancelled') return <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border bg-red-100 text-red-700 border-red-200 uppercase tracking-wider">{t(language, 'Cancelled')}</span>;
+                                            const hasPtnr = !!selectedReferral.payout_id;
+                                            const hasAdv = !!selectedReferral.advisor_payout_id;
+                                            const ptnrPaid = selectedReferral.partner_payout?.status === 'Paid';
+                                            const advPaid = selectedReferral.advisor_payout?.status === 'Paid';
+                                            let compositeStatus = t(language, 'Pending');
+                                            let colorClass = 'bg-amber-100 text-amber-700 border-amber-200';
+                                            if (hasPtnr || hasAdv) {
+                                                const allExistingPaid = (!hasPtnr || ptnrPaid) && (!hasAdv || advPaid);
+                                                const somePaid = (hasPtnr && ptnrPaid) || (hasAdv && advPaid);
+                                                if (allExistingPaid) {
+                                                    compositeStatus = t(language, 'Paid');
+                                                    colorClass = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                                                } else if (somePaid) {
+                                                    compositeStatus = t(language, 'PartiallyPaid');
+                                                    colorClass = 'bg-blue-100 text-blue-700 border-blue-200';
+                                                } else {
+                                                    compositeStatus = t(language, 'InPayout');
+                                                    colorClass = 'bg-blue-50 text-blue-600 border-blue-200';
+                                                }
+                                            }
+                                            return <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider ${colorClass}`}>{compositeStatus}</span>;
+                                        })()}
+                                    </div>
+                                    <div className="text-slate-500 text-sm font-medium">{t(language, 'GeneratedByTransaction')}</div>
+                                </div>
+                                <div className="text-3xl sm:text-4xl font-black text-slate-900 tabular-nums whitespace-nowrap">
+                                    {formatCurrency(selectedReferral.revenue_generated)} <span className="text-xl sm:text-2xl font-semibold text-slate-400">{currency}</span>
+                                </div>
+                            </div>
+
+                            {/* Partner & Advisor stack */}
+                            <div className="space-y-4">
+                                {/* Partner */}
+                                {currentUser?.role !== 'sale advisor' && (
+                                    <div className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col gap-3 shadow-sm">
+                                        <div className="flex justify-between items-start sm:items-center pb-3 border-b border-slate-100">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t(language, 'Partner')}</span>
+                                                </div>
+                                                <div className="font-semibold text-slate-900">
+                                                    {selectedReferral.partner_id ? (selectedReferral.crm_partners?.name || t(language, 'UnknownPartner')) : <span className="text-slate-400 italic">{t(language, 'DirectAdvisor')}</span>}
+                                                </div>
+                                            </div>
+                                            {selectedReferral.partner_id && (
+                                                <div className="text-right">
+                                                    {selectedReferral.payout_id ? (
+                                                        selectedReferral.partner_payout?.status === 'Paid' ? (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-wider"><CheckCircle2 className="w-3 h-3"/> {t(language, 'Paid')}</span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100 uppercase tracking-wider">{t(language, 'Processing')}</span>
+                                                        )
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-slate-50 text-slate-500 border border-slate-200 uppercase tracking-wider">{t(language, 'NoPayout')}</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {selectedReferral.partner_id && (
+                                            <>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500 font-medium">{t(language, 'GrossCommission')}</span>
+                                                    <span className="font-semibold text-slate-700 tabular-nums whitespace-nowrap">
+                                                        {formatCurrency((selectedReferral.crm_partners as any)?.issues_vat_invoice === true ? (selectedReferral.commission_value || 0) : (selectedReferral.commission_value || 0) / 0.9)} {currency}
+                                                    </span>
+                                                </div>
+                                                {(selectedReferral.crm_partners as any)?.issues_vat_invoice !== true && (
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-rose-500 font-medium flex items-center gap-2">
+                                                            PIT Deduction <span className="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md font-bold border border-rose-100 tracking-wider">10%</span>
+                                                        </span>
+                                                        <span className="font-semibold text-rose-600 tabular-nums whitespace-nowrap">
+                                                            -{formatCurrency(((selectedReferral.commission_value || 0) / 0.9) - (selectedReferral.commission_value || 0))} {currency}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-50">
+                                                    <span className="text-sm font-bold text-slate-900">{t(language, 'NetCommission')}</span>
+                                                    <span className="font-black text-purple-700 text-xl tabular-nums whitespace-nowrap">
+                                                        {formatCurrency(selectedReferral.commission_value || 0)} <span className="text-sm font-semibold text-purple-400">{currency}</span>
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Advisor */}
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col gap-3 shadow-sm">
+                                    <div className="flex justify-between items-start sm:items-center pb-3 border-b border-slate-100">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t(language, 'SalesAdvisor')}</span>
+                                            </div>
+                                            <div className="font-semibold text-slate-900">
+                                                {selectedReferral.sale_advisor_id ? (accountsMap[selectedReferral.sale_advisor_id]?.name || t(language, 'UnknownAdvisor')) : <span className="text-slate-400 italic">{t(language, 'Unassigned')}</span>}
+                                            </div>
+                                        </div>
+                                        {selectedReferral.sale_advisor_id && (
+                                            <div className="text-right">
+                                                {selectedReferral.advisor_payout_id ? (
+                                                    selectedReferral.advisor_payout?.status === 'Paid' ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-wider"><CheckCircle2 className="w-3 h-3"/> {t(language, 'Paid')}</span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100 uppercase tracking-wider">{t(language, 'Processing')}</span>
+                                                    )
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-slate-50 text-slate-500 border border-slate-200 uppercase tracking-wider">{t(language, 'NoPayout')}</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {selectedReferral.sale_advisor_id && (
+                                        <>
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-500 font-medium">{t(language, 'GrossCommission')}</span>
+                                                <span className="font-semibold text-slate-700 tabular-nums whitespace-nowrap">
+                                                    {formatCurrency(accountsMap[selectedReferral.sale_advisor_id]?.deduct_pit === false ? (selectedReferral.advisor_commission_value || 0) : (selectedReferral.advisor_commission_value || 0) / 0.9)} {currency}
+                                                </span>
+                                            </div>
+                                            {accountsMap[selectedReferral.sale_advisor_id]?.deduct_pit !== false && (
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-rose-500 font-medium flex items-center gap-2">
+                                                        PIT Deduction <span className="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md font-bold border border-rose-100 tracking-wider">10%</span>
+                                                    </span>
+                                                    <span className="font-semibold text-rose-600 tabular-nums whitespace-nowrap">
+                                                        -{formatCurrency(((selectedReferral.advisor_commission_value || 0) / 0.9) - (selectedReferral.advisor_commission_value || 0))} {currency}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-50">
+                                                <span className="text-sm font-bold text-slate-900">{t(language, 'NetCommission')}</span>
+                                                <span className="font-black text-emerald-700 text-xl tabular-nums whitespace-nowrap">
+                                                    {formatCurrency(selectedReferral.advisor_commission_value || 0)} <span className="text-sm font-semibold text-emerald-400">{currency}</span>
+                                                </span>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Total Net Payout */}
+                            <div className="bg-slate-100 p-5 rounded-2xl border border-slate-200 flex justify-between items-center shadow-sm">
+                                <div className="text-sm font-bold text-slate-700 uppercase tracking-wider">{t(language, 'TotalNetPayout')}</div>
+                                <div className="text-2xl font-black text-slate-900 tabular-nums whitespace-nowrap">
+                                    {formatCurrency((currentUser?.role !== 'sale advisor' ? (selectedReferral.commission_value || 0) : 0) + (selectedReferral.advisor_commission_value || 0))} <span className="text-lg font-semibold text-slate-500">{currency}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
