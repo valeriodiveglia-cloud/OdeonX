@@ -8,6 +8,7 @@ export interface SalaryModalProps {
     open: boolean
     onClose: () => void
     onSave: (data: Partial<HRStaffSalaryHistory>) => Promise<void>
+    onResign?: (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation', reason: string, notes: string }) => Promise<void>
     entry: HRStaffSalaryHistory | null
     staffList: HRStaffMember[]
     departments: HRDepartment[]
@@ -17,9 +18,12 @@ export interface SalaryModalProps {
     preselectedStaffId?: string
 }
 
-export default function SalaryModal({ open, onClose, onSave, entry, staffList, departments, positions, saving, loggedUserName, preselectedStaffId }: SalaryModalProps) {
+export default function SalaryModal({ open, onClose, onSave, onResign, entry, staffList, departments, positions, saving, loggedUserName, preselectedStaffId }: SalaryModalProps) {
     const [staffId, setStaffId]           = useState(preselectedStaffId || '')
     const [effectiveDate, setEffectiveDate] = useState('')
+    const [activeTab, setActiveTab]       = useState<'status' | 'resignation'>('status')
+    const [leavingType, setLeavingType]   = useState<'dismissal' | 'resignation' | ''>('')
+    const [leavingReason, setLeavingReason] = useState('')
     
     // Position/Dept tracking
     const [prevDepartmentId, setPrevDepartmentId] = useState<string | null>(null)
@@ -57,6 +61,7 @@ export default function SalaryModal({ open, onClose, onSave, entry, staffList, d
     // Load existing entry or reset
     useEffect(() => {
         if (entry) {
+            setActiveTab('status')
             setStaffId(entry.staff_id)
             setEffectiveDate(entry.effective_date || '')
             
@@ -76,6 +81,9 @@ export default function SalaryModal({ open, onClose, onSave, entry, staffList, d
             setApprovedBy(entry.approved_by || '')
             setNotes(entry.notes || '')
         } else {
+            setActiveTab('status')
+            setLeavingType('')
+            setLeavingReason('')
             const initialStaffId = preselectedStaffId || '';
             setStaffId(initialStaffId); 
             setEffectiveDate(new Date().toISOString().slice(0, 10))
@@ -118,6 +126,13 @@ export default function SalaryModal({ open, onClose, onSave, entry, staffList, d
     
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        
+        if (activeTab === 'resignation') {
+            if (onResign) {
+                await onResign({ staffId, effectiveDate, type: leavingType as any, reason: leavingReason, notes })
+            }
+            return
+        }
         
         const typeChanged = prevSalaryType !== salaryType
         const isPromotion = prevDepartmentId !== newDepartmentId || prevPositionId !== newPositionId
@@ -166,12 +181,25 @@ export default function SalaryModal({ open, onClose, onSave, entry, staffList, d
             <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                     <h2 className="text-lg font-semibold text-gray-900">
-                        Record Gross Salary / Position Change
+                        Record Staff Change
                     </h2>
                     <button onClick={onClose} type="button" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
+
+                {!entry && (
+                    <div className="flex items-center border-b border-gray-200 px-6 pt-2">
+                        <button type="button" onClick={() => setActiveTab('status')}
+                            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'status' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                            Gross Salary / Position Change
+                        </button>
+                        <button type="button" onClick={() => setActiveTab('resignation')}
+                            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'resignation' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                            Dismissal / Resignation
+                        </button>
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
 
@@ -194,7 +222,9 @@ export default function SalaryModal({ open, onClose, onSave, entry, staffList, d
                         </div>
                     </div>
                     
-                    {/* Role Details */}
+                    {activeTab === 'status' ? (
+                        <>
+                            {/* Role Details */}
                     <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-4">
                         <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-2 flex items-center gap-2">
                             <Briefcase className="w-3.5 h-3.5" /> Role / Position
@@ -324,6 +354,48 @@ export default function SalaryModal({ open, onClose, onSave, entry, staffList, d
                             </span>
                         </div>
                     )}
+                        </>
+                    ) : (
+                        <div className="space-y-4 pt-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Type of Leaving *</label>
+                                    <select required value={leavingType} onChange={e => { setLeavingType(e.target.value as any); setLeavingReason(''); }} disabled={!staffId}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-gray-50">
+                                        <option value="" disabled>Select type…</option>
+                                        <option value="resignation">Resignation</option>
+                                        <option value="dismissal">Dismissal</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Reason *</label>
+                                    <select required value={leavingReason} onChange={e => setLeavingReason(e.target.value)} disabled={!staffId || !leavingType}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-gray-50">
+                                        <option value="" disabled>Select reason…</option>
+                                        {leavingType === 'resignation' && (
+                                            <>
+                                                <option value="Personal Reasons">Personal Reasons</option>
+                                                <option value="Career Change / Better Opportunity">Career Change / Better Opportunity</option>
+                                                <option value="Relocation">Relocation</option>
+                                                <option value="Health Issues">Health Issues</option>
+                                                <option value="Other">Other</option>
+                                            </>
+                                        )}
+                                        {leavingType === 'dismissal' && (
+                                            <>
+                                                <option value="Underperforming">Underperforming</option>
+                                                <option value="Behavioral Issues">Behavioral Issues</option>
+                                                <option value="Attendance / Tardiness">Attendance / Tardiness</option>
+                                                <option value="Policy Violation">Policy Violation</option>
+                                                <option value="Redundancy / Layoff">Redundancy / Layoff</option>
+                                                <option value="Other">Other</option>
+                                            </>
+                                        )}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Additional Details */}
                     <div className="border-t border-gray-100 pt-6">
@@ -342,10 +414,14 @@ export default function SalaryModal({ open, onClose, onSave, entry, staffList, d
                                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
                                 Cancel
                             </button>
-                            <button type="submit" disabled={saving || !staffId || !effectiveDate || !newAmount || !newPositionId || !newDepartmentId}
-                                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                            <button type="submit" disabled={
+                                saving || !staffId || !effectiveDate || 
+                                (activeTab === 'status' && (!newAmount || !newPositionId || !newDepartmentId)) ||
+                                (activeTab === 'resignation' && (!leavingType || !leavingReason))
+                            }
+                                className={`px-5 py-2 text-sm font-medium text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-blue-600 hover:bg-blue-700`}>
                                 {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                                {entry ? 'Update' : 'Record Change'}
+                                {activeTab === 'resignation' ? 'Set Inactive' : (entry ? 'Update' : 'Record Change')}
                             </button>
                         </div>
                     </div>

@@ -399,8 +399,12 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
     }
 
     function handleApply() {
-        if (localChecked.size >= values.length) onFilter(null)
-        else onFilter(new Set(localChecked))
+        let finalChecked = localChecked;
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)));
+        }
+        if (finalChecked.size >= values.length) onFilter(null); 
+        else onFilter(finalChecked);
     }
 
     return (

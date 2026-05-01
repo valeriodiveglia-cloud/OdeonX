@@ -11,7 +11,7 @@ const BASE = '/human-resources/management'
 const NAV = [
     { href: `${BASE}/staff`, label: 'Staff List', icon: Users },
     { href: `${BASE}/performance`, label: 'Performance', icon: Star },
-    { href: `${BASE}/salary-history`, label: 'Salary & Promotions', icon: TrendingUp },
+    { href: `${BASE}/salary-history`, label: 'Status Change', icon: TrendingUp },
     { href: `${BASE}/fines`, label: 'Fines Table', icon: NotebookPen },
     { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
 ]

@@ -115,7 +115,7 @@ export default function SalaryHistoryPage() {
                     new_position:hr_positions!hr_staff_salary_history_new_position_id_fkey(name),
                     previous_department:hr_departments!hr_staff_salary_history_previous_department_id_fkey(name),
                     new_department:hr_departments!hr_staff_salary_history_new_department_id_fkey(name)
-                `).order('effective_date', { ascending: false }),
+                `).neq('record_type', 'dismissal').neq('record_type', 'resignation').order('effective_date', { ascending: false }),
                 supabase.from('hr_departments').select('*').order('name'),
                 supabase.from('hr_positions').select('*').order('name')
             ])
@@ -197,6 +197,42 @@ export default function SalaryHistoryPage() {
         setSaving(false)
     }
 
+    const handleResign = async (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation', reason: string, notes: string }) => {
+        setSaving(true)
+        try {
+            const staff = staffList.find(s => s.id === data.staffId)
+            const previous_amount = staff?.salary_amount || 0
+
+            const { error: staffErr } = await supabase.from('hr_staff').update({ status: 'inactive' }).eq('id', data.staffId)
+            if (staffErr) throw staffErr
+            
+            const historyPayload: Partial<HRStaffSalaryHistory> = {
+                staff_id: data.staffId,
+                effective_date: data.effectiveDate,
+                record_type: data.type,
+                previous_amount: previous_amount,
+                previous_salary_type: staff?.salary_type || 'fixed',
+                new_amount: 0,
+                salary_type: staff?.salary_type || 'fixed',
+                increase_type: 'none',
+                increase_value: null,
+                reason: data.reason,
+                approved_by: loggedUserName || null,
+                notes: data.notes || null
+            }
+            const { error: histErr } = await supabase.from('hr_staff_salary_history').insert([historyPayload])
+            if (histErr) throw histErr
+
+            setModalOpen(false)
+            setEditingEntry(null)
+            await fetchAll()
+        } catch (err) {
+            console.error(err)
+            alert('Failed to update staff status')
+        }
+        setSaving(false)
+    }
+
     const handleDelete = async () => {
         if (!deletingId) return
         setDeleteLoading(true)
@@ -216,7 +252,7 @@ export default function SalaryHistoryPage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Salary & Promotions</h1>
+                        <h1 className="text-2xl font-bold text-white">Status Change</h1>
                         <p className="text-sm text-slate-400 mt-1">Track role changes, promotions, and gross salary adjustments for your team.</p>
                     </div>
                     <button onClick={() => { setEditingEntry(null); setModalOpen(true) }}
@@ -280,12 +316,19 @@ export default function SalaryHistoryPage() {
                             <tbody className="divide-y divide-gray-50">
                                 {filtered.map((e, idx) => {
                                     const isPromo = e.record_type === 'promotion'
+                                    const isResign = e.record_type === 'resignation'
+                                    const isDismissal = e.record_type === 'dismissal'
+                                    const isDeparture = isResign || isDismissal
                                     return (
-                                        <tr key={e.id} className="hover:bg-gray-50/50 transition-colors">
+                                        <tr key={e.id} className="group hover:bg-gray-50/50 transition-colors">
                                             <td className="px-6 py-4">
                                                 {isPromo ? (
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-xs font-bold border border-purple-100">
                                                         <Briefcase className="w-3.5 h-3.5" /> Promotion
+                                                    </span>
+                                                ) : isDeparture ? (
+                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${isResign ? 'bg-orange-50 text-orange-700 border-orange-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
+                                                        <TrendingDown className="w-3.5 h-3.5" /> {isResign ? 'Resignation' : 'Dismissal'}
                                                     </span>
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
@@ -314,9 +357,9 @@ export default function SalaryHistoryPage() {
                                             </td>
                                             <td className="px-6 py-4 text-sm font-medium text-gray-600">{new Date(e.effective_date).toLocaleDateString('en-GB')}</td>
                                             <td className="px-6 py-4 text-sm text-gray-500 text-right font-mono">{fmt(e.previous_amount)}</td>
-                                            <td className="px-6 py-4 text-sm font-bold text-gray-900 text-right font-mono">{fmt(e.new_amount)}</td>
+                                            <td className="px-6 py-4 text-sm font-bold text-gray-900 text-right font-mono">{isDeparture ? '—' : fmt(e.new_amount)}</td>
                                             <td className="px-6 py-4 text-center">
-                                                <ChangeIndicator prev={e.previous_amount} next={e.new_amount} type={e.record_type} incType={e.increase_type} incValue={e.increase_value} prevType={e.previous_salary_type} newType={e.salary_type} />
+                                                {isDeparture ? <span className="text-gray-400 text-xs">—</span> : <ChangeIndicator prev={e.previous_amount} next={e.new_amount} type={e.record_type} incType={e.increase_type} incValue={e.increase_value} prevType={e.previous_salary_type} newType={e.salary_type} />}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className="text-sm font-medium text-gray-700 block truncate max-w-[150px]">{e.reason || '—'}</span>
@@ -369,7 +412,7 @@ export default function SalaryHistoryPage() {
             </div>
 
             <SalaryModal open={modalOpen} onClose={() => { setModalOpen(false); setEditingEntry(null) }}
-                onSave={handleSave} entry={editingEntry} staffList={staffList} departments={departments} positions={positions} saving={saving} loggedUserName={loggedUserName} />
+                onSave={handleSave} onResign={handleResign} entry={editingEntry} staffList={staffList} departments={departments} positions={positions} saving={saving} loggedUserName={loggedUserName} />
 
             {deletingId && (
                 <DeleteConfirm

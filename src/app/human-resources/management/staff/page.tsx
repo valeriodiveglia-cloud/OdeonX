@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRStaffMember, EmploymentType, SalaryType, StaffStatus, HRDepartment, HRPosition } from '@/types/human-resources'
+import { HRStaffMember, EmploymentType, SalaryType, StaffStatus, HRDepartment, HRPosition, HRAlertSetting } from '@/types/human-resources'
 import CircularLoader from '@/components/CircularLoader'
 import {
     Users, UserPlus, Search, X, Pencil, Trash2,
-    Briefcase, Clock, Building2, ChevronDown, ChevronRight, Folders
+    Briefcase, Clock, Building2, ChevronDown, ChevronRight, Folders, CheckCircle
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -14,11 +14,7 @@ import { useRouter } from 'next/navigation'
 const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n)
 
-const STATUS_COLORS: Record<StaffStatus, { bg: string; text: string; dot: string }> = {
-    active:     { bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
-    inactive:   { bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-500' },
-    terminated: { bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500' },
-}
+
 
 const EMPLOYMENT_LABEL: Record<EmploymentType, string> = {
     full_time: 'Full-time',
@@ -28,6 +24,44 @@ const EMPLOYMENT_LABEL: Record<EmploymentType, string> = {
 const SALARY_LABEL: Record<SalaryType, string> = {
     fixed: '/month',
     hourly: '/hour',
+}
+
+const BranchCell = ({ branchNames }: { branchNames: string[] }) => {
+    const [isExpanded, setIsExpanded] = useState(false)
+    if (branchNames.length === 0) return <span className="text-xs text-gray-400 italic">Not assigned</span>
+    
+    if (branchNames.length <= 2 || isExpanded) {
+        return (
+            <div className="flex flex-wrap gap-1">
+                {branchNames.map((name, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
+                        <Building2 className="w-3 h-3" />
+                        {name}
+                    </span>
+                ))}
+                {isExpanded && branchNames.length > 2 && (
+                    <button onClick={(e) => { e.stopPropagation(); setIsExpanded(false) }} className="text-[10px] text-blue-500 hover:underline ml-1">Show less</button>
+                )}
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex flex-wrap gap-1 items-center">
+            {branchNames.slice(0, 2).map((name, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
+                    <Building2 className="w-3 h-3" />
+                    {name}
+                </span>
+            ))}
+            <button 
+                onClick={(e) => { e.stopPropagation(); setIsExpanded(true) }}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+            >
+                +{branchNames.length - 2} more
+            </button>
+        </div>
+    )
 }
 
 /* ─── Modal ─── */
@@ -120,6 +154,34 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        const phoneVal = phone.trim() || null;
+        const emailVal = email.trim() || null;
+
+        // Check for duplicates in the database (active or archived)
+        if (phoneVal || emailVal) {
+            let query = supabase.from('hr_staff').select('id, full_name, status');
+            
+            if (phoneVal && emailVal) {
+                query = query.or(`phone.eq."${phoneVal}",email.eq."${emailVal}"`);
+            } else if (phoneVal) {
+                query = query.eq('phone', phoneVal);
+            } else if (emailVal) {
+                query = query.eq('email', emailVal);
+            }
+
+            if (staff) {
+                query = query.neq('id', staff.id);
+            }
+
+            const { data, error } = await query;
+            if (!error && data && data.length > 0) {
+                const duplicate = data[0];
+                alert(`Cannot save: A staff member named "${duplicate.full_name}" (Status: ${duplicate.status}) already exists with this phone or email.`);
+                return; // Stop submission
+            }
+        }
+
         const buildFullName = [lastName.trim(), middleName.trim(), firstName.trim()]
             .filter(Boolean)
             .join(' ')
@@ -294,22 +356,22 @@ function StaffModal({ open, onClose, onSave, staff, branches, departments, posit
                     {/* Branch Assignment */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Branch Assignment</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="flex flex-wrap gap-2">
                             {branches.map(branch => {
-                                const selected = selectedBranches.includes(branch.id)
+                                const isSelected = selectedBranches.includes(branch.id)
                                 return (
-                                    <div key={branch.id}
-                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition cursor-pointer
-                                            ${selected ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                                    <button
+                                        type="button"
+                                        key={branch.id}
                                         onClick={() => toggleBranch(branch.id)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
+                                            isSelected 
+                                            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                                            : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        }`}
                                     >
-                                        <input type="checkbox" checked={selected} readOnly
-                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <span className={`text-sm flex-1 ${selected ? 'text-blue-700 font-medium' : 'text-gray-700'}`}>
-                                            {branch.name}
-                                        </span>
-                                    </div>
+                                        {branch.name}
+                                    </button>
                                 )
                             })}
                         </div>
@@ -379,13 +441,13 @@ export default function StaffListPage() {
     const [branchMap, setBranchMap]   = useState<Record<string, string>>({})
     const [departments, setDepartments] = useState<HRDepartment[]>([])
     const [positions, setPositions]     = useState<HRPosition[]>([])
+    const [alertsConfig, setAlertsConfig] = useState<HRAlertSetting[]>([])
     const router = useRouter()
 
     // Filters
     const [search, setSearch]         = useState('')
     const [filterBranch, setFilterBranch]           = useState('all')
     const [filterEmployment, setFilterEmployment]   = useState<'all' | EmploymentType>('all')
-    const [filterStatus, setFilterStatus]           = useState<'all' | StaffStatus>('all')
 
     // Modal
     const [modalOpen, setModalOpen]   = useState(false)
@@ -399,11 +461,12 @@ export default function StaffListPage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            const [branchRes, staffRes, deptRes, posRes] = await Promise.all([
+            const [branchRes, staffRes, deptRes, posRes, alertsRes] = await Promise.all([
                 supabase.from('provider_branches').select('id, name').order('name'),
-                supabase.from('hr_staff').select('*, hr_staff_branches(*)').order('full_name'),
+                supabase.from('hr_staff').select('*, hr_staff_branches(*), hr_staff_contracts(*)').eq('status', 'active').order('full_name'),
                 supabase.from('hr_departments').select('*').order('sort_order'),
                 supabase.from('hr_positions').select('*').order('sort_order'),
+                supabase.from('hr_alert_settings').select('*')
             ])
 
             if (branchRes.data) {
@@ -416,6 +479,7 @@ export default function StaffListPage() {
             if (staffRes.data) setStaff(staffRes.data as HRStaffMember[])
             if (deptRes.data) setDepartments(deptRes.data as HRDepartment[])
             if (posRes.data) setPositions(posRes.data as HRPosition[])
+            if (alertsRes.data) setAlertsConfig(alertsRes.data as HRAlertSetting[])
         } catch (err) {
             console.error('Error fetching staff data:', err)
         }
@@ -440,15 +504,14 @@ export default function StaffListPage() {
                 if (!branchIds.includes(filterBranch)) return false
             }
             if (filterEmployment !== 'all' && s.employment_type !== filterEmployment) return false
-            if (filterStatus !== 'all' && s.status !== filterStatus) return false
             return true
         })
-    }, [staff, search, filterBranch, filterEmployment, filterStatus])
+    }, [staff, search, filterBranch, filterEmployment])
 
     /* ─── Summary cards ─── */
-    const totalActive   = staff.filter(s => s.status === 'active').length
-    const totalFT       = staff.filter(s => s.employment_type === 'full_time' && s.status === 'active').length
-    const totalPT       = staff.filter(s => s.employment_type === 'part_time' && s.status === 'active').length
+    const totalActive   = staff.length
+    const totalFT       = staff.filter(s => s.employment_type === 'full_time').length
+    const totalPT       = staff.filter(s => s.employment_type === 'part_time').length
 
     const summaryCards = [
         { label: 'Total Staff',   value: staff.length,  icon: Users,     color: 'text-blue-600',    bg: 'bg-blue-50' },
@@ -591,16 +654,15 @@ export default function StaffListPage() {
                         <option value="part_time">Part-time</option>
                     </select>
 
-                    {/* Status filter */}
-                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}
-                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                        <option value="all">All Status</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="terminated">Terminated</option>
-                    </select>
-
-                    <span className="text-xs text-slate-500 ml-auto">{filtered.length} of {staff.length} shown</span>
+                    <span className="text-xs text-slate-500 ml-auto mr-2">{filtered.length} of {staff.length} shown</span>
+                    <button
+                        onClick={() => router.push('/human-resources/management/staff-archive')}
+                        className="text-sm font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5 shrink-0 border-l border-white/10 pl-4"
+                        title="View Dismissed & Resigned Staff"
+                    >
+                        <Folders className="w-4 h-4" />
+                        Archive
+                    </button>
                 </div>
 
                 {/* Table */}
@@ -614,14 +676,14 @@ export default function StaffListPage() {
                                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Position</th>
                                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Branch(es)</th>
                                     <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Type</th>
-                                    <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Salary (VND)</th>
                                     <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Status</th>
+                                    <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Salary (VND)</th>
+                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Alerts</th>
                                     <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filtered.map((s, idx) => {
-                                    const sc = STATUS_COLORS[s.status]
                                     const branchNames = (s.hr_staff_branches || [])
                                         .map(b => branchMap[b.branch_id])
                                         .filter(Boolean)
@@ -644,21 +706,12 @@ export default function StaffListPage() {
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600">{s.position}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{s.position}</td>
                                             <td className="px-4 py-3">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {branchNames.length > 0 ? branchNames.map((name, i) => (
-                                                        <span key={i}
-                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600"
-                                                        >
-                                                            <Building2 className="w-3 h-3" />
-                                                            {name}
-                                                        </span>
-                                                    )) : <span className="text-xs text-gray-400 italic">Not assigned</span>}
-                                                </div>
+                                                <BranchCell branchNames={branchNames} />
                                             </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium
+                                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium
                                                     ${s.employment_type === 'full_time'
                                                         ? 'bg-indigo-50 text-indigo-700'
                                                         : 'bg-amber-50 text-amber-700'
@@ -667,15 +720,108 @@ export default function StaffListPage() {
                                                     {EMPLOYMENT_LABEL[s.employment_type]}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 text-right text-sm font-mono">
+                                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                {s.probation_end_date && new Date(s.probation_end_date).getTime() > Date.now() ? (
+                                                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                                                        Probation
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                        Active
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-right text-sm font-mono whitespace-nowrap">
                                                 <span className="text-gray-900 font-semibold">{fmt(s.salary_amount)}</span>
                                                 <span className="text-gray-400 text-xs ml-1">{SALARY_LABEL[s.salary_type]}</span>
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium ${sc.bg} ${sc.text}`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-                                                    {s.status.charAt(0).toUpperCase() + s.status.slice(1)}
-                                                </span>
+                                                {(() => {
+                                                    const alerts: {type: string, text: string}[] = [];
+
+                                                    alertsConfig.forEach(cfg => {
+                                                        // Check scope
+                                                        let matchesScope = false;
+                                                        if (cfg.scope === 'global') matchesScope = true;
+                                                        else if (cfg.scope === 'department' && s.department_id === cfg.scope_id) matchesScope = true;
+                                                        else if (cfg.scope === 'position' && s.position_id === cfg.scope_id) matchesScope = true;
+
+                                                        if (!matchesScope) return;
+
+                                                        let targetDateStr: string | null | undefined = null;
+                                                        const contracts = s.hr_staff_contracts || [];
+                                                        const latestContract = contracts.length > 0 
+                                                            ? contracts.reduce((prev, curr) => (prev.version > curr.version) ? prev : curr) 
+                                                            : null;
+
+                                                        if (cfg.target_field === 'start_date') targetDateStr = s.start_date;
+                                                        else if (cfg.target_field === 'probation_end_date') targetDateStr = s.probation_end_date;
+                                                        else if (cfg.target_field === 'contract_expiration_date') targetDateStr = latestContract?.expiration_date;
+                                                        else if (cfg.target_field === 'contract_signing_date') targetDateStr = latestContract?.signing_date;
+                                                        else if (cfg.target_field === 'last_status_change') targetDateStr = s.updated_at;
+
+                                                        if (!targetDateStr) return;
+
+                                                        const tDate = new Date(targetDateStr).getTime();
+                                                        const diffDays = (tDate - Date.now()) / (1000 * 3600 * 24);
+                                                        const daysThreshold = cfg.days || 0;
+
+                                                        let shouldTrigger = false;
+                                                        let alertStartDate = 0;
+                                                        if (cfg.condition_type === 'before') {
+                                                            shouldTrigger = diffDays <= daysThreshold;
+                                                            alertStartDate = tDate - (daysThreshold * 1000 * 3600 * 24);
+                                                        } else if (cfg.condition_type === 'after') {
+                                                            shouldTrigger = (-diffDays) >= daysThreshold;
+                                                            alertStartDate = tDate + (daysThreshold * 1000 * 3600 * 24);
+                                                        }
+
+                                                        if (shouldTrigger && cfg.deactivate_trigger) {
+                                                            let deactDateStr: string | null | undefined = null;
+                                                            if (cfg.deactivate_trigger === 'start_date') deactDateStr = s.start_date;
+                                                            else if (cfg.deactivate_trigger === 'probation_end_date') deactDateStr = s.probation_end_date;
+                                                            else if (cfg.deactivate_trigger === 'contract_expiration_date') deactDateStr = latestContract?.expiration_date;
+                                                            else if (cfg.deactivate_trigger === 'contract_signing_date') deactDateStr = latestContract?.signing_date;
+                                                            else if (cfg.deactivate_trigger === 'last_status_change') deactDateStr = s.updated_at;
+
+                                                            if (deactDateStr) {
+                                                                const dDate = new Date(deactDateStr).getTime();
+                                                                // If the trigger field was updated at/after the alert started, deactivate the alert.
+                                                                if (dDate >= alertStartDate) {
+                                                                    shouldTrigger = false;
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        if (shouldTrigger) {
+                                                            let type = 'warning';
+                                                            if (diffDays < 0 && (cfg.target_field === 'probation_end_date' || cfg.target_field === 'contract_expiration_date')) {
+                                                                type = cfg.target_field === 'contract_expiration_date' ? 'danger' : 'info';
+                                                            } else if (cfg.target_field === 'start_date' || cfg.target_field === 'last_status_change') {
+                                                                type = 'info';
+                                                            }
+                                                            alerts.push({ type, text: cfg.label });
+                                                        }
+                                                    });
+
+                                                    if (alerts.length === 0) {
+                                                        return <span className="text-gray-400 italic text-xs">—</span>;
+                                                    }
+
+                                                    return (
+                                                        <div className="flex flex-col gap-1 items-center">
+                                                            {alerts.map((a, i) => (
+                                                                <span key={i} className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap
+                                                                    ${a.type === 'danger' ? 'bg-red-50 text-red-700' : ''}
+                                                                    ${a.type === 'warning' ? 'bg-amber-50 text-amber-700' : ''}
+                                                                    ${a.type === 'info' ? 'bg-blue-50 text-blue-700' : ''}
+                                                                `}>
+                                                                    {a.text}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                                 <div className="flex items-center justify-center gap-1">

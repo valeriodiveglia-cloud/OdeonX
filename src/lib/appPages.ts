@@ -47,7 +47,8 @@ import {
   Ticket,
   BookOpen,
   ScrollText,
-  Briefcase
+  Briefcase,
+  Folders
 } from 'lucide-react'
 
 export type AppPage = {
@@ -106,8 +107,9 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   
   // HR Management
   { id: 'hrm-staff', href: '/human-resources/management/staff', title: 'Staff List', module: 'HR Management', icon: Users },
+  { id: 'hrm-staff-archive', href: '/human-resources/management/staff-archive', title: 'Staff Archive', module: 'HR Management', icon: Folders },
   { id: 'hrm-performance', href: '/human-resources/management/performance', title: 'Performance Reviews', module: 'HR Management', icon: Star },
-  { id: 'hrm-salary', href: '/human-resources/management/salary-history', title: 'Salary & Promotions', module: 'HR Management', icon: TrendingUp },
+  { id: 'hrm-salary', href: '/human-resources/management/salary-history', title: 'Status Change', module: 'HR Management', icon: TrendingUp },
   { id: 'hrm-settings', href: '/human-resources/management/settings', title: 'Management Settings', module: 'HR Management', icon: Settings },
   
   // HR Operational

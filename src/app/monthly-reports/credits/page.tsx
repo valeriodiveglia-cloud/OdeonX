@@ -384,7 +384,14 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
     const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
     function toggleAll() { const next = new Set(localChecked); if (allVisibleChecked) { filteredValues.forEach(v => next.delete(v)) } else { filteredValues.forEach(v => next.add(v)) }; setLocalChecked(next) }
     function toggleOne(v: string) { const next = new Set(localChecked); if (next.has(v)) next.delete(v); else next.add(v); setLocalChecked(next) }
-    function handleApply() { if (localChecked.size >= values.length) onFilter(null); else onFilter(new Set(localChecked)) }
+    function handleApply() {
+        let finalChecked = localChecked;
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)));
+        }
+        if (finalChecked.size >= values.length) onFilter(null); 
+        else onFilter(finalChecked);
+    }
 
     return (
         <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>

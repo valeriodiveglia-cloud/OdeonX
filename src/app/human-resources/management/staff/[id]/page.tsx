@@ -10,7 +10,7 @@ import {
     Calendar, Building2, Briefcase, Plus, Loader2, Trash2, BadgeCheck, Lock, Unlock,
     ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen
 } from 'lucide-react'
-import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog, HRStaffDocument } from '@/types/human-resources'
+import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog, HRStaffDocument, HRStaffContract } from '@/types/human-resources'
 import PerformanceModal, { computePeriodLabel } from '@/components/human-resources/PerformanceModal'
 import SalaryModal from '@/components/human-resources/SalaryModal'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
@@ -22,7 +22,8 @@ const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB'
 
 // === TABS CONFIG ===
 const TABS = [
-    { id: 'profile', label: 'Profile & Contract', icon: User, color: 'text-blue-600', activeBg: 'bg-blue-50 text-blue-700' },
+    { id: 'profile', label: 'Profile', icon: User, color: 'text-blue-600', activeBg: 'bg-blue-50 text-blue-700' },
+    { id: 'contract', label: 'Contract', icon: Briefcase, color: 'text-amber-600', activeBg: 'bg-amber-50 text-amber-700' },
     { id: 'documents', label: 'Documents', icon: FileText, color: 'text-indigo-600', activeBg: 'bg-indigo-50 text-indigo-700' },
     { id: 'timeline', label: 'Career Journey', icon: Activity, color: 'text-purple-600', activeBg: 'bg-purple-50 text-purple-700' },
     { id: 'performance', label: 'Performance', icon: TrendingUp, color: 'text-emerald-600', activeBg: 'bg-emerald-50 text-emerald-700' },
@@ -58,7 +59,7 @@ export default function StaffDetailPage() {
         setLoading(true)
         try {
             const [staffRes, deptsRes, posRes, roleReq, salReq, perfReq, branchesReq, catReq, docsReq] = await Promise.all([
-                supabase.from('hr_staff').select('*, hr_departments(*), hr_positions(*), hr_staff_branches(*)').eq('id', id).single(),
+                supabase.from('hr_staff').select('*, hr_departments(*), hr_positions(*), hr_staff_branches(*), hr_staff_contracts(*)').eq('id', id).single(),
                 supabase.from('hr_departments').select('*').order('sort_order'),
                 supabase.from('hr_positions').select('*').order('sort_order'),
                 supabase.from('hr_staff_role_history').select('*, old_position:hr_positions!old_position_id(*), new_position:hr_positions!new_position_id(*)').eq('staff_id', id).order('effective_date', { ascending: false }),
@@ -180,6 +181,7 @@ export default function StaffDetailPage() {
                 <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-900 border border-gray-100">
                     <div className="p-6 sm:p-8">
                         {activeTab === 'profile' && <TabProfile staff={staff} departments={departments} positions={positions} branches={providerBranches} onUpdate={fetchAll} />}
+                        {activeTab === 'contract' && <TabContract staff={staff} onUpdate={fetchAll} />}
                         {activeTab === 'documents' && <TabDocuments staff={staff} documents={documents} onUpdate={fetchAll} />}
                         {activeTab === 'timeline' && <TabTimeline staff={staff} roleHistory={roleHistory} salaryHistory={salaryHistory} positions={positions} departments={departments} loggedUserName={loggedUserName} onUpdate={fetchAll} />}
                         {activeTab === 'performance' && <TabPerformance staff={staff} performances={performances} onUpdate={fetchAll} allCategories={allCategories} />}
@@ -227,15 +229,37 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
     const handleSave = async () => {
         setSaving(true)
         try {
-            const { hr_staff_branches, hr_departments, hr_positions, ...updateData } = formData as any;
+            const phoneVal = (formData.phone || '').trim() || null;
+            const emailVal = (formData.email || '').trim() || null;
+
+            if (phoneVal || emailVal) {
+                let query = supabase.from('hr_staff').select('id, full_name, status');
+                
+                if (phoneVal && emailVal) {
+                    query = query.or(`phone.eq."${phoneVal}",email.eq."${emailVal}"`);
+                } else if (phoneVal) {
+                    query = query.eq('phone', phoneVal);
+                } else if (emailVal) {
+                    query = query.eq('email', emailVal);
+                }
+
+                query = query.neq('id', staff.id);
+
+                const { data, error } = await query;
+                if (!error && data && data.length > 0) {
+                    const duplicate = data[0];
+                    alert(`Cannot save: A staff member named "${duplicate.full_name}" (Status: ${duplicate.status}) already exists with this phone or email.`);
+                    setSaving(false);
+                    return;
+                }
+            }
+            const { hr_staff_branches, hr_departments, hr_positions, hr_staff_contracts, contract_signing_date, contract_expiration_date, notes, ...updateData } = formData as any;
             
             // Sanitize empty strings to null for date and relation fields
             const nullifyIfEmpty = (field: string) => {
                 if (updateData[field] === '') updateData[field] = null;
             }
             nullifyIfEmpty('start_date');
-            nullifyIfEmpty('contract_signing_date');
-            nullifyIfEmpty('contract_expiration_date');
             nullifyIfEmpty('probation_end_date');
             nullifyIfEmpty('department_id');
             nullifyIfEmpty('position_id');
@@ -276,10 +300,10 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                         }
                         setIsEditing(!isEditing)
                     }} 
-                    className={`p-2 rounded-xl border transition-all ${isEditing ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                    className={`p-2 rounded-xl border transition-all ${isEditing ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
                     title={isEditing ? "Cancel Editing" : "Enable Editing"}
                 >
-                    <Pencil className="w-5 h-5" />
+                    {isEditing ? <X className="w-5 h-5" /> : <Pencil className="w-5 h-5" />}
                 </button>
             </div>
             
@@ -290,13 +314,9 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
-                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
-                     <select disabled={!isEditing} value={formData.status || 'active'} onChange={e => handleChange('status', e.target.value)}
-                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed">
-                         <option value="active">Active</option>
-                         <option value="inactive">Inactive</option>
-                         <option value="terminated">Terminated</option>
-                     </select>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Address</label>
+                    <input disabled={!isEditing} value={formData.address || ''} onChange={e => handleChange('address', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Phone</label>
@@ -401,47 +421,30 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
 
             <div>
                 <h3 className="text-sm font-semibold text-gray-900 mb-3">Assigned Branches</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {branches.map(branch => (
-                        <label key={branch.id} className={`flex items-center gap-2 p-2 rounded-lg border transition-colors ${selectedBranches.includes(branch.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'} ${isEditing ? 'cursor-pointer hover:bg-gray-50' : 'opacity-70 cursor-not-allowed'}`}>
-                            <input type="checkbox" disabled={!isEditing} className="rounded text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
-                                checked={selectedBranches.includes(branch.id)}
-                                onChange={(e) => {
-                                    if (e.target.checked) setSelectedBranches(p => [...p, branch.id])
-                                    else setSelectedBranches(p => p.filter(id => id !== branch.id))
+                <div className="flex flex-wrap gap-2">
+                    {branches.map(branch => {
+                        const isSelected = selectedBranches.includes(branch.id);
+                        return (
+                            <button
+                                type="button"
+                                key={branch.id}
+                                disabled={!isEditing}
+                                onClick={() => {
+                                    if (isSelected) setSelectedBranches(p => p.filter(id => id !== branch.id))
+                                    else setSelectedBranches(p => [...p, branch.id])
                                 }}
-                            />
-                            <span className="text-sm text-gray-700">{branch.name}</span>
-                        </label>
-                    ))}
-                    {branches.length === 0 && <span className="text-sm text-gray-400">No branches available in settings.</span>}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                                    isSelected 
+                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                                } ${!isEditing ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                                {branch.name}
+                            </button>
+                        )
+                    })}
+                    {branches.length === 0 && <span className="text-sm text-gray-400 italic">No branches available in settings.</span>}
                 </div>
-            </div>
-
-            <hr className="border-gray-100" />
-
-            <div>
-                <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Contract & Dates</h2>
-                <p className="text-sm text-gray-500 mt-1">Employment timeline and contract milestones.</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Contract Signing Date</label>
-                    <input disabled={!isEditing} type="date" value={formData.contract_signing_date || ''} onChange={e => handleChange('contract_signing_date', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Contract Expiration Date</label>
-                    <input disabled={!isEditing} type="date" value={formData.contract_expiration_date || ''} onChange={e => handleChange('contract_expiration_date', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
-                </div>
-            </div>
-
-            <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 mt-5">Notes</label>
-                <textarea disabled={!isEditing} rows={3} value={formData.notes || ''} onChange={e => handleChange('notes', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" placeholder="Internal notes..."></textarea>
             </div>
 
             {isEditing && (
@@ -452,6 +455,248 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                     </button>
                 </div>
             )}
+        </div>
+    )
+}
+
+// ==========================================
+// TAB: Contract
+// ==========================================
+function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () => void }) {
+    const contracts = [...(staff.hr_staff_contracts || [])].sort((a, b) => a.version - b.version);
+    
+    const [selectedIdx, setSelectedIdx] = useState<number>(Math.max(0, contracts.length - 1));
+    const [isAddingNew, setIsAddingNew] = useState(false);
+    
+    const [formData, setFormData] = useState<Partial<HRStaffContract>>({})
+    const [displayValues, setDisplayValues] = useState<Record<string, string>>({})
+    const [saving, setSaving] = useState(false)
+    const [isEditing, setIsEditing] = useState(false)
+
+    const breakdownFields = [
+        { key: 'basic_salary', label: 'Basic Salary' },
+        { key: 'uniforms_allowance', label: 'Uniforms Allowance' },
+        { key: 'lunch_allowance', label: 'Lunch Allowance' },
+        { key: 'phone_allowance', label: 'Phone Allowance' },
+        { key: 'fuel_allowance', label: 'Fuel Allowance' },
+        { key: 'home_support_allowance', label: 'Home Support' },
+    ] as const;
+
+    // When the selected tab changes, populate form
+    useEffect(() => {
+        let currentContract: Partial<HRStaffContract> = {};
+        if (isAddingNew) {
+            currentContract = { version: contracts.length > 0 ? contracts[contracts.length - 1].version + 1 : 1 };
+            setIsEditing(true);
+        } else if (contracts[selectedIdx]) {
+            currentContract = { ...contracts[selectedIdx] };
+            setIsEditing(false);
+        }
+
+        setFormData(currentContract);
+        
+        const initDisplay: Record<string, string> = {};
+        breakdownFields.forEach(f => {
+            const val = currentContract[f.key as keyof HRStaffContract];
+            initDisplay[f.key] = val ? Number(val).toLocaleString('en-US') : '';
+        });
+        setDisplayValues(initDisplay);
+    }, [staff, selectedIdx, isAddingNew]);
+
+    const handleChange = (field: keyof HRStaffContract, val: any) => {
+        setFormData(p => ({ ...p, [field]: val }))
+    }
+
+    const handleBreakdownChange = (key: string, rawValue: string) => {
+        let val = rawValue.replace(/[^0-9]/g, '');
+        let numVal = parseInt(val, 10);
+        
+        setDisplayValues(p => ({ ...p, [key]: isNaN(numVal) ? '' : numVal.toLocaleString('en-US') }));
+        handleChange(key as any, isNaN(numVal) ? null : numVal);
+    };
+    
+    const handleSave = async () => {
+        if (formData.signing_date && formData.expiration_date) {
+            const signDate = new Date(formData.signing_date).getTime();
+            const expDate = new Date(formData.expiration_date).getTime();
+            if (expDate < signDate) {
+                alert("Contract Expiration Date cannot be before the Contract Signing Date.");
+                return;
+            }
+        }
+
+        setSaving(true)
+        try {
+            const payload = {
+                staff_id: staff.id,
+                version: formData.version || 1,
+                signing_date: formData.signing_date === '' ? null : formData.signing_date,
+                expiration_date: formData.expiration_date === '' ? null : formData.expiration_date,
+                notes: formData.notes === '' ? null : formData.notes,
+                basic_salary: formData.basic_salary || 0,
+                uniforms_allowance: formData.uniforms_allowance || 0,
+                lunch_allowance: formData.lunch_allowance || 0,
+                phone_allowance: formData.phone_allowance || 0,
+                fuel_allowance: formData.fuel_allowance || 0,
+                home_support_allowance: formData.home_support_allowance || 0,
+            }
+
+            if (isAddingNew) {
+                const { error } = await supabase.from('hr_staff_contracts').insert([payload])
+                if (error) throw error
+            } else if (contracts[selectedIdx]) {
+                const { error } = await supabase.from('hr_staff_contracts').update(payload).eq('id', contracts[selectedIdx].id)
+                if (error) throw error
+            }
+
+            setIsAddingNew(false)
+            setIsEditing(false)
+            onUpdate() // Refresh data
+        } catch (err) {
+            console.error(err)
+            alert('Failed to save contract')
+        }
+        setSaving(false)
+    }
+
+    const grossSalary = staff.salary_amount || 0;
+    const currentTotal = breakdownFields.reduce((sum, f) => sum + (Number(formData[f.key as keyof HRStaffContract]) || 0), 0);
+    const difference = grossSalary - currentTotal;
+    const isMatching = currentTotal === grossSalary;
+
+    return (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-start justify-between">
+                <div>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Contract History</h2>
+                    <p className="text-sm text-gray-500 mt-1">Manage employment contracts and salary breakdowns.</p>
+                </div>
+                {!isAddingNew && (
+                    <button 
+                        onClick={() => setIsAddingNew(true)} 
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition shadow hover:shadow-lg"
+                    >
+                        <Plus className="w-4 h-4" /> Renew Contract
+                    </button>
+                )}
+            </div>
+
+            {/* Tabs */}
+            <div className="border-b border-gray-200 flex flex-wrap gap-6 mb-6">
+                {contracts.map((c, i) => (
+                    <button 
+                        key={c.id} 
+                        onClick={() => { setIsAddingNew(false); setSelectedIdx(i); }}
+                        className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                            !isAddingNew && selectedIdx === i 
+                                ? 'border-blue-600 text-blue-600' 
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
+                    >
+                        {i === 0 ? 'Initial Contract' : `Renewal #${i}`}
+                    </button>
+                ))}
+                {isAddingNew && (
+                    <div className="py-3 px-1 border-b-2 font-medium text-sm border-blue-600 text-blue-600">
+                        New Renewal
+                    </div>
+                )}
+            </div>
+
+            <div className="border border-gray-200 rounded-2xl p-6 bg-white relative">
+                {!isAddingNew && (
+                    <button 
+                        onClick={() => setIsEditing(!isEditing)} 
+                        className={`absolute top-4 right-4 p-2 rounded-xl border transition-all ${isEditing ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                        title={isEditing ? "Cancel Editing" : "Enable Editing"}
+                    >
+                        {isEditing ? <X className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+                    </button>
+                )}
+
+                <h3 className="text-lg font-semibold text-gray-900 mb-5">
+                    {isAddingNew ? 'Drafting New Contract' : (selectedIdx === 0 ? 'Initial Contract Details' : `Renewal #${selectedIdx} Details`)}
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Contract Signing Date</label>
+                        <input disabled={!isEditing} type="date" value={formData.signing_date || ''} onChange={e => handleChange('signing_date', e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Contract Expiration Date</label>
+                        <input disabled={!isEditing} type="date" value={formData.expiration_date || ''} onChange={e => handleChange('expiration_date', e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                    </div>
+                </div>
+
+                <div className="mt-5">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Notes</label>
+                    <textarea disabled={!isEditing} rows={2} value={formData.notes || ''} onChange={e => handleChange('notes', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" placeholder="Internal notes..."></textarea>
+                </div>
+
+                <hr className="border-gray-100 my-6" />
+
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-gray-900">Salary Breakdown</h3>
+                        <div className="text-sm">
+                            <span className="text-gray-500">Gross Salary (from Profile): </span>
+                            <span className="font-bold text-gray-900">{fmtVND(grossSalary)}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 sm:p-6 space-y-4">
+                        {breakdownFields.map(field => {
+                            const val = Number(formData[field.key as keyof HRStaffContract]) || 0;
+                            const pct = grossSalary > 0 ? ((val / grossSalary) * 100).toFixed(1) : '0.0';
+                            return (
+                                <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                    <label className="w-full sm:w-48 text-sm font-medium text-gray-700">{field.label}</label>
+                                    <div className="flex-1 relative">
+                                        <input 
+                                            disabled={!isEditing} 
+                                            type="text" 
+                                            value={displayValues[field.key] || ''} 
+                                            onChange={e => handleBreakdownChange(field.key, e.target.value)}
+                                            className="w-full px-3 py-2 pr-16 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:bg-gray-100 disabled:cursor-not-allowed text-right font-mono" 
+                                            placeholder="0"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                            {pct}%
+                                        </span>
+                                    </div>
+                                </div>
+                            )
+                        })}
+
+                        <div className={`pt-4 mt-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-medium text-sm ${!isMatching ? 'text-red-600' : 'text-emerald-600'}`}>
+                            <span>Total Breakdown: {fmtVND(currentTotal)}</span>
+                            {!isMatching ? (
+                                <span className="flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Difference: {fmtVND(Math.abs(difference))}</span>
+                            ) : (
+                                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4" /> Matches Gross Salary</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {isEditing && (
+                    <div className="pt-6 flex justify-end gap-3">
+                        {isAddingNew && (
+                            <button onClick={() => setIsAddingNew(false)} disabled={saving} className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition">
+                                Cancel
+                            </button>
+                        )}
+                        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            {isAddingNew ? 'Save New Contract' : 'Update Contract'}
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }

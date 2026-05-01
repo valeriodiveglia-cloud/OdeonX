@@ -136,17 +136,16 @@ export interface HRStaffMember {
   position_id: string | null;
   phone: string | null;
   email: string | null;
+  address: string | null;
   employment_type: EmploymentType;
   salary_type: SalaryType;
   salary_amount: number;
   start_date: string | null;
   status: StaffStatus;
   notes: string | null;
-  contract_signing_date: string | null;
   probation_months: number;
   probation_salary_pct: number;
   probation_end_date: string | null;
-  contract_expiration_date: string | null;
   contract_doc_url: string | null;
   cv_doc_url: string | null;
   id_card_doc_url: string | null;
@@ -156,6 +155,24 @@ export interface HRStaffMember {
   hr_staff_branches?: HRStaffBranch[];
   hr_departments?: HRDepartment;
   hr_positions?: HRPosition;
+  hr_staff_contracts?: HRStaffContract[];
+}
+
+export interface HRStaffContract {
+    id: string;
+    staff_id: string;
+    version: number;
+    signing_date: string | null;
+    expiration_date: string | null;
+    basic_salary: number | null;
+    uniforms_allowance: number | null;
+    lunch_allowance: number | null;
+    phone_allowance: number | null;
+    fuel_allowance: number | null;
+    home_support_allowance: number | null;
+    notes: string | null;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export type PerformanceRating = 1 | 2 | 3 | 4 | 5;
@@ -179,10 +196,24 @@ export interface HRStaffPerformance {
 }
 
 export interface HRDisciplinaryCategory {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
+    id: string
+    name: string
+    created_at?: string
+}
+
+export type AlertScope = 'global' | 'department' | 'position'
+export type AlertTargetField = 'start_date' | 'probation_end_date' | 'contract_expiration_date' | 'contract_signing_date' | 'last_status_change'
+
+export interface HRAlertSetting {
+    id: string;
+    label: string;
+    target_field: AlertTargetField;
+    deactivate_trigger: AlertTargetField | null;
+    condition_type: 'before' | 'after';
+    days: number | null;
+    scope: AlertScope;
+    scope_id: string | null;
+    created_at?: string;
 }
 
 export interface HRDisciplinaryCatalog {
@@ -230,7 +261,7 @@ export interface HRStaffSalaryHistory {
   created_at: string;
   
   // New Columns for Promotions
-  record_type: 'salary_increase' | 'promotion';
+  record_type: 'salary_increase' | 'promotion' | 'resignation' | 'dismissal';
   increase_type: 'percentage' | 'fixed' | 'none' | null;
   increase_value: number | null;
   previous_salary_type: SalaryType | null;
