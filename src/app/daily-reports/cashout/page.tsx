@@ -365,6 +365,7 @@ function EditorModal({
                     value={date}
                     onChange={e => setDate(e.target.value)}
                     disabled={viewMode}
+                    max={todayISO()}
                   />
                 </div>
 
