@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if partner is active
-    if (partner.status !== 'Active' && partner.status !== 'Negotiating') {
+    const allowedStatuses = ['Active', 'Negotiating', 'Waiting for Activation']
+    if (!allowedStatuses.includes(partner.status)) {
       return NextResponse.json({ error: 'Account partner non attivo' }, { status: 403 })
     }
 
