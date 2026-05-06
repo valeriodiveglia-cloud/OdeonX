@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const { identifier, password } = await req.json()
 
     if (!identifier || typeof identifier !== 'string') {
-      return NextResponse.json({ error: 'Codice partner o numero di telefono richiesto' }, { status: 400 })
+      return NextResponse.json({ error: 'Partner code or phone number required' }, { status: 400 })
     }
 
     // Find partner by code or phone
@@ -40,20 +40,20 @@ export async function POST(req: NextRequest) {
     }
 
     if (!partner) {
-      return NextResponse.json({ error: 'Partner non trovato' }, { status: 404 })
+      return NextResponse.json({ error: 'Partner not found' }, { status: 404 })
     }
 
     // Check if partner is active
     const allowedStatuses = ['Active', 'Negotiating', 'Waiting for Activation']
     if (!allowedStatuses.includes(partner.status)) {
-      return NextResponse.json({ error: 'Account partner non attivo' }, { status: 403 })
+      return NextResponse.json({ error: 'Partner account is not active' }, { status: 403 })
     }
 
     // Check rate limiting
     if (partner.locked_until && new Date(partner.locked_until) > new Date()) {
       const minutesLeft = Math.ceil((new Date(partner.locked_until).getTime() - Date.now()) / 60000)
       return NextResponse.json({
-        error: `Troppi tentativi. Riprova tra ${minutesLeft} minut${minutesLeft === 1 ? 'o' : 'i'}.`,
+        error: `Too many attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'}.`,
         locked: true,
         minutesLeft
       }, { status: 429 })
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     // Verify password
     if (!password || typeof password !== 'string') {
-      return NextResponse.json({ error: 'Password richiesta' }, { status: 400 })
+      return NextResponse.json({ error: 'Password required' }, { status: 400 })
     }
 
     const valid = await bcrypt.compare(password, partner.partner_password_hash)
@@ -92,14 +92,14 @@ export async function POST(req: NextRequest) {
 
       if (attempts >= 5) {
         return NextResponse.json({
-          error: 'Troppi tentativi. Account bloccato per 15 minuti.',
+          error: 'Too many attempts. Account locked for 15 minutes.',
           locked: true,
           minutesLeft: 15
         }, { status: 429 })
       }
 
       return NextResponse.json({
-        error: 'Password errata',
+        error: 'Incorrect password',
         attemptsLeft: 5 - attempts
       }, { status: 401 })
     }
@@ -115,6 +115,6 @@ export async function POST(req: NextRequest) {
       partnerId: partner.id
     })
   } catch {
-    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

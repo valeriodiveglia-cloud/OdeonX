@@ -14,11 +14,11 @@ export async function POST(req: NextRequest) {
     const { partnerCode, newPassword } = await req.json()
 
     if (!partnerCode || typeof partnerCode !== 'string') {
-      return NextResponse.json({ error: 'Codice partner richiesto' }, { status: 400 })
+      return NextResponse.json({ error: 'Partner code required' }, { status: 400 })
     }
 
     if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
-      return NextResponse.json({ error: 'La password deve avere almeno 6 caratteri' }, { status: 400 })
+      return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
     }
 
     // Find partner by code
@@ -29,17 +29,18 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (error || !partner) {
-      return NextResponse.json({ error: 'Partner non trovato' }, { status: 404 })
+      return NextResponse.json({ error: 'Partner not found' }, { status: 404 })
     }
 
     // Only allow setup if password is not yet set
     if (partner.partner_password_hash) {
-      return NextResponse.json({ error: 'Password già impostata. Contatta il ristorante per il reset.' }, { status: 400 })
+      return NextResponse.json({ error: 'Password already set. Contact the restaurant to reset.' }, { status: 400 })
     }
 
     // Check if partner is active
-    if (partner.status !== 'Active' && partner.status !== 'Negotiating') {
-      return NextResponse.json({ error: 'Account partner non attivo' }, { status: 403 })
+    const allowedStatuses = ['Active', 'Negotiating', 'Waiting for Activation']
+    if (!allowedStatuses.includes(partner.status)) {
+      return NextResponse.json({ error: 'Partner account is not active' }, { status: 403 })
     }
 
     // Hash and save password
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
       .eq('id', partner.id)
 
     if (updateError) {
-      return NextResponse.json({ error: 'Errore nel salvataggio della password' }, { status: 500 })
+      return NextResponse.json({ error: 'Error saving password' }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -63,6 +64,6 @@ export async function POST(req: NextRequest) {
       partnerId: partner.id
     })
   } catch {
-    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
