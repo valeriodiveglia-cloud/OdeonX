@@ -8,11 +8,12 @@ import CircularLoader from '@/components/CircularLoader'
 import {
     ArrowLeft, User, FileText, Activity, TrendingUp, Save, UploadCloud, ExternalLink,
     Calendar, Building2, Briefcase, Plus, Loader2, Trash2, BadgeCheck, Lock, Unlock,
-    ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen
+    ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen, FileDown, Star
 } from 'lucide-react'
 import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog, HRStaffDocument, HRStaffContract } from '@/types/human-resources'
-import PerformanceModal, { computePeriodLabel } from '@/components/human-resources/PerformanceModal'
+import PerformanceModal, { computePeriodLabel, OVERALL_LABELS } from '@/components/human-resources/PerformanceModal'
 import SalaryModal from '@/components/human-resources/SalaryModal'
+import { saveAs } from 'file-saver'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
 import { useSettings } from '@/contexts/SettingsContext'
 
@@ -49,10 +50,104 @@ export default function StaffDetailPage() {
     const [roleHistory, setRoleHistory] = useState<HRStaffRoleHistory[]>([])
     const [salaryHistory, setSalaryHistory] = useState<HRStaffSalaryHistory[]>([])
     const [performances, setPerformances] = useState<HRStaffPerformance[]>([])
-    const [providerBranches, setProviderBranches] = useState<{id: string, name: string}[]>([])
+    const [providerBranches, setProviderBranches] = useState<{id: string, name: string, city: string}[]>([])
     const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
     const [documents, setDocuments] = useState<HRStaffDocument[]>([])
     const [loggedUserName, setLoggedUserName] = useState<string>('')
+
+    const [perfModalOpen, setPerfModalOpen] = useState(false)
+    const [perfSaving, setPerfSaving] = useState(false)
+
+    const [dismissalModalOpen, setDismissalModalOpen] = useState(false)
+    const [dismissalSaving, setDismissalSaving] = useState(false)
+
+    const [pendingResignation, setPendingResignation] = useState<{ staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation' | 'rejection', reason: string, notes: string } | null>(null)
+    const [exitReviewModalOpen, setExitReviewModalOpen] = useState(false)
+    const [exitReviewSaving, setExitReviewSaving] = useState(false)
+
+    const handleSavePerformance = async (data: any, decision?: 'confirm' | 'reject') => {
+        setPerfSaving(true)
+        try {
+            const { error } = await supabase.from('hr_staff_performance').insert([data])
+            if (error) throw error
+            
+            if (decision === 'reject') {
+                setPerfModalOpen(false)
+                setDismissalModalOpen(true)
+            } else {
+                setPerfModalOpen(false)
+                await fetchAll()
+            }
+        } catch (err) {
+            console.error(err)
+            alert('Failed to save probation review')
+        }
+        setPerfSaving(false)
+    }
+
+    const handleResign = async (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation' | 'rejection', reason: string, notes: string }) => {
+        if (data.type === 'rejection') {
+            setDismissalSaving(true)
+            try {
+                const { error: histErr } = await supabase.from('hr_staff_role_history').insert([{
+                    staff_id: data.staffId,
+                    effective_date: data.effectiveDate,
+                    reason: `[REJECTION] ${data.reason}`,
+                    notes: data.notes,
+                    created_by: null
+                }])
+                if (histErr) throw histErr
+                
+                const { error: staffErr } = await supabase.from('hr_staff').update({ status: 'terminated' }).eq('id', data.staffId)
+                if (staffErr) throw staffErr
+                
+                setDismissalModalOpen(false)
+                router.push('/human-resources/management/staff')
+            } catch (err: any) {
+                console.error(err)
+                alert('Failed to record rejection: ' + (err.message || JSON.stringify(err)))
+            }
+            setDismissalSaving(false)
+            return
+        }
+
+        setPendingResignation(data)
+        setDismissalModalOpen(false)
+        setExitReviewModalOpen(true)
+    }
+
+    const handleExitReviewSave = async (reviewData: any) => {
+        if (!pendingResignation) return
+        setExitReviewSaving(true)
+        try {
+            // 1. Save performance review
+            const reviewWithNote = { ...reviewData, notes: (reviewData.notes ? reviewData.notes + '\n\n' : '') + '[EXIT REVIEW]' };
+            const { error: perfErr } = await supabase.from('hr_staff_performance').insert([reviewWithNote])
+            if (perfErr) throw perfErr
+
+            // 2. Save role history
+            const { error: histErr } = await supabase.from('hr_staff_role_history').insert([{
+                staff_id: pendingResignation.staffId,
+                effective_date: pendingResignation.effectiveDate,
+                reason: `[${pendingResignation.type.toUpperCase()}] ${pendingResignation.reason}`,
+                notes: pendingResignation.notes,
+                created_by: null
+            }])
+            if (histErr) throw histErr
+            
+            // 3. Update staff status
+            const { error: staffErr } = await supabase.from('hr_staff').update({ status: 'terminated' }).eq('id', pendingResignation.staffId)
+            if (staffErr) throw staffErr
+            
+            setExitReviewModalOpen(false)
+            setPendingResignation(null)
+            router.push('/human-resources/management/staff')
+        } catch (err: any) {
+            console.error(err)
+            alert('Failed to record exit review & rejection: ' + (err.message || JSON.stringify(err)))
+        }
+        setExitReviewSaving(false)
+    }
 
     const fetchAll = useCallback(async () => {
         if (!id) return;
@@ -69,7 +164,7 @@ export default function StaffDetailPage() {
                     new_position:hr_positions!hr_staff_salary_history_new_position_id_fkey(name)
                 `).eq('staff_id', id).order('effective_date', { ascending: false }),
                 supabase.from('hr_staff_performance').select('*').eq('staff_id', id).order('review_date', { ascending: false }),
-                supabase.from('provider_branches').select('id, name').order('name'),
+                supabase.from('provider_branches').select('id, name, city').order('name'),
                 supabase.from('hr_rating_categories').select('*').order('sort_order'),
                 supabase.from('hr_staff_documents').select('*').eq('staff_id', id).order('uploaded_at', { ascending: false })
             ])
@@ -141,12 +236,31 @@ export default function StaffDetailPage() {
                                         {(staff as any).hr_departments?.name}
                                     </span>
                                 )}
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border
-                                    ${staff.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
-                                      staff.status === 'inactive' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
-                                      'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                                    {staff.status.toUpperCase()}
-                                </span>
+                                {staff.status !== 'active' ? (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border
+                                        ${staff.status === 'inactive' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
+                                          'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                        {staff.status.toUpperCase()}
+                                    </span>
+                                ) : staff.probation_end_date && new Date(staff.probation_end_date).getTime() > Date.now() ? (() => {
+                                    const isConfirmed = performances.some(p => p.period === 'Probation Confirmed');
+                                    return (
+                                        <button 
+                                            onClick={() => setPerfModalOpen(true)}
+                                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border transition-colors cursor-pointer ${
+                                                isConfirmed
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                                                : 'bg-orange-500/10 text-orange-400 border-orange-500/20 hover:bg-orange-500/20'
+                                            }`}
+                                        >
+                                            {isConfirmed ? 'PROBATION CONFIRMED' : 'PROBATION'}
+                                        </button>
+                                    )
+                                })() : (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                                        ACTIVE
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -183,12 +297,51 @@ export default function StaffDetailPage() {
                         {activeTab === 'profile' && <TabProfile staff={staff} departments={departments} positions={positions} branches={providerBranches} onUpdate={fetchAll} />}
                         {activeTab === 'contract' && <TabContract staff={staff} onUpdate={fetchAll} />}
                         {activeTab === 'documents' && <TabDocuments staff={staff} documents={documents} onUpdate={fetchAll} />}
-                        {activeTab === 'timeline' && <TabTimeline staff={staff} roleHistory={roleHistory} salaryHistory={salaryHistory} positions={positions} departments={departments} loggedUserName={loggedUserName} onUpdate={fetchAll} />}
+                        {activeTab === 'timeline' && <TabTimeline staff={staff} roleHistory={roleHistory} salaryHistory={salaryHistory} positions={positions} departments={departments} loggedUserName={loggedUserName} onUpdate={fetchAll} onResign={handleResign} />}
                         {activeTab === 'performance' && <TabPerformance staff={staff} performances={performances} onUpdate={fetchAll} allCategories={allCategories} />}
                         {activeTab === 'disciplinary' && <TabDisciplinary staff={staff} />}
                     </div>
                 </div>
 
+                <PerformanceModal 
+                    open={perfModalOpen} 
+                    onClose={() => setPerfModalOpen(false)}
+                    onSave={handleSavePerformance} 
+                    review={null} 
+                    staffList={[staff]} 
+                    allCategories={allCategories} 
+                    saving={perfSaving} 
+                    preselectedStaffId={staff.id} 
+                    isProbation={true}
+                />
+
+                <PerformanceModal
+                    open={exitReviewModalOpen}
+                    onClose={() => { setExitReviewModalOpen(false); setPendingResignation(null); }}
+                    onSave={handleExitReviewSave}
+                    review={null}
+                    staffList={[staff]}
+                    allCategories={allCategories}
+                    saving={exitReviewSaving}
+                    preselectedStaffId={staff.id}
+                    preselectedPeriod={computePeriodLabel('Quarterly', new Date().toISOString().slice(0, 10), 0)}
+                    isExitReview={true}
+                />
+
+                <SalaryModal
+                    open={dismissalModalOpen}
+                    onClose={() => setDismissalModalOpen(false)}
+                    onSave={async () => {}}
+                    onResign={handleResign}
+                    entry={null}
+                    staffList={[staff]}
+                    departments={departments}
+                    positions={positions}
+                    saving={dismissalSaving}
+                    loggedUserName={loggedUserName}
+                    preselectedStaffId={staff.id}
+                    isProbationRejection={true}
+                />
             </div>
         </div>
     )
@@ -319,6 +472,20 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">City</label>
+                    <select 
+                        disabled={!isEditing} 
+                        value={formData.city || ''} 
+                        onChange={e => handleChange('city', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                        <option value="">None</option>
+                        {Array.from(new Set(branches.map(b => b.city).filter(Boolean))).sort().map((city: any) => (
+                            <option key={city} value={city}>{city}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Phone</label>
                     <input disabled={!isEditing} value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
@@ -420,9 +587,11 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
             <hr className="border-gray-100" />
 
             <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Assigned Branches</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Assigned Branches</h3>
+                </div>
                 <div className="flex flex-wrap gap-2">
-                    {branches.map(branch => {
+                    {branches.filter(b => !formData.city || b.city === formData.city).map(branch => {
                         const isSelected = selectedBranches.includes(branch.id);
                         return (
                             <button
@@ -443,7 +612,9 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                             </button>
                         )
                     })}
-                    {branches.length === 0 && <span className="text-sm text-gray-400 italic">No branches available in settings.</span>}
+                    {branches.filter(b => !formData.city || b.city === formData.city).length === 0 && (
+                        <span className="text-sm text-gray-400 italic">No branches available for the selected city.</span>
+                    )}
                 </div>
             </div>
 
@@ -816,7 +987,7 @@ function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, do
 // ==========================================
 // TAB: Career Journey (Timeline)
 // ==========================================
-function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments, loggedUserName, onUpdate }: { staff: HRStaffMember, roleHistory: HRStaffRoleHistory[], salaryHistory: HRStaffSalaryHistory[], positions: HRPosition[], departments: HRDepartment[], loggedUserName: string, onUpdate: () => void }) {
+function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments, loggedUserName, onUpdate, onResign }: { staff: HRStaffMember, roleHistory: HRStaffRoleHistory[], salaryHistory: HRStaffSalaryHistory[], positions: HRPosition[], departments: HRDepartment[], loggedUserName: string, onUpdate: () => void, onResign: (data: any) => Promise<void> }) {
     
     const [modalOpen, setModalOpen] = useState(false)
     const [saving, setSaving] = useState(false)
@@ -893,6 +1064,7 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments
                 open={modalOpen}
                 onClose={() => setModalOpen(false)}
                 onSave={handleSaveSalary}
+                onResign={onResign}
                 entry={null}
                 staffList={[staff]}
                 departments={departments}
@@ -948,14 +1120,40 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments
                                     {event.data.reason && <p className="text-xs text-gray-500 mt-2 italic">"{event.data.reason}"</p>}
                                 </div>
                             )}
-                            {event.type === 'role' && (
-                                <div>
-                                    <p className="text-sm text-gray-900 font-medium tracking-tight">Role Transfer (Legacy)</p>
-                                    <p className="text-sm text-gray-600 mt-1">
-                                        Moved from <strong>{event.data.old_position?.name || 'Unknown'}</strong> to <strong className="text-blue-600">{event.data.new_position?.name || 'Unknown'}</strong>
-                                    </p>
-                                </div>
-                            )}
+                            {event.type === 'role' && (() => {
+                                const match = event.data.reason?.match(/^\[(RESIGNATION|DISMISSAL|REJECTION|RE-HIRED|ACTIVE)\]\s*(.*)/i);
+                                if (match) {
+                                    const actionType = match[1].toUpperCase();
+                                    const text = match[2];
+                                    let badgeClass = "bg-gray-100 text-gray-700";
+                                    let label = "Status Change";
+                                    
+                                    if (actionType === 'REJECTION') { badgeClass = "bg-purple-100 text-purple-700"; label = "Probation Rejected"; }
+                                    else if (actionType === 'DISMISSAL') { badgeClass = "bg-red-100 text-red-700"; label = "Dismissed"; }
+                                    else if (actionType === 'RESIGNATION') { badgeClass = "bg-orange-100 text-orange-700"; label = "Resigned"; }
+                                    else if (actionType === 'RE-HIRED') { badgeClass = "bg-emerald-100 text-emerald-700"; label = "Re-Hired"; }
+                                    else if (actionType === 'ACTIVE') { badgeClass = "bg-blue-100 text-blue-700"; label = "Status Active"; }
+
+                                    return (
+                                        <div>
+                                            <p className="text-sm text-gray-900 font-medium tracking-tight flex items-center gap-2">
+                                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${badgeClass}`}>{label}</span>
+                                            </p>
+                                            {text && <p className="text-sm text-gray-600 mt-2">{text}</p>}
+                                        </div>
+                                    )
+                                }
+
+                                return (
+                                    <div>
+                                        <p className="text-sm text-gray-900 font-medium tracking-tight">Role Transfer</p>
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            Moved from <strong>{event.data.old_position?.name || 'Unknown'}</strong> to <strong className="text-blue-600">{event.data.new_position?.name || 'Unknown'}</strong>
+                                        </p>
+                                        {event.data.reason && <p className="text-xs text-gray-500 mt-2 italic">"{event.data.reason}"</p>}
+                                    </div>
+                                )
+                            })()}
                         </div>
                     </div>
                 ))}
@@ -971,6 +1169,18 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
     const [modalOpen, setModalOpen] = useState(false);
     const [editingReview, setEditingReview] = useState<HRStaffPerformance | null>(null);
     const [saving, setSaving] = useState(false);
+    const [exportingId, setExportingId] = useState<string | null>(null);
+
+    const previousGoals = useMemo(() => {
+        if (!editingReview) {
+            return performances.length > 0 ? performances[0].goals || undefined : undefined;
+        }
+        const idx = performances.findIndex(p => p.id === editingReview.id);
+        if (idx >= 0 && idx + 1 < performances.length) {
+            return performances[idx + 1].goals || undefined;
+        }
+        return undefined;
+    }, [editingReview, performances]);
 
     // Setup chart data
     const chartData = useMemo(() => {
@@ -1001,8 +1211,151 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
         }
     };
 
+    const handleDeleteReview = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this performance review?')) return;
+        try {
+            const { error } = await supabase.from('hr_staff_performance').delete().eq('id', id);
+            if (error) throw error;
+            onUpdate();
+            setModalOpen(false);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to delete review');
+        }
+    };
+
+    const handleSkillLevelChange = async (level: number) => {
+        try {
+            const { error } = await supabase.from('hr_staff').update({ skill_level: level }).eq('id', staff.id);
+            if (error) throw error;
+            onUpdate();
+        } catch (err: any) {
+            console.error(err);
+            alert(`Failed to update skill level: ${err.message || JSON.stringify(err)}`);
+        }
+    };
+
+    const handleExportReview = async (e: React.MouseEvent, p: HRStaffPerformance) => {
+        e.stopPropagation();
+        setExportingId(p.id);
+        try {
+            const ExcelJS = (await import('exceljs')).default;
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Review');
+
+            sheet.getColumn(1).width = 30;
+            sheet.getColumn(2).width = 70;
+
+            const titleRow = sheet.addRow(['PERFORMANCE REVIEW', '']);
+            sheet.mergeCells('A1:B1');
+            titleRow.height = 30;
+            titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+            titleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+            titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+            sheet.addRow([]);
+
+            const addDataRow = (label: string, value: string | number, isHighlight = false) => {
+                const r = sheet.addRow([label, value]);
+                r.getCell(1).font = { bold: true, color: { argb: 'FF374151' } };
+                r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+                r.getCell(1).alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+                r.getCell(1).border = { top: { style: 'thin', color: { argb: 'FFE5E7EB' } }, bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } }, left: { style: 'thin', color: { argb: 'FFE5E7EB' } }, right: { style: 'thin', color: { argb: 'FFE5E7EB' } } };
+                
+                r.getCell(2).font = { bold: isHighlight, color: isHighlight ? { argb: 'FF1D4ED8' } : { argb: 'FF111827' } };
+                r.getCell(2).alignment = { vertical: 'top', horizontal: 'left', indent: 1, wrapText: true };
+                r.getCell(2).border = { top: { style: 'thin', color: { argb: 'FFE5E7EB' } }, bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } }, left: { style: 'thin', color: { argb: 'FFE5E7EB' } }, right: { style: 'thin', color: { argb: 'FFE5E7EB' } } };
+                return r;
+            };
+
+            const headerGeneralRow = sheet.addRow(['General Information', '']);
+            sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`);
+            headerGeneralRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+            headerGeneralRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+            headerGeneralRow.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+            
+            addDataRow('Staff Member', staff.full_name || 'Unknown Staff');
+            addDataRow('Period', p.period || '-');
+            addDataRow('Date', fmtDate(p.review_date));
+            addDataRow('Reviewer', p.reviewer_name || 'System');
+            
+            const catsObj = p.category_ratings || {};
+            const vals = Object.values(catsObj);
+            const avg = vals.length ? vals.reduce((a:any, b:any) => a + b, 0) / vals.length : 0;
+            const overallRounded = Math.round(avg) || p.rating || 0;
+            const ratingLabel = OVERALL_LABELS[overallRounded]?.label || '';
+            addDataRow('Overall Rating', `${avg.toFixed(1)} / 5 - ${ratingLabel}`, true);
+            
+            sheet.addRow([]);
+
+            const headerCatsRow = sheet.addRow(['Category Ratings', '']);
+            sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`);
+            headerCatsRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+            headerCatsRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+            headerCatsRow.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+            
+            for (const [key, val] of Object.entries(catsObj)) {
+                if (val === 0) continue;
+                const keyLabel = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                addDataRow(keyLabel, `${val} / 5`);
+            }
+
+            sheet.addRow([]);
+
+            const headerTextRow = sheet.addRow(['Comments & Goals', '']);
+            sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`);
+            headerTextRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+            headerTextRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
+            headerTextRow.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+
+            addDataRow('Comments', p.notes || 'No comments provided.');
+            addDataRow('Goals', p.goals || 'No goals set.');
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const safeName = (staff.full_name || 'Staff').replace(/[^a-z0-9]/gi, '_');
+            const safePeriod = (p.period || 'Unknown').replace(/[^a-z0-9]/gi, '_');
+            
+            saveAs(new Blob([buffer]), `Review_${safeName}_${safePeriod}.xlsx`);
+        } catch (err) {
+            console.error('Export error', err);
+            alert('Failed to export review');
+        }
+        setExportingId(null);
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            {/* BASE SKILLS LEVEL SECTION */}
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                            <BadgeCheck className="w-5 h-5 text-indigo-600" />
+                            Operational Skill Level
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                            Set the base capability level for auto-scheduling requirements.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        {[1, 2, 3, 4, 5].map(level => (
+                            <button
+                                key={level}
+                                onClick={() => handleSkillLevelChange(level)}
+                                className={`p-1 transition-all rounded-lg hover:scale-110 ${
+                                    (staff.skill_level || 1) >= level 
+                                    ? 'text-indigo-600' 
+                                    : 'text-gray-200 hover:text-indigo-300'
+                                }`}
+                                title={`Level ${level}`}
+                            >
+                                <Star className={`w-8 h-8 ${ (staff.skill_level || 1) >= level ? 'fill-indigo-600' : ''}`} />
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Performance Tracking</h2>
@@ -1024,13 +1377,30 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                 allCategories={allCategories}
                 saving={saving}
                 preselectedStaffId={staff.id}
+                readOnly={!!editingReview}
+                onDelete={handleDeleteReview}
+                previousGoals={previousGoals}
             />
 
             {/* CHART */}
             {chartData.length > 0 ? (
                 <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <LineChart 
+                            data={chartData} 
+                            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                            onClick={(state: any) => {
+                                if (state && state.activePayload && state.activePayload.length > 0) {
+                                    const rawDate = state.activePayload[0].payload.rawDate;
+                                    const p = performances.find(p => p.review_date === rawDate);
+                                    if (p) {
+                                        setEditingReview(p);
+                                        setModalOpen(true);
+                                    }
+                                }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                        >
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                             <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} dy={10} />
                             <YAxis domain={[0, 5]} ticks={[1,2,3,4,5]} tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
@@ -1070,7 +1440,17 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                                     <p className="text-xs text-gray-500">By {p.reviewer_name || 'System'}</p>
                                 </div>
                             </div>
-                            <Pencil className="w-4 h-4 text-gray-300 group-hover:text-emerald-500 transition-colors" />
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={(e) => handleExportReview(e, p)}
+                                    disabled={exportingId === p.id}
+                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="Export Review as Excel"
+                                >
+                                    {exportingId === p.id ? <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" /> : <FileDown className="w-4 h-4" />}
+                                </button>
+                                <Pencil className="w-4 h-4 text-gray-300 group-hover:text-emerald-500 transition-colors" />
+                            </div>
                         </div>
                         <p className="text-sm text-gray-700 leading-relaxed italic border-l-2 border-emerald-200 pl-3">
                             "{p.notes || 'No specific notes provided for this review segment.'}"

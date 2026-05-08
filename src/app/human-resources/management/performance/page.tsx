@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffPerformance, HRStaffMember, HRRatingCategory, HRReviewPeriod } from '@/types/human-resources'
+import { saveAs } from 'file-saver'
 
 export type AppAccount = {
     id: string
@@ -20,7 +21,7 @@ import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import {
     Star, Plus, Search, X, Pencil, Trash2,
-    TrendingUp, TrendingDown, User, ChevronLeft, ChevronRight
+    TrendingUp, TrendingDown, User, ChevronLeft, ChevronRight, FileDown
 } from 'lucide-react'
 
 /* ═══════════════════════════════════════════════════════════
@@ -34,7 +35,7 @@ interface SelectStaffModalProps {
     open: boolean;
     onClose: () => void;
     onSelect: (staffId: string) => void;
-    staffList: HRStaffMember[];
+    staffList: any[];
     title?: string;
     subtitle?: string;
 }
@@ -45,7 +46,6 @@ function SelectStaffModal({ open, onClose, onSelect, staffList, title = "Select 
     if (!open) return null
 
     const filtered = staffList.filter(s => {
-        if (s.status !== 'active') return false
         const q = search.toLowerCase()
         return (
             (s.full_name || '').toLowerCase().includes(q) ||
@@ -279,6 +279,59 @@ function CategoryBreakdown({ ratings }: { ratings: Record<string, number> }) {
 }
 
 /* ═══════════════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════════════ */
+function getPeriodDates(periodType: string, dateStr: string, offset: number): { start: Date, end: Date } {
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return { start: new Date(), end: new Date() };
+    const [y, m, day] = parts.map(Number);
+    let d = new Date(y, m - 1, day);
+    const type = periodType.toLowerCase();
+
+    if (type.includes('daily') || type.includes('giornal')) {
+        d.setDate(d.getDate() + offset);
+        const start = new Date(d); start.setHours(0,0,0,0);
+        const end = new Date(d); end.setHours(23,59,59,999);
+        return { start, end };
+    }
+    if (type.includes('week') || type.includes('settiman')) {
+        d.setDate(d.getDate() + offset * 7);
+        const dayOfWeek = d.getDay();
+        const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+        const start = new Date(d.getFullYear(), d.getMonth(), diff);
+        const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
+        return { start, end };
+    }
+    if (type.includes('month') || type.includes('mensil')) {
+        d.setMonth(d.getMonth() + offset);
+        const start = new Date(d.getFullYear(), d.getMonth(), 1);
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { start, end };
+    }
+    if (type.includes('quarter') || type.includes('trimestr')) {
+        d.setMonth(d.getMonth() + offset * 3);
+        const q = Math.floor(d.getMonth() / 3);
+        const start = new Date(d.getFullYear(), q * 3, 1);
+        const end = new Date(d.getFullYear(), q * 3 + 3, 0, 23, 59, 59, 999);
+        return { start, end };
+    }
+    if (type.includes('semi-annual') || type.includes('semestr')) {
+        d.setMonth(d.getMonth() + offset * 6);
+        const h = Math.floor(d.getMonth() / 6);
+        const start = new Date(d.getFullYear(), h * 6, 1);
+        const end = new Date(d.getFullYear(), h * 6 + 6, 0, 23, 59, 59, 999);
+        return { start, end };
+    }
+    if (type.includes('annual') || type.includes('annua')) {
+        d.setFullYear(d.getFullYear() + offset);
+        const start = new Date(d.getFullYear(), 0, 1);
+        const end = new Date(d.getFullYear(), 12, 0, 23, 59, 59, 999);
+        return { start, end };
+    }
+    return { start: d, end: d };
+}
+
+/* ═══════════════════════════════════════════════════════
    Main Page
    ═══════════════════════════════════════════════════════ */
 export default function PerformancePage() {
@@ -286,7 +339,7 @@ export default function PerformancePage() {
     
     const [loading, setLoading]       = useState(true)
     const [reviews, setReviews]       = useState<(HRStaffPerformance & { hr_staff: HRStaffMember })[]>([])
-    const [staffList, setStaffList]   = useState<HRStaffMember[]>([])
+    const [staffList, setStaffList]   = useState<(HRStaffMember & { termination_date?: string | null })[]>([])
     const [accountList, setAccountList] = useState<AppAccount[]>([])
     const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
     
@@ -309,17 +362,51 @@ export default function PerformancePage() {
 
     const [deletingId, setDeletingId]     = useState<string | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
+    const [exportLoading, setExportLoading] = useState(false)
+
+    const previousGoalsForModal = useMemo(() => {
+        const staffId = editingReview ? editingReview.staff_id : preselectedStaffForNew;
+        if (!staffId) return undefined;
+        
+        // Find all reviews for this staff member, sorted by date desc
+        const staffReviews = [...reviews]
+            .filter(r => r.staff_id === staffId)
+            .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime());
+            
+        if (!editingReview) {
+            return staffReviews.length > 0 ? staffReviews[0].goals || undefined : undefined;
+        }
+        
+        const idx = staffReviews.findIndex(r => r.id === editingReview.id);
+        if (idx >= 0 && idx + 1 < staffReviews.length) {
+            return staffReviews[idx + 1].goals || undefined;
+        }
+        return undefined;
+    }, [editingReview, preselectedStaffForNew, reviews]);
 
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            const [staffRes, reviewRes, catRes, accRes] = await Promise.all([
+            const [staffRes, reviewRes, catRes, accRes, historyRes] = await Promise.all([
                 supabase.from('hr_staff').select('*').order('full_name'),
                 supabase.from('hr_staff_performance').select('*, hr_staff(*)').order('review_date', { ascending: false }),
                 supabase.from('hr_rating_categories').select('*').order('sort_order'),
                 supabase.from('app_accounts').select('*').order('name'),
+                supabase.from('hr_staff_role_history').select('*').order('effective_date', { ascending: false }).order('created_at', { ascending: false })
             ])
-            if (staffRes.data) setStaffList(staffRes.data as HRStaffMember[])
+            if (staffRes.data) {
+                const staffWithDeparture = staffRes.data.map(s => {
+                    let termination_date = null
+                    if (s.status !== 'active' && historyRes.data) {
+                        const leaveEvent = historyRes.data.find(h => h.staff_id === s.id && String(h.reason).match(/^\[(RESIGNATION|DISMISSAL|REJECTION)\]/i))
+                        if (leaveEvent) {
+                            termination_date = leaveEvent.effective_date
+                        }
+                    }
+                    return { ...s, termination_date }
+                })
+                setStaffList(staffWithDeparture)
+            }
             if (reviewRes.data) setReviews(reviewRes.data as any)
             if (catRes.data) setAllCategories(catRes.data as HRRatingCategory[])
             if (accRes.data) setAccountList(accRes.data as AppAccount[])
@@ -329,20 +416,47 @@ export default function PerformancePage() {
 
     useEffect(() => { fetchAll() }, [fetchAll])
 
+    const { end: periodEnd } = useMemo(() => getPeriodDates(hrReviewFrequency, today, periodOffset), [hrReviewFrequency, today, periodOffset])
+    const periodEndStr = periodEnd.toISOString().slice(0, 10)
+
     const filteredStaff = useMemo(() => {
         return staffList.filter(s => {
-            if (s.status !== 'active') return false
+            const review = reviews.find(r => r.staff_id === s.id && r.period === activePeriodLabel)
+            
+            // If they started after this period ended, don't show them
+            if (s.start_date && s.start_date > periodEndStr) return false
+
+            // If they are outsourced, only show them if they have a review
+            if (s.employment_type === 'outsourced' && !review) {
+                return false
+            }
+
+            // If they are inactive, only show them if they have a review, OR they left on/after the period ended
+            if (s.status !== 'active') {
+                if (!review) {
+                    if (!s.termination_date) return false
+                    if (s.termination_date < periodEndStr) return false
+                }
+            }
+
             if (search) {
                 const q = search.toLowerCase()
                 if (!s.full_name?.toLowerCase().includes(q) && !s.position?.toLowerCase().includes(q)) return false
             }
             if (filterRating !== 'all') {
-                const review = reviews.find(r => r.staff_id === s.id && r.period === activePeriodLabel)
                 if (!review || String(review.rating) !== filterRating) return false
             }
             return true
         })
-    }, [staffList, search, filterRating, reviews, activePeriodLabel])
+    }, [staffList, search, filterRating, reviews, activePeriodLabel, periodEndStr])
+
+    const eligibleForNewReview = useMemo(() => {
+        return staffList.filter(s => 
+            s.status === 'active' && 
+            (!s.start_date || s.start_date <= periodEndStr) &&
+            !reviews.some(r => r.staff_id === s.id && r.period === activePeriodLabel)
+        )
+    }, [staffList, reviews, activePeriodLabel, periodEndStr])
 
     /* Summary for selected tab */
     const reviewsInTab = useMemo(() => reviews.filter(r => r.period === activePeriodLabel), [reviews, activePeriodLabel])
@@ -350,13 +464,13 @@ export default function PerformancePage() {
         ? (reviewsInTab.reduce((s, r) => s + r.rating, 0) / reviewsInTab.length).toFixed(1)
         : '—'
     const completedCount = reviewsInTab.length
-    const pendingCount = staffList.filter(s => s.status === 'active').length - completedCount
+    const pendingCount = filteredStaff.length - completedCount
 
     const summaryCards = [
         { label: 'Completed Reviews',  value: completedCount,          icon: Star,         color: 'text-blue-600',    bg: 'bg-blue-50' },
         { label: 'Pending Reviews',    value: pendingCount,            icon: User,         color: 'text-orange-600',  bg: 'bg-orange-50' },
         { label: 'Avg Rating',         value: avgRating,               icon: TrendingUp,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { label: 'Total Active Staff', value: staffList.filter(s => s.status === 'active').length, icon: User, color: 'text-slate-600', bg: 'bg-slate-50' },
+        { label: 'Eligible Staff',     value: filteredStaff.length,    icon: User,         color: 'text-slate-600',   bg: 'bg-slate-50' },
     ]
 
     const handleSave = async (data: any) => {
@@ -386,6 +500,119 @@ export default function PerformancePage() {
         setDeleteLoading(false)
     }
 
+    const handleExport = async () => {
+        setExportLoading(true)
+        try {
+            const JSZip = (await import('jszip')).default
+            const ExcelJS = (await import('exceljs')).default
+
+            const zip = new JSZip()
+            
+            if (reviewsInTab.length === 0) {
+                alert(`No reviews found for ${activePeriodLabel}`)
+                setExportLoading(false)
+                return
+            }
+
+            const safePeriodFolder = activePeriodLabel.replace(/[^a-z0-9]/gi, '_')
+            const folder = zip.folder(`Performance_Reviews_${safePeriodFolder}`)
+            if (!folder) return
+
+            for (const review of reviewsInTab) {
+                const staffName = review.hr_staff?.full_name || 'Unknown_Staff'
+                const safeName = staffName.replace(/[^a-z0-9]/gi, '_')
+                const safePeriod = (review.period || 'Unknown').replace(/[^a-z0-9]/gi, '_')
+                
+                const workbook = new ExcelJS.Workbook()
+                const sheet = workbook.addWorksheet('Review')
+
+                sheet.getColumn(1).width = 30
+                sheet.getColumn(2).width = 70
+
+                // Title Row
+                const titleRow = sheet.addRow(['PERFORMANCE REVIEW', ''])
+                sheet.mergeCells('A1:B1')
+                titleRow.height = 30
+                titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } }
+                titleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } } // blue-900
+                titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' }
+
+                sheet.addRow([])
+
+                // Helper for key-value styling
+                const addDataRow = (label: string, value: string | number, isHighlight = false) => {
+                    const r = sheet.addRow([label, value])
+                    r.getCell(1).font = { bold: true, color: { argb: 'FF374151' } }
+                    r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } } // gray-100
+                    r.getCell(1).alignment = { vertical: 'middle', horizontal: 'right', indent: 1 }
+                    r.getCell(1).border = { top: { style: 'thin', color: { argb: 'FFE5E7EB' } }, bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } }, left: { style: 'thin', color: { argb: 'FFE5E7EB' } }, right: { style: 'thin', color: { argb: 'FFE5E7EB' } } }
+                    
+                    r.getCell(2).font = { bold: isHighlight, color: isHighlight ? { argb: 'FF1D4ED8' } : { argb: 'FF111827' } }
+                    r.getCell(2).alignment = { vertical: 'top', horizontal: 'left', indent: 1, wrapText: true }
+                    r.getCell(2).border = { top: { style: 'thin', color: { argb: 'FFE5E7EB' } }, bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } }, left: { style: 'thin', color: { argb: 'FFE5E7EB' } }, right: { style: 'thin', color: { argb: 'FFE5E7EB' } } }
+                    return r
+                }
+
+                // General Info Section
+                const headerGeneralRow = sheet.addRow(['General Information', ''])
+                sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`)
+                headerGeneralRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }
+                headerGeneralRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } } // blue-500
+                headerGeneralRow.getCell(1).alignment = { vertical: 'middle', indent: 1 }
+                
+                addDataRow('Staff Member', staffName)
+                addDataRow('Period', review.period || '-')
+                addDataRow('Date', new Date(review.review_date).toLocaleDateString('en-GB'))
+                
+                const reviewer = accountList.find(a => a.id === review.reviewer_id)
+                addDataRow('Reviewer', review.reviewer_name || (reviewer ? (reviewer.name || reviewer.email) : 'System'))
+                
+                const avg = computeAverage(review.category_ratings || {})
+                const overallRounded = Math.round(avg) || review.rating || 0
+                const ratingLabel = OVERALL_LABELS[overallRounded]?.label || ''
+                addDataRow('Overall Rating', `${avg.toFixed(1)} / 5 - ${ratingLabel}`, true)
+                
+                sheet.addRow([])
+
+                // Categories Section
+                const headerCatsRow = sheet.addRow(['Category Ratings', ''])
+                sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`)
+                headerCatsRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }
+                headerCatsRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } } // emerald-500
+                headerCatsRow.getCell(1).alignment = { vertical: 'middle', indent: 1 }
+                
+                const cats = review.category_ratings || {}
+                for (const [key, val] of Object.entries(cats)) {
+                    if (val === 0) continue
+                    const keyLabel = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+                    addDataRow(keyLabel, `${val} / 5`)
+                }
+
+                sheet.addRow([])
+
+                // Text fields Section
+                const headerTextRow = sheet.addRow(['Comments & Goals', ''])
+                sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`)
+                headerTextRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }
+                headerTextRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } } // violet-500
+                headerTextRow.getCell(1).alignment = { vertical: 'middle', indent: 1 }
+
+                addDataRow('Comments', review.notes || 'No comments provided.')
+                addDataRow('Goals', review.goals || 'No goals set.')
+                
+                const buffer = await workbook.xlsx.writeBuffer()
+                folder.file(`Review_${safeName}_${safePeriod}.xlsx`, buffer)
+            }
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' })
+            saveAs(zipBlob, `Performance_Reviews_${safePeriodFolder}.zip`)
+        } catch (e) {
+            console.error('Export failed', e)
+            alert('Failed to generate export')
+        }
+        setExportLoading(false)
+    }
+
     if (loading) return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
 
     return (
@@ -397,11 +624,21 @@ export default function PerformancePage() {
                         <h1 className="text-2xl font-bold text-white">Performance Reviews</h1>
                         <p className="text-sm text-slate-400 mt-1">Multi-category evaluations with overall average rating.</p>
                     </div>
-                    <button onClick={() => { setEditingReview(null); setPreselectedStaffForNew(null); setStaffSelectOpen(true) }}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg shrink-0">
-                        <Plus className="w-4 h-4" />
-                        New Review
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button 
+                            onClick={handleExport}
+                            disabled={exportLoading}
+                            className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shadow hover:shadow-lg disabled:opacity-50"
+                        >
+                            {exportLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FileDown className="w-4 h-4" />} 
+                            Export ZIP
+                        </button>
+                        <button onClick={() => { setEditingReview(null); setPreselectedStaffForNew(null); setStaffSelectOpen(true) }}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg whitespace-nowrap">
+                            <Plus className="w-4 h-4" />
+                            New Review
+                        </button>
+                    </div>
                 </div>
 
                 {/* Summary Cards */}
@@ -547,7 +784,7 @@ export default function PerformancePage() {
             <SelectStaffModal 
                 open={isStaffSelectOpen} 
                 onClose={() => setStaffSelectOpen(false)} 
-                staffList={staffList} 
+                staffList={eligibleForNewReview} 
                 onSelect={(id) => {
                     setPreselectedStaffForNew(id)
                     setStaffSelectOpen(false)
@@ -568,7 +805,7 @@ export default function PerformancePage() {
             />
 
             <PerformanceModal open={modalOpen} onClose={() => { setModalOpen(false); setEditingReview(null) }}
-                onSave={handleSave} review={editingReview} staffList={staffList} allCategories={allCategories} saving={saving} preselectedStaffId={preselectedStaffForNew} preselectedPeriod={activePeriodLabel} onDelete={(id) => setDeletingId(id)} />
+                onSave={handleSave} review={editingReview} staffList={staffList} allCategories={allCategories} saving={saving} preselectedStaffId={preselectedStaffForNew} preselectedPeriod={activePeriodLabel} onDelete={(id) => setDeletingId(id)} previousGoals={previousGoalsForModal} />
 
             {deletingId && (
                 <DeleteConfirm

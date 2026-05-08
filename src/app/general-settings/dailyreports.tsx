@@ -13,6 +13,7 @@ type ProviderBranch = {
   name: string
   company_name?: string
   address?: string
+  city?: string
   tax_code?: string
   phone?: string
   email?: string
@@ -122,11 +123,92 @@ function loadOrderLS(): string[] | null {
   }
 }
 
+/* -------- City Autocomplete -------- */
+function CityAutocomplete({
+  label,
+  value,
+  onChange,
+  suggestions
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  suggestions: string[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [focus, setFocus] = useState(false)
+
+  // alias matching
+  const aliases: Record<string, string> = {
+    'saigon': 'Ho Chi Minh',
+    'hcm': 'Ho Chi Minh',
+    'hcmc': 'Ho Chi Minh',
+  }
+
+  function handleChange(v: string) {
+    const lower = v.toLowerCase()
+    if (aliases[lower]) {
+      onChange(aliases[lower])
+    } else {
+      onChange(v)
+    }
+    setOpen(true)
+  }
+
+  let finalSuggestions = [...suggestions];
+  for (const canonical of Object.values(aliases)) {
+    if (!finalSuggestions.includes(canonical)) {
+      finalSuggestions.push(canonical);
+    }
+  }
+
+  const filtered = Array.from(new Set(finalSuggestions)).filter(s => {
+    if (s.toLowerCase().includes(value.toLowerCase())) return true;
+    for (const [alias, canonical] of Object.entries(aliases)) {
+      if (canonical.toLowerCase() === s.toLowerCase() && alias.includes(value.toLowerCase())) {
+        return true;
+      }
+    }
+    return false;
+  }).filter(s => s.toLowerCase() !== value.toLowerCase())
+
+  return (
+    <div className="relative flex flex-col">
+      <span className="text-sm text-gray-800">{label}</span>
+      <input
+        className="mt-1 w-full border rounded-lg px-3 h-10 text-gray-900 bg-white"
+        value={value}
+        onChange={e => handleChange(e.target.value)}
+        onFocus={() => { setFocus(true); setOpen(true) }}
+        onBlur={() => setTimeout(() => { setFocus(false); setOpen(false) }, 200)}
+      />
+      {(focus || open) && value.length >= 1 && filtered.length > 0 && (
+        <ul className="absolute z-10 top-[100%] left-0 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
+          {filtered.map(s => (
+            <li
+              key={s}
+              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-gray-900"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                onChange(s)
+                setOpen(false)
+                setFocus(false)
+              }}
+            >
+              {s}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 /* ===========================================================
    Reusable Card: usala dentro l'index /general-settings/page.tsx
    =========================================================== */
 export function DailyReportsCard() {
-  const { language } = useSettings()
+  const { language, currency } = useSettings()
   const [branches, setBranches] = useState<Record<string, ProviderBranch>>({})
   const [order, setOrder] = useState<string[]>([])
   const branchOptions = useMemo(() => {
@@ -134,6 +216,14 @@ export function DailyReportsCard() {
     const remaining = Object.keys(branches).filter(id => !knownOrdered.includes(id))
     return [...knownOrdered, ...remaining]
   }, [order, branches])
+
+  const uniqueCities = useMemo(() => {
+    const cities = new Set<string>()
+    Object.values(branches).forEach(b => {
+      if (b.city) cities.add(b.city.trim())
+    })
+    return Array.from(cities).sort()
+  }, [branches])
 
   const [branchId, setBranchId] = useState<string>('')
 
@@ -177,6 +267,7 @@ export function DailyReportsCard() {
             name: row.name ?? '',
             company_name: row.company_name ?? '',
             address: row.address ?? '',
+            city: row.city ?? '',
             tax_code: row.tax_code ?? '',
             phone: row.phone ?? '',
             email: row.email ?? '',
@@ -240,6 +331,7 @@ export function DailyReportsCard() {
       name: t(language, 'GeneralSettingsNewBranch'),
       company_name: '',
       address: '',
+      city: '',
       tax_code: '',
       phone: '',
       email: '',
@@ -305,6 +397,7 @@ export function DailyReportsCard() {
         name: (b.name || '').trim(),
         company_name: (b.company_name || '').trim(),
         address: (b.address || '').trim(),
+        city: (b.city || '').trim(),
         tax_code: (b.tax_code || '').trim(),
         phone: (b.phone || '').trim(),
         email: (b.email || '').trim(),
@@ -320,6 +413,37 @@ export function DailyReportsCard() {
           .upsert(rows, { onConflict: 'id' })
 
         if (error) throw error
+
+        // Sync branch bank accounts to fin_bank_accounts
+        try {
+            const { data: existingAccs } = await supabase.from('fin_bank_accounts').select('*').not('branch_id', 'is', null);
+            const accRows = rows.map(r => {
+                const ext = existingAccs?.find(a => a.branch_id === r.id);
+                if (ext) {
+                    return {
+                        ...ext,
+                        account_name: r.bank_account_name || ext.account_name,
+                        bank_name: r.bank || ext.bank_name,
+                        account_number: r.account_number || ext.account_number,
+                    }
+                } else {
+                    return {
+                        id: crypto.randomUUID(),
+                        account_name: r.bank_account_name || `${r.name.split(' ').map((w: string) => w[0]?.toUpperCase()).join('')} (Pasta Fresca ${r.name})`,
+                        bank_name: r.bank || null,
+                        account_number: r.account_number || null,
+                        account_type: 'Checking',
+                        branch_id: r.id,
+                        opening_balance: 0,
+                        current_balance: 0,
+                        currency: currency || 'VND',
+                    }
+                }
+            });
+            if (accRows.length > 0) {
+                await supabase.from('fin_bank_accounts').upsert(accRows, { onConflict: 'id' });
+            }
+        } catch(e) { console.error('Failed to sync bank accounts', e) }
       }
 
       saveLS(branches)
@@ -404,6 +528,12 @@ export function DailyReportsCard() {
             <Field label={t(language, 'GeneralSettingsBranchName')} value={current.name || ''} onChange={v => updateBranch({ name: v })} />
             <Field label={t(language, 'GeneralSettingsCompanyName')} value={current.company_name || ''} onChange={v => updateBranch({ company_name: v })} />
             <Field label={t(language, 'GeneralSettingsAddress')} value={current.address || ''} onChange={v => updateBranch({ address: v })} />
+            <CityAutocomplete
+              label={t(language, 'City') || 'City'}
+              value={current.city || ''}
+              onChange={v => updateBranch({ city: v })}
+              suggestions={uniqueCities}
+            />
             <Field label={t(language, 'GeneralSettingsTaxCode')} value={current.tax_code || ''} onChange={v => updateBranch({ tax_code: v })} />
             <Field label={t(language, 'GeneralSettingsPhone')} value={current.phone || ''} onChange={v => updateBranch({ phone: v })} />
             <Field label={t(language, 'GeneralSettingsEmail')} value={current.email || ''} onChange={v => updateBranch({ email: v })} />

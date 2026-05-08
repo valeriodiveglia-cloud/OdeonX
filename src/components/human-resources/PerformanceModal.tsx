@@ -85,7 +85,7 @@ function StarPicker({ value, onChange, disabled }: { value: number; onChange: (v
                     </button>
                 ))}
             </div>
-            <div className="w-24 text-right shrink-0">
+            <div className="w-32 text-right shrink-0 whitespace-nowrap">
                 {activeValue > 0 ? (
                     <span className={`text-[11px] font-bold uppercase tracking-wider ${OVERALL_LABELS[activeValue]?.color || 'text-gray-500'}`}>
                         {OVERALL_LABELS[activeValue]?.label}
@@ -147,7 +147,7 @@ export function computePeriodLabel(periodType: string, dateStr: string, offset: 
 export interface PerformanceModalProps {
     open: boolean
     onClose: () => void
-    onSave: (data: any) => Promise<void>
+    onSave: (data: any, probationDecision?: 'confirm' | 'reject') => Promise<void>
     review: HRStaffPerformance | null
     staffList: HRStaffMember[]
     allCategories: HRRatingCategory[]
@@ -155,9 +155,13 @@ export interface PerformanceModalProps {
     onDelete?: (id: string) => void
     preselectedStaffId?: string | null
     preselectedPeriod?: string
+    isProbation?: boolean
+    isExitReview?: boolean
+    readOnly?: boolean
+    previousGoals?: string
 }
 
-export default function PerformanceModal({ open, onClose, onSave, review, staffList, allCategories, saving, preselectedStaffId, preselectedPeriod, onDelete }: PerformanceModalProps) {
+export default function PerformanceModal({ open, onClose, onSave, review, staffList, allCategories, saving, preselectedStaffId, preselectedPeriod, onDelete, isProbation, isExitReview, readOnly, previousGoals }: PerformanceModalProps) {
     const [isEditing, setIsEditing]       = useState(false)
     const [staffId, setStaffId]           = useState('')
     const [reviewDate, setReviewDate]     = useState('')
@@ -236,21 +240,30 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
     const overallAvg = computeAverage(categoryRatings)
     const ratedCount = Object.values(categoryRatings).filter(v => v > 0).length
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const isGoalsVisible = !isExitReview && !(isProbation && overallAvg < 2.5);
+    const isFormValid = Boolean(
+        staffId &&
+        strengths.trim() &&
+        improvements.trim() &&
+        (!isGoalsVisible || goals.trim()) &&
+        (applicableCategories.length === 0 || ratedCount === applicableCategories.length)
+    );
+
+    const handleSubmit = async (e: React.FormEvent, decision?: 'confirm' | 'reject') => {
         e.preventDefault()
         const roundedRating = Math.round(overallAvg) || 3
         await onSave({
             staff_id: staffId,
             review_date: reviewDate,
             reviewer_name: reviewerName.trim() || null,
-            period: period.trim() || null,
+            period: isProbation ? (decision === 'confirm' ? 'Probation Confirmed' : 'Probation Rejected') : (period.trim() || null),
             rating: roundedRating,
             category_ratings: categoryRatings,
             strengths: strengths.trim() || null,
             improvements: improvements.trim() || null,
             goals: goals.trim() || null,
             notes: notes.trim() || null,
-        })
+        }, decision)
     }
 
     const setCatRating = (key: string, val: number) => {
@@ -280,10 +293,10 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Review Date *</label>
-                            <input type="date" required value={reviewDate} onChange={e => handleDateChange(e.target.value)}
-                                disabled={!isEditing}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-500" />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Review Date</label>
+                            <input type="date" value={reviewDate} onChange={e => handleDateChange(e.target.value)}
+                                disabled
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
                         </div>
                     </div>
 
@@ -303,13 +316,20 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                         </div>
                     </div>
 
+                    {previousGoals && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                            <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wider mb-2">Goals from Previous Period</h4>
+                            <p className="text-sm text-amber-900 whitespace-pre-wrap">{previousGoals}</p>
+                        </div>
+                    )}
+
                     {/* Conditional Sections */}
                     {staffId && (
                         <>
                             {/* Category Ratings */}
                             <div className="border border-gray-200 rounded-xl overflow-hidden">
                                 <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                                    <h3 className="text-sm font-semibold text-gray-800">Rating Categories</h3>
+                                    <h3 className="text-sm font-semibold text-gray-800">Rating Categories *</h3>
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs text-gray-500">{ratedCount}/{applicableCategories.length} rated</span>
                                     </div>
@@ -357,7 +377,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         <span className="inline-flex items-center gap-1.5">
                                             <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                                            Strengths
+                                            Strengths *
                                         </span>
                                     </label>
                                     <textarea value={strengths} onChange={e => setStrengths(e.target.value)} rows={3}
@@ -369,7 +389,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         <span className="inline-flex items-center gap-1.5">
                                             <TrendingDown className="w-3.5 h-3.5 text-orange-500" />
-                                            Areas for Improvement
+                                            Areas for Improvement *
                                         </span>
                                     </label>
                                     <textarea value={improvements} onChange={e => setImprovements(e.target.value)} rows={3}
@@ -380,13 +400,15 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                             </div>
 
                             {/* ── Goals ── */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Goals for Next Period</label>
-                                <textarea value={goals} onChange={e => setGoals(e.target.value)} rows={2}
-                                    placeholder="Objectives and targets for the next review period…"
-                                    disabled={!isEditing}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
-                            </div>
+                            {!isExitReview && !(isProbation && overallAvg < 2.5) && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Goals for Next Period *</label>
+                                    <textarea value={goals} onChange={e => setGoals(e.target.value)} rows={2}
+                                        placeholder="Objectives and targets for the next review period…"
+                                        disabled={!isEditing}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
+                                </div>
+                            )}
 
                             {/* ── Notes ── */}
                             <div>
@@ -433,7 +455,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                 </button>
                             )}
                             
-                            {review && !isEditing && (
+                            {review && !isEditing && !readOnly && (
                                 <button type="button" onClick={(e) => {
                                     e.preventDefault()
                                     setIsEditing(true)
@@ -443,16 +465,31 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                     Edit
                                 </button>
                             )}
-                            {(!review || isEditing) && (
-                                <button type="submit" disabled={saving || !staffId}
-                                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
-                                    {saving ? (
-                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    ) : (
-                                        <Plus className="w-4 h-4" />
-                                    )}
-                                    {review ? 'Update Review' : 'Create Review'}
-                                </button>
+                            {(!review || isEditing) && !readOnly && (
+                                isProbation ? (
+                                    <>
+                                        <button type="button" onClick={(e) => handleSubmit(e, 'reject')} disabled={saving || !isFormValid}
+                                            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2">
+                                            {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <TrendingDown className="w-4 h-4" />}
+                                            Reject
+                                        </button>
+                                        <button type="button" onClick={(e) => handleSubmit(e, 'confirm')} disabled={saving || !isFormValid || (isProbation && overallAvg < 2.5)}
+                                            className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 flex items-center gap-2">
+                                            {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                                            Confirm
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button type="button" onClick={(e) => handleSubmit(e)} disabled={saving || !isFormValid}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
+                                        {saving ? (
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        ) : (
+                                            <Plus className="w-4 h-4" />
+                                        )}
+                                        {review ? 'Update Review' : (isExitReview ? 'Set Inactive' : 'Create Review')}
+                                    </button>
+                                )
                             )}
                         </div>
                     </div>

@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import {
     ShiftType, MOCK_STAFF,
     getShiftTypes, getRosterData, saveRosterData, rosterKey,
     formatDate, getMonday, addDays, formatWeekRange, dayName,
     generateMockRoster, getStaffCrossBranchShifts, shiftsOverlap,
+    AutoScheduleTimeSlot, getAutoScheduleTimeSlots
 } from '@/lib/hr-operational-data'
 import CircularLoader from '@/components/CircularLoader'
-import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User, Clock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User, Clock, Wand2 } from 'lucide-react'
 
 export default function RosterPage() {
     const [loading, setLoading] = useState(true)
@@ -18,19 +19,52 @@ export default function RosterPage() {
     const [weekStart, setWeekStart] = useState(getMonday(new Date()))
     const [roster, setRoster] = useState<Record<string, string>>({})
     const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([])
+    const [staffList, setStaffList] = useState<{ id: string; name: string; role: string; department: string; position: string; employment_type: string; skill_level: number; branchIds: string[] }[]>([])
+    const [borrowedStaffIds, setBorrowedStaffIds] = useState<string[]>([])
+    const [autoScheduleTimeSlots, setAutoScheduleTimeSlots] = useState<AutoScheduleTimeSlot[]>([])
+    const [isBorrowModalOpen, setIsBorrowModalOpen] = useState(false)
     const [editingCell, setEditingCell] = useState<{ staffId: string; date: string; staffName: string } | null>(null)
     const [staffDetailId, setStaffDetailId] = useState<string | null>(null)
     const [dayDetailDate, setDayDetailDate] = useState<string | null>(null)
+    const [borrowTab, setBorrowTab] = useState<'internal' | 'outsourced'>('internal')
     const modalRef = useRef<HTMLDivElement>(null)
 
-    // Load branches
+    // Load branches and staff
     useEffect(() => {
         ;(async () => {
-            const { data } = await supabase.from('provider_branches').select('id, name').order('name')
-            if (data && data.length > 0) {
-                setBranches(data)
-                setSelectedBranch(data[0].id)
+            const { data: bData } = await supabase.from('provider_branches').select('id, name').order('name')
+            if (bData && bData.length > 0) {
+                setBranches(bData)
+                setSelectedBranch(bData[0].id)
             }
+            
+            const { data: sData } = await supabase
+                .from('hr_staff')
+                .select(`
+                    id, 
+                    full_name, 
+                    department,
+                    position, 
+                    employment_type,
+                    skill_level,
+                    hr_staff_branches(branch_id)
+                `)
+                .eq('status', 'active')
+
+            if (sData) {
+                const formatted = sData.map((s: any) => ({
+                    id: s.id,
+                    name: s.full_name,
+                    role: s.position ? `${s.position}${s.employment_type === 'outsourced' ? ' (Outsourced)' : ''}` : (s.employment_type === 'outsourced' ? 'Outsourced' : 'Staff'),
+                    department: s.department || 'Unassigned',
+                    position: s.position || 'Unassigned',
+                    employment_type: s.employment_type,
+                    skill_level: s.skill_level || 1,
+                    branchIds: s.hr_staff_branches?.map((b: any) => b.branch_id) || []
+                }))
+                setStaffList(formatted)
+            }
+            
             setLoading(false)
         })()
     }, [])
@@ -42,7 +76,7 @@ export default function RosterPage() {
         setShiftTypes(types)
 
         // Clear stale mock data when generator version changes
-        const MOCK_VERSION = 'v7-offdays-global-split-days'
+        const MOCK_VERSION = 'v8-empty'
         const versionKey = 'hr_operational_roster_version'
         if (typeof window !== 'undefined' && localStorage.getItem(versionKey) !== MOCK_VERSION) {
             localStorage.removeItem('hr_operational_roster')
@@ -51,26 +85,43 @@ export default function RosterPage() {
         }
 
         const saved = getRosterData()
-        // Generate mock data for ALL branches (not just selected) so cross-branch views work
-        let merged = { ...saved }
-        let anyGenerated = false
-        const allBranchIds = branches.map(b => b.id)
-        branches.forEach((branch) => {
-            const weekKey = rosterKey(branch.id, 'staff-1', formatDate(weekStart))
-            if (!merged[weekKey]) {
-                const mock = generateMockRoster(branch.id, weekStart, allBranchIds)
-                merged = { ...merged, ...mock }
-                anyGenerated = true
-            }
-        })
-        if (anyGenerated) {
-            saveRosterData(merged)
-        }
-        setRoster(merged)
+        setRoster(saved)
+        setBorrowedStaffIds([])
+        setAutoScheduleTimeSlots(getAutoScheduleTimeSlots())
     }, [selectedBranch, weekStart, branches])
 
     const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
     const todayStr = formatDate(new Date())
+
+    const hasShiftInCurrentBranchThisWeek = useCallback((staffId: string) => {
+        return weekDays.some(day => {
+            const key = rosterKey(selectedBranch, staffId, formatDate(day))
+            return !!roster[key]
+        })
+    }, [selectedBranch, weekDays, roster])
+
+    const displayedStaff = staffList.filter(s => {
+        if (hasShiftInCurrentBranchThisWeek(s.id)) return true;
+        if (borrowedStaffIds.includes(s.id)) return true;
+        if (s.employment_type === 'outsourced') return false; // Hide outsourced staff from main view by default
+        return s.branchIds.includes(selectedBranch);
+    })
+
+    const groupedStaff = useMemo(() => {
+        const groups: Record<string, typeof displayedStaff> = {}
+        displayedStaff.forEach(s => {
+            if (!groups[s.department]) groups[s.department] = []
+            groups[s.department].push(s)
+        })
+        for (const dep in groups) {
+            groups[dep].sort((a, b) => a.position.localeCompare(b.position))
+        }
+        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
+    }, [displayedStaff])
+
+    const availableToBorrow = staffList.filter(s => !displayedStaff.find(ds => ds.id === s.id))
+    const availableInternal = availableToBorrow.filter(s => s.employment_type !== 'outsourced')
+    const availableOutsourced = availableToBorrow.filter(s => s.employment_type === 'outsourced')
 
     const prevWeek = () => setWeekStart(addDays(weekStart, -7))
     const nextWeek = () => setWeekStart(addDays(weekStart, 7))
@@ -173,6 +224,155 @@ export default function RosterPage() {
         setEditingCell(null)
     }
 
+    const handleAutoSchedule = (overwrite: boolean) => {
+        if (overwrite && !confirm('This will overwrite existing shifts for this week. Are you sure?')) return;
+        
+        let newRoster = { ...roster };
+        const branchSlots = autoScheduleTimeSlots.filter(s => s.branchId === selectedBranch);
+        const branchStaff = staffList.filter(s => s.branchIds.includes(selectedBranch) && s.employment_type !== 'outsourced');
+        const workShifts = shiftTypes.filter(s => s.type === 'work');
+        
+        // Helper to check if a shift covers a time slot
+        const parseTime = (t: string) => { const [h,m] = t.split(':').map(Number); return h * 60 + m; }
+        const coversSlot = (shift: ShiftType, slotStart: string, slotEnd: string) => {
+            if (!shift.startTime || !shift.endTime) return false;
+            const sStart = parseTime(shift.startTime);
+            const sEnd = parseTime(shift.endTime) < sStart ? parseTime(shift.endTime) + 24*60 : parseTime(shift.endTime);
+            const lStart = parseTime(slotStart);
+            const lEnd = parseTime(slotEnd) < lStart ? parseTime(slotEnd) + 24*60 : parseTime(slotEnd);
+            return sStart <= lStart && sEnd >= lEnd;
+        }
+
+        // Helper to check consecutive working days up to a given date
+        const getConsecutiveDays = (staffId: string, checkDate: Date, tempRoster: Record<string,string>) => {
+            let consecutive = 0;
+            // check backwards up to 6 days
+            for(let i=1; i<=6; i++) {
+                const d = new Date(checkDate);
+                d.setDate(d.getDate() - i);
+                const key = rosterKey(selectedBranch, staffId, formatDate(d));
+                const shiftId = tempRoster[key];
+                if(shiftId) {
+                    const shift = shiftTypes.find(s => s.id === shiftId);
+                    if (shift && shift.type === 'work') consecutive++;
+                    else break;
+                } else {
+                    break;
+                }
+            }
+            return consecutive;
+        }
+
+        if (overwrite) {
+            // clear the week for branch staff
+            weekDays.forEach(day => {
+                const dateStr = formatDate(day);
+                branchStaff.forEach(staff => {
+                    const key = rosterKey(selectedBranch, staff.id, dateStr);
+                    delete newRoster[key];
+                });
+            });
+        }
+
+        weekDays.forEach((day, dayIndex) => {
+            const dateStr = formatDate(day);
+            
+            // Current points calculation: slotId -> department -> points
+            const currentPoints: Record<string, Record<string, number>> = {};
+            branchSlots.forEach(slot => { currentPoints[slot.id] = {}; });
+
+            branchStaff.forEach(staff => {
+                const key = rosterKey(selectedBranch, staff.id, dateStr);
+                const assignedShiftId = newRoster[key];
+                if (assignedShiftId) {
+                    const assignedShift = shiftTypes.find(s => s.id === assignedShiftId);
+                    if (assignedShift && assignedShift.type === 'work') {
+                        branchSlots.forEach(slot => {
+                            if (coversSlot(assignedShift, slot.startTime, slot.endTime)) {
+                                const dept = staff.department || 'Unknown';
+                                currentPoints[slot.id][dept] = (currentPoints[slot.id][dept] || 0) + (staff.skill_level || 1);
+                            }
+                        });
+                    }
+                }
+            });
+
+            // Try to meet targets for each slot and department
+            branchSlots.forEach(slot => {
+                const targets = slot.targets || {};
+                const departments = Object.keys(targets);
+                
+                departments.forEach(dept => {
+                    const target = targets[dept][dayIndex] || 0;
+                    
+                    while ((currentPoints[slot.id][dept] || 0) < target) {
+                        const availableStaff = branchStaff.find(staff => {
+                            if ((staff.department || 'Unknown') !== dept) return false;
+                            const key = rosterKey(selectedBranch, staff.id, dateStr);
+                            if (newRoster[key]) return false; // already working
+                            if (getConsecutiveDays(staff.id, day, newRoster) >= 6) return false; // 6 days max
+                            // Ensure they don't have a conflict in another branch
+                            const conflict = getCrossBranchShifts(staff.id, dateStr).length > 0;
+                            if (conflict) return false;
+                            return true;
+                        });
+
+                        if (!availableStaff) break;
+
+                        const viableShift = workShifts.find(s => coversSlot(s, slot.startTime, slot.endTime));
+                        if (!viableShift) break; 
+
+                        const newKey = rosterKey(selectedBranch, availableStaff.id, dateStr);
+                        newRoster[newKey] = viableShift.id;
+                        
+                        // Update points for all slots this shift might cover
+                        branchSlots.forEach(otherSlot => {
+                            if (coversSlot(viableShift, otherSlot.startTime, otherSlot.endTime)) {
+                                currentPoints[otherSlot.id][dept] = (currentPoints[otherSlot.id][dept] || 0) + (availableStaff.skill_level || 1);
+                            }
+                        });
+                    }
+                });
+            });
+            
+            // Gap filling: for anyone with < 40 hours and no days off, give them off days using auto schedulable leave types
+            const autoLeaveShift = shiftTypes.find(s => s.type === 'leave' && s.isAutoSchedulable);
+            if (autoLeaveShift) {
+                branchStaff.forEach(staff => {
+                    // check total hours assigned so far
+                    let totalHours = 0;
+                    let hasLeave = false;
+                    weekDays.forEach(d => {
+                        const shiftId = newRoster[rosterKey(selectedBranch, staff.id, formatDate(d))];
+                        if(shiftId) {
+                            const shift = shiftTypes.find(s => s.id === shiftId);
+                            if(shift) {
+                                if(shift.type === 'work') totalHours += shift.hours;
+                                else if(shift.type === 'leave') hasLeave = true;
+                            }
+                        }
+                    });
+                    
+                    if (totalHours < 40 && !hasLeave) {
+                        // find a day with no shift
+                        const unassignedDays = weekDays.filter(d => !newRoster[rosterKey(selectedBranch, staff.id, formatDate(d))]);
+                        if (unassignedDays.length > 0) {
+                            // give up to 2 days off
+                            const daysOffToGive = Math.min(2, unassignedDays.length);
+                            for(let i=0; i<daysOffToGive; i++) {
+                                const newKey = rosterKey(selectedBranch, staff.id, formatDate(unassignedDays[i]));
+                                newRoster[newKey] = autoLeaveShift.id;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
+        setRoster(newRoster);
+        saveRosterData(newRoster);
+    }
+
     const getWeeklyHours = (staffId: string): number => {
         return weekDays.reduce((t, day) => {
             const s = getCellShift(staffId, formatDate(day))
@@ -181,17 +381,66 @@ export default function RosterPage() {
     }
 
     const getStaffWorkingCount = (date: string): number => {
-        return MOCK_STAFF.filter(s => {
+        return displayedStaff.filter(s => {
             const sh = getCellShift(s.id, date)
             return sh && sh.type === 'work'
         }).length
     }
 
     const getDayTotalHours = (date: string): number => {
-        return MOCK_STAFF.reduce((t, s) => {
+        return displayedStaff.reduce((t, s) => {
             const sh = getCellShift(s.id, date)
             return t + (sh?.hours || 0)
         }, 0)
+    }
+
+    const getDayCoverageStatus = (dateStr: string, dayIndex: number): { met: boolean; errors: string[] } => {
+        const branchSlots = autoScheduleTimeSlots.filter(s => s.branchId === selectedBranch);
+        if (branchSlots.length === 0) return { met: true, errors: [] }; // no targets to miss
+
+        const currentPoints: Record<string, Record<string, number>> = {};
+        branchSlots.forEach(slot => { currentPoints[slot.id] = {}; });
+
+        const parseTime = (t: string) => { const [h,m] = t.split(':').map(Number); return h * 60 + m; }
+        const coversSlot = (shift: ShiftType, slotStart: string, slotEnd: string) => {
+            if (!shift.startTime || !shift.endTime) return false;
+            const sStart = parseTime(shift.startTime);
+            const sEnd = parseTime(shift.endTime) < sStart ? parseTime(shift.endTime) + 24*60 : parseTime(shift.endTime);
+            const lStart = parseTime(slotStart);
+            const lEnd = parseTime(slotEnd) < lStart ? parseTime(slotEnd) + 24*60 : parseTime(slotEnd);
+            return sStart <= lStart && sEnd >= lEnd;
+        }
+
+        displayedStaff.forEach(staff => {
+            const key = rosterKey(selectedBranch, staff.id, dateStr);
+            const assignedShiftId = roster[key];
+            if (assignedShiftId) {
+                const assignedShift = shiftTypes.find(s => s.id === assignedShiftId);
+                if (assignedShift && assignedShift.type === 'work') {
+                    branchSlots.forEach(slot => {
+                        if (coversSlot(assignedShift, slot.startTime, slot.endTime)) {
+                            const dept = staff.department || 'Unknown';
+                            currentPoints[slot.id][dept] = (currentPoints[slot.id][dept] || 0) + (staff.skill_level || 1);
+                        }
+                    });
+                }
+            }
+        });
+
+        const errors: string[] = [];
+        branchSlots.forEach(slot => {
+            const targets = slot.targets || {};
+            const departments = Object.keys(targets);
+            
+            departments.forEach(dept => {
+                const target = targets[dept][dayIndex] || 0;
+                if (target > 0 && (currentPoints[slot.id][dept] || 0) < target) {
+                    errors.push(`${slot.name} (${dept}): ${currentPoints[slot.id][dept] || 0}/${target} pts`);
+                }
+            });
+        });
+
+        return { met: errors.length === 0, errors };
     }
 
     if (loading) {
@@ -250,7 +499,38 @@ export default function RosterPage() {
             </div>
 
             {/* Divider */}
-            <div className="border-t border-blue-400/20 mb-4"></div>
+            <div className="border-t border-blue-400/20 mb-4 flex justify-between items-center py-2">
+                <div className="text-sm font-semibold text-blue-200">
+                    {displayedStaff.length} Staff in roster
+                </div>
+                <div className="flex gap-2">
+                    <div className="flex items-center gap-1 bg-blue-600/10 rounded-lg p-1 border border-blue-500/20 mr-2">
+                        <button
+                            onClick={() => handleAutoSchedule(false)}
+                            className="px-3 py-1 text-xs rounded-md hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
+                            title="Auto-assign shifts to meet skill targets without overwriting existing shifts"
+                        >
+                            <Wand2 className="w-3.5 h-3.5" />
+                            Auto-Fill Gaps
+                        </button>
+                        <div className="w-px h-4 bg-blue-500/20"></div>
+                        <button
+                            onClick={() => handleAutoSchedule(true)}
+                            className="px-3 py-1 text-xs rounded-md hover:bg-red-500/20 text-red-300 hover:text-red-200 font-medium transition flex items-center gap-1.5"
+                            title="Clear this week and completely auto-generate roster based on targets"
+                        >
+                            Overwrite Week
+                        </button>
+                    </div>
+                    <button
+                        onClick={() => setIsBorrowModalOpen(true)}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/50 hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
+                    >
+                        <User className="w-3.5 h-3.5" />
+                        Assign External Staff
+                    </button>
+                </div>
+            </div>
 
             {/* Grid in white card */}
             <div className="bg-white rounded-2xl shadow overflow-x-auto">
@@ -260,16 +540,22 @@ export default function RosterPage() {
                             <th className="sticky left-0 z-10 bg-gray-50 text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 border-b border-gray-200 min-w-[180px] rounded-tl-2xl">
                                 Staff
                             </th>
-                            {weekDays.map(day => {
+                            {weekDays.map((day, dayIndex) => {
                                 const ds = formatDate(day)
                                 const isToday = ds === todayStr
+                                const coverage = getDayCoverageStatus(ds, dayIndex)
                                 return (
                                     <th
                                         key={ds}
-                                        className={`px-2 py-3 text-center border-b border-gray-200 min-w-[100px] cursor-pointer group/day transition-colors
+                                        className={`px-2 py-3 text-center border-b border-gray-200 min-w-[100px] cursor-pointer group/day transition-colors relative
                                             ${isToday ? 'bg-blue-50 hover:bg-blue-100/70' : 'bg-gray-50 hover:bg-gray-100'}`}
                                         onClick={() => setDayDetailDate(ds)}
                                     >
+                                        {!coverage.met && (
+                                            <div className="absolute top-2 right-2 text-red-500 cursor-help" title={`Missing targets:\n${coverage.errors.join('\n')}`}>
+                                                <AlertTriangle className="w-3.5 h-3.5" />
+                                            </div>
+                                        )}
                                         <div className={`text-xs uppercase tracking-wider ${isToday ? 'text-blue-600' : 'text-gray-500'} group-hover/day:text-blue-600 transition-colors`}>
                                             {dayName(day)}
                                         </div>
@@ -288,96 +574,137 @@ export default function RosterPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {MOCK_STAFF.map((staff, idx) => {
-                            const weekHours = getWeeklyHours(staff.id)
-                            return (
-                                <tr key={staff.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
-                                    {/* Staff name cell */}
-                                    <td className="sticky left-0 z-10 px-4 py-2 border-b border-gray-100" style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                        <div
-                                            className="flex items-center gap-3 cursor-pointer group"
-                                            onClick={(e) => { e.stopPropagation(); setStaffDetailId(staff.id) }}
-                                        >
-                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                                                {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                            </div>
-                                            <div>
-                                                <div className="text-sm font-medium text-gray-900 leading-tight group-hover:text-blue-600 group-hover:underline transition-colors">{staff.name}</div>
-                                                <div className="text-xs text-gray-400">{staff.role}</div>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    {/* Day cells */}
-                                    {weekDays.map(day => {
-                                        const ds = formatDate(day)
-                                        const shift = getCellShift(staff.id, ds)
-                                        const isToday = ds === todayStr
-                                        // Only show cross-branch info if staff HAS a shift in current branch
-                                        const crossShifts = shift ? getCrossBranchShifts(staff.id, ds) : []
-
-                                        return (
-                                            <td
-                                                key={ds}
-                                                className={`px-1 py-1.5 border-b border-gray-100 text-center cursor-pointer transition-colors
-                                                    ${isToday ? 'bg-blue-50/50' : ''}
-                                                    hover:bg-blue-50`}
-                                                onClick={() => setEditingCell({ staffId: staff.id, date: ds, staffName: staff.name })}
-                                            >
-                                                {shift ? (
-                                                    <div
-                                                        className="inline-flex flex-col items-center rounded-lg px-2.5 py-1.5 min-w-[64px]"
-                                                        style={{
-                                                            backgroundColor: shift.color + '15',
-                                                            border: `1px solid ${shift.color}30`,
-                                                        }}
-                                                    >
-                                                        <span className="text-xs font-bold" style={{ color: shift.color }}>
-                                                            {shift.code}
-                                                        </span>
-                                                        {shift.type === 'work' && shift.startTime && (
-                                                            <span className="text-[10px] text-gray-400 mt-0.5">
-                                                                {shift.startTime}–{shift.endTime}
-                                                            </span>
-                                                        )}
-                                                        {shift.type === 'leave' && (
-                                                            <span className="text-[10px] mt-0.5" style={{ color: shift.color + 'BB' }}>
-                                                                {shift.name}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="inline-flex items-center justify-center rounded-lg border border-dashed border-gray-200 text-gray-300 hover:border-gray-300 hover:text-gray-400 transition min-w-[64px] py-3 text-lg">
-                                                        +
-                                                    </div>
-                                                )}
-                                                {/* Cross-branch indicator — only when this cell HAS a shift */}
-                                                {crossShifts.length > 0 && (
-                                                    <div className="mt-0.5">
-                                                        {crossShifts.map((cs, i) => {
-                                                            const otherShift = shiftTypes.find(s => s.id === cs.shiftTypeId)
-                                                            return (
-                                                                <div key={i} className="flex items-center justify-center gap-0.5 text-[9px] text-amber-600/80">
-                                                                    <MapPin className="w-2.5 h-2.5" />
-                                                                    <span>{getBranchName(cs.branchId).split(' ').slice(0, 2).join(' ')}: {otherShift?.code}</span>
-                                                                </div>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </td>
-                                        )
-                                    })}
-
-                                    {/* Weekly hours */}
-                                    <td className="px-3 py-2 border-b border-gray-100 text-center">
-                                        <span className={`text-sm font-semibold ${weekHours > 44 ? 'text-red-500' : weekHours >= 40 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                                            {weekHours}h
-                                        </span>
+                        {groupedStaff.map(([department, staffInDept]) => (
+                            <Fragment key={department}>
+                                {/* Department Header Row */}
+                                <tr className="bg-slate-50/80 border-y border-slate-200">
+                                    <td 
+                                        colSpan={weekDays.length + 2} 
+                                        className="sticky left-0 z-10 px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider"
+                                    >
+                                        {department}
                                     </td>
                                 </tr>
-                            )
-                        })}
+                                {staffInDept.map((staff, idx) => {
+                                    const weekHours = getWeeklyHours(staff.id)
+                                    return (
+                                        <tr key={staff.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                                            {/* Staff name cell */}
+                                            <td className="sticky left-0 z-10 px-4 py-2 border-b border-gray-100" style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fcfdfd' }}>
+                                                <div
+                                                    className="flex items-center gap-3 cursor-pointer group"
+                                                    onClick={(e) => { e.stopPropagation(); setStaffDetailId(staff.id) }}
+                                                >
+                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                                                        {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm font-medium text-gray-900 leading-tight group-hover:text-blue-600 group-hover:underline transition-colors">{staff.name}</div>
+                                                        <div className="text-xs text-gray-400">{staff.role}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* Day cells */}
+                                            {weekDays.map(day => {
+                                                const ds = formatDate(day)
+                                                const shift = getCellShift(staff.id, ds)
+                                                const isToday = ds === todayStr
+                                                // Always fetch cross-branch shifts to show availability
+                                                const crossShifts = getCrossBranchShifts(staff.id, ds)
+                                                
+                                                const isFullyBlocked = crossShifts.some(cs => {
+                                                    const s = shiftTypes.find(t => t.id === cs.shiftTypeId)
+                                                    return s && (s.globalAcrossBranches || s.allowParallel === false)
+                                                })
+                                                const isBusyElsewhere = !shift && crossShifts.length > 0 && !isFullyBlocked
+
+                                                const bgClass = isToday 
+                                                    ? 'bg-blue-50/50' 
+                                                    : isFullyBlocked && !shift 
+                                                        ? 'bg-slate-100/60' 
+                                                        : isBusyElsewhere 
+                                                            ? 'bg-amber-50/40' 
+                                                            : ''
+
+                                                const plusStyle = isFullyBlocked 
+                                                    ? 'border-gray-200 text-gray-300 opacity-40' // Disabled look
+                                                    : isBusyElsewhere 
+                                                        ? 'border-amber-200 text-amber-300 hover:border-amber-300 hover:text-amber-400' 
+                                                        : 'border-gray-200 text-gray-300 hover:border-gray-300 hover:text-gray-400'
+
+                                                const indicatorStyle = isFullyBlocked ? 'text-slate-500' : 'text-amber-600/80'
+                                                const iconColor = isFullyBlocked ? 'text-slate-400' : 'text-amber-500'
+
+                                                return (
+                                                    <td
+                                                        key={ds}
+                                                        className={`px-1 py-1.5 border-b border-gray-100 text-center cursor-pointer transition-colors
+                                                            ${bgClass}
+                                                            hover:bg-blue-50`}
+                                                        onClick={() => setEditingCell({ staffId: staff.id, date: ds, staffName: staff.name })}
+                                                    >
+                                                        {shift ? (
+                                                            <div
+                                                                className="inline-flex flex-col items-center rounded-lg px-2.5 py-1.5 min-w-[64px]"
+                                                                style={{
+                                                                    backgroundColor: shift.color + '15',
+                                                                    border: `1px solid ${shift.color}30`,
+                                                                }}
+                                                            >
+                                                                <span className="text-xs font-bold" style={{ color: shift.color }}>
+                                                                    {shift.code}
+                                                                </span>
+                                                                {shift.type === 'work' && shift.startTime && (
+                                                                    <span className="text-[10px] text-gray-400 mt-0.5 leading-none">
+                                                                        {shift.startTime}–{shift.endTime}
+                                                                    </span>
+                                                                )}
+                                                                {shift.type === 'work' && shift.startTime2 && shift.endTime2 && (
+                                                                    <span className="text-[10px] text-gray-400 mt-0.5 leading-none">
+                                                                        {shift.startTime2}–{shift.endTime2}
+                                                                    </span>
+                                                                )}
+                                                                {shift.type === 'leave' && (
+                                                                    <span className="text-[10px] mt-0.5" style={{ color: shift.color + 'BB' }}>
+                                                                        {shift.name}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <div className={`inline-flex items-center justify-center rounded-lg border border-dashed transition min-w-[64px] py-3 text-lg ${plusStyle}`}>
+                                                                +
+                                                            </div>
+                                                        )}
+                                                        {/* Cross-branch indicator */}
+                                                        {crossShifts.length > 0 && (
+                                                            <div className="mt-0.5">
+                                                                {crossShifts.map((cs, i) => {
+                                                                    const otherShift = shiftTypes.find(s => s.id === cs.shiftTypeId)
+                                                                    return (
+                                                                        <div key={i} className={`flex items-center justify-center gap-0.5 text-[9px] ${indicatorStyle}`}>
+                                                                            <MapPin className={`w-2.5 h-2.5 ${iconColor}`} />
+                                                                            <span>{getBranchName(cs.branchId).split(' ').slice(0, 2).join(' ')}: {otherShift?.code}</span>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                )
+                                            })}
+
+                                            {/* Weekly hours */}
+                                            <td className="px-3 py-2 border-b border-gray-100 text-center">
+                                                <span className={`text-sm font-semibold ${weekHours > 44 ? 'text-red-500' : weekHours >= 40 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                                    {weekHours}h
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </Fragment>
+                        ))}
                     </tbody>
 
                     {/* Summary row */}
@@ -399,7 +726,7 @@ export default function RosterPage() {
                             })}
                             <td className="px-3 py-3 text-center rounded-br-2xl">
                                 <div className="text-sm font-bold text-gray-800">
-                                    {MOCK_STAFF.reduce((t, s) => t + getWeeklyHours(s.id), 0)}h
+                                    {displayedStaff.reduce((t, s) => t + getWeeklyHours(s.id), 0)}h
                                 </div>
                             </td>
                         </tr>
@@ -454,7 +781,9 @@ export default function RosterPage() {
                                                 return (
                                                     <p key={i} className="text-xs text-amber-600 mt-0.5">
                                                         {getBranchName(cs.branchId)}: {otherShift?.name}
-                                                        {otherShift?.type === 'work' && otherShift?.startTime ? ` (${otherShift.startTime}–${otherShift.endTime})` : ''}
+                                                        {otherShift?.type === 'work' && otherShift?.startTime 
+                                                            ? ` (${otherShift.startTime}–${otherShift.endTime}${otherShift.startTime2 ? ` & ${otherShift.startTime2}–${otherShift.endTime2}` : ''})` 
+                                                            : ''}
                                                     </p>
                                                 )
                                             })}
@@ -486,13 +815,19 @@ export default function RosterPage() {
                                                         ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-500/50'
                                                         : 'border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300'}`}
                                         >
-                                            <div className="w-4 h-4 rounded-md shrink-0" style={{ backgroundColor: isConflicted ? '#9CA3AF' : st.color }} />
-                                            <div className="min-w-0">
-                                                <div className={`text-sm font-medium ${isConflicted ? 'text-gray-400' : 'text-gray-900'}`}>{st.name}</div>
-                                                <div className="text-xs text-gray-500">{st.startTime}–{st.endTime} · {st.hours}h</div>
+                                            <div className="w-4 h-4 rounded-md shrink-0 mt-0.5" style={{ backgroundColor: isConflicted ? '#9CA3AF' : st.color }} />
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex justify-between items-start">
+                                                    <div className={`text-sm font-medium leading-tight ${isConflicted ? 'text-gray-400' : 'text-gray-900'}`}>{st.name}</div>
+                                                    {st.hours > 0 && <div className="text-[10px] font-semibold text-gray-400 bg-gray-100/80 px-1.5 py-0.5 rounded leading-none">{st.hours}h</div>}
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1 flex flex-col gap-0.5">
+                                                    <span>{st.startTime} – {st.endTime}</span>
+                                                    {st.startTime2 && st.endTime2 && <span>{st.startTime2} – {st.endTime2}</span>}
+                                                </div>
                                                 {isConflicted && (
-                                                    <div className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
-                                                        <AlertTriangle className="w-3 h-3" />
+                                                    <div className="text-[10px] text-red-500 mt-1.5 flex items-center gap-1 leading-tight bg-red-100/50 p-1 rounded">
+                                                        <AlertTriangle className="w-3 h-3 shrink-0" />
                                                         Conflicts with {conflictInfo.branchName}
                                                     </div>
                                                 )}
@@ -541,9 +876,99 @@ export default function RosterPage() {
                 </div>
             )}
 
+            {/* Borrow Staff Modal */}
+            {isBorrowModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setIsBorrowModalOpen(false)}>
+                    <div
+                        className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md p-6 max-h-[80vh] flex flex-col"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900">Assign External Staff</h3>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    Add a staff member from another branch to this week's roster.
+                                </p>
+                            </div>
+                            <button onClick={() => setIsBorrowModalOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="flex gap-6 border-b border-gray-200 mb-4">
+                            <button 
+                                onClick={() => setBorrowTab('internal')}
+                                className={`pb-2 text-sm font-medium transition-colors border-b-2 ${borrowTab === 'internal' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Internal Staff ({availableInternal.length})
+                            </button>
+                            <button 
+                                onClick={() => setBorrowTab('outsourced')}
+                                className={`pb-2 text-sm font-medium transition-colors border-b-2 ${borrowTab === 'outsourced' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Outsourced ({availableOutsourced.length})
+                            </button>
+                        </div>
+
+                        <div className="mb-4">
+                            <input 
+                                type="text" 
+                                placeholder="Search by name or role..." 
+                                onChange={e => {
+                                    const val = e.target.value.toLowerCase()
+                                    const rows = document.querySelectorAll('.borrow-staff-row')
+                                    rows.forEach(row => {
+                                        const text = (row.textContent || '').toLowerCase()
+                                        if (text.includes(val)) {
+                                            (row as HTMLElement).style.display = 'flex'
+                                        } else {
+                                            (row as HTMLElement).style.display = 'none'
+                                        }
+                                    })
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+
+                        <div className="overflow-y-auto flex-1 mb-4">
+                            {(borrowTab === 'internal' ? availableInternal : availableOutsourced).length === 0 ? (
+                                <div className="p-8 text-center text-sm text-gray-500 h-full flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl">
+                                    <User className="w-8 h-8 text-gray-300 mb-2" />
+                                    No {borrowTab === 'internal' ? 'internal' : 'outsourced'} staff available.
+                                </div>
+                            ) : (
+                                <div className="divide-y border border-gray-100 rounded-xl">
+                                    {(borrowTab === 'internal' ? availableInternal : availableOutsourced).map(staff => (
+                                        <button
+                                            key={staff.id}
+                                            onClick={() => {
+                                                setBorrowedStaffIds(prev => [...prev, staff.id])
+                                                setIsBorrowModalOpen(false)
+                                            }}
+                                            className={`borrow-staff-row w-full flex items-center gap-3 p-3 text-left transition-colors ${borrowTab === 'internal' ? 'hover:bg-blue-50' : 'hover:bg-indigo-50/50'}`}
+                                        >
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${borrowTab === 'internal' ? 'bg-gradient-to-br from-slate-400 to-slate-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
+                                                {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-medium text-gray-900">{staff.name}</div>
+                                                <div className={`text-xs ${borrowTab === 'internal' ? 'text-gray-500' : 'text-indigo-500'}`}>{staff.role}</div>
+                                            </div>
+                                            <div className={`ml-auto text-xs font-semibold px-2 py-1 rounded-md ${borrowTab === 'internal' ? 'text-blue-600 bg-blue-100' : 'text-indigo-600 bg-indigo-100'}`}>
+                                                Add
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Staff Detail Modal */}
             {staffDetailId && (() => {
-                const staff = MOCK_STAFF.find(s => s.id === staffDetailId)
+                const staff = staffList.find(s => s.id === staffDetailId)
                 if (!staff) return null
 
                 // Gather all shifts for this staff across all branches for current week
@@ -791,7 +1216,7 @@ export default function RosterPage() {
                 }
 
                 // Build staff rows with their shifts for this day across the selected branch
-                const staffRows = MOCK_STAFF.map(staff => {
+                const staffRows = displayedStaff.map(staff => {
                     const key = rosterKey(selectedBranch, staff.id, dayDetailDate)
                     const shiftId = roster[key]
                     const shift = shiftId ? shiftTypes.find(s => s.id === shiftId) : null

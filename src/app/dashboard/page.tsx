@@ -16,7 +16,7 @@ import {
   ArrowRightStartOnRectangleIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
-import { LayoutDashboard, Boxes, Handshake, Target, Settings2, Save, Bell } from 'lucide-react'
+import { LayoutDashboard, Boxes, Handshake, Target, Settings2, Save, Bell, DollarSign } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
@@ -27,6 +27,7 @@ type ProviderBranch = {
   id: string
   name: string
   address?: string
+  city?: string
   sort_order?: number | null
 }
 
@@ -366,6 +367,7 @@ export default function HomeDashboard() {
     { id: 'branch-picker', Component: BranchPickerCTA, title: t(language, 'CheckInSystem') || 'Check In System', icon: MapPinIcon },
     { id: 'monthly-reports', href: '/monthly-reports', icon: LayoutDashboard, title: t(language, 'MonthlyReports') || 'Monthly Reports', roles: ['owner', 'admin'] },
     { id: 'hr-module', Component: HRModuleCTA, title: t(language, 'HumanResources') || 'Human Resources', icon: UserGroupIcon },
+    { id: 'finance', href: '/finance', icon: DollarSign, title: 'Finance', roles: ['owner', 'accountant'] },
   ]
 
   // Filter based on roles
@@ -676,6 +678,7 @@ function BranchPickerModal({ onClose, destination }: { onClose: () => void, dest
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [branches, setBranches] = useState<ProviderBranch[]>([])
+  const [cityFilter, setCityFilter] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const { language } = useSettings()
 
@@ -685,21 +688,41 @@ function BranchPickerModal({ onClose, destination }: { onClose: () => void, dest
         setLoading(true)
         setErr(null)
         try {
+          const { data: userData } = await supabase.auth.getUser()
+          let userBranches: string[] | null = null
+
+          if (userData?.user) {
+            const { data: acc } = await supabase
+              .from('app_accounts')
+              .select('branches, role')
+              .eq('user_id', userData.user.id)
+              .single()
+
+            if (acc && acc.role !== 'owner' && acc.role !== 'admin') {
+              userBranches = acc.branches || []
+            }
+          }
+
           const { data, error } = await supabase
             .from('provider_branches')
-            .select('id,name,address,sort_order')
+            .select('id,name,address,city,sort_order')
             .order('sort_order', { ascending: true, nullsFirst: true })
             .order('name', { ascending: true })
 
           if (error) throw error
 
-          const rows: ProviderBranch[] =
+          let rows: ProviderBranch[] =
             (data || []).map(r => ({
               id: String(r.id),
               name: r.name || '',
               address: r.address || '',
+              city: r.city || '',
               sort_order: r.sort_order
             }))
+
+          if (userBranches) {
+            rows = rows.filter(r => userBranches!.includes(r.id))
+          }
 
           if (!ignore) {
             setBranches(rows)
@@ -774,10 +797,33 @@ function BranchPickerModal({ onClose, destination }: { onClose: () => void, dest
             )}
 
             {!loading && !err && branches.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {branches.map(b => (
-                  <button
-                    key={b.id}
+              <div className="space-y-4">
+                {(() => {
+                  const uniqueCities = Array.from(new Set(branches.map(b => b.city).filter(Boolean))) as string[]
+                  const filteredBranches = cityFilter ? branches.filter(b => b.city === cityFilter) : branches
+
+                  return (
+                    <>
+                      {uniqueCities.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm font-medium text-gray-700">{t(language, 'City') || 'City'}:</label>
+                          <select
+                            value={cityFilter}
+                            onChange={e => setCityFilter(e.target.value)}
+                            className="text-sm border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3"
+                          >
+                            <option value="">{t(language, 'AllCities') || 'All Cities'}</option>
+                            {uniqueCities.sort().map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {filteredBranches.map(b => (
+                          <button
+                            key={b.id}
                     type="button"
                     onClick={() => pick(b)}
                     className="group relative text-left rounded-2xl border border-gray-200 bg-white px-4 py-4 transition
@@ -794,7 +840,11 @@ function BranchPickerModal({ onClose, destination }: { onClose: () => void, dest
                       </div>
                     </div>
                   </button>
-                ))}
+                        ))}
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             )}
           </div>
@@ -837,6 +887,7 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [branches, setBranches] = useState<ProviderBranch[]>([])
+  const [cityFilter, setCityFilter] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const { language } = useSettings()
 
@@ -846,21 +897,41 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
         setLoading(true)
         setErr(null)
         try {
+          const { data: userData } = await supabase.auth.getUser()
+          let userBranches: string[] | null = null
+
+          if (userData?.user) {
+            const { data: acc } = await supabase
+              .from('app_accounts')
+              .select('branches, role')
+              .eq('user_id', userData.user.id)
+              .single()
+
+            if (acc && acc.role !== 'owner' && acc.role !== 'admin') {
+              userBranches = acc.branches || []
+            }
+          }
+
           const { data, error } = await supabase
             .from('provider_branches')
-            .select('id,name,address,sort_order')
+            .select('id,name,address,city,sort_order')
             .order('sort_order', { ascending: true, nullsFirst: true })
             .order('name', { ascending: true })
 
           if (error) throw error
 
-          const rows: ProviderBranch[] =
+          let rows: ProviderBranch[] =
             (data || []).map(r => ({
               id: String(r.id),
               name: r.name || '',
               address: r.address || '',
+              city: r.city || '',
               sort_order: r.sort_order
             }))
+
+          if (userBranches) {
+            rows = rows.filter(r => userBranches!.includes(r.id))
+          }
 
           if (!ignore) {
             setBranches(rows)
@@ -953,8 +1024,30 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
                   </div>
                 </button>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {branches.map(b => (
+                {(() => {
+                  const uniqueCities = Array.from(new Set(branches.map(b => b.city).filter(Boolean))) as string[]
+                  const filteredBranches = cityFilter ? branches.filter(b => b.city === cityFilter) : branches
+
+                  return (
+                    <>
+                      {uniqueCities.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm font-medium text-gray-700">{t(language, 'City') || 'City'}:</label>
+                          <select
+                            value={cityFilter}
+                            onChange={e => setCityFilter(e.target.value)}
+                            className="text-sm border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3"
+                          >
+                            <option value="">{t(language, 'AllCities') || 'All Cities'}</option>
+                            {uniqueCities.sort().map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {filteredBranches.map(b => (
                     <button
                       key={b.id}
                       type="button"
@@ -974,7 +1067,10 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
                       </div>
                     </button>
                   ))}
-                </div>
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             )}
           </div>

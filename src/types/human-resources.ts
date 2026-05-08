@@ -74,7 +74,7 @@ export interface RecruitmentPlatform {
 
 // ── HR Management ──
 
-export type EmploymentType = 'full_time' | 'part_time';
+export type EmploymentType = 'full_time' | 'part_time' | 'outsourced';
 export type SalaryType = 'fixed' | 'hourly';
 export type StaffStatus = 'active' | 'inactive' | 'terminated';
 export type RatingCategoryScope = 'global' | 'department' | 'position';
@@ -137,12 +137,14 @@ export interface HRStaffMember {
   phone: string | null;
   email: string | null;
   address: string | null;
+  city: string | null;
   employment_type: EmploymentType;
   salary_type: SalaryType;
   salary_amount: number;
   start_date: string | null;
   status: StaffStatus;
   notes: string | null;
+  skill_level: number;
   probation_months: number;
   probation_salary_pct: number;
   probation_end_date: string | null;
@@ -180,6 +182,7 @@ export type PerformanceRating = 1 | 2 | 3 | 4 | 5;
 export interface HRStaffPerformance {
   id: string;
   staff_id: string;
+  reviewer_id?: string | null;
   review_date: string;
   reviewer_name: string | null;
   period: string | null;
@@ -261,7 +264,7 @@ export interface HRStaffSalaryHistory {
   created_at: string;
   
   // New Columns for Promotions
-  record_type: 'salary_increase' | 'promotion' | 'resignation' | 'dismissal';
+  record_type: 'salary_increase' | 'promotion' | 'resignation' | 'dismissal' | 'rejection';
   increase_type: 'percentage' | 'fixed' | 'none' | null;
   increase_value: number | null;
   previous_salary_type: SalaryType | null;

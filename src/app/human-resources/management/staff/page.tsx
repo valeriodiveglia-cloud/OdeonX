@@ -1,24 +1,29 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffMember, EmploymentType, SalaryType, StaffStatus, HRDepartment, HRPosition, HRAlertSetting } from '@/types/human-resources'
 import CircularLoader from '@/components/CircularLoader'
 import {
     Users, UserPlus, Search, X, Pencil, Trash2,
-    Briefcase, Clock, Building2, ChevronDown, ChevronRight, Folders, CheckCircle
+    Briefcase, Clock, Building2, ChevronDown, ChevronRight, Folders, CheckCircle,
+    ArrowUp, ArrowDown, Filter, MoreVertical, FileDown, Star
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import PerformanceModal from '@/components/human-resources/PerformanceModal'
+import SalaryModal from '@/components/human-resources/SalaryModal'
+import { StaffModal } from '@/components/human-resources/StaffModal'
+import { HRRatingCategory } from '@/types/human-resources'
+import { saveAs } from 'file-saver'
 
 /* ─── Helpers ─── */
 const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n)
 
-
-
 const EMPLOYMENT_LABEL: Record<EmploymentType, string> = {
     full_time: 'Full-time',
     part_time: 'Part-time',
+    outsourced: 'Outsourced',
 }
 
 const SALARY_LABEL: Record<SalaryType, string> = {
@@ -64,347 +69,6 @@ const BranchCell = ({ branchNames }: { branchNames: string[] }) => {
     )
 }
 
-/* ─── Modal ─── */
-
-interface StaffModalProps {
-    open: boolean
-    onClose: () => void
-    onSave: (data: Partial<HRStaffMember>, branchIds: string[]) => Promise<void>
-    staff: HRStaffMember | null
-    branches: { id: string; name: string }[]
-    departments: HRDepartment[]
-    positions: HRPosition[]
-    saving: boolean
-}
-
-function StaffModal({ open, onClose, onSave, staff, branches, departments, positions, saving }: StaffModalProps) {
-    const [lastName, setLastName]             = useState('')
-    const [middleName, setMiddleName]         = useState('')
-    const [firstName, setFirstName]           = useState('')
-    const [departmentId, setDepartmentId]     = useState('')
-    const [positionId, setPositionId]         = useState('')
-    const [phone, setPhone]                   = useState('')
-    const [email, setEmail]                   = useState('')
-    const [employmentType, setEmploymentType] = useState<EmploymentType>('full_time')
-    const [salaryType, setSalaryType]         = useState<SalaryType>('fixed')
-    const [salaryAmount, setSalaryAmount]     = useState('')
-    const [startDate, setStartDate]           = useState('')
-    const [probationMonths, setProbationMonths] = useState('')
-    const [probationSalaryPct, setProbationSalaryPct] = useState('100')
-    const [status, setStatus]                 = useState<StaffStatus>('active')
-    const [notes, setNotes]                   = useState('')
-    const [selectedBranches, setSelectedBranches] = useState<string[]>([])
-
-    // Filter positions by selected department
-    const filteredPositions = departmentId
-        ? positions.filter(p => !p.department_id || p.department_id === departmentId)
-        : positions
-
-    useEffect(() => {
-        if (staff) {
-            const parts = (staff.full_name || '').split(' ').filter(Boolean)
-            if (parts.length === 1) {
-                setLastName(parts[0])
-                setMiddleName('')
-                setFirstName('')
-            } else if (parts.length === 2) {
-                setLastName(parts[0])
-                setMiddleName('')
-                setFirstName(parts[1])
-            } else if (parts.length > 2) {
-                setLastName(parts[0])
-                setFirstName(parts[parts.length - 1])
-                setMiddleName(parts.slice(1, parts.length - 1).join(' '))
-            } else {
-                setLastName('')
-                setMiddleName('')
-                setFirstName('')
-            }
-            setDepartmentId(staff.department_id || '')
-            setPositionId(staff.position_id || '')
-            setPhone(staff.phone || '')
-            setEmail(staff.email || '')
-            setEmploymentType(staff.employment_type)
-            setSalaryType(staff.salary_type)
-            setSalaryAmount(staff.salary_amount ? new Intl.NumberFormat('en-US').format(staff.salary_amount) : '')
-            setStartDate(staff.start_date || '')
-            setProbationMonths(staff.probation_months ? staff.probation_months.toString() : '')
-            setProbationSalaryPct(staff.probation_salary_pct ? staff.probation_salary_pct.toString() : '100')
-            setStatus(staff.status)
-            setNotes(staff.notes || '')
-            const branchIds = staff.hr_staff_branches?.map(b => b.branch_id) || []
-            setSelectedBranches(branchIds)
-        } else {
-            setLastName(''); setMiddleName(''); setFirstName('')
-            setDepartmentId(''); setPositionId(''); setPhone(''); setEmail('')
-            setEmploymentType('full_time'); setSalaryType('fixed'); setSalaryAmount('')
-            setStartDate(''); setProbationMonths(''); setProbationSalaryPct('100'); setStatus('active'); setNotes('')
-            setSelectedBranches([])
-        }
-    }, [staff, open])
-
-    const toggleBranch = (id: string) => {
-        setSelectedBranches(prev => {
-            if (prev.includes(id)) {
-                return prev.filter(b => b !== id)
-            }
-            return [...prev, id]
-        })
-    }
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-
-        const phoneVal = phone.trim() || null;
-        const emailVal = email.trim() || null;
-
-        // Check for duplicates in the database (active or archived)
-        if (phoneVal || emailVal) {
-            let query = supabase.from('hr_staff').select('id, full_name, status');
-            
-            if (phoneVal && emailVal) {
-                query = query.or(`phone.eq."${phoneVal}",email.eq."${emailVal}"`);
-            } else if (phoneVal) {
-                query = query.eq('phone', phoneVal);
-            } else if (emailVal) {
-                query = query.eq('email', emailVal);
-            }
-
-            if (staff) {
-                query = query.neq('id', staff.id);
-            }
-
-            const { data, error } = await query;
-            if (!error && data && data.length > 0) {
-                const duplicate = data[0];
-                alert(`Cannot save: A staff member named "${duplicate.full_name}" (Status: ${duplicate.status}) already exists with this phone or email.`);
-                return; // Stop submission
-            }
-        }
-
-        const buildFullName = [lastName.trim(), middleName.trim(), firstName.trim()]
-            .filter(Boolean)
-            .join(' ')
-            
-        const deptName = departments.find(d => d.id === departmentId)?.name || null
-        const posName = positions.find(p => p.id === positionId)?.name || ''
-        
-        let probationEndDate = null;
-        const probMonths = parseInt(probationMonths, 10);
-        if (startDate && !isNaN(probMonths) && probMonths > 0) {
-            const dateObj = new Date(startDate);
-            dateObj.setMonth(dateObj.getMonth() + probMonths);
-            dateObj.setDate(dateObj.getDate() - 1);
-            probationEndDate = dateObj.toISOString().split('T')[0];
-        }
-
-        await onSave(
-            {
-                full_name: buildFullName,
-                position: posName,
-                department: deptName,
-                department_id: departmentId || null,
-                position_id: positionId || null,
-                phone: phone.trim() || null,
-                email: email.trim() || null,
-                employment_type: employmentType,
-                salary_type: salaryType,
-                salary_amount: parseFloat(salaryAmount.replace(/,/g, '')) || 0,
-                start_date: startDate || null,
-                probation_months: isNaN(probMonths) ? 0 : probMonths,
-                probation_salary_pct: parseFloat(probationSalaryPct) || 100,
-                probation_end_date: probationEndDate,
-                status,
-                notes: notes.trim() || null,
-            },
-            selectedBranches
-        )
-    }
-
-    if (!open) return null
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                    <h2 className="text-lg font-semibold text-gray-900">
-                        {staff ? 'Edit Staff Member' : 'Add Staff Member'}
-                    </h2>
-                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                    {/* Row 1: Name Parts */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-                            <input required value={lastName} onChange={e => setLastName(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
-                            <input value={middleName} onChange={e => setMiddleName(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-                            <input required value={firstName} onChange={e => setFirstName(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                    </div>
-
-                    {/* Row 2: Phone + Email */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                            <input value={phone} onChange={e => setPhone(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                    </div>
-
-                    {/* Row 3: Department + Position + (Status if editing) */}
-                    <div className={`grid grid-cols-1 gap-4 ${staff ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                            <select value={departmentId} onChange={e => { setDepartmentId(e.target.value); setPositionId('') }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="">Select department…</option>
-                                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Position *</label>
-                            <select required value={positionId} onChange={e => setPositionId(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="">Select position…</option>
-                                {filteredPositions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-                        </div>
-                        {staff && (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                                <select value={status} onChange={e => setStatus(e.target.value as StaffStatus)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                    <option value="active">Active</option>
-                                    <option value="inactive">Inactive</option>
-                                    <option value="terminated">Terminated</option>
-                                </select>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Row 4: Employment + Salary */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
-                            <select value={employmentType} onChange={e => {
-                                const val = e.target.value as EmploymentType;
-                                setEmploymentType(val);
-                                if (val === 'part_time') setSalaryType('hourly');
-                                if (val === 'full_time') setSalaryType('fixed');
-                            }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="full_time">Full-time</option>
-                                <option value="part_time">Part-time</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Amount (VND) {employmentType === 'full_time' ? '/month' : '/hour'}
-                            </label>
-                            <input type="text" value={salaryAmount} onChange={e => {
-                                const val = e.target.value.replace(/\D/g, '')
-                                setSalaryAmount(val ? new Intl.NumberFormat('en-US').format(parseInt(val, 10)) : '')
-                            }}
-                                placeholder="0"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                    </div>
-
-                    {/* Row 5: Start Date + Probation */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Probation Time (Months)</label>
-                            <input type="number" min="0" step="1" value={probationMonths} onChange={e => setProbationMonths(e.target.value)}
-                                placeholder="e.g. 2"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Probation Salary (%)</label>
-                            <div className="relative">
-                                <input type="number" min="0" max="100" step="1" value={probationSalaryPct} onChange={e => setProbationSalaryPct(e.target.value)}
-                                    placeholder="100"
-                                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Branch Assignment */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Branch Assignment</label>
-                        <div className="flex flex-wrap gap-2">
-                            {branches.map(branch => {
-                                const isSelected = selectedBranches.includes(branch.id)
-                                return (
-                                    <button
-                                        type="button"
-                                        key={branch.id}
-                                        onClick={() => toggleBranch(branch.id)}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
-                                            isSelected 
-                                            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                                            : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        {branch.name}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                        {branches.length === 0 && (
-                            <p className="text-xs text-gray-400 mt-1">No branches found. Add branches in General Settings first.</p>
-                        )}
-                    </div>
-
-                    {/* Notes */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none" />
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-                        <button type="button" onClick={onClose}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                            Cancel
-                        </button>
-                        <button type="submit" disabled={saving || !lastName.trim() || !firstName.trim() || !positionId}
-                            className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                            {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                            {staff ? 'Update' : 'Create'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    )
-}
-
 /* ─── Delete Confirm ─── */
 
 function DeleteConfirm({ name, onConfirm, onCancel, deleting }: {
@@ -442,12 +106,28 @@ export default function StaffListPage() {
     const [departments, setDepartments] = useState<HRDepartment[]>([])
     const [positions, setPositions]     = useState<HRPosition[]>([])
     const [alertsConfig, setAlertsConfig] = useState<HRAlertSetting[]>([])
+    const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
     const router = useRouter()
 
     // Filters
     const [search, setSearch]         = useState('')
-    const [filterBranch, setFilterBranch]           = useState('all')
-    const [filterEmployment, setFilterEmployment]   = useState<'all' | EmploymentType>('all')
+
+    // Column Header state
+    type SortKey = 'name' | 'position' | 'branch' | 'type' | 'status' | 'salary' | 'alerts' | 'skill';
+    const [sortKey, setSortKey] = useState<SortKey>('name')
+    const [sortAsc, setSortAsc] = useState(true)
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+    const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
+
+    function applySort(k: SortKey, asc: boolean) {
+        setSortKey(k); setSortAsc(asc); setOpenMenu(null)
+    }
+    function applyColumnFilter(col: SortKey, vals: Set<string> | null) {
+        setColumnFilters(prev => ({ ...prev, [col]: vals })); setOpenMenu(null)
+    }
+    function clearColumnFilter(col: SortKey) {
+        setColumnFilters(prev => { const n = { ...prev }; delete n[col]; return n }); setOpenMenu(null)
+    }
 
     // Modal
     const [modalOpen, setModalOpen]   = useState(false)
@@ -458,15 +138,26 @@ export default function StaffListPage() {
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
 
+    // Performance Modal for Probation
+    const [perfModalOpen, setPerfModalOpen] = useState(false)
+    const [perfStaffId, setPerfStaffId] = useState<string | null>(null)
+    const [perfSaving, setPerfSaving] = useState(false)
+
+    // Rejection Modal
+    const [dismissalModalOpen, setDismissalModalOpen] = useState(false)
+    const [dismissalStaffId, setDismissalStaffId] = useState<string | null>(null)
+    const [dismissalSaving, setDismissalSaving] = useState(false)
+
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            const [branchRes, staffRes, deptRes, posRes, alertsRes] = await Promise.all([
+            const [branchRes, staffRes, deptRes, posRes, alertsRes, catRes] = await Promise.all([
                 supabase.from('provider_branches').select('id, name').order('name'),
-                supabase.from('hr_staff').select('*, hr_staff_branches(*), hr_staff_contracts(*)').eq('status', 'active').order('full_name'),
+                supabase.from('hr_staff').select('*, hr_staff_branches(*), hr_staff_contracts(*), hr_staff_performance(period)').eq('status', 'active').order('full_name'),
                 supabase.from('hr_departments').select('*').order('sort_order'),
                 supabase.from('hr_positions').select('*').order('sort_order'),
-                supabase.from('hr_alert_settings').select('*')
+                supabase.from('hr_alert_settings').select('*'),
+                supabase.from('hr_rating_categories').select('*').order('sort_order')
             ])
 
             if (branchRes.data) {
@@ -480,6 +171,7 @@ export default function StaffListPage() {
             if (deptRes.data) setDepartments(deptRes.data as HRDepartment[])
             if (posRes.data) setPositions(posRes.data as HRPosition[])
             if (alertsRes.data) setAlertsConfig(alertsRes.data as HRAlertSetting[])
+            if (catRes.data) setAllCategories(catRes.data as HRRatingCategory[])
         } catch (err) {
             console.error('Error fetching staff data:', err)
         }
@@ -489,35 +181,97 @@ export default function StaffListPage() {
     useEffect(() => { fetchAll() }, [fetchAll])
 
     /* ─── Filtered list ─── */
-    const filtered = useMemo(() => {
-        return staff.filter(s => {
-            if (search) {
-                const q = search.toLowerCase()
-                if (
-                    !s.full_name.toLowerCase().includes(q) &&
-                    !s.position.toLowerCase().includes(q) &&
-                    !(s.department || '').toLowerCase().includes(q)
-                ) return false
-            }
-            if (filterBranch !== 'all') {
-                const branchIds = s.hr_staff_branches?.map(b => b.branch_id) || []
-                if (!branchIds.includes(filterBranch)) return false
-            }
-            if (filterEmployment !== 'all' && s.employment_type !== filterEmployment) return false
-            return true
+    const displayValue = useCallback((s: HRStaffMember, key: SortKey): string | string[] => {
+        switch (key) {
+            case 'name': return s.full_name || '';
+            case 'position': return s.position || '';
+            case 'branch': return (s.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean);
+            case 'type': return EMPLOYMENT_LABEL[s.employment_type];
+            case 'status': return s.status;
+            case 'salary': return String(s.salary_amount);
+            case 'skill': return String(s.skill_level || 1);
+            default: return '';
+        }
+    }, [branchMap])
+
+    const columnValues = useMemo(() => {
+        const map: Record<string, string[]> = {}
+        const keys: SortKey[] = ['name', 'position', 'branch', 'type', 'status', 'salary', 'skill']
+        keys.forEach(k => {
+            const set = new Set<string>()
+            staff.forEach(s => { 
+                const v = displayValue(s, k)
+                if (Array.isArray(v)) {
+                    v.forEach(val => val && set.add(val))
+                } else {
+                    if (v) set.add(v)
+                }
+            })
+            map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
         })
-    }, [staff, search, filterBranch, filterEmployment])
+        return map
+    }, [staff, displayValue])
+
+    const filtered = useMemo(() => {
+        let out = staff.slice()
+        if (search) {
+            const q = search.toLowerCase()
+            out = out.filter(s =>
+                (s.full_name || '').toLowerCase().includes(q) ||
+                (s.position || '').toLowerCase().includes(q) ||
+                (s.department || '').toLowerCase().includes(q)
+            )
+        }
+        for (const [col, allowed] of Object.entries(columnFilters)) {
+            if (!allowed) continue
+            out = out.filter(s => {
+                const v = displayValue(s, col as SortKey)
+                if (Array.isArray(v)) {
+                    if (v.length === 0) return allowed.has('');
+                    return v.some(val => allowed.has(val))
+                } else {
+                    return allowed.has(v)
+                }
+            })
+        }
+        out.sort((a, b) => {
+            let av: any, bv: any
+            switch(sortKey) {
+                case 'name': av = a.full_name; bv = b.full_name; break;
+                case 'position': av = a.position; bv = b.position; break;
+                case 'type': av = EMPLOYMENT_LABEL[a.employment_type]; bv = EMPLOYMENT_LABEL[b.employment_type]; break;
+                case 'status': av = a.status; bv = b.status; break;
+                case 'salary': av = a.salary_amount; bv = b.salary_amount; break;
+                case 'skill': av = a.skill_level || 1; bv = b.skill_level || 1; break;
+                case 'branch': 
+                    av = (a.hr_staff_branches || []).map(br => branchMap[br.branch_id]).filter(Boolean).join(', ');
+                    bv = (b.hr_staff_branches || []).map(br => branchMap[br.branch_id]).filter(Boolean).join(', ');
+                    break;
+                default: av = ''; bv = '';
+            }
+            let cmp: number
+            if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv
+            else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
+            return sortAsc ? cmp : -cmp
+        })
+        return out
+    }, [staff, search, sortKey, sortAsc, columnFilters, displayValue, branchMap])
+
 
     /* ─── Summary cards ─── */
-    const totalActive   = staff.length
-    const totalFT       = staff.filter(s => s.employment_type === 'full_time').length
-    const totalPT       = staff.filter(s => s.employment_type === 'part_time').length
+    const filteredFullTime = filtered.filter(s => s.employment_type === 'full_time')
+    const totalFT       = filteredFullTime.length
+    const totalPT       = filtered.filter(s => s.employment_type === 'part_time').length
+    const totalOS       = filtered.filter(s => s.employment_type === 'outsourced').length
+    const totalFTSalary = filteredFullTime.reduce((sum, s) => sum + Number(s.salary_amount || 0), 0)
+
+    const isFiltered = filtered.length !== staff.length;
 
     const summaryCards = [
-        { label: 'Total Staff',   value: staff.length,  icon: Users,     color: 'text-blue-600',    bg: 'bg-blue-50' },
-        { label: 'Active',        value: totalActive,    icon: Users,     color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { label: 'Full-time',     value: totalFT,        icon: Briefcase, color: 'text-indigo-600',  bg: 'bg-indigo-50' },
-        { label: 'Part-time',     value: totalPT,        icon: Clock,     color: 'text-amber-600',   bg: 'bg-amber-50' },
+        { label: isFiltered ? 'Staff (Filtered)' : 'Total Staff',   value: filtered.length,  icon: Users,     color: 'text-blue-600',    bg: 'bg-blue-50' },
+        { label: isFiltered ? 'FT Salary (Filtered)' : 'Total FT Salary',value: `${fmt(totalFTSalary)} VND`, icon: Briefcase, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { label: isFiltered ? 'Full-time' : 'Full-time',     value: totalFT,        icon: Briefcase, color: 'text-indigo-600',  bg: 'bg-indigo-50' },
+        { label: isFiltered ? 'PT/Outsourced' : 'PT/Outsourced',     value: totalPT + totalOS,        icon: Clock,     color: 'text-amber-600',   bg: 'bg-amber-50' },
     ]
 
     /* ─── Save handler ─── */
@@ -582,6 +336,121 @@ export default function StaffListPage() {
         setDeleteLoading(false)
     }
 
+    /* ─── Performance Review (Probation) ─── */
+    const handleSavePerformance = async (data: any, decision?: 'confirm' | 'reject') => {
+        setPerfSaving(true)
+        try {
+            const { error } = await supabase.from('hr_staff_performance').insert([data])
+            if (error) throw error
+            
+            if (decision === 'reject') {
+                setPerfModalOpen(false)
+                setDismissalStaffId(data.staff_id)
+                setDismissalModalOpen(true)
+            } else {
+                setPerfModalOpen(false)
+                await fetchAll()
+            }
+        } catch (err) {
+            console.error(err)
+            alert('Failed to save probation review')
+        }
+        setPerfSaving(false)
+    }
+
+    const handleResign = async (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation' | 'rejection', reason: string, notes: string }) => {
+        setDismissalSaving(true)
+        try {
+            const { error: histErr } = await supabase.from('hr_staff_role_history').insert([{
+                staff_id: data.staffId,
+                effective_date: data.effectiveDate,
+                reason: `[${data.type.toUpperCase()}] ${data.reason}`,
+                notes: data.notes,
+                created_by: null // Or loggedUserName
+            }])
+            if (histErr) throw histErr
+            
+            const { error: staffErr } = await supabase.from('hr_staff').update({ status: 'terminated' }).eq('id', data.staffId)
+            if (staffErr) throw staffErr
+            
+            setDismissalModalOpen(false)
+            await fetchAll()
+        } catch (err: any) {
+            console.error(err)
+            alert('Failed to record rejection: ' + (err.message || JSON.stringify(err)))
+        }
+        setDismissalSaving(false)
+    }
+
+    /* ─── Export to Excel ─── */
+    const handleExport = async () => {
+        const ExcelJS = (await import('exceljs')).default
+
+        const workbook = new ExcelJS.Workbook()
+        const ftSheet = workbook.addWorksheet('Full-Time')
+        const ptSheet = workbook.addWorksheet('Part-Time')
+        const osSheet = workbook.addWorksheet('Outsourced')
+
+        const baseColumns = [
+            { header: 'Name', key: 'name', width: 25 },
+            { header: 'Department', key: 'dept', width: 20 },
+            { header: 'Position', key: 'pos', width: 20 },
+            { header: 'Branch', key: 'branch', width: 30 },
+            { header: 'Type', key: 'type', width: 15 },
+            { header: 'Status', key: 'status', width: 15 },
+        ]
+
+        ftSheet.columns = [
+            ...baseColumns,
+            { header: 'Salary (VND/Month)', key: 'salary', width: 20, style: { numFmt: '#,##0' } }
+        ]
+        
+        ptSheet.columns = [
+            ...baseColumns,
+            { header: 'Salary (VND/Hour)', key: 'salary', width: 20, style: { numFmt: '#,##0' } }
+        ]
+        
+        osSheet.columns = [
+            ...baseColumns,
+            { header: 'Salary (VND/Hour)', key: 'salary', width: 20, style: { numFmt: '#,##0' } }
+        ]
+
+        const mapStaffRow = (s: HRStaffMember) => ({
+            name: s.full_name,
+            dept: s.department || '',
+            pos: s.position || '',
+            branch: (s.hr_staff_branches || []).map(br => branchMap[br.branch_id]).filter(Boolean).join(', '),
+            type: EMPLOYMENT_LABEL[s.employment_type],
+            status: s.status.toUpperCase(),
+            salary: Number(s.salary_amount || 0)
+        })
+
+        const ftStaff = filtered.filter(s => s.employment_type === 'full_time')
+        const ptStaff = filtered.filter(s => s.employment_type === 'part_time')
+        const osStaff = filtered.filter(s => s.employment_type === 'outsourced')
+
+        ftStaff.forEach(s => ftSheet.addRow(mapStaffRow(s)))
+        ptStaff.forEach(s => ptSheet.addRow(mapStaffRow(s)))
+        osStaff.forEach(s => osSheet.addRow(mapStaffRow(s)))
+
+        // Formatting headers
+        ;[ftSheet, ptSheet, osSheet].forEach(sheet => {
+            sheet.getRow(1).font = { bold: true }
+            sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } }
+        })
+
+        // Add total to Full-Time sheet
+        const totalFTSalary = ftStaff.reduce((sum, s) => sum + Number(s.salary_amount || 0), 0)
+        const totalRow = ftSheet.addRow({
+            name: 'TOTAL',
+            salary: totalFTSalary
+        })
+        totalRow.font = { bold: true }
+
+        const buffer = await workbook.xlsx.writeBuffer()
+        saveAs(new Blob([buffer]), `Staff_Export_${new Date().toISOString().split('T')[0]}.xlsx`)
+    }
+
     /* ─── Render ─── */
     if (loading) {
         return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
@@ -596,13 +465,22 @@ export default function StaffListPage() {
                         <h1 className="text-2xl font-bold text-white">Staff Management</h1>
                         <p className="text-sm text-slate-400 mt-1">Manage staff members, positions, salaries and branch assignments.</p>
                     </div>
-                    <button
-                        onClick={() => { setEditingStaff(null); setModalOpen(true) }}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg shrink-0"
-                    >
-                        <UserPlus className="w-4 h-4" />
-                        Add Staff
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            onClick={handleExport}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 border border-white/10 text-sm font-medium text-white hover:bg-slate-700 transition shadow hover:shadow-lg"
+                        >
+                            <FileDown className="w-4 h-4" />
+                            Export
+                        </button>
+                        <button
+                            onClick={() => { setEditingStaff(null); setModalOpen(true) }}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg"
+                        >
+                            <UserPlus className="w-4 h-4" />
+                            Add Staff
+                        </button>
+                    </div>
                 </div>
 
                 {/* Summary Cards */}
@@ -639,21 +517,6 @@ export default function StaffListPage() {
                         )}
                     </div>
 
-                    {/* Branch filter */}
-                    <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)}
-                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                        <option value="all">All Branches</option>
-                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-
-                    {/* Employment type filter */}
-                    <select value={filterEmployment} onChange={e => setFilterEmployment(e.target.value as any)}
-                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                        <option value="all">All Types</option>
-                        <option value="full_time">Full-time</option>
-                        <option value="part_time">Part-time</option>
-                    </select>
-
                     <span className="text-xs text-slate-500 ml-auto mr-2">{filtered.length} of {staff.length} shown</span>
                     <button
                         onClick={() => router.push('/human-resources/management/staff-archive')}
@@ -672,12 +535,25 @@ export default function StaffListPage() {
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-200">
                                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">#</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Name</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Position</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Branch(es)</th>
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Type</th>
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Status</th>
-                                    <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Salary (VND)</th>
+                                    {([
+                                        ['name', 'Name'], 
+                                        ['position', 'Position'], 
+                                        ['branch', 'Branch(es)'], 
+                                        ['type', 'Type', true], 
+                                        ['status', 'Status', true], 
+                                        ['skill', 'Skill', true],
+                                        ['salary', 'Salary (VND)', false, true]
+                                    ] as [SortKey, string, boolean?, boolean?][]).map(([k, lbl, center, right]) => (
+                                        <ColumnHeader
+                                            key={k} colKey={k} label={lbl}
+                                            sortKey={sortKey} sortAsc={sortAsc} onSort={applySort}
+                                            values={columnValues[k] || []} activeFilter={columnFilters[k] || null}
+                                            onFilter={(s) => applyColumnFilter(k, s)} onClear={() => clearColumnFilter(k)}
+                                            open={openMenu === k} onToggle={() => setOpenMenu(openMenu === k ? null : k)} onClose={() => setOpenMenu(null)}
+                                            dict={{ sortAsc: 'Sort Ascending', sortDesc: 'Sort Descending', selectAll: 'Select All', deselectAll: 'Deselect All', filterPlaceholder: 'Filter...', clearFilters: 'Clear Filters' }}
+                                            center={center} right={right} className="text-xs uppercase tracking-wider text-gray-500"
+                                        />
+                                    ))}
                                     <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Alerts</th>
                                     <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Actions</th>
                                 </tr>
@@ -721,15 +597,40 @@ export default function StaffListPage() {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-center whitespace-nowrap">
-                                                {s.probation_end_date && new Date(s.probation_end_date).getTime() > Date.now() ? (
-                                                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
-                                                        Probation
-                                                    </span>
-                                                ) : (
+                                                {s.probation_end_date && new Date(s.probation_end_date).getTime() > Date.now() ? (() => {
+                                                    const perfs = (s as any).hr_staff_performance;
+                                                    const isConfirmed = Array.isArray(perfs) && perfs.some((p: any) => p && p.period === 'Probation Confirmed');
+                                                    return (
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                setPerfStaffId(s.id)
+                                                                setPerfModalOpen(true)
+                                                            }}
+                                                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors cursor-pointer ${
+                                                                isConfirmed 
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                                                    : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
+                                                            }`}
+                                                        >
+                                                            {isConfirmed ? 'Probation Confirmed' : 'Probation'}
+                                                        </button>
+                                                    )
+                                                })() : (
                                                     <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                                                         Active
                                                     </span>
                                                 )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                <div className="flex items-center justify-center gap-0.5" title={`Skill Level: ${s.skill_level || 1}`}>
+                                                    {Array.from({ length: 5 }).map((_, i) => (
+                                                        <Star 
+                                                            key={i} 
+                                                            className={`w-3.5 h-3.5 ${i < (s.skill_level || 1) ? 'text-indigo-500 fill-indigo-500' : 'text-gray-200'}`} 
+                                                        />
+                                                    ))}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3 text-right text-sm font-mono whitespace-nowrap">
                                                 <span className="text-gray-900 font-semibold">{fmt(s.salary_amount)}</span>
@@ -884,6 +785,200 @@ export default function StaffListPage() {
                     deleting={deleteLoading}
                 />
             )}
+
+            <PerformanceModal 
+                open={perfModalOpen} 
+                onClose={() => { setPerfModalOpen(false); setPerfStaffId(null) }}
+                onSave={handleSavePerformance} 
+                review={null} 
+                staffList={staff} 
+                allCategories={allCategories} 
+                saving={perfSaving} 
+                preselectedStaffId={perfStaffId} 
+                isProbation={true}
+            />
+
+            <SalaryModal
+                open={dismissalModalOpen}
+                onClose={() => { setDismissalModalOpen(false); setDismissalStaffId(null) }}
+                onSave={async () => {}}
+                onResign={handleResign}
+                entry={null}
+                staffList={staff}
+                departments={departments}
+                positions={positions}
+                saving={dismissalSaving}
+                loggedUserName={""}
+                preselectedStaffId={dismissalStaffId || ''}
+                isProbationRejection={true}
+            />
         </div>
+    )
+}
+
+/* --- Column Header Component --- */
+type ColumnHeaderProps = {
+    colKey: string
+    label: string
+    sortKey: string
+    sortAsc: boolean
+    onSort: (k: any, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (s: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+    right?: boolean
+    center?: boolean
+    className?: string
+}
+
+function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '' }: ColumnHeaderProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+        ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+        : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) { filteredValues.forEach(v => next.delete(v)) }
+        else { filteredValues.forEach(v => next.add(v)) }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        let finalChecked = localChecked;
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)));
+        }
+        if (finalChecked.size >= values.length) onFilter(null); 
+        else onFilter(finalChecked);
+    }
+
+    return (
+        <th className={`px-4 py-3 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
+            <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+                <span className="select-none">{label}</span>
+                {isActive && (
+                    sortAsc
+                        ? <ArrowUp className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        : <ArrowDown className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                )}
+                {hasFilter && <Filter className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onToggle() }}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+                    aria-label={`Menu ${label}`}
+                >
+                    <MoreVertical className="w-4 h-4 text-gray-500" />
+                </button>
+            </div>
+
+            {open && dropdownStyle && (
+                <div
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case"
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button
+                            onClick={() => onSort(colKey, true)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowUp className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button
+                            onClick={() => onSort(colKey, false)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowDown className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input
+                            type="text"
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                            placeholder={dict.filterPlaceholder}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+                        <button
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v || '(Empty)'}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+                        <button onClick={onClear} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium">
+                            {dict.clearFilters}
+                        </button>
+                        <button onClick={handleApply} className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
+        </th>
     )
 }

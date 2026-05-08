@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { CheckCircleIcon, PlusIcon, Cog6ToothIcon, XMarkIcon, TrashIcon, Squares2X2Icon, WrenchScrewdriverIcon, BookOpenIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
+import React, { useEffect, useState, Fragment } from 'react'
+import { CheckCircleIcon, PlusIcon, Cog6ToothIcon, XMarkIcon, TrashIcon, Squares2X2Icon, WrenchScrewdriverIcon, BookOpenIcon, ClipboardDocumentListIcon, EnvelopeIcon, PencilSquareIcon, UserIcon, ShieldCheckIcon, BuildingStorefrontIcon } from '@heroicons/react/24/outline'
+import { CheckCircleIcon as CheckCircleSolid, XCircleIcon as XCircleSolid } from '@heroicons/react/24/solid'
 import { t, type Lang } from '@/lib/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
 import { supabase } from '@/lib/supabase_shim'
@@ -44,7 +45,7 @@ type AppSettingsRow = AppSettingsUI & { id: 'singleton'; updated_at?: string | n
 const TBL_APP = 'app_settings'
 
 const TBL_ACCOUNTS = 'app_accounts'
-type AccountRole = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor'
+type AccountRole = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor' | 'accountant'
 type AccountRow = {
   id: string
   user_id?: string | null
@@ -54,6 +55,7 @@ type AccountRow = {
   position: string | null
   role: AccountRole
   is_active: boolean
+  branches?: string[]
   created_at: string
   first_login_at?: string | null
 }
@@ -111,13 +113,13 @@ function Modal({ open, title, children, onClose, width = 'max-w-xl' }: {
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className={`relative w-full ${width} bg-white rounded-2xl shadow-lg p-4`}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-base font-semibold text-gray-900">{title}</div>
-          <button onClick={onClose} className="w-9 h-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100">
-            <XMarkIcon className="w-5 h-5 text-gray-600" />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
+      <div className={`relative w-full ${width} bg-white rounded-3xl shadow-2xl ring-1 ring-black/5 p-6 sm:p-8 transform transition-all`}>
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+          <h3 className="text-xl font-bold text-slate-800 tracking-tight">{title}</h3>
+          <button onClick={onClose} className="w-9 h-9 inline-flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
         {children}
@@ -458,6 +460,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   const [editOpen, setEditOpen] = useState(false)
   const [accLoading, setAccLoading] = useState(false)
   const [acc, setAcc] = useState<AccountRow[]>([])
+  const [providerBranches, setProviderBranches] = useState<any[]>([])
   const [accMsg, setAccMsg] = useState<string | null>(null)
   const [accMsgKind, setAccMsgKind] = useState<'ok' | 'err'>('err')
   const showAccOk = (msg: string) => { setAccMsg(msg); setAccMsgKind('ok'); }
@@ -480,14 +483,14 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
   const canSeeAccounts = myRole === 'owner' || myRole === 'admin'
 
-  const [formAdd, setFormAdd] = useState<{ email: string; phone: string; name: string; position: string; role: AccountRole; is_active: boolean; }>(
-    { email: '', phone: '', name: '', position: '', role: 'staff', is_active: true }
+  const [formAdd, setFormAdd] = useState<{ email: string; phone: string; name: string; position: string; role: AccountRole; is_active: boolean; branches: string[]; cityFilter: string }>(
+    { email: '', phone: '', name: '', position: '', role: 'staff', is_active: true, branches: [], cityFilter: '' }
   )
 
-  const [formEdit, setFormEdit] = useState<{ id: string; email: string; phone: string; name: string; position: string; role: AccountRole; is_active: boolean } | null>(null)
+  const [formEdit, setFormEdit] = useState<{ id: string; email: string; phone: string; name: string; position: string; role: AccountRole; is_active: boolean; branches: string[]; cityFilter: string } | null>(null)
 
   function resetAddForm() {
-    setFormAdd({ email: '', phone: '', name: '', position: '', role: 'staff', is_active: true })
+    setFormAdd({ email: '', phone: '', name: '', position: '', role: 'staff', is_active: true, branches: [], cityFilter: '' })
     setAccMsg(null)
   }
 
@@ -557,18 +560,22 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
   async function fetchAccounts() {
     setAccLoading(true)
-    const { data, error } = await supabase.from(TBL_ACCOUNTS).select('*').order('created_at', { ascending: true })
-    if (error) showAccErr(`Accounts load error: ${error.message}`); else setAccMsg(null)
-    setAcc(data || [])
+    const [accRes, pbRes] = await Promise.all([
+      supabase.from(TBL_ACCOUNTS).select('*').order('created_at', { ascending: true }),
+      supabase.from('provider_branches').select('id, name, city').order('name')
+    ])
+    if (accRes.error) showAccErr(`Accounts load error: ${accRes.error.message}`); else setAccMsg(null)
+    setAcc(accRes.data || [])
+    if (pbRes.data) setProviderBranches(pbRes.data)
     setAccLoading(false)
   }
 
-  useEffect(() => { if (manageOpen) { (async () => { await ensureCurrentUserAccount(); await fetchAccounts() })() } }, [manageOpen])
+  useEffect(() => { if (manageOpen || addOpen) { (async () => { await ensureCurrentUserAccount(); await fetchAccounts() })() } }, [manageOpen, addOpen])
 
   async function addAccount(): Promise<AccountRow | null> {
     const email = formAdd.email.trim().toLowerCase()
     if (!isValidEmail(email)) { showAccErr(t('InvalidEmail', lang) || 'Invalid email'); return null }
-    const roleToSet: AccountRole = myRole === 'admin' ? (formAdd.role === 'manager' ? 'manager' : formAdd.role === 'sale advisor' ? 'sale advisor' : 'staff') : formAdd.role
+    const roleToSet: AccountRole = myRole === 'admin' ? (formAdd.role === 'manager' ? 'manager' : formAdd.role === 'sale advisor' ? 'sale advisor' : formAdd.role === 'accountant' ? 'accountant' : 'staff') : formAdd.role
     const res = await authFetch('/api/users/admin-upsert', {
       method: 'POST',
       body: JSON.stringify({
@@ -578,6 +585,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         position: formAdd.position || null,
         role: roleToSet,
         is_active: formAdd.is_active,
+        branches: formAdd.branches,
       }),
     })
     const ct = res.headers.get('content-type') || ''
@@ -590,13 +598,13 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
   function openEdit(u: AccountRow) {
     setSelected(u)
-    setFormEdit({ id: u.id, email: u.email, phone: u.phone || '', name: u.name || '', position: u.position || '', role: u.role, is_active: u.is_active })
+    setFormEdit({ id: u.id, email: u.email, phone: u.phone || '', name: u.name || '', position: u.position || '', role: u.role, is_active: u.is_active, branches: u.branches || [], cityFilter: '' })
     setEditOpen(true)
   }
 
   async function saveEdit() {
     if (!formEdit) return
-    const intendedRole: AccountRole = myRole === 'admin' ? (formEdit.role === 'manager' ? 'manager' : formEdit.role === 'sale advisor' ? 'sale advisor' : 'staff') : formEdit.role
+    const intendedRole: AccountRole = myRole === 'admin' ? (formEdit.role === 'manager' ? 'manager' : formEdit.role === 'sale advisor' ? 'sale advisor' : formEdit.role === 'accountant' ? 'accountant' : 'staff') : formEdit.role
     const res = await authFetch('/api/users/admin-upsert', {
       method: 'POST',
       body: JSON.stringify({
@@ -607,6 +615,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         position: formEdit.position || null,
         role: intendedRole,
         is_active: formEdit.is_active,
+        branches: formEdit.branches,
       }),
     })
     const ct = res.headers.get('content-type') || ''
@@ -636,7 +645,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   async function deleteAccount(id: string) {
     const u = acc.find(x => x.id === id)
     if (!u) return
-    const canDeleteRow = myRole === 'owner' ? true : myRole === 'admin' ? (u.role === 'staff' || u.role === 'manager' || u.role === 'sale advisor') : false
+    const canDeleteRow = myRole === 'owner' ? true : myRole === 'admin' ? (u.role === 'staff' || u.role === 'manager' || u.role === 'sale advisor' || u.role === 'accountant') : false
     if (!canDeleteRow) { showAccErr(t('NotAllowed', lang) || 'Not allowed'); return }
     const old = acc
     setAcc(list => list.filter(x => x.id !== id))
@@ -1222,61 +1231,149 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </Modal>
 
       {/* Accounts: Add */}
-      <Modal open={addOpen} title={t('NewAccount', lang) || 'New account'} onClose={() => setAddOpen(false)} width="max-w-lg">
-        <div className="space-y-3 text-gray-800">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-sm">{t('Email', lang) || 'Email'}</label>
-              <input type="email" value={formAdd.email}
-                onChange={e => setFormAdd(v => ({ ...v, email: e.target.value }))}
-                className="w-full border rounded-lg px-2 py-1 h-9" />
+      <Modal open={addOpen} title={t('NewAccount', lang) || 'New account'} onClose={() => setAddOpen(false)} width="max-w-3xl">
+        <div className="space-y-6 text-gray-800 pb-2">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* General Info Card */}
+            <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 space-y-4 shadow-sm">
+              <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-2">
+                <UserIcon className="w-5 h-5 text-blue-500" />
+                {t('GeneralInfo', lang) || 'General Information'}
+              </h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Email', lang) || 'Email'}</label>
+                  <input type="email" value={formAdd.email}
+                    onChange={e => setFormAdd(v => ({ ...v, email: e.target.value }))}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="user@company.com" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Name', lang) || 'Name'}</label>
+                  <input type="text" value={formAdd.name}
+                    onChange={e => setFormAdd(v => ({ ...v, name: e.target.value }))}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="John Doe" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Phone', lang) || 'Phone'}</label>
+                  <input type="text" value={formAdd.phone}
+                    onChange={e => setFormAdd(v => ({ ...v, phone: e.target.value }))}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="+1 234 567 890" />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-sm">{t('Phone', lang) || 'Phone'}</label>
-              <input type="text" value={formAdd.phone}
-                onChange={e => setFormAdd(v => ({ ...v, phone: e.target.value }))}
-                className="w-full border rounded-lg px-2 py-1 h-9" />
-            </div>
-            <div>
-              <label className="text-sm">{t('Name', lang) || 'Name'}</label>
-              <input type="text" value={formAdd.name}
-                onChange={e => setFormAdd(v => ({ ...v, name: e.target.value }))}
-                className="w-full border rounded-lg px-2 py-1 h-9" />
-            </div>
-            <div>
-              <label className="text-sm">{t('Position', lang) || 'Position'}</label>
-              <input type="text" value={formAdd.position}
-                onChange={e => setFormAdd(v => ({ ...v, position: e.target.value }))}
-                className="w-full border rounded-lg px-2 py-1 h-9" />
-            </div>
-            <div>
-              <label className="text-sm">{t('Role', lang) || 'Role'}</label>
-              <select
-                value={formAdd.role}
-                onChange={e => setFormAdd(v => ({ ...v, role: e.target.value as AccountRole }))}
-                className="w-full border rounded-lg px-2 py-1 h-10 bg-white">
-                <option value="staff">staff</option>
-                <option value="sale advisor">Sale Advisor</option>
-                <option value="manager">manager</option>
-                <option value="admin" disabled={myRole === 'admin'}>admin</option>
-                <option value="owner" disabled={myRole !== 'owner'}>owner</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={formAdd.is_active}
-                  onChange={e => setFormAdd(v => ({ ...v, is_active: e.target.checked }))} />
-                {t('Active', lang) || 'Active'}
-              </label>
+
+            {/* Role & Access Card */}
+            <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 space-y-4 shadow-sm flex flex-col justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-2">
+                  <ShieldCheckIcon className="w-5 h-5 text-blue-500" />
+                  {t('RoleAndAccess', lang) || 'Role & Access'}
+                </h4>
+                <div className="space-y-4 mt-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Role', lang) || 'Role'}</label>
+                    <select
+                      value={formAdd.role}
+                      onChange={e => {
+                        const newRole = e.target.value as AccountRole;
+                        setFormAdd(v => {
+                          let newBranches = v.branches;
+                          if (newRole === 'admin' || newRole === 'owner') {
+                            newBranches = providerBranches.map(b => b.id);
+                          } else if (v.role === 'admin' || v.role === 'owner') {
+                            newBranches = [];
+                          }
+                          return { ...v, role: newRole, branches: newBranches };
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                      <option value="staff">Staff</option>
+                      <option value="sale advisor">Sale Advisor</option>
+                      <option value="manager">Manager</option>
+                      <option value="accountant">Accountant</option>
+                      <option value="admin" disabled={myRole === 'admin'}>Admin</option>
+                      <option value="owner" disabled={myRole !== 'owner'}>Owner</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Position', lang) || 'Position Title'}</label>
+                    <input type="text" value={formAdd.position}
+                      onChange={e => setFormAdd(v => ({ ...v, position: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="e.g. Head Chef" />
+                  </div>
+                </div>
+              </div>
+              <div className="pt-4 border-t border-slate-200/60 mt-4">
+                <label className="flex items-center gap-3 cursor-pointer group p-2 -m-2 rounded-lg hover:bg-white transition-colors">
+                  <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formAdd.is_active ? 'bg-blue-600' : 'bg-gray-200'}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formAdd.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </div>
+                  <input type="checkbox" className="hidden" checked={formAdd.is_active} onChange={e => setFormAdd(v => ({ ...v, is_active: e.target.checked }))} />
+                  <div>
+                    <span className="text-sm font-semibold text-gray-900 block">{t('AccountActive', lang) || 'Account is Active'}</span>
+                    <span className="text-xs text-gray-500">Allow user to log in</span>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
 
+          {/* Branch Selection Card */}
+          <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <BuildingStorefrontIcon className="w-5 h-5 text-blue-500" />
+                {t('BranchAssignments', lang) || 'Branch Assignments'}
+              </h4>
+              <select 
+                value={formAdd.cityFilter} 
+                onChange={e => setFormAdd(v => ({ ...v, cityFilter: e.target.value }))}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-shadow shadow-sm"
+              >
+                <option value="">{t('AllCities', lang) || 'All Cities'}</option>
+                {Array.from(new Set(providerBranches.map(b => b.city).filter(Boolean))).sort().map(city => (
+                  <option key={city as string} value={city as string}>{city as string}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              {providerBranches.filter(b => !formAdd.cityFilter || b.city === formAdd.cityFilter).map(branch => {
+                const isSelected = formAdd.branches.includes(branch.id)
+                return (
+                  <button
+                    key={branch.id}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) setFormAdd(v => ({ ...v, branches: v.branches.filter(id => id !== branch.id) }))
+                      else setFormAdd(v => ({ ...v, branches: [...v.branches, branch.id] }))
+                    }}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                      isSelected 
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20' 
+                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 shadow-sm'
+                    }`}
+                  >
+                    {branch.name}
+                  </button>
+                )
+              })}
+            </div>
+            {providerBranches.length === 0 && (
+              <div className="text-sm text-gray-500 italic py-2">No branches available.</div>
+            )}
+          </div>
+
           {accMsg && (
-            <div className={`text-sm ${accMsgKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{accMsg}</div>
+            <div className={`text-sm p-4 rounded-xl font-medium flex items-center gap-2 ${accMsgKind === 'ok' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+              {accMsgKind === 'ok' ? <CheckCircleIcon className="w-5 h-5" /> : <XMarkIcon className="w-5 h-5" />}
+              {accMsg}
+            </div>
           )}
 
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setAddOpen(false)} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
+          <div className="pt-2 flex items-center justify-end gap-3">
+            <button type="button" onClick={() => setAddOpen(false)} className="px-6 h-11 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors">
               {t('Cancel', lang) || 'Cancel'}
             </button>
             <button
@@ -1291,17 +1388,18 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                   setAddOpen(false)
                 }
               }}
-              className={`px-3 h-9 rounded-lg bg-blue-600 text-white ${creating ? 'opacity-60' : 'hover:opacity-90'}`}
+              className={`px-8 h-11 rounded-xl bg-blue-600 text-sm font-bold text-white shadow-sm transition-all flex items-center gap-2 ${creating ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700 hover:-translate-y-0.5 hover:shadow-md'}`}
               disabled={creating}
             >
-              {creating ? (t('Loading', lang) || 'Loading…') : (t('Save', lang) || 'Save')}
+              {creating && <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>}
+              {creating ? (t('Loading', lang) || 'Loading…') : (t('SaveAccount', lang) || 'Create Account')}
             </button>
           </div>
         </div>
       </Modal>
 
       {/* Accounts: Manage */}
-      <Modal open={manageOpen} title={t('ManageAccounts', lang) || 'Manage accounts'} onClose={() => setManageOpen(false)} width="max-w-3xl">
+      <Modal open={manageOpen} title={t('ManageAccounts', lang) || 'Manage accounts'} onClose={() => setManageOpen(false)} width="max-w-5xl">
         <div className="space-y-3 text-gray-800">
           {accMsg && (
             <div className={`text-sm ${accMsgKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{accMsg}</div>
@@ -1323,59 +1421,108 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                   <tr><td className="p-3" colSpan={6}>{t('Loading', lang) || 'Loading…'}</td></tr>
                 ) : acc.length === 0 ? (
                   <tr><td className="p-3" colSpan={6}>{t('NoData', lang) || 'No data'}</td></tr>
-                ) : acc.map(u => (
-                  <tr key={u.id} className="border-t align-middle">
+                ) : acc.map(u => {
+                  const hasAllBranches = u.role === 'owner' || u.role === 'admin' || (u.branches || []).length >= providerBranches.length;
+                  return (
+                  <Fragment key={u.id}>
+                    <tr className="border-t align-middle">
                     <td className="p-2">{u.email}</td>
                     <td className="p-2">{u.name || '-'}</td>
-                    <td className="p-2">{u.role}</td>
-                    <td className="p-2 text-center">
-                      {u.is_active ? (
-                        <span className="text-green-600 font-bold">✓</span>
-                      ) : (
-                        <span className="text-red-600 font-bold">✗</span>
-                      )}
+                    <td className="p-2">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                        u.role === 'owner' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                        u.role === 'admin' ? 'bg-rose-100 text-rose-700 border-rose-200' :
+                        u.role === 'manager' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                        u.role === 'accountant' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                        u.role === 'sale advisor' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' :
+                        'bg-gray-100 text-gray-700 border-gray-200'
+                      }`}>
+                        {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
+                      </span>
                     </td>
-                    <td className="p-2 text-center">
-                      {u.first_login_at ? (
-                        <span className="text-green-600 font-bold">✓</span>
-                      ) : (
-                        <span className="text-red-600 font-bold">✗</span>
-                      )}
+                    <td className="p-2">
+                      <div className="flex justify-center">
+                        {u.is_active ? (
+                          <CheckCircleSolid className="w-6 h-6 text-emerald-400" />
+                        ) : (
+                          <XCircleSolid className="w-6 h-6 text-rose-400" />
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      <div className="flex justify-center">
+                        {u.first_login_at ? (
+                          <CheckCircleSolid className="w-6 h-6 text-emerald-400" />
+                        ) : (
+                          <XCircleSolid className="w-6 h-6 text-rose-400" />
+                        )}
+                      </div>
                     </td>
                     <td className="p-2 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center gap-2">
+                      <div className="inline-flex items-center gap-1">
                         <button
                           onClick={() => sendAuthLinkForRow(u)}
-                          className="px-3 h-8 rounded-lg border hover:bg-gray-50 leading-none whitespace-nowrap"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center border text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
                           disabled={!!sendingRow[u.id]}
                           title={t('SendAccessLink', lang) || 'Send access link'}
                         >
-                          {sendingRow[u.id]
-                            ? (t('Loading', lang) || 'Loading…')
-                            : (t('SendLink', lang) || 'Send link')}
+                          {sendingRow[u.id] ? (
+                            <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            <EnvelopeIcon className="w-4 h-4" />
+                          )}
                         </button>
                         <button
                           onClick={() => openEdit(u)}
-                          className="px-3 h-8 rounded-lg border hover:bg-gray-50 leading-none whitespace-nowrap"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center border text-gray-600 hover:bg-gray-100 transition-colors"
+                          title={t('Edit', lang) || 'Edit'}
                         >
-                          {t('Edit', lang) || 'Edit'}
+                          <PencilSquareIcon className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => requestDelete(u)}
-                          className="px-3 h-8 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 leading-none whitespace-nowrap"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center border text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors"
+                          title={t('Delete', lang) || 'Delete'}
                         >
-                          {t('Delete', lang) || 'Delete'}
+                          <TrashIcon className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  <tr>
+                    <td colSpan={6} className="px-2 pb-3 pt-0 text-xs text-gray-500">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium mr-1">{t('Branches', lang) || 'Branches'}:</span>
+                        {hasAllBranches ? (
+                          <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-medium border border-blue-200">
+                            {t('AllBranches', lang) || 'All Branches'}
+                          </span>
+                        ) : (u.branches || []).length > 0 ? (
+                          (u.branches || []).map(bId => {
+                            const b = providerBranches.find(x => x.id === bId)
+                            return b ? (
+                              <span key={bId} className="px-1.5 py-0.5 bg-gray-100 rounded border text-gray-600">
+                                {b.name}
+                              </span>
+                            ) : null
+                          })
+                        ) : (
+                          <span className="italic text-gray-400">{t('NoBranches', lang) || 'No branches assigned'}</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  </Fragment>
+                )})}
               </tbody>
             </table>
           </div>
 
           <div className="pt-2 flex items-center justify-end">
-            <button type="button" onClick={() => setManageOpen(false)} className="px-4 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
+            <button type="button" onClick={() => setManageOpen(false)} className="px-6 h-10 rounded-xl bg-blue-600 font-medium text-white shadow hover:bg-blue-700 hover:shadow-md transition-all active:scale-95">
               {t('Close', lang) || 'Close'}
             </button>
           </div>
@@ -1383,65 +1530,154 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       </Modal>
 
       {/* Accounts: Edit */}
-      <Modal open={editOpen && !!formEdit} title={t('EditAccount', lang) || 'Edit account'} onClose={() => { setEditOpen(false); setSelected(null); setFormEdit(null) }} width="max-w-lg">
+      <Modal open={editOpen && !!formEdit} title={t('EditAccount', lang) || 'Edit account'} onClose={() => { setEditOpen(false); setSelected(null); setFormEdit(null) }} width="max-w-3xl">
         {formEdit ? (
-          <div className="space-y-3 text-gray-800">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <label className="text-sm">{t('Email', lang) || 'Email'}</label>
-                <input type="email" value={formEdit.email}
-                  onChange={e => setFormEdit(v => v ? ({ ...v, email: e.target.value }) : v)}
-                  className="w-full border rounded-lg px-2 py-1 h-9" />
+          <div className="space-y-6 text-gray-800 pb-2">
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* General Info Card */}
+              <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 space-y-4 shadow-sm">
+                <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-2">
+                  <UserIcon className="w-5 h-5 text-blue-500" />
+                  {t('GeneralInfo', lang) || 'General Information'}
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Email', lang) || 'Email'}</label>
+                    <input type="email" value={formEdit.email}
+                      onChange={e => setFormEdit(v => v ? ({ ...v, email: e.target.value }) : v)}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="user@company.com" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Name', lang) || 'Name'}</label>
+                    <input type="text" value={formEdit.name}
+                      onChange={e => setFormEdit(v => (v ? ({ ...v, name: e.target.value }) : v))}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="John Doe" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Phone', lang) || 'Phone'}</label>
+                    <input type="text" value={formEdit.phone}
+                      onChange={e => setFormEdit(v => (v ? ({ ...v, phone: e.target.value }) : v))}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="+1 234 567 890" />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="text-sm">{t('Phone', lang) || 'Phone'}</label>
-                <input type="text" value={formEdit.phone}
-                  onChange={e => setFormEdit(v => (v ? ({ ...v, phone: e.target.value }) : v))}
-                  className="w-full border rounded-lg px-2 py-1 h-9" />
-              </div>
-              <div>
-                <label className="text-sm">{t('Name', lang) || 'Name'}</label>
-                <input type="text" value={formEdit.name}
-                  onChange={e => setFormEdit(v => (v ? ({ ...v, name: e.target.value }) : v))}
-                  className="w-full border rounded-lg px-2 py-1 h-9" />
-              </div>
-              <div>
-                <label className="text-sm">{t('Position', lang) || 'Position'}</label>
-                <input type="text" value={formEdit.position}
-                  onChange={e => setFormEdit(v => (v ? ({ ...v, position: e.target.value }) : v))}
-                  className="w-full border rounded-lg px-2 py-1 h-9" />
-              </div>
-              <div>
-                <label className="text-sm">{t('Role', lang) || 'Role'}</label>
-                <select
-                  value={formEdit.role}
-                  onChange={e => setFormEdit(v => (v ? ({ ...v, role: e.target.value as AccountRole }) : v))}
-                  className="w-full border rounded-lg px-2 py-1 h-10 bg-white">
-                  <option value="staff">staff</option>
-                  <option value="sale advisor">Sale Advisor</option>
-                  <option value="manager">manager</option>
-                  <option value="admin" disabled={myRole === 'admin'}>admin</option>
-                  <option value="owner" disabled={myRole !== 'owner'}>owner</option>
-                </select>
-              </div>
-              <div className="flex items-end">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={formEdit.is_active}
-                    onChange={e => setFormEdit(v => (v ? ({ ...v, is_active: e.target.checked }) : v))} />
-                  {t('Active', lang) || 'Active'}
-                </label>
+
+              {/* Role & Access Card */}
+              <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 space-y-4 shadow-sm flex flex-col justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-2">
+                    <ShieldCheckIcon className="w-5 h-5 text-blue-500" />
+                    {t('RoleAndAccess', lang) || 'Role & Access'}
+                  </h4>
+                  <div className="space-y-4 mt-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Role', lang) || 'Role'}</label>
+                      <select
+                        value={formEdit.role}
+                        onChange={e => {
+                          const newRole = e.target.value as AccountRole;
+                          setFormEdit(v => {
+                            if (!v) return v;
+                            let newBranches = v.branches;
+                            if (newRole === 'admin' || newRole === 'owner') {
+                              newBranches = providerBranches.map(b => b.id);
+                            } else if (v.role === 'admin' || v.role === 'owner') {
+                              newBranches = [];
+                            }
+                            return { ...v, role: newRole, branches: newBranches };
+                          });
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                        <option value="staff">Staff</option>
+                        <option value="sale advisor">Sale Advisor</option>
+                        <option value="manager">Manager</option>
+                        <option value="accountant">Accountant</option>
+                        <option value="admin" disabled={myRole === 'admin'}>Admin</option>
+                        <option value="owner" disabled={myRole !== 'owner'}>Owner</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t('Position', lang) || 'Position Title'}</label>
+                      <input type="text" value={formEdit.position}
+                        onChange={e => setFormEdit(v => (v ? ({ ...v, position: e.target.value }) : v))}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="e.g. Head Chef" />
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-200/60 mt-4">
+                  <label className="flex items-center gap-3 cursor-pointer group p-2 -m-2 rounded-lg hover:bg-white transition-colors">
+                    <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formEdit.is_active ? 'bg-blue-600' : 'bg-gray-200'}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formEdit.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </div>
+                    <input type="checkbox" className="hidden" checked={formEdit.is_active} onChange={e => setFormEdit(v => (v ? ({ ...v, is_active: e.target.checked }) : v))} />
+                    <div>
+                      <span className="text-sm font-semibold text-gray-900 block">{t('AccountActive', lang) || 'Account is Active'}</span>
+                      <span className="text-xs text-gray-500">Allow user to log in</span>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
 
+            {/* Branch Selection Card */}
+            <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <BuildingStorefrontIcon className="w-5 h-5 text-blue-500" />
+                  {t('BranchAssignments', lang) || 'Branch Assignments'}
+                </h4>
+                <select 
+                  value={formEdit.cityFilter} 
+                  onChange={e => setFormEdit(v => v ? { ...v, cityFilter: e.target.value } : v)}
+                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-shadow shadow-sm"
+                >
+                  <option value="">{t('AllCities', lang) || 'All Cities'}</option>
+                  {Array.from(new Set(providerBranches.map(b => b.city).filter(Boolean))).sort().map(city => (
+                    <option key={city as string} value={city as string}>{city as string}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                {providerBranches.filter(b => !formEdit.cityFilter || b.city === formEdit.cityFilter).map(branch => {
+                  const isSelected = formEdit.branches.includes(branch.id)
+                  return (
+                    <button
+                      key={branch.id}
+                      type="button"
+                      onClick={() => setFormEdit(v => v ? {
+                        ...v, 
+                        branches: isSelected ? v.branches.filter(id => id !== branch.id) : [...v.branches, branch.id]
+                      } : v)}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                        isSelected 
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20' 
+                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 shadow-sm'
+                      }`}
+                    >
+                      {branch.name}
+                    </button>
+                  )
+                })}
+              </div>
+              {providerBranches.length === 0 && (
+                <div className="text-sm text-gray-500 italic py-2">No branches available.</div>
+              )}
+            </div>
+
             {accMsg && (
-              <div className={`text-sm ${accMsgKind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{accMsg}</div>
+              <div className={`text-sm p-4 rounded-xl font-medium flex items-center gap-2 ${accMsgKind === 'ok' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+                {accMsgKind === 'ok' ? <CheckCircleIcon className="w-5 h-5" /> : <XMarkIcon className="w-5 h-5" />}
+                {accMsg}
+              </div>
             )}
 
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button type="button" onClick={() => { setEditOpen(false); setSelected(null); setFormEdit(null) }} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button type="button" onClick={() => { setEditOpen(false); setSelected(null); setFormEdit(null) }} className="px-6 h-11 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors">
                 {t('Cancel', lang) || 'Cancel'}
               </button>
-              <button type="button" onClick={saveEdit} className="px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90">
+              <button type="button" onClick={saveEdit} className="px-8 h-11 rounded-xl bg-blue-600 text-sm font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-2">
                 {t('Save', lang) || 'Save'}
               </button>
             </div>

@@ -3,24 +3,28 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React from 'react'
-import { Users, Home, Star, TrendingUp, Settings, NotebookPen, Gift } from 'lucide-react'
+import { Home, FileText, CreditCard, Landmark, BarChart3, ArrowDownUp, Settings, Calendar as CalendarIcon, RefreshCw } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
-const BASE = '/human-resources/management'
 const NAV = [
-    { href: `${BASE}/staff`, label: 'Staff List', icon: Users },
-    { href: `${BASE}/performance`, label: 'Performance', icon: Star },
-    { href: `${BASE}/salary-history`, label: 'Status Change', icon: TrendingUp },
-    { href: `${BASE}/disciplinary`, label: 'Disciplinary', icon: NotebookPen },
-    { href: `${BASE}/bonus`, label: 'Bonus', icon: Gift },
-    { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
+    { href: '/finance', label: 'Dashboard', icon: Home, exact: true },
+    { href: '/finance/invoices', label: 'Invoices', icon: FileText },
+    { href: '/finance/recurring', label: 'Recurring Payments', icon: RefreshCw },
+    { href: '/finance/payments', label: 'Payment Orders', icon: CreditCard },
+    { href: '/finance/calendar', label: 'Calendar', icon: CalendarIcon },
+    { href: '/finance/accounts', label: 'Bank Accounts', icon: Landmark },
+    { href: '/finance/pnl', label: 'P&L Report', icon: BarChart3 },
+    { href: '/finance/cashflow', label: 'Cash Flow', icon: ArrowDownUp },
+    { href: '/finance/settings', label: 'Settings', icon: Settings },
 ]
 
 const EXP_W_REM = 16
 const COLL_W_REM = 3.5
 
-export default function LeftNavHRManagement() {
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v0.0'
+
+export default function LeftNavFinance() {
     const pathname = usePathname()
     const { language, setLanguage } = useSettings()
     const [open, setOpen] = React.useState(false)
@@ -38,8 +42,6 @@ export default function LeftNavHRManagement() {
     const isEN = language === 'en'
     const toggleLang = () => setLanguage(isEN ? 'vi' : 'en')
 
-    const norm = (s: string) => s.replace(/\/+$/, '')
-
     return (
         <div
             className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
@@ -49,18 +51,18 @@ export default function LeftNavHRManagement() {
         >
             {/* Header */}
             <div className="h-16 flex items-center px-3 border-b border-white/10">
-                <Link href="/dashboard" className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`}>
+                <Link href="/dashboard" className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`} title="Back to Dashboard">
                     <Home className="w-5 h-5 text-white" />
                 </Link>
                 <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
-                    {open ? 'HR Management' : ''}
+                    {open ? 'Finance' : ''}
                 </div>
             </div>
 
             {/* Nav Items */}
             <nav className="p-2 space-y-1 mt-2">
                 {NAV.map((item) => {
-                    const active = pathname === item.href || pathname.startsWith(item.href + '/')
+                    const active = item.exact ? pathname === item.href : pathname.startsWith(item.href)
 
                     return (
                         <Link
@@ -82,13 +84,26 @@ export default function LeftNavHRManagement() {
                 })}
             </nav>
 
+            {/* Footer */}
             <div className={`mt-auto p-3 flex items-center justify-between transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}>
                 <button
                     onClick={toggleLang}
                     className="w-8 h-8 rounded-full overflow-hidden border border-white/20 hover:bg-white/10 flex items-center justify-center p-0"
                 >
-                    <ReactCountryFlag countryCode={isEN ? 'GB' : 'VN'} svg style={{ width: '1.2em', height: '1.2em' }} />
+                    <ReactCountryFlag
+                        countryCode={isEN ? 'GB' : 'VN'}
+                        svg
+                        style={{
+                            width: '110%',
+                            height: '110%',
+                            objectFit: 'cover',
+                            display: 'block',
+                        }}
+                    />
                 </button>
+                {open && (
+                    <div className="text-xs text-slate-300 px-2">{appVersion}</div>
+                )}
             </div>
         </div>
     )

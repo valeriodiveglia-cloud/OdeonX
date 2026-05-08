@@ -367,6 +367,12 @@ const dict = {
     // ---------- ACCOUNTS ----------
     Accounts: 'Accounts',
     NewAccount: 'New Account',
+    GeneralInfo: 'General Information',
+    RoleAndAccess: 'Role & Access',
+    BranchAssignments: 'Branch Assignments',
+    AccountActive: 'Account is Active',
+    AllCities: 'All Cities',
+    SaveAccount: 'Create Account',
     ManageAccounts: 'Manage Accounts',
     NewAccountTitle: 'New account',
     ManageAccountsTitle: 'Manage accounts',

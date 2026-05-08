@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRDepartment, HRPosition, HRRatingCategory, RatingCategoryScope, HRDisciplinaryCategory, HRAlertSetting, AlertScope, AlertTargetField } from '@/types/human-resources'
+import { HRDepartment, HRPosition, HRRatingCategory, RatingCategoryScope, HRDisciplinaryCategory, HRAlertSetting, AlertScope, AlertTargetField, HRDisciplinaryCatalog } from '@/types/human-resources'
 import { useSettings } from '@/contexts/SettingsContext'
 import CircularLoader from '@/components/CircularLoader'
 import {
     Settings, Building2, Briefcase, Star, Plus, Pencil, Trash2, X,
-    Check, Globe, ChevronRight, Calendar, NotebookPen, AlertTriangle
+    Check, Globe, ChevronRight, Calendar, NotebookPen, AlertTriangle, Gift, Tag, Loader2
 } from 'lucide-react'
 
 /* ═══════════════════════════════════════════════
@@ -19,7 +19,9 @@ const TABS = [
     { key: 'alerts'      as const, label: 'Alerts',             icon: AlertTriangle },
     { key: 'categories'  as const, label: 'Rating Categories',  icon: Star },
     { key: 'fines_categories' as const, label: 'Disciplinary Categories', icon: NotebookPen },
+    { key: 'fines_table' as const, label: 'Fine Tables',        icon: Tag },
     { key: 'periods'     as const, label: 'Review Periods',     icon: Calendar },
+    { key: 'bonus'       as const, label: 'Bonus Settings',     icon: Gift },
 ]
 type TabKey = typeof TABS[number]['key']
 
@@ -921,6 +923,820 @@ function DisciplinaryCategoriesTab({ categories, onRefresh }: {
 }
 
 /* ═══════════════════════════════════════════════════
+   BONUS TAB
+   ═══════════════════════════════════════════════════ */
+function BonusTab() {
+    const { 
+        hrBonus14thBaseYears, setHrBonus14thBaseYears,
+        hrBonus14thSteps, setHrBonus14thSteps,
+        hrBonusPtMaxCap, setHrBonusPtMaxCap,
+        hrBonusPtTargetHours, setHrBonusPtTargetHours,
+        hrBonusPtMinHours, setHrBonusPtMinHours,
+        hrBonusPtMinRating, setHrBonusPtMinRating,
+        hrBonus14thMinRating, setHrBonus14thMinRating,
+        hrBonus13thGuaranteedPct, setHrBonus13thGuaranteedPct,
+        hrBonus13thPerfPct, setHrBonus13thPerfPct,
+        hrBonus13thPerfTiers, setHrBonus13thPerfTiers,
+        currency
+    } = useSettings()
+
+    const formatCurrencyInput = (val: string) => {
+        const cleaned = val.replace(/[^\d.]/g, '');
+        const parts = cleaned.split('.');
+        if (parts[0]) {
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+        return parts.slice(0, 2).join('.');
+    }
+
+    const [baseYears, setBaseYears] = useState(hrBonus14thBaseYears.toString())
+    const [steps, setSteps] = useState<{ years: number, pct: number }[]>([...hrBonus14thSteps].sort((a, b) => a.years - b.years))
+
+    const [ptMaxCap, setPtMaxCap] = useState(formatCurrencyInput(hrBonusPtMaxCap.toString()))
+    const [ptTargetHours, setPtTargetHours] = useState(hrBonusPtTargetHours.toString())
+    const [ptMinHours, setPtMinHours] = useState(hrBonusPtMinHours.toString())
+    
+    // Performance Additions
+    const [ptMinRating, setPtMinRating] = useState(hrBonusPtMinRating.toString())
+    const [minRating14th, setMinRating14th] = useState(hrBonus14thMinRating.toString())
+    const [guaranteed13th, setGuaranteed13th] = useState(hrBonus13thGuaranteedPct.toString())
+    const [perf13th, setPerf13th] = useState(hrBonus13thPerfPct.toString())
+    const [perfTiers, setPerfTiers] = useState<{ min_rating: number, multiplier_pct: number }[]>([...hrBonus13thPerfTiers].sort((a, b) => a.min_rating - b.min_rating))
+    
+    // Add Modal State
+    const [addModalOpen, setAddModalOpen] = useState(false)
+    const [newStepYears, setNewStepYears] = useState('')
+    const [newStepPct, setNewStepPct] = useState('')
+
+    const handleSave = () => {
+        const parsedBase = parseInt(baseYears) || 0
+        setHrBonus14thBaseYears(parsedBase)
+        setHrBonus14thSteps(steps)
+        setHrBonusPtMaxCap(parseInt(ptMaxCap.replace(/,/g, '')) || 0)
+        setHrBonusPtTargetHours(parseInt(ptTargetHours) || 0)
+        setHrBonusPtMinHours(parseInt(ptMinHours) || 0)
+        setHrBonusPtMinRating(parseFloat(ptMinRating) || 0)
+        setHrBonus14thMinRating(parseFloat(minRating14th) || 0)
+        setHrBonus13thGuaranteedPct(parseInt(guaranteed13th) || 0)
+        setHrBonus13thPerfPct(parseInt(perf13th) || 0)
+        setHrBonus13thPerfTiers(perfTiers)
+    }
+
+    const openAddStepModal = () => {
+        setNewStepYears('')
+        setNewStepPct('')
+        setAddModalOpen(true)
+    }
+
+    const confirmAddStep = () => {
+        const y = parseInt(newStepYears)
+        const p = parseInt(newStepPct)
+        if (isNaN(y) || isNaN(p) || y < 0 || p < 0) return
+        
+        const newSteps = [...steps, { years: y, pct: Math.min(p, 100) }]
+        newSteps.sort((a, b) => a.years - b.years)
+        setSteps(newSteps)
+        setAddModalOpen(false)
+    }
+
+    const updateStepPct = (index: number, val: string) => {
+        const newSteps = [...steps]
+        newSteps[index].pct = parseInt(val) || 0
+        setSteps(newSteps)
+    }
+
+    const removeStep = (index: number) => {
+        setSteps(steps.filter((_, i) => i !== index))
+    }
+
+    const hasChanges = baseYears !== hrBonus14thBaseYears.toString() || 
+                       JSON.stringify(steps) !== JSON.stringify([...hrBonus14thSteps].sort((a,b)=>a.years-b.years)) ||
+                       ptMaxCap.replace(/,/g, '') !== hrBonusPtMaxCap.toString() ||
+                       ptTargetHours !== hrBonusPtTargetHours.toString() ||
+                       ptMinHours !== hrBonusPtMinHours.toString() ||
+                       ptMinRating !== hrBonusPtMinRating.toString() ||
+                       minRating14th !== hrBonus14thMinRating.toString() ||
+                       guaranteed13th !== hrBonus13thGuaranteedPct.toString() ||
+                       perf13th !== hrBonus13thPerfPct.toString() ||
+                       JSON.stringify(perfTiers) !== JSON.stringify([...hrBonus13thPerfTiers].sort((a,b)=>a.min_rating-b.min_rating))
+
+    const [addTierModalOpen, setAddTierModalOpen] = useState(false)
+    const [newTierMinRating, setNewTierMinRating] = useState('')
+    const [newTierMultiplier, setNewTierMultiplier] = useState('')
+
+    const confirmAddTier = () => {
+        const minRating = parseFloat(newTierMinRating)
+        const mult = parseInt(newTierMultiplier)
+        if (isNaN(minRating) || isNaN(mult) || minRating < 0 || mult < 0) return
+        
+        const newTiers = [...perfTiers, { min_rating: minRating, multiplier_pct: mult }]
+        newTiers.sort((a, b) => a.min_rating - b.min_rating)
+        setPerfTiers(newTiers)
+        setAddTierModalOpen(false)
+    }
+
+    const removeTier = (index: number) => {
+        setPerfTiers(perfTiers.filter((_, i) => i !== index))
+    }
+
+    const updateTierPct = (index: number, val: string) => {
+        const newTiers = [...perfTiers]
+        newTiers[index].multiplier_pct = parseInt(val) || 0
+        setPerfTiers(newTiers)
+    }
+
+    return (
+        <div>
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h2 className="text-lg font-semibold text-white">Bonus Configurations</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Configure 14th month rules globally across all staff.</p>
+                </div>
+                {hasChanges && (
+                    <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
+                        Save Changes
+                    </button>
+                )}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-md overflow-hidden p-6 space-y-8">
+                {/* 14th Month Base Rules */}
+                <div>
+                    <h3 className="text-md font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <Gift className="w-5 h-5 text-blue-600" />
+                        14th Month Base Eligibility
+                    </h3>
+                    <div className="max-w-xs">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Base Tenure Threshold (Years)</label>
+                        <p className="text-xs text-gray-500 mb-3">Staff must complete this many years before unlocking the 14th month bonus.</p>
+                        <div className="relative">
+                            <input 
+                                type="number" min="0" max="20"
+                                value={baseYears} 
+                                onChange={e => setBaseYears(e.target.value)}
+                                className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">years</span>
+                        </div>
+                    </div>
+                </div>
+
+                <hr className="border-gray-100" />
+
+                {/* 14th Month Steps */}
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 className="text-md font-semibold text-gray-900 mb-1">Percentage Steps</h3>
+                            <p className="text-xs text-gray-500">Configure what percentage is given each year after reaching the base threshold.</p>
+                        </div>
+                        <button onClick={openAddStepModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 transition">
+                            <Plus className="w-4 h-4" /> Add Step
+                        </button>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 space-y-3">
+                        {steps.map((step, idx) => (
+                            <div key={idx} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                <div className="flex-1">
+                                    <span className="text-sm font-medium text-gray-700">
+                                        After <span className="font-bold text-gray-900">{step.years}</span> total years
+                                    </span>
+                                </div>
+                                <div className="relative w-32 shrink-0">
+                                    <input 
+                                        type="number" min="0" max="100"
+                                        value={step.pct}
+                                        onChange={e => updateStepPct(idx, e.target.value)}
+                                        className="w-full pl-3 pr-8 py-1.5 border border-gray-300 rounded-md text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-right font-medium"
+                                    />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">%</span>
+                                </div>
+                                <button 
+                                    onClick={() => removeStep(idx)}
+                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
+                                    title="Remove this step"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))}
+                        {steps.length === 0 && (
+                            <p className="text-sm text-gray-500 text-center py-4 italic">No percentage steps defined. Staff will receive 0% of the 14th month.</p>
+                        )}
+                    </div>
+                </div>
+
+                <hr className="border-gray-100" />
+
+                {/* Part-Time Bonus Config */}
+                <div>
+                    <h3 className="text-md font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <Gift className="w-5 h-5 text-blue-600" />
+                        Part-Time Bonus Calculation
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="flex flex-col h-full">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Max Cap ({currency})</label>
+                            <p className="text-xs text-gray-500 mb-3">Maximum bonus given for reaching target hours.</p>
+                            <div className="relative mt-auto">
+                                <input 
+                                    type="text"
+                                    value={ptMaxCap} 
+                                    onChange={e => setPtMaxCap(formatCurrencyInput(e.target.value))}
+                                    className="w-full pl-3 pr-12 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">{currency}</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col h-full">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Target Hours</label>
+                            <p className="text-xs text-gray-500 mb-3">Hours required to receive the max cap.</p>
+                            <div className="relative mt-auto">
+                                <input 
+                                    type="number" min="1"
+                                    value={ptTargetHours} 
+                                    onChange={e => setPtTargetHours(e.target.value)}
+                                    className="w-full pl-3 pr-12 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">hrs</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col h-full">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Hours</label>
+                            <p className="text-xs text-gray-500 mb-3">Hours below this get 0 bonus.</p>
+                            <div className="relative mt-auto">
+                                <input 
+                                    type="number" min="0"
+                                    value={ptMinHours} 
+                                    onChange={e => setPtMinHours(e.target.value)}
+                                    className="w-full pl-3 pr-12 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">hrs</span>
+                            </div>
+                        </div> 
+                    </div>
+                </div>
+
+                <hr className="border-gray-100" />
+
+                {/* Performance Integration */}
+                <div>
+                    <h3 className="text-md font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <Star className="w-5 h-5 text-amber-500" />
+                        Performance Integration
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        {/* 13th Month Split */}
+                        <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl space-y-4">
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-900">13th Month Structure</h4>
+                                <p className="text-xs text-gray-500 mt-1">Split the 13th month bonus into a guaranteed portion and a performance-based portion.</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="relative">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Guaranteed</label>
+                                    <input 
+                                        type="number" min="0" max="100"
+                                        value={guaranteed13th} 
+                                        onChange={e => setGuaranteed13th(e.target.value)}
+                                        className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                    <span className="absolute right-3 top-7 text-gray-400 text-sm font-medium">%</span>
+                                </div>
+                                <div className="relative">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Performance</label>
+                                    <input 
+                                        type="number" min="0" max="100"
+                                        value={perf13th} 
+                                        onChange={e => setPerf13th(e.target.value)}
+                                        className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                    <span className="absolute right-3 top-7 text-gray-400 text-sm font-medium">%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Gatekeepers */}
+                        <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl space-y-4">
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-900">Bonus Gatekeepers</h4>
+                                <p className="text-xs text-gray-500 mt-1">Minimum average rating required to receive these bonuses at all.</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="relative">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">14th Month Min. Rating</label>
+                                    <input 
+                                        type="number" step="0.1" min="0" max="5"
+                                        value={minRating14th} 
+                                        onChange={e => setMinRating14th(e.target.value)}
+                                        className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                    <span className="absolute right-3 top-7 text-amber-500 text-sm"><Star className="w-4 h-4 fill-current"/></span>
+                                </div>
+                                <div className="relative">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Part-Time Min. Rating</label>
+                                    <input 
+                                        type="number" step="0.1" min="0" max="5"
+                                        value={ptMinRating} 
+                                        onChange={e => setPtMinRating(e.target.value)}
+                                        className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                    <span className="absolute right-3 top-7 text-amber-500 text-sm"><Star className="w-4 h-4 fill-current"/></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 13th Month Performance Tiers */}
+                    <div>
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-md font-semibold text-gray-900 mb-1">13th Month Performance Multipliers</h3>
+                                <p className="text-xs text-gray-500">Configure how the performance portion of the 13th month bonus scales with the rating.</p>
+                            </div>
+                            <button onClick={() => { setNewTierMinRating(''); setNewTierMultiplier(''); setAddTierModalOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 transition">
+                                <Plus className="w-4 h-4" /> Add Tier
+                            </button>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 space-y-3">
+                            {[...perfTiers].reverse().map((tier, reverseIdx) => {
+                                const idx = perfTiers.length - 1 - reverseIdx; // get original index to update state correctly
+                                const nextTier = perfTiers[idx + 1]; // because state is sorted ascending
+                                const upperBound = nextTier ? (nextTier.min_rating - 0.01).toFixed(2) : "5.00";
+                                
+                                return (
+                                    <div key={idx} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                        <div className="flex-1 flex items-center gap-2">
+                                            <span className="text-sm font-medium text-gray-700">Rating from</span>
+                                            <span className="font-bold text-gray-900 flex items-center gap-1">
+                                                {tier.min_rating.toFixed(2)} to {upperBound} <Star className="w-3.5 h-3.5 text-amber-500 fill-current" />
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-gray-500">gets</span>
+                                            <div className="relative w-28 shrink-0">
+                                                <input 
+                                                    type="number" min="0"
+                                                    value={tier.multiplier_pct}
+                                                    onChange={e => updateTierPct(idx, e.target.value)}
+                                                    className="w-full pl-3 pr-8 py-1.5 border border-gray-300 rounded-md text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-right font-medium"
+                                                />
+                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">%</span>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => removeTier(idx)}
+                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
+                                            title="Remove this tier"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                            
+                            {perfTiers.length > 0 && perfTiers[0].min_rating > 0 && (
+                                <div className="flex items-center gap-4 bg-gray-100/50 p-3 rounded-lg border border-gray-200 border-dashed text-gray-500">
+                                    <div className="flex-1 flex items-center gap-2">
+                                        <span className="text-sm font-medium">Rating from</span>
+                                        <span className="font-bold flex items-center gap-1">
+                                            0.00 to {(perfTiers[0].min_rating - 0.01).toFixed(2)} <Star className="w-3.5 h-3.5 opacity-50 fill-current" />
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs">gets</span>
+                                        <div className="relative w-28 shrink-0 flex justify-end">
+                                            <span className="font-bold text-sm text-gray-400 pr-3 py-1.5">0%</span>
+                                        </div>
+                                    </div>
+                                    <div className="w-7"></div>
+                                </div>
+                            )}
+
+                            {perfTiers.length === 0 && (
+                                <p className="text-sm text-gray-500 text-center py-4 italic">No performance tiers defined. Performance multiplier will be 0%.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Add Step Modal (14th Month) */}
+            {addModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Bonus Step</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Total Years Completed *</label>
+                                <div className="relative">
+                                    <input autoFocus type="number" min="0" max="50" value={newStepYears} onChange={e => setNewStepYears(e.target.value)} placeholder="e.g. 5"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none pr-12" />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">years</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Percentage *</label>
+                                <div className="relative">
+                                    <input type="number" min="0" max="100" value={newStepPct} onChange={e => setNewStepPct(e.target.value)} placeholder="e.g. 80"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none pr-8" />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button onClick={() => setAddModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                            <button onClick={confirmAddStep} disabled={!newStepYears || !newStepPct}
+                                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Tier Modal (Performance) */}
+            {addTierModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Performance Tier</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Rating *</label>
+                                <div className="relative">
+                                    <input autoFocus type="number" step="0.1" min="0" max="5" value={newTierMinRating} onChange={e => setNewTierMinRating(e.target.value)} placeholder="e.g. 4.8"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none pr-8" />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-500 text-sm"><Star className="w-4 h-4 fill-current"/></span>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Multiplier Percentage *</label>
+                                <div className="relative">
+                                    <input type="number" min="0" value={newTierMultiplier} onChange={e => setNewTierMultiplier(e.target.value)} placeholder="e.g. 150"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none pr-8" />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button onClick={() => setAddTierModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                            <button onClick={confirmAddTier} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition">Add Tier</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════
+   FINES TABLE TAB
+   ═══════════════════════════════════════════════════ */
+function FinesTableTab({ departments, positions, categories }: {
+    departments: HRDepartment[];
+    positions: HRPosition[];
+    categories: HRDisciplinaryCategory[];
+}) {
+    const [catalog, setCatalog] = useState<HRDisciplinaryCatalog[]>([])
+    const [loading, setLoading] = useState(true)
+    const [modalOpen, setModalOpen] = useState(false)
+    const [editingNode, setEditingNode] = useState<HRDisciplinaryCatalog | null>(null)
+
+    const fetchCatalog = useCallback(async () => {
+        setLoading(true)
+        try {
+            const { data, error } = await supabase.from('hr_disciplinary_catalog').select('*, category:hr_disciplinary_categories(*)').order('infraction_name', { ascending: true })
+            if (error) throw error
+            setCatalog(data as HRDisciplinaryCatalog[] || [])
+        } catch (err) {
+            console.error('Error fetching catalog', err)
+        } finally {
+            setLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        fetchCatalog()
+    }, [fetchCatalog])
+
+    async function handleSave(formData: Partial<HRDisciplinaryCatalog>) {
+        try {
+            if (editingNode) {
+                const { error } = await supabase.from('hr_disciplinary_catalog').update(formData).eq('id', editingNode.id)
+                if (error) throw error
+            } else {
+                const { error } = await supabase.from('hr_disciplinary_catalog').insert([formData])
+                if (error) throw error
+            }
+            fetchCatalog()
+            setModalOpen(false)
+        } catch (err) {
+            console.error(err)
+            alert('Failed to save infraction.')
+        }
+    }
+
+    async function handleDelete(id: string) {
+        if (!window.confirm('Delete this infraction template? This will not remove past fines, but it will remove the template.')) return
+        try {
+            const { error } = await supabase.from('hr_disciplinary_catalog').delete().eq('id', id)
+            if (error) throw error
+            fetchCatalog()
+        } catch (err) {
+            console.error(err)
+            alert('Failed to delete infraction.')
+        }
+    }
+
+    const fmt = (n: number | null) => {
+        if (n === null || isNaN(n)) return '0'
+        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n)
+    }
+
+    return (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h2 className="text-lg font-bold text-gray-900">Fine Tables</h2>
+                    <p className="text-sm text-gray-500 mt-1">Manage the predefined list of infractions and their default fine amounts.</p>
+                </div>
+                <button 
+                    onClick={() => { setEditingNode(null); setModalOpen(true); }} 
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap"
+                >
+                    <Plus className="w-4 h-4" /> Add Infraction
+                </button>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-2/5">Infraction / Reason</th>
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-1/5">Category</th>
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-1/5">Applicability</th>
+                                <th className="text-right px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Default Amount (VND)</th>
+                                <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-32">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                        {loading ? (
+                            <tr><td colSpan={5} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></td></tr>
+                        ) : catalog.length === 0 ? (
+                            <tr>
+                                <td colSpan={5} className="text-center py-12 text-gray-400">
+                                    No infractions found. Add one to build the disciplinary catalog.
+                                </td>
+                            </tr>
+                        ) : (
+                            catalog.map(c => (
+                                <tr key={c.id} className="hover:bg-gray-50/80 transition-colors group">
+                                    <td className="px-6 py-4 text-gray-900 font-medium text-sm">
+                                        {c.infraction_name}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {c.category ? (
+                                            <span className="text-sm font-medium text-gray-900">
+                                                {c.category.name}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400 text-sm italic">—</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {c.applicability_type === 'global' && (
+                                            <div className="flex items-center gap-1.5 text-gray-600">
+                                                <Globe className="w-3.5 h-3.5" /> <span className="text-sm font-medium">Global</span>
+                                            </div>
+                                        )}
+                                        {c.applicability_type === 'department' && (
+                                            <div className="flex items-center gap-1.5 text-blue-600">
+                                                <Building2 className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{departments.find(d => d.id === c.target_id)?.name || 'Unknown Department'}</span>
+                                            </div>
+                                        )}
+                                        {c.applicability_type === 'position' && (
+                                            <div className="flex items-center gap-1.5 text-purple-600">
+                                                <Briefcase className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{positions.find(p => p.id === c.target_id)?.name || 'Unknown Position'}</span>
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right font-mono text-sm">
+                                        <span className="text-gray-900 font-semibold">{fmt(c.default_amount)}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => { setEditingNode(c); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                                <Pencil className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(c.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal */}
+            {modalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-900">{editingNode ? 'Edit Infraction' : 'Add Infraction'}</h3>
+                            <button onClick={() => setModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-900 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            <FormCatalog 
+                                initialData={editingNode} 
+                                categories={categories}
+                                departments={departments}
+                                positions={positions}
+                                onSave={handleSave} 
+                                onCancel={() => setModalOpen(false)} 
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function FormCatalog({ 
+    initialData, 
+    categories, 
+    departments,
+    positions,
+    onSave, 
+    onCancel 
+}: { 
+    initialData: HRDisciplinaryCatalog | null, 
+    categories: HRDisciplinaryCategory[], 
+    departments: HRDepartment[],
+    positions: HRPosition[],
+    onSave: (d: Partial<HRDisciplinaryCatalog>) => void, 
+    onCancel: () => void 
+}) {
+    const [name, setName] = useState(initialData?.infraction_name || '')
+    const [amount, setAmount] = useState(initialData?.default_amount || 0)
+    const [categoryId, setCategoryId] = useState(initialData?.category_id || '')
+    const [applicabilityType, setApplicabilityType] = useState<'global' | 'department' | 'position'>(initialData?.applicability_type || 'global')
+    const [targetId, setTargetId] = useState(initialData?.target_id || '')
+    const [displayAmount, setDisplayAmount] = useState(initialData?.default_amount ? Number(initialData.default_amount).toLocaleString('en-US') : '')
+    const [submitting, setSubmitting] = useState(false)
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!name || amount < 0) return
+        if (applicabilityType !== 'global' && !targetId) {
+            alert('Please select a target department or position.')
+            return
+        }
+        setSubmitting(true)
+        onSave({
+            infraction_name: name,
+            default_amount: amount,
+            category_id: categoryId || null,
+            applicability_type: applicabilityType,
+            target_id: applicabilityType === 'global' ? null : targetId
+        })
+    }
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Reason / Infraction Name <span className="text-red-500">*</span></label>
+                <input 
+                    type="text" 
+                    required 
+                    value={name} 
+                    onChange={e => setName(e.target.value)} 
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                    placeholder="e.g. Late for Shift" 
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
+                    <select 
+                        value={categoryId} 
+                        onChange={e => setCategoryId(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="">No Category</option>
+                        {categories.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Default Fine (VND) <span className="text-red-500">*</span></label>
+                    <input 
+                        type="text" 
+                        required 
+                        value={displayAmount} 
+                        onChange={e => {
+                            let val = e.target.value.replace(/[^0-9]/g, '');
+                            if (val) {
+                                setDisplayAmount(parseInt(val, 10).toLocaleString('en-US'))
+                                setAmount(parseInt(val, 10))
+                            } else {
+                                setDisplayAmount('')
+                                setAmount(0)
+                            }
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" 
+                        placeholder="0" 
+                    />
+                </div>
+            </div>
+
+            <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-3">Applicability Scope</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('global'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'global' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Globe className="w-4 h-4" /> Global
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('department'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'department' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Building2 className="w-4 h-4" /> Department
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('position'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'position' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Briefcase className="w-4 h-4" /> Position
+                        </button>
+                    </div>
+                </div>
+
+                {applicabilityType === 'department' && (
+                    <div className="animate-in fade-in slide-in-from-top-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Target Department <span className="text-red-500">*</span></label>
+                        <select 
+                            required
+                            value={targetId} 
+                            onChange={e => setTargetId(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">Select Department...</option>
+                            {departments.map(d => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                {applicabilityType === 'position' && (
+                    <div className="animate-in fade-in slide-in-from-top-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Target Position <span className="text-red-500">*</span></label>
+                        <select 
+                            required
+                            value={targetId} 
+                            onChange={e => setTargetId(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">Select Position...</option>
+                            {positions.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
+                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+                <button type="submit" disabled={submitting || !name || amount < 0} className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    {submitting ? 'Saving...' : 'Save'}
+                </button>
+            </div>
+        </form>
+    )
+}
+
+/* ═══════════════════════════════════════════════════
    MAIN SETTINGS PAGE
    ═══════════════════════════════════════════════════ */
 export default function HRManagementSettingsPage() {
@@ -955,44 +1771,52 @@ export default function HRManagementSettingsPage() {
 
     return (
         <div className="min-h-screen text-gray-100 p-6">
-            <div className="max-w-5xl mx-auto">
+            <div className="max-w-6xl mx-auto">
                 {/* Header */}
-                <div className="mb-6">
+                <div className="mb-8 border-b border-white/10 pb-6">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Settings className="w-6 h-6 text-slate-400" />
                         HR Management Settings
                     </h1>
-                    <p className="text-sm text-slate-400 mt-1">Configure departments, positions, and performance rating categories.</p>
+                    <p className="text-sm text-slate-400 mt-1">Configure departments, positions, rules, and categories.</p>
                 </div>
 
-                {/* Tabs */}
-                <div className="mt-8 border-b border-white/10 mb-6">
-                    <nav className="-mb-px flex space-x-8 overflow-x-auto custom-scrollbar" aria-label="Tabs">
-                        {TABS.map(tab => (
-                            <button
-                                key={tab.key}
-                                onClick={() => setActiveTab(tab.key)}
-                                className={`
-                                    flex items-center gap-2 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
-                                    ${activeTab === tab.key
-                                        ? 'border-blue-500 text-blue-500'
-                                        : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}
-                                `}
-                            >
-                                <tab.icon className="w-4 h-4" />
-                                {tab.label}
-                            </button>
-                        ))}
-                    </nav>
-                </div>
+                <div className="flex flex-col lg:flex-row gap-8">
+                    {/* Sidebar Nav */}
+                    <div className="w-full lg:w-64 shrink-0">
+                        <nav className="flex flex-col space-y-1 bg-slate-900/50 p-2 rounded-xl border border-white/5" aria-label="Settings Navigation">
+                            {TABS.map(tab => (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setActiveTab(tab.key)}
+                                    className={`
+                                        flex items-center gap-3 w-full px-4 py-2.5 rounded-lg font-medium text-sm transition-all text-left
+                                        ${activeTab === tab.key
+                                            ? 'bg-blue-600 text-white shadow-sm'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/5'}
+                                    `}
+                                >
+                                    <tab.icon className="w-4 h-4 shrink-0" />
+                                    <span className="truncate">{tab.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+                    </div>
 
-                {/* Tab content */}
-                {activeTab === 'departments' && <DepartmentsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
-                {activeTab === 'positions'   && <PositionsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
-                {activeTab === 'alerts'      && <AlertsTab departments={departments} positions={positions} alerts={alerts} onRefresh={fetchAll} />}
-                {activeTab === 'categories'  && <CategoriesTab departments={departments} positions={positions} categories={categories} onRefresh={fetchAll} />}
-                {activeTab === 'fines_categories' && <DisciplinaryCategoriesTab categories={finesCategories} onRefresh={fetchAll} />}
-                {activeTab === 'periods'     && <ReviewPeriodsTab />}
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                            {activeTab === 'departments' && <DepartmentsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
+                            {activeTab === 'positions'   && <PositionsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
+                            {activeTab === 'alerts'      && <AlertsTab departments={departments} positions={positions} alerts={alerts} onRefresh={fetchAll} />}
+                            {activeTab === 'categories'  && <CategoriesTab departments={departments} positions={positions} categories={categories} onRefresh={fetchAll} />}
+                            {activeTab === 'fines_categories' && <DisciplinaryCategoriesTab categories={finesCategories} onRefresh={fetchAll} />}
+                            {activeTab === 'fines_table' && <FinesTableTab departments={departments} positions={positions} categories={finesCategories} />}
+                            {activeTab === 'periods'     && <ReviewPeriodsTab />}
+                            {activeTab === 'bonus'       && <BonusTab />}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     )

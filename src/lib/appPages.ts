@@ -134,6 +134,15 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   { id: 'monthly-deposits', href: '/monthly-reports/deposits', title: 'Deposits', module: 'Monthly Reports', icon: Landmark, requiresRole: ['owner', 'admin'] },
   { id: 'monthly-ledger', href: '/monthly-reports/cash-ledger', title: 'Cash Ledger', module: 'Monthly Reports', icon: BookOpen, requiresRole: ['owner', 'admin'] },
   { id: 'monthly-activity', href: '/monthly-reports/activity-log', title: 'Activity Log', module: 'Monthly Reports', icon: ScrollText, requiresRole: ['owner', 'admin'] },
+
+  // Finance
+  { id: 'finance-dash', href: '/finance', title: 'Finance Dashboard', module: 'Finance', icon: Home, requiresRole: ['owner', 'admin'] },
+  { id: 'finance-invoices', href: '/finance/invoices', title: 'Invoices', module: 'Finance', icon: FileText, requiresRole: ['owner', 'admin'] },
+  { id: 'finance-payments', href: '/finance/payments', title: 'Payment Orders', module: 'Finance', icon: CreditCard, requiresRole: ['owner', 'admin'] },
+  { id: 'finance-accounts', href: '/finance/accounts', title: 'Bank Accounts', module: 'Finance', icon: Landmark, requiresRole: ['owner', 'admin'] },
+  { id: 'finance-pnl', href: '/finance/pnl', title: 'P&L Report', module: 'Finance', icon: BarChart3, requiresRole: ['owner', 'admin'] },
+  { id: 'finance-cashflow', href: '/finance/cashflow', title: 'Cash Flow', module: 'Finance', icon: ArrowLeftRight, requiresRole: ['owner', 'admin'] },
+  { id: 'finance-settings', href: '/finance/settings', title: 'Finance Settings', module: 'Finance', icon: Settings, requiresRole: ['owner', 'admin'] },
 ]
 
 export const getDefaultQuickAccess = (role: string | null) => {

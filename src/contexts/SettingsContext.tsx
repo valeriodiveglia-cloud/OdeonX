@@ -75,6 +75,30 @@ type Ctx = {
   hrReviewFrequency: string
   setHrReviewFrequency: (v: string) => void
 
+  // HR Bonus Config
+  hrBonus14thBaseYears: number
+  setHrBonus14thBaseYears: (n: number) => void
+  hrBonus14thSteps: { years: number, pct: number }[]
+  setHrBonus14thSteps: (s: { years: number, pct: number }[]) => void
+
+  hrBonusPtMaxCap: number
+  setHrBonusPtMaxCap: (n: number) => void
+  hrBonusPtTargetHours: number
+  setHrBonusPtTargetHours: (n: number) => void
+  hrBonusPtMinHours: number
+  setHrBonusPtMinHours: (n: number) => void
+
+  hrBonusPtMinRating: number
+  setHrBonusPtMinRating: (n: number) => void
+  hrBonus14thMinRating: number
+  setHrBonus14thMinRating: (n: number) => void
+  hrBonus13thGuaranteedPct: number
+  setHrBonus13thGuaranteedPct: (n: number) => void
+  hrBonus13thPerfPct: number
+  setHrBonus13thPerfPct: (n: number) => void
+  hrBonus13thPerfTiers: { min_rating: number, multiplier_pct: number }[]
+  setHrBonus13thPerfTiers: (t: { min_rating: number, multiplier_pct: number }[]) => void
+
   // CRM Global Settings
   crmAdvisorCommissionPct: number
   setCrmAdvisorCommissionPct: (p: number) => void
@@ -132,6 +156,29 @@ const SettingsCtx = createContext<Ctx>({
   hrReviewFrequency: 'Quarterly',
   setHrReviewFrequency: () => {},
 
+  hrBonus14thBaseYears: 3,
+  setHrBonus14thBaseYears: () => {},
+  hrBonus14thSteps: [{ years: 3, pct: 60 }, { years: 4, pct: 70 }, { years: 5, pct: 80 }, { years: 6, pct: 90 }, { years: 7, pct: 100 }],
+  setHrBonus14thSteps: () => {},
+
+  hrBonusPtMaxCap: 2000000,
+  setHrBonusPtMaxCap: () => {},
+  hrBonusPtTargetHours: 500,
+  setHrBonusPtTargetHours: () => {},
+  hrBonusPtMinHours: 100,
+  setHrBonusPtMinHours: () => {},
+
+  hrBonusPtMinRating: 2.5,
+  setHrBonusPtMinRating: () => {},
+  hrBonus14thMinRating: 3.0,
+  setHrBonus14thMinRating: () => {},
+  hrBonus13thGuaranteedPct: 80,
+  setHrBonus13thGuaranteedPct: () => {},
+  hrBonus13thPerfPct: 20,
+  setHrBonus13thPerfPct: () => {},
+  hrBonus13thPerfTiers: [{ min_rating: 3, multiplier_pct: 100 }, { min_rating: 4.8, multiplier_pct: 150 }],
+  setHrBonus13thPerfTiers: () => {},
+
   crmAdvisorCommissionPct: 10,
   setCrmAdvisorCommissionPct: () => {},
   crmCommissionType: 'Acquisition + Maintenance',
@@ -178,6 +225,22 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   // HR
   const [hrReviewFrequency, setHrReviewFrequencyState] = useState<string>('Quarterly')
+  const [hrBonus14thBaseYears, setHrBonus14thBaseYearsState] = useState<number>(3)
+  const [hrBonus14thSteps, setHrBonus14thStepsState] = useState<{ years: number, pct: number }[]>([
+    { years: 3, pct: 60 }, { years: 4, pct: 70 }, { years: 5, pct: 80 }, { years: 6, pct: 90 }, { years: 7, pct: 100 }
+  ])
+  const [hrBonusPtMaxCap, setHrBonusPtMaxCapState] = useState<number>(2000000)
+  const [hrBonusPtTargetHours, setHrBonusPtTargetHoursState] = useState<number>(500)
+  const [hrBonusPtMinHours, setHrBonusPtMinHoursState] = useState<number>(100)
+
+  const [hrBonusPtMinRating, setHrBonusPtMinRatingState] = useState<number>(2.5)
+  const [hrBonus14thMinRating, setHrBonus14thMinRatingState] = useState<number>(3.0)
+  const [hrBonus13thGuaranteedPct, setHrBonus13thGuaranteedPctState] = useState<number>(80)
+  const [hrBonus13thPerfPct, setHrBonus13thPerfPctState] = useState<number>(20)
+  const [hrBonus13thPerfTiers, setHrBonus13thPerfTiersState] = useState<{ min_rating: number, multiplier_pct: number }[]>([
+    { min_rating: 3, multiplier_pct: 100 },
+    { min_rating: 4.8, multiplier_pct: 150 }
+  ])
 
   // CRM
   const [crmAdvisorCommissionPct, setCrmAdvisorCommissionPctState] = useState<number>(10)
@@ -217,6 +280,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     equipmentReviewMonths?: number
     equipmentCsvConfirm?: boolean
     hrReviewFrequency?: string
+    hrBonus14thBaseYears?: number
+    hrBonus14thSteps?: { years: number, pct: number }[]
+    hrBonusPtMaxCap?: number
+    hrBonusPtTargetHours?: number
+    hrBonusPtMinHours?: number
+    hrBonusPtMinRating?: number
+    hrBonus14thMinRating?: number
+    hrBonus13thGuaranteedPct?: number
+    hrBonus13thPerfPct?: number
+    hrBonus13thPerfTiers?: { min_rating: number, multiplier_pct: number }[]
     crmAdvisorCommissionPct?: number
     crmCommissionType?: string
     crmCommissionRules?: any
@@ -249,6 +322,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if ('equipmentCsvConfirm' in partial) patch.equipment_csv_require_confirm_refs = partial.equipmentCsvConfirm
 
     if ('hrReviewFrequency' in partial) patch.hr_review_frequency = partial.hrReviewFrequency
+    if ('hrBonus14thBaseYears' in partial) patch.hr_bonus_14th_base_years = partial.hrBonus14thBaseYears
+    if ('hrBonus14thSteps' in partial) patch.hr_bonus_14th_steps = partial.hrBonus14thSteps
+    if ('hrBonusPtMaxCap' in partial) patch.hr_bonus_pt_max_cap = partial.hrBonusPtMaxCap
+    if ('hrBonusPtTargetHours' in partial) patch.hr_bonus_pt_target_hours = partial.hrBonusPtTargetHours
+    if ('hrBonusPtMinHours' in partial) patch.hr_bonus_pt_min_hours = partial.hrBonusPtMinHours
+    if ('hrBonusPtMinRating' in partial) patch.hr_bonus_pt_min_rating = partial.hrBonusPtMinRating
+    if ('hrBonus14thMinRating' in partial) patch.hr_bonus_14th_min_rating = partial.hrBonus14thMinRating
+    if ('hrBonus13thGuaranteedPct' in partial) patch.hr_bonus_13th_guaranteed_pct = partial.hrBonus13thGuaranteedPct
+    if ('hrBonus13thPerfPct' in partial) patch.hr_bonus_13th_perf_pct = partial.hrBonus13thPerfPct
+    if ('hrBonus13thPerfTiers' in partial) patch.hr_bonus_13th_perf_tiers = partial.hrBonus13thPerfTiers
 
     if ('crmAdvisorCommissionPct' in partial) patch.crm_advisor_commission_pct = partial.crmAdvisorCommissionPct
     if ('crmCommissionType' in partial) patch.crm_commission_type = partial.crmCommissionType
@@ -273,7 +356,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase
       .from('app_settings')
       .select(
-        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs, hr_review_frequency, crm_advisor_commission_pct, crm_commission_type, crm_commission_rules, crm_partner_rules'
+        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs, hr_review_frequency, hr_bonus_14th_base_years, hr_bonus_14th_steps, hr_bonus_pt_max_cap, hr_bonus_pt_target_hours, hr_bonus_pt_min_hours, hr_bonus_pt_min_rating, hr_bonus_14th_min_rating, hr_bonus_13th_guaranteed_pct, hr_bonus_13th_perf_pct, hr_bonus_13th_perf_tiers, crm_advisor_commission_pct, crm_commission_type, crm_commission_rules, crm_partner_rules'
       )
       .eq('id', 'singleton')
       .maybeSingle()
@@ -338,6 +421,28 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         : undefined
 
     const hrFreqDb = data?.hr_review_frequency ? String(data.hr_review_frequency) : undefined
+    if (data?.hr_bonus_14th_base_years !== undefined) {
+      setHrBonus14thBaseYearsState(Number(data.hr_bonus_14th_base_years))
+    }
+    if (data?.hr_bonus_14th_steps) {
+      const stepsData = data.hr_bonus_14th_steps as any[];
+      // Migrate from old number[] format if necessary
+      if (stepsData.length > 0 && typeof stepsData[0] === 'number') {
+        const base = data.hr_bonus_14th_base_years !== undefined ? Number(data.hr_bonus_14th_base_years) : 3;
+        setHrBonus14thStepsState(stepsData.map((val: number, idx: number) => ({ years: base + idx, pct: val })));
+      } else {
+        setHrBonus14thStepsState(stepsData);
+      }
+    }
+
+    if (data?.hr_bonus_pt_max_cap !== undefined) setHrBonusPtMaxCapState(Number(data.hr_bonus_pt_max_cap))
+    if (data?.hr_bonus_pt_target_hours !== undefined) setHrBonusPtTargetHoursState(Number(data.hr_bonus_pt_target_hours))
+    if (data?.hr_bonus_pt_min_hours !== undefined) setHrBonusPtMinHoursState(Number(data.hr_bonus_pt_min_hours))
+    if (data?.hr_bonus_pt_min_rating !== undefined) setHrBonusPtMinRatingState(Number(data.hr_bonus_pt_min_rating))
+    if (data?.hr_bonus_14th_min_rating !== undefined) setHrBonus14thMinRatingState(Number(data.hr_bonus_14th_min_rating))
+    if (data?.hr_bonus_13th_guaranteed_pct !== undefined) setHrBonus13thGuaranteedPctState(Number(data.hr_bonus_13th_guaranteed_pct))
+    if (data?.hr_bonus_13th_perf_pct !== undefined) setHrBonus13thPerfPctState(Number(data.hr_bonus_13th_perf_pct))
+    if (data?.hr_bonus_13th_perf_tiers !== undefined) setHrBonus13thPerfTiersState(data.hr_bonus_13th_perf_tiers as any)
 
     try {
       // Local overrides
@@ -562,6 +667,56 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     void saveToDb({ hrReviewFrequency: v })
   }
 
+  function setHrBonus14thBaseYears(n: number) {
+    setHrBonus14thBaseYearsState(n)
+    void saveToDb({ hrBonus14thBaseYears: n })
+  }
+
+  function setHrBonus14thSteps(s: { years: number, pct: number }[]) {
+    setHrBonus14thStepsState(s)
+    void saveToDb({ hrBonus14thSteps: s })
+  }
+
+  function setHrBonusPtMaxCap(n: number) {
+    setHrBonusPtMaxCapState(n)
+    void saveToDb({ hrBonusPtMaxCap: n })
+  }
+
+  function setHrBonusPtTargetHours(n: number) {
+    setHrBonusPtTargetHoursState(n)
+    void saveToDb({ hrBonusPtTargetHours: n })
+  }
+
+  function setHrBonusPtMinHours(n: number) {
+    setHrBonusPtMinHoursState(n)
+    void saveToDb({ hrBonusPtMinHours: n })
+  }
+
+  function setHrBonusPtMinRating(n: number) {
+    setHrBonusPtMinRatingState(n)
+    void saveToDb({ hrBonusPtMinRating: n })
+  }
+
+  function setHrBonus14thMinRating(n: number) {
+    setHrBonus14thMinRatingState(n)
+    void saveToDb({ hrBonus14thMinRating: n })
+  }
+
+  function setHrBonus13thGuaranteedPct(n: number) {
+    setHrBonus13thGuaranteedPctState(n)
+    void saveToDb({ hrBonus13thGuaranteedPct: n })
+  }
+
+  function setHrBonus13thPerfPct(n: number) {
+    setHrBonus13thPerfPctState(n)
+    void saveToDb({ hrBonus13thPerfPct: n })
+  }
+
+  function setHrBonus13thPerfTiers(t: { min_rating: number, multiplier_pct: number }[]) {
+    setHrBonus13thPerfTiersState(t)
+    void saveToDb({ hrBonus13thPerfTiers: t })
+  }
+
   function setCrmAdvisorCommissionPct(p: number) {
     setCrmAdvisorCommissionPctState(p)
     void saveToDb({ crmAdvisorCommissionPct: p })
@@ -632,6 +787,29 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
         hrReviewFrequency,
         setHrReviewFrequency,
+
+        hrBonus14thBaseYears,
+        setHrBonus14thBaseYears,
+        hrBonus14thSteps,
+        setHrBonus14thSteps,
+
+        hrBonusPtMaxCap,
+        setHrBonusPtMaxCap,
+        hrBonusPtTargetHours,
+        setHrBonusPtTargetHours,
+        hrBonusPtMinHours,
+        setHrBonusPtMinHours,
+
+        hrBonusPtMinRating,
+        setHrBonusPtMinRating,
+        hrBonus14thMinRating,
+        setHrBonus14thMinRating,
+        hrBonus13thGuaranteedPct,
+        setHrBonus13thGuaranteedPct,
+        hrBonus13thPerfPct,
+        setHrBonus13thPerfPct,
+        hrBonus13thPerfTiers,
+        setHrBonus13thPerfTiers,
 
         crmAdvisorCommissionPct,
         setCrmAdvisorCommissionPct,

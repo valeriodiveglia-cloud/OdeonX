@@ -8,7 +8,7 @@ export interface SalaryModalProps {
     open: boolean
     onClose: () => void
     onSave: (data: Partial<HRStaffSalaryHistory>) => Promise<void>
-    onResign?: (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation', reason: string, notes: string }) => Promise<void>
+    onResign?: (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation' | 'rejection', reason: string, notes: string }) => Promise<void>
     entry: HRStaffSalaryHistory | null
     staffList: HRStaffMember[]
     departments: HRDepartment[]
@@ -16,13 +16,14 @@ export interface SalaryModalProps {
     saving: boolean
     loggedUserName: string
     preselectedStaffId?: string
+    isProbationRejection?: boolean
 }
 
-export default function SalaryModal({ open, onClose, onSave, onResign, entry, staffList, departments, positions, saving, loggedUserName, preselectedStaffId }: SalaryModalProps) {
+export default function SalaryModal({ open, onClose, onSave, onResign, entry, staffList, departments, positions, saving, loggedUserName, preselectedStaffId, isProbationRejection }: SalaryModalProps) {
     const [staffId, setStaffId]           = useState(preselectedStaffId || '')
     const [effectiveDate, setEffectiveDate] = useState('')
     const [activeTab, setActiveTab]       = useState<'status' | 'resignation'>('status')
-    const [leavingType, setLeavingType]   = useState<'dismissal' | 'resignation' | ''>('')
+    const [leavingType, setLeavingType]   = useState<'dismissal' | 'resignation' | 'rejection' | ''>('')
     const [leavingReason, setLeavingReason] = useState('')
     
     // Position/Dept tracking
@@ -81,8 +82,8 @@ export default function SalaryModal({ open, onClose, onSave, onResign, entry, st
             setApprovedBy(entry.approved_by || '')
             setNotes(entry.notes || '')
         } else {
-            setActiveTab('status')
-            setLeavingType('')
+            setActiveTab(isProbationRejection ? 'resignation' : 'status')
+            setLeavingType(isProbationRejection ? 'rejection' : '')
             setLeavingReason('')
             const initialStaffId = preselectedStaffId || '';
             setStaffId(initialStaffId); 
@@ -107,7 +108,7 @@ export default function SalaryModal({ open, onClose, onSave, onResign, entry, st
             setIncreaseType('percentage'); setIncreaseValue('')
             setApprovedBy(loggedUserName); setNotes('')
         }
-    }, [entry, open, loggedUserName, preselectedStaffId, staffList])
+    }, [entry, open, loggedUserName, preselectedStaffId, staffList, isProbationRejection])
 
     // Auto-calculate new amount based on increase type & value (only if salary type matches)
     useEffect(() => {
@@ -188,7 +189,7 @@ export default function SalaryModal({ open, onClose, onSave, onResign, entry, st
                     </button>
                 </div>
 
-                {!entry && (
+                {!entry && !isProbationRejection && (
                     <div className="flex items-center border-b border-gray-200 px-6 pt-2">
                         <button type="button" onClick={() => setActiveTab('status')}
                             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'status' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
@@ -198,6 +199,13 @@ export default function SalaryModal({ open, onClose, onSave, onResign, entry, st
                             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'resignation' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                             Dismissal / Resignation
                         </button>
+                    </div>
+                )}
+                {!entry && isProbationRejection && (
+                    <div className="flex items-center border-b border-gray-200 px-6 pt-2">
+                        <div className="px-4 py-3 text-sm font-medium border-b-2 border-red-600 text-red-600">
+                            Probation Rejection
+                        </div>
                     </div>
                 )}
 
@@ -360,11 +368,12 @@ export default function SalaryModal({ open, onClose, onSave, onResign, entry, st
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Type of Leaving *</label>
-                                    <select required value={leavingType} onChange={e => { setLeavingType(e.target.value as any); setLeavingReason(''); }} disabled={!staffId}
+                                    <select required value={leavingType} onChange={e => { setLeavingType(e.target.value as any); setLeavingReason(''); }} disabled={!staffId || isProbationRejection}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-gray-50">
                                         <option value="" disabled>Select type…</option>
-                                        <option value="resignation">Resignation</option>
-                                        <option value="dismissal">Dismissal</option>
+                                        {!isProbationRejection && <option value="resignation">Resignation</option>}
+                                        {!isProbationRejection && <option value="dismissal">Dismissal</option>}
+                                        {isProbationRejection && <option value="rejection">Rejection</option>}
                                     </select>
                                 </div>
                                 <div>
@@ -388,6 +397,14 @@ export default function SalaryModal({ open, onClose, onSave, onResign, entry, st
                                                 <option value="Attendance / Tardiness">Attendance / Tardiness</option>
                                                 <option value="Policy Violation">Policy Violation</option>
                                                 <option value="Redundancy / Layoff">Redundancy / Layoff</option>
+                                                <option value="Other">Other</option>
+                                            </>
+                                        )}
+                                        {leavingType === 'rejection' && (
+                                            <>
+                                                <option value="Underperforming">Underperforming</option>
+                                                <option value="Not suitable">Not suitable</option>
+                                                <option value="Refused position">Refused position</option>
                                                 <option value="Other">Other</option>
                                             </>
                                         )}
@@ -421,7 +438,7 @@ export default function SalaryModal({ open, onClose, onSave, onResign, entry, st
                             }
                                 className={`px-5 py-2 text-sm font-medium text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-blue-600 hover:bg-blue-700`}>
                                 {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                                {activeTab === 'resignation' ? 'Set Inactive' : (entry ? 'Update' : 'Record Change')}
+                                {activeTab === 'resignation' ? (isProbationRejection ? 'Reject' : 'Next') : (entry ? 'Update' : 'Record Change')}
                             </button>
                         </div>
                     </div>

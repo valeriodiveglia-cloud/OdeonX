@@ -8,8 +8,9 @@ import CircularLoader from '@/components/CircularLoader'
 import SalaryModal from '@/components/human-resources/SalaryModal'
 import {
     TrendingUp, Plus, Search, X, Pencil, Trash2,
-    ArrowUpRight, DollarSign, Calendar, Users, Briefcase, TrendingDown
+    ArrowUpRight, DollarSign, Calendar, Users, Briefcase, TrendingDown, FileDown
 } from 'lucide-react'
+import { saveAs } from 'file-saver'
 
 /* ─── Helpers ─── */
 const fmt = (n: number) => new Intl.NumberFormat('en-US').format(Math.round(n))
@@ -68,6 +69,64 @@ function DeleteConfirm({ label, onConfirm, onCancel, deleting }: {
     )
 }
 
+function ExportModal({ onClose, onExport }: { onClose: () => void, onExport: (range: 'this_month' | 'prev_month' | 'all' | 'custom', start?: string, end?: string) => void }) {
+    const [range, setRange] = useState<'this_month' | 'prev_month' | 'all' | 'custom'>('this_month')
+    const [startDate, setStartDate] = useState('')
+    const [endDate, setEndDate] = useState('')
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Status Changes</h3>
+                
+                <div className="space-y-3 mb-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={range === 'this_month'} onChange={() => setRange('this_month')} className="text-blue-600 focus:ring-blue-500" />
+                        <span className="text-sm text-gray-700">This Month</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={range === 'prev_month'} onChange={() => setRange('prev_month')} className="text-blue-600 focus:ring-blue-500" />
+                        <span className="text-sm text-gray-700">Previous Month</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={range === 'custom'} onChange={() => setRange('custom')} className="text-blue-600 focus:ring-blue-500" />
+                        <span className="text-sm text-gray-700">Custom Dates</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={range === 'all'} onChange={() => setRange('all')} className="text-blue-600 focus:ring-blue-500" />
+                        <span className="text-sm text-gray-700">All Time</span>
+                    </label>
+
+                    {range === 'custom' && (
+                        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-100">
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">From</label>
+                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">To</label>
+                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                    <button 
+                        onClick={() => onExport(range, startDate, endDate)} 
+                        disabled={range === 'custom' && (!startDate || !endDate)}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
+                    >
+                        <FileDown className="w-4 h-4" />
+                        Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 /* ─── Main Page ─── */
 export default function SalaryHistoryPage() {
     const { language } = useSettings()
@@ -87,6 +146,8 @@ export default function SalaryHistoryPage() {
 
     const [deletingId, setDeletingId]     = useState<string | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
+
+    const [exportModalOpen, setExportModalOpen] = useState(false)
 
     const [loggedUserName, setLoggedUserName] = useState<string>('')
 
@@ -197,7 +258,7 @@ export default function SalaryHistoryPage() {
         setSaving(false)
     }
 
-    const handleResign = async (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation', reason: string, notes: string }) => {
+    const handleResign = async (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation' | 'rejection', reason: string, notes: string }) => {
         setSaving(true)
         try {
             const staff = staffList.find(s => s.id === data.staffId)
@@ -244,6 +305,95 @@ export default function SalaryHistoryPage() {
         setDeleteLoading(false)
     }
 
+    const handleExport = async (range: 'this_month' | 'prev_month' | 'all' | 'custom', startDate?: string, endDate?: string) => {
+        const ExcelJS = (await import('exceljs')).default
+
+        let dataToExport = filtered
+        
+        const now = new Date()
+        if (range === 'this_month') {
+            // Start of current month (local time, or use UTC if you prefer, but typical string comparisons work fine)
+            // Using standard yyyy-mm-dd
+            const y = now.getFullYear()
+            const m = String(now.getMonth() + 1).padStart(2, '0')
+            const start = `${y}-${m}-01`
+            const lastDay = new Date(y, now.getMonth() + 1, 0).getDate()
+            const end = `${y}-${m}-${String(lastDay).padStart(2, '0')}`
+            dataToExport = filtered.filter(e => e.effective_date >= start && e.effective_date <= end)
+        } else if (range === 'prev_month') {
+            const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+            const y = prev.getFullYear()
+            const m = String(prev.getMonth() + 1).padStart(2, '0')
+            const start = `${y}-${m}-01`
+            const lastDay = new Date(y, prev.getMonth() + 1, 0).getDate()
+            const end = `${y}-${m}-${String(lastDay).padStart(2, '0')}`
+            dataToExport = filtered.filter(e => e.effective_date >= start && e.effective_date <= end)
+        } else if (range === 'custom' && startDate && endDate) {
+            dataToExport = filtered.filter(e => e.effective_date >= startDate && e.effective_date <= endDate)
+        }
+
+        const workbook = new ExcelJS.Workbook()
+        const sheet = workbook.addWorksheet('Status Changes')
+
+        sheet.columns = [
+            { header: 'Staff Member', key: 'name', width: 25 },
+            { header: 'Old Position', key: 'old_position', width: 20 },
+            { header: 'New Position', key: 'new_position', width: 20 },
+            { header: 'Employment Type', key: 'type', width: 18 },
+            { header: 'Date', key: 'date', width: 15 },
+            { header: 'Old Gross Salary', key: 'old_salary', width: 18, style: { numFmt: '#,##0' } },
+            { header: 'New Gross Salary', key: 'new_salary', width: 18, style: { numFmt: '#,##0' } },
+            { header: 'Increase', key: 'increase', width: 15 },
+            { header: 'Reason', key: 'reason', width: 30 },
+        ]
+
+        sheet.getRow(1).font = { bold: true }
+        sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } }
+
+        dataToExport.forEach(e => {
+            const isPromo = e.record_type === 'promotion'
+            const isResign = e.record_type === 'resignation'
+            const isDismissal = e.record_type === 'dismissal'
+            
+            const diff = e.new_amount - e.previous_amount
+            const pct = e.previous_amount > 0 ? ((diff / e.previous_amount) * 100).toFixed(1) : 'New'
+            const increaseStr = diff === 0 ? 'No Change' : (e.previous_amount === 0 ? 'New' : `${diff > 0 ? '+' : ''}${pct}%`)
+
+            const oldPos = e.previous_position?.name || e.hr_staff?.position || ''
+            const newPos = e.new_position?.name || e.hr_staff?.position || ''
+            const empTypeStr = e.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'
+
+            sheet.addRow({
+                name: e.hr_staff?.full_name || '',
+                old_position: oldPos,
+                new_position: newPos,
+                type: empTypeStr,
+                date: new Date(e.effective_date).toLocaleDateString('en-GB'),
+                old_salary: e.previous_amount,
+                new_salary: (isResign || isDismissal) ? null : e.new_amount,
+                increase: (isResign || isDismissal) ? '—' : increaseStr,
+                reason: e.reason || ''
+            })
+        })
+
+        let fileNameSuffix = 'All_Time'
+        if (range === 'this_month') {
+            const mName = now.toLocaleString('default', { month: 'long', year: 'numeric' }) // e.g., "May 2026"
+            fileNameSuffix = mName.replace(' ', '_')
+        } else if (range === 'prev_month') {
+            const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+            const mName = prev.toLocaleString('default', { month: 'long', year: 'numeric' })
+            fileNameSuffix = mName.replace(' ', '_')
+        } else if (range === 'custom' && startDate && endDate) {
+            fileNameSuffix = `${startDate}_to_${endDate}`
+        }
+
+        const buffer = await workbook.xlsx.writeBuffer()
+        saveAs(new Blob([buffer]), `Status_Changes_Export_${fileNameSuffix}.xlsx`)
+        
+        setExportModalOpen(false)
+    }
+
     if (loading) return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
 
     return (
@@ -255,11 +405,18 @@ export default function SalaryHistoryPage() {
                         <h1 className="text-2xl font-bold text-white">Status Change</h1>
                         <p className="text-sm text-slate-400 mt-1">Track role changes, promotions, and gross salary adjustments for your team.</p>
                     </div>
-                    <button onClick={() => { setEditingEntry(null); setModalOpen(true) }}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg shrink-0">
-                        <Plus className="w-4 h-4" />
-                        Record Event
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => setExportModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 border border-white/10 text-sm font-medium text-white hover:bg-slate-700 transition shadow hover:shadow-lg">
+                            <FileDown className="w-4 h-4" />
+                            Export
+                        </button>
+                        <button onClick={() => { setEditingEntry(null); setModalOpen(true) }}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg">
+                            <Plus className="w-4 h-4" />
+                            Record Event
+                        </button>
+                    </div>
                 </div>
 
                 {/* Summary Cards */}
@@ -418,6 +575,10 @@ export default function SalaryHistoryPage() {
                 <DeleteConfirm
                     label={entries.find(e => e.id === deletingId)?.hr_staff?.full_name || ''}
                     onConfirm={handleDelete} onCancel={() => setDeletingId(null)} deleting={deleteLoading} />
+            )}
+
+            {exportModalOpen && (
+                <ExportModal onClose={() => setExportModalOpen(false)} onExport={handleExport} />
             )}
         </div>
     )
