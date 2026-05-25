@@ -340,86 +340,99 @@ export default function InvoicesPage() {
 
     const handleDoneLinking = async () => {
         setShowLinkModal(false)
-        const selectedManual = unlinkedManualItems.filter(i => form.linked_item_ids.includes(i.id))
-        const selectedCard = linkableCardExpenses.filter(i => form.linked_card_ids.includes(i.id))
-        const selectedCashOut = linkableCashOuts.filter(i => form.linked_cashout_ids.includes(i.id))
-        
-        if (selectedManual.length === 0 && selectedCard.length === 0 && selectedCashOut.length === 0) return
-        
-        let grossTotal = 0
-        const categories = new Set<string>()
-        const branchIds = new Set<string>()
-
-        let firstCategory: string | null = null
-        let firstBranch: string | null = null
-
-        selectedManual.forEach(i => {
-            grossTotal += Number(i.amount || 0)
-            if (i.account_id) { categories.add(i.account_id); if (!firstCategory) firstCategory = i.account_id }
-            if (i.branch_ids && i.branch_ids.length > 0) { branchIds.add(i.branch_ids[0]); if (!firstBranch) firstBranch = i.branch_ids[0] }
-        })
-        selectedCard.forEach(i => {
-            grossTotal += Number(i.amount || 0)
-            if (i.account_id) { categories.add(i.account_id); if (!firstCategory) firstCategory = i.account_id }
-            if (i.branch_ids && i.branch_ids.length > 0) { branchIds.add(i.branch_ids[0]); if (!firstBranch) firstBranch = i.branch_ids[0] }
-        })
-
-        // Resolve cashout branch name → branch_id and category → CoA account_id
-        for (const co of selectedCashOut) {
-            grossTotal += Number(co.amount || 0)
-
-            // Resolve branch name to branch_id
-            if (co.branch) {
-                const matchedBranch = branches.find(b => b.name === co.branch)
-                if (matchedBranch) {
-                    branchIds.add(matchedBranch.id)
-                    if (!firstBranch) firstBranch = matchedBranch.id
-                }
-            }
-
-            // Resolve cashout category → CoA account_id via mapping table
-            if (co.branch && (co as any).category) {
-                const { data: mapping } = await supabase
-                    .from('fin_cashout_category_mapping')
-                    .select('account_id')
-                    .eq('branch_name', co.branch)
-                    .eq('category_name', (co as any).category)
-                    .limit(1)
-                    .maybeSingle()
-                if (mapping?.account_id) {
-                    categories.add(mapping.account_id)
-                    if (!firstCategory) firstCategory = mapping.account_id
-                }
-            }
-        }
-
-        if (categories.size > 1 || branchIds.size > 1) {
-            alert(t(language, 'FinInvIncongruenceWarn'))
-        }
-
-        setForm(f => {
-            const cleanRateStr = f.vat_rate.replace(/,/g, '')
-            const rate = parseFloat(cleanRateStr) || 0
-            const isVND = (f.currency || currency) === 'VND'
-            const net = grossTotal / (1 + (rate / 100))
-            const vat = grossTotal - net
+        try {
+            const selectedManual = unlinkedManualItems.filter(i => form.linked_item_ids.includes(i.id))
+            const selectedCard = linkableCardExpenses.filter(i => form.linked_card_ids.includes(i.id))
+            const selectedCashOut = linkableCashOuts.filter(i => form.linked_cashout_ids.includes(i.id))
             
-            const netStr = isVND 
-                ? Math.round(net).toLocaleString('en-US') 
-                : net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                
-            const vatStr = isVND 
-                ? Math.round(vat).toLocaleString('en-US') 
-                : vat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                
-            return {
-                ...f,
-                net_amount: netStr,
-                vat_amount: vatStr,
-                account_id: firstCategory || f.account_id,
-                branch_ids: firstBranch ? [firstBranch] : f.branch_ids
+            if (selectedManual.length === 0 && selectedCard.length === 0 && selectedCashOut.length === 0) return
+            
+            let grossTotal = 0
+            const categories = new Set<string>()
+            const branchIds = new Set<string>()
+
+            let firstCategory: string | null = null
+            let firstBranch: string | null = null
+            let firstSupplierId: string | null = null
+
+            selectedManual.forEach(i => {
+                grossTotal += Number(i.amount || 0)
+                if (i.account_id) { categories.add(i.account_id); if (!firstCategory) firstCategory = i.account_id }
+                if (i.branch_ids && i.branch_ids.length > 0) { branchIds.add(i.branch_ids[0]); if (!firstBranch) firstBranch = i.branch_ids[0] }
+                if (i.supplier_id && !firstSupplierId) firstSupplierId = i.supplier_id
+            })
+            selectedCard.forEach(i => {
+                grossTotal += Number(i.amount || 0)
+                if (i.account_id) { categories.add(i.account_id); if (!firstCategory) firstCategory = i.account_id }
+                if (i.branch_ids && i.branch_ids.length > 0) { branchIds.add(i.branch_ids[0]); if (!firstBranch) firstBranch = i.branch_ids[0] }
+                if (i.supplier_id && !firstSupplierId) firstSupplierId = i.supplier_id
+            })
+
+            // Resolve cashout branch name → branch_id and category → CoA account_id
+            for (const co of selectedCashOut) {
+                grossTotal += Number(co.amount || 0)
+                if (co.supplier_id && !firstSupplierId) firstSupplierId = co.supplier_id
+
+                // Resolve branch name to branch_id
+                if (co.branch) {
+                    const matchedBranch = branches.find(b => b.name === co.branch)
+                    if (matchedBranch) {
+                        branchIds.add(matchedBranch.id)
+                        if (!firstBranch) firstBranch = matchedBranch.id
+                    }
+                }
+
+                // Resolve cashout category → CoA account_id via mapping table
+                if (co.branch && (co as any).category) {
+                    const { data: mapping, error: mappingErr } = await supabase
+                        .from('fin_cashout_category_mapping')
+                        .select('account_id')
+                        .eq('branch_name', co.branch)
+                        .eq('category_name', (co as any).category)
+                        .limit(1)
+                        .maybeSingle()
+                    
+                    if (mappingErr) {
+                        console.warn("Could not map cashout category:", mappingErr)
+                    } else if (mapping?.account_id) {
+                        categories.add(mapping.account_id)
+                        if (!firstCategory) firstCategory = mapping.account_id
+                    }
+                }
             }
-        })
+
+            if (categories.size > 1 || branchIds.size > 1) {
+                alert(t(language, 'FinInvIncongruenceWarn'))
+            }
+
+            setForm(f => {
+                const cleanRateStr = String(f.vat_rate || '10').replace(/,/g, '')
+                const rate = parseFloat(cleanRateStr) || 0
+                const isVND = (f.currency || currency) === 'VND'
+                const net = grossTotal / (1 + (rate / 100))
+                const vat = grossTotal - net
+                
+                const netStr = isVND 
+                    ? Math.round(net).toLocaleString('en-US') 
+                    : net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    
+                const vatStr = isVND 
+                    ? Math.round(vat).toLocaleString('en-US') 
+                    : vat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    
+                return {
+                    ...f,
+                    net_amount: netStr,
+                    vat_amount: vatStr,
+                    account_id: firstCategory || f.account_id,
+                    branch_ids: firstBranch ? [firstBranch] : f.branch_ids,
+                    supplier_id: f.supplier_id || firstSupplierId || ''
+                }
+            })
+        } catch (err: any) {
+            console.error("Error in handleDoneLinking:", err)
+            alert("Error: " + err.message)
+        }
     }
 
     const handleSave = async (e: React.FormEvent) => {
