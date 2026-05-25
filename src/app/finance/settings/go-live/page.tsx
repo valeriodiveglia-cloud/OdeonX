@@ -23,12 +23,13 @@ export default function FinancialGoLiveSettingsPage() {
                 setStartDate(data.finance_start_date || '')
             }
             setLoading(false)
+            if (error) alert("Debug Fetch Error: " + error.message)
         }
         fetchSettings()
     }, [])
 
     const handleSave = async () => {
-        if (!settingsId) return
+        if (!settingsId) { alert("Debug: l'ID delle impostazioni non e stato caricato (settingsId e nullo)."); return; }
         setSaving(true)
         try {
             const { error } = await supabase
