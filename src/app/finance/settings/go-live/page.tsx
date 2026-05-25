@@ -10,32 +10,29 @@ import { t } from '@/lib/i18n'
 
 export default function FinancialGoLiveSettingsPage() {
     const { language } = useSettings()
-    const [settingsId, setSettingsId] = useState<string | null>(null)
     const [startDate, setStartDate] = useState<string>('')
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
 
     useEffect(() => {
         async function fetchSettings() {
-            const { data, error } = await supabase.from('app_settings').select('id, finance_start_date').limit(1).single()
+            const { data, error } = await supabase.from('app_settings').select('finance_start_date').limit(1).single()
             if (data) {
-                setSettingsId(data.id)
                 setStartDate(data.finance_start_date || '')
             }
             setLoading(false)
-            if (error) alert("Debug Fetch Error: " + error.message)
+            if (error && error.code !== 'PGRST116') console.error("Fetch error:", error)
         }
         fetchSettings()
     }, [])
 
     const handleSave = async () => {
-        if (!settingsId) { alert("Debug: l'ID delle impostazioni non e stato caricato (settingsId e nullo)."); return; }
         setSaving(true)
         try {
             const { error } = await supabase
                 .from('app_settings')
                 .update({ finance_start_date: startDate || null })
-                .eq('id', settingsId)
+                .eq('id', 'singleton')
 
             if (error) throw error
 
