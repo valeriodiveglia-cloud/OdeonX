@@ -337,6 +337,7 @@ export default function PaymentOrdersPage() {
                 if (createTab === 'transfer') {
                     const { data: order, error: ordErr } = await supabase.from('fin_payment_orders').insert({
                         order_number: orderNum,
+                        order_date: toLocalDateStr(new Date()),
                         total_amount: transferAmount + (hasTransferFee ? transferFeeAmount : 0),
                         status: isDraft ? 'Draft' : 'Pending Review',
                         bank_account_id: createAccountId,
@@ -355,6 +356,7 @@ export default function PaymentOrdersPage() {
 
                     const { data: order, error: ordErr } = await supabase.from('fin_payment_orders').insert({
                         order_number: orderNum,
+                        order_date: toLocalDateStr(new Date()),
                         total_amount: selectedTotal,
                         status: isDraft ? 'Draft' : 'Pending Review',
                         bank_account_id: createAccountId || null,
