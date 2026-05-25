@@ -3,7 +3,7 @@ import LeftNavMonthlyReports from '@/components/LeftNavMonthlyReports'
 import { requireRole } from '@/lib/auth-check'
 
 export default async function MonthlyReportsLayout({ children }: { children: ReactNode }) {
-    await requireRole(['owner', 'admin'])
+    await requireRole(['owner', 'admin', 'accountant'])
 
     return (
         <div className="relative">

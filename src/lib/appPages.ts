@@ -63,7 +63,7 @@ export type AppPage = {
 export const APP_PAGES_DIRECTORY: AppPage[] = [
   // Dashboard default
   { id: 'dashboard', href: '/dashboard', title: 'Dashboard', module: 'System', icon: LayoutDashboard },
-  { id: 'general-settings', href: '/general-settings', title: 'Global Settings', module: 'System', icon: Cog6ToothIcon },
+  { id: 'general-settings', href: '/general-settings', title: 'Global Settings', module: 'System', icon: Cog6ToothIcon, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   
   // Costing & Materials
   { id: 'materials', href: '/materials', title: 'Materials', module: 'Costing & Operations', icon: Boxes },
@@ -75,17 +75,17 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   { id: 'costing-settings', href: '/settings', title: 'Costing Settings', module: 'Costing & Operations', icon: Settings },
   
   // Catering
-  { id: 'catering', href: '/catering', title: 'Event Calculator', module: 'Catering', icon: Building2 },
-  { id: 'catering-settings', href: '/catering/eventsettings', title: 'Event Settings', module: 'Catering', icon: Settings },
+  { id: 'catering', href: '/catering', title: 'Event Calculator', module: 'Catering', icon: Building2, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'catering-settings', href: '/catering/eventsettings', title: 'Event Settings', module: 'Catering', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   
   // Daily Reports
-  { id: 'daily-reports-closing', href: '/daily-reports/closinglist', title: 'Cashier Closing', module: 'Daily Reports', icon: Banknote },
-  { id: 'daily-reports-cashout', href: '/daily-reports/cashout', title: 'Cash Out', module: 'Daily Reports', icon: Receipt },
-  { id: 'daily-reports-bank', href: '/daily-reports/banktransfers', title: 'Bank Transfers', module: 'Daily Reports', icon: ArrowLeftRight },
-  { id: 'daily-reports-wastage', href: '/daily-reports/wastage-report', title: 'Wastage Report', module: 'Daily Reports', icon: Trash2 },
-  { id: 'daily-reports-credits', href: '/daily-reports/credits', title: 'Credits', module: 'Daily Reports', icon: Wallet },
-  { id: 'daily-reports-deposits', href: '/daily-reports/deposits', title: 'Deposits', module: 'Daily Reports', icon: Landmark },
-  { id: 'daily-reports-settings', href: '/daily-reports/dailyreportsettings', title: 'Daily Reports Settings', module: 'Daily Reports', icon: Settings },
+  { id: 'daily-reports-closing', href: '/daily-reports/closinglist', title: 'Cashier Closing', module: 'Daily Reports', icon: Banknote, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'daily-reports-cashout', href: '/daily-reports/cashout', title: 'Cash Out', module: 'Daily Reports', icon: Receipt, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'daily-reports-bank', href: '/daily-reports/banktransfers', title: 'Bank Transfers', module: 'Daily Reports', icon: ArrowLeftRight, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'daily-reports-wastage', href: '/daily-reports/wastage-report', title: 'Wastage Report', module: 'Daily Reports', icon: Trash2, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'daily-reports-credits', href: '/daily-reports/credits', title: 'Credits', module: 'Daily Reports', icon: Wallet, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'daily-reports-deposits', href: '/daily-reports/deposits', title: 'Deposits', module: 'Daily Reports', icon: Landmark, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'daily-reports-settings', href: '/daily-reports/dailyreportsettings', title: 'Daily Reports Settings', module: 'Daily Reports', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   
   // Asset Inventory
   { id: 'asset-inventory-dash', href: '/asset-inventory', title: 'Asset Dashboard', module: 'Asset Inventory', icon: LayoutDashboard },
@@ -94,55 +94,55 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   { id: 'asset-inventory-settings', href: '/asset-inventory/settings', title: 'Asset Settings', module: 'Asset Inventory', icon: Settings },
 
   // Loyalty Manager
-  { id: 'loyalty-manager', href: '/loyalty-manager', title: 'Loyalty Dashboard', module: 'Loyalty', icon: LayoutDashboard },
-  { id: 'loyalty-cards', href: '/loyalty-manager/cards', title: 'Loyalty Cards', module: 'Loyalty', icon: CreditCard },
-  { id: 'loyalty-vouchers', href: '/loyalty-manager/vouchers', title: 'Vouchers', module: 'Loyalty', icon: Ticket },
-  { id: 'loyalty-settings', href: '/loyalty-manager/settings', title: 'Loyalty Settings', module: 'Loyalty', icon: Settings },
+  { id: 'loyalty-manager', href: '/loyalty-manager', title: 'Loyalty Dashboard', module: 'Loyalty', icon: LayoutDashboard, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'loyalty-cards', href: '/loyalty-manager/cards', title: 'Loyalty Cards', module: 'Loyalty', icon: CreditCard, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'loyalty-vouchers', href: '/loyalty-manager/vouchers', title: 'Vouchers', module: 'Loyalty', icon: Ticket, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'loyalty-settings', href: '/loyalty-manager/settings', title: 'Loyalty Settings', module: 'Loyalty', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
 
   // HR Module - Global
-  { id: 'hr-dashboard', href: '/human-resources', title: 'HR Dashboard', module: 'HR General', icon: Home },
-  { id: 'hr-recruitment', href: '/human-resources/recruitment', title: 'Recruitment', module: 'HR General', icon: Briefcase },
-  { id: 'hr-activity', href: '/human-resources/activity', title: 'Activity', module: 'HR General', icon: Activity },
-  { id: 'hr-candidates', href: '/human-resources/candidates', title: 'Candidates', module: 'HR General', icon: Users },
+  { id: 'hr-dashboard', href: '/human-resources', title: 'HR Dashboard', module: 'HR General', icon: Home, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hr-recruitment', href: '/human-resources/recruitment', title: 'Recruitment', module: 'HR General', icon: Briefcase, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hr-activity', href: '/human-resources/activity', title: 'Activity', module: 'HR General', icon: Activity, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hr-candidates', href: '/human-resources/candidates', title: 'Candidates', module: 'HR General', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   
   // HR Management
-  { id: 'hrm-staff', href: '/human-resources/management/staff', title: 'Staff List', module: 'HR Management', icon: Users },
-  { id: 'hrm-staff-archive', href: '/human-resources/management/staff-archive', title: 'Staff Archive', module: 'HR Management', icon: Folders },
-  { id: 'hrm-performance', href: '/human-resources/management/performance', title: 'Performance Reviews', module: 'HR Management', icon: Star },
-  { id: 'hrm-salary', href: '/human-resources/management/salary-history', title: 'Status Change', module: 'HR Management', icon: TrendingUp },
-  { id: 'hrm-settings', href: '/human-resources/management/settings', title: 'Management Settings', module: 'HR Management', icon: Settings },
+  { id: 'hrm-staff', href: '/human-resources/management/staff', title: 'Staff List', module: 'HR Management', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hrm-staff-archive', href: '/human-resources/management/staff-archive', title: 'Staff Archive', module: 'HR Management', icon: Folders, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hrm-performance', href: '/human-resources/management/performance', title: 'Performance Reviews', module: 'HR Management', icon: Star, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hrm-salary', href: '/human-resources/management/salary-history', title: 'Status Change', module: 'HR Management', icon: TrendingUp, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hrm-settings', href: '/human-resources/management/settings', title: 'Management Settings', module: 'HR Management', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   
   // HR Operational
-  { id: 'hro-roster', href: '/human-resources/operational/roster', title: 'Roster', module: 'HR Operational', icon: CalendarDays },
-  { id: 'hro-reports', href: '/human-resources/operational/reports', title: 'HR Reports', module: 'HR Operational', icon: BarChart3 },
-  { id: 'hro-settings', href: '/human-resources/operational/settings', title: 'Operational Settings', module: 'HR Operational', icon: Settings },
+  { id: 'hro-roster', href: '/human-resources/operational/roster', title: 'Roster', module: 'HR Operational', icon: CalendarDays, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hro-reports', href: '/human-resources/operational/reports', title: 'HR Reports', module: 'HR Operational', icon: BarChart3, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hro-settings', href: '/human-resources/operational/settings', title: 'Operational Settings', module: 'HR Operational', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   
   // CRM
-  { id: 'crm-dash', href: '/crm', title: 'CRM Dashboard', module: 'CRM', icon: Home, requiresRole: ['owner', 'admin', 'manager'] },
-  { id: 'crm-partners', href: '/crm/partners', title: 'Partners & Pipeline', module: 'CRM', icon: Users, requiresRole: ['owner', 'admin', 'manager'] },
-  { id: 'crm-referrals', href: '/crm/referrals', title: 'Referrals', module: 'CRM', icon: Target },
+  { id: 'crm-dash', href: '/crm', title: 'CRM Dashboard', module: 'CRM', icon: Home, requiresRole: ['owner', 'admin', 'manager', 'accountant'] },
+  { id: 'crm-partners', href: '/crm/partners', title: 'Partners & Pipeline', module: 'CRM', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'accountant'] },
+  { id: 'crm-referrals', href: '/crm/referrals', title: 'Referrals', module: 'CRM', icon: Target, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
   { id: 'crm-commissions', href: '/crm/commissions', title: 'Commissions', module: 'CRM', icon: HandCoins, requiresRole: ['owner', 'admin', 'manager'] },
   { id: 'crm-tasks', href: '/crm/tasks', title: 'Tasks', module: 'CRM', icon: CalendarCheck2, requiresRole: ['owner', 'admin', 'manager'] },
   
   // Monthly Reports
-  { id: 'monthly-dash', href: '/monthly-reports', title: 'Monthly Dashboard', module: 'Monthly Reports', icon: LayoutDashboard, requiresRole: ['owner', 'admin'] },
-  { id: 'monthly-closing', href: '/monthly-reports/closinglist', title: 'Closing List', module: 'Monthly Reports', icon: Banknote, requiresRole: ['owner', 'admin'] },
-  { id: 'monthly-cashout', href: '/monthly-reports/cashout', title: 'Cash Out', module: 'Monthly Reports', icon: Receipt, requiresRole: ['owner', 'admin'] },
-  { id: 'monthly-bank', href: '/monthly-reports/banktransfers', title: 'Bank Transfers', module: 'Monthly Reports', icon: ArrowLeftRight, requiresRole: ['owner', 'admin'] },
-  { id: 'monthly-wastage', href: '/monthly-reports/wastage-report', title: 'Wastage', module: 'Monthly Reports', icon: Trash2, requiresRole: ['owner', 'admin'] },
-  { id: 'monthly-credits', href: '/monthly-reports/credits', title: 'Credits', module: 'Monthly Reports', icon: Wallet, requiresRole: ['owner', 'admin'] },
-  { id: 'monthly-deposits', href: '/monthly-reports/deposits', title: 'Deposits', module: 'Monthly Reports', icon: Landmark, requiresRole: ['owner', 'admin'] },
-  { id: 'monthly-ledger', href: '/monthly-reports/cash-ledger', title: 'Cash Ledger', module: 'Monthly Reports', icon: BookOpen, requiresRole: ['owner', 'admin'] },
-  { id: 'monthly-activity', href: '/monthly-reports/activity-log', title: 'Activity Log', module: 'Monthly Reports', icon: ScrollText, requiresRole: ['owner', 'admin'] },
+  { id: 'monthly-dash', href: '/monthly-reports', title: 'Monthly Dashboard', module: 'Monthly Reports', icon: LayoutDashboard, requiresRole: ['owner', 'admin', 'accountant'] },
+  { id: 'monthly-closing', href: '/monthly-reports/closinglist', title: 'Closing List', module: 'Monthly Reports', icon: Banknote, requiresRole: ['owner', 'admin', 'accountant'] },
+  { id: 'monthly-cashout', href: '/monthly-reports/cashout', title: 'Cash Out', module: 'Monthly Reports', icon: Receipt, requiresRole: ['owner', 'admin', 'accountant'] },
+  { id: 'monthly-bank', href: '/monthly-reports/banktransfers', title: 'Bank Transfers', module: 'Monthly Reports', icon: ArrowLeftRight, requiresRole: ['owner', 'admin', 'accountant'] },
+  { id: 'monthly-wastage', href: '/monthly-reports/wastage-report', title: 'Wastage', module: 'Monthly Reports', icon: Trash2, requiresRole: ['owner', 'admin', 'accountant'] },
+  { id: 'monthly-credits', href: '/monthly-reports/credits', title: 'Credits', module: 'Monthly Reports', icon: Wallet, requiresRole: ['owner', 'admin', 'accountant'] },
+  { id: 'monthly-deposits', href: '/monthly-reports/deposits', title: 'Deposits', module: 'Monthly Reports', icon: Landmark, requiresRole: ['owner', 'admin', 'accountant'] },
+  { id: 'monthly-ledger', href: '/monthly-reports/cash-ledger', title: 'Cash Ledger', module: 'Monthly Reports', icon: BookOpen, requiresRole: ['owner', 'admin', 'accountant'] },
+  { id: 'monthly-activity', href: '/monthly-reports/activity-log', title: 'Activity Log', module: 'Monthly Reports', icon: ScrollText, requiresRole: ['owner'] },
 
   // Finance
-  { id: 'finance-dash', href: '/finance', title: 'Finance Dashboard', module: 'Finance', icon: Home, requiresRole: ['owner', 'admin'] },
-  { id: 'finance-invoices', href: '/finance/invoices', title: 'Invoices', module: 'Finance', icon: FileText, requiresRole: ['owner', 'admin'] },
-  { id: 'finance-payments', href: '/finance/payments', title: 'Payment Orders', module: 'Finance', icon: CreditCard, requiresRole: ['owner', 'admin'] },
-  { id: 'finance-accounts', href: '/finance/accounts', title: 'Bank Accounts', module: 'Finance', icon: Landmark, requiresRole: ['owner', 'admin'] },
-  { id: 'finance-pnl', href: '/finance/pnl', title: 'P&L Report', module: 'Finance', icon: BarChart3, requiresRole: ['owner', 'admin'] },
-  { id: 'finance-cashflow', href: '/finance/cashflow', title: 'Cash Flow', module: 'Finance', icon: ArrowLeftRight, requiresRole: ['owner', 'admin'] },
-  { id: 'finance-settings', href: '/finance/settings', title: 'Finance Settings', module: 'Finance', icon: Settings, requiresRole: ['owner', 'admin'] },
+  { id: 'finance-dash', href: '/finance', title: 'Dashboard', module: 'Finance', icon: Home, requiresRole: ['owner', 'accountant'] },
+  { id: 'finance-invoices', href: '/finance/invoices', title: 'Invoices', module: 'Finance', icon: FileText, requiresRole: ['owner', 'accountant'] },
+  { id: 'finance-payments', href: '/finance/payments', title: 'Payment Orders', module: 'Finance', icon: CreditCard, requiresRole: ['owner', 'accountant'] },
+  { id: 'finance-accounts', href: '/finance/accounts', title: 'Treasury', module: 'Finance', icon: Landmark, requiresRole: ['owner', 'accountant'] },
+  { id: 'finance-pnl', href: '/finance/pnl', title: 'P&L Report', module: 'Finance', icon: BarChart3, requiresRole: ['owner', 'accountant'] },
+  { id: 'finance-cashflow', href: '/finance/cashflow', title: 'Cash Flow', module: 'Finance', icon: ArrowLeftRight, requiresRole: ['owner', 'accountant'] },
+  { id: 'finance-settings', href: '/finance/settings', title: 'Setting', module: 'Finance', icon: Settings, requiresRole: ['owner', 'accountant'] },
 ]
 
 export const getDefaultQuickAccess = (role: string | null) => {

@@ -564,7 +564,13 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
       supabase.from(TBL_ACCOUNTS).select('*').order('created_at', { ascending: true }),
       supabase.from('provider_branches').select('id, name, city').order('name')
     ])
-    if (accRes.error) showAccErr(`Accounts load error: ${accRes.error.message}`); else setAccMsg(null)
+    if (accRes.error) {
+      showAccErr(`Accounts load error: ${accRes.error.message}`);
+    } else if (pbRes.error) {
+      showAccErr(`Branches load error: ${pbRes.error.message}`);
+    } else {
+      setAccMsg(null);
+    }
     setAcc(accRes.data || [])
     if (pbRes.data) setProviderBranches(pbRes.data)
     setAccLoading(false)
@@ -829,31 +835,31 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2 md:col-span-1">
             <label className="text-sm text-gray-800">{t('RestaurantName', lang) || 'Restaurant name'}</label>
-            <input type="text" value={s.restaurant_name ?? ''} onChange={e => patch('restaurant_name', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+            <input type="text" value={s.restaurant_name ?? ''} onChange={e => patch('restaurant_name', e.target.value)} disabled={myRole === 'accountant'} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10" />
           </div>
           <div className="col-span-2 md:col-span-1">
             <label className="text-sm text-gray-800">{t('CompanyName', lang) || 'Company name'}</label>
-            <input type="text" value={s.company_name ?? ''} onChange={e => patch('company_name', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+            <input type="text" value={s.company_name ?? ''} onChange={e => patch('company_name', e.target.value)} disabled={myRole === 'accountant'} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10" />
           </div>
           <div className="col-span-2">
             <label className="text-sm text-gray-800">{t('Address', lang) || 'Address'}</label>
-            <input type="text" value={s.address ?? ''} onChange={e => patch('address', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+            <input type="text" value={s.address ?? ''} onChange={e => patch('address', e.target.value)} disabled={myRole === 'accountant'} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10" />
           </div>
           <div className="col-span-2 md:col-span-1">
             <label className="text-sm text-gray-800">{t('TaxCode', lang) || 'Tax code'}</label>
-            <input type="text" value={s.tax_code ?? ''} onChange={e => patch('tax_code', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+            <input type="text" value={s.tax_code ?? ''} onChange={e => patch('tax_code', e.target.value)} disabled={myRole === 'accountant'} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10" />
           </div>
           <div className="col-span-2 md:col-span-1">
             <label className="text-sm text-gray-800">{t('Phone', lang) || 'Phone'}</label>
-            <input type="text" value={s.phone ?? ''} onChange={e => patch('phone', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+            <input type="text" value={s.phone ?? ''} onChange={e => patch('phone', e.target.value)} disabled={myRole === 'accountant'} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10" />
           </div>
           <div className="col-span-2 md:col-span-1">
             <label className="text-sm text-gray-800">{t('Email', lang) || 'Email'}</label>
-            <input type="email" value={s.email ?? ''} onChange={e => patch('email', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+            <input type="email" value={s.email ?? ''} onChange={e => patch('email', e.target.value)} disabled={myRole === 'accountant'} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10" />
           </div>
           <div className="col-span-2 md:col-span-1">
             <label className="text-sm text-gray-800">{t('Website', lang) || 'Website'}</label>
-            <input type="text" value={s.website ?? ''} onChange={e => patch('website', e.target.value)} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white h-10" />
+            <input type="text" value={s.website ?? ''} onChange={e => patch('website', e.target.value)} disabled={myRole === 'accountant'} className="mt-1 w-full border rounded-lg px-2 py-1 text-gray-900 bg-white disabled:bg-gray-50 h-10" />
           </div>
 
           <div className="col-span-2 md:col-span-1">
@@ -868,18 +874,20 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                   const f = e.target.files?.[0]
                   if (f) handleLogoUpload(f)
                 }}
+                disabled={myRole === 'accountant'}
               />
               <button
                 type="button"
-                onClick={() => document.getElementById('logoInput')?.click()}
-                className="px-3 h-9 rounded-lg border bg-white text-gray-800 hover:bg-gray-50"
+                onClick={() => myRole !== 'accountant' && document.getElementById('logoInput')?.click()}
+                className="px-3 h-9 rounded-lg border bg-white text-gray-800 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={myRole === 'accountant'}
               >
                 {t('ChooseFile', lang) || 'Choose file'}
               </button>
               {logoSrc ? (
                 <img src={logoSrc} alt="logo" className="ml-2 h-10 w-10 rounded object-contain border bg-white" />
               ) : null}
-              {s.logo_data ? (
+              {s.logo_data && myRole !== 'accountant' ? (
                 <button
                   type="button"
                   className="ml-auto w-9 h-9 inline-flex items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50"
@@ -929,70 +937,74 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
           </div>
         </SectionCard>
 
-        <SectionCard title={t('Materials', lang)}>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-                <label className="text-sm text-gray-800">{t('ReviewMonths', lang)}</label>
-                <input type="number" min={0} max={12} value={s.materials_review_months} onChange={handleMonthsChange('materials_review_months')} className="border rounded-lg px-2 py-1 text-gray-900 h-9 w-24" />
+        {myRole !== 'accountant' && (
+          <SectionCard title={t('Materials', lang)}>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                  <label className="text-sm text-gray-800">{t('ReviewMonths', lang)}</label>
+                  <input type="number" min={0} max={12} value={s.materials_review_months} onChange={handleMonthsChange('materials_review_months')} className="border rounded-lg px-2 py-1 text-gray-900 h-9 w-24" />
+                </div>
+              </div>
+              <div className="col-span-2 border-t pt-2">
+                <Toggle id="csv_confirm_materials" checked={!!s.csv_require_confirm_refs} onChange={v => patch('csv_require_confirm_refs', !!v)} label={t('AskCsvConfirm', lang)} />
+                <Toggle id="materials_exclusive_default" checked={!!s.materials_exclusive_default} onChange={v => patch('materials_exclusive_default', !!v)} label={t('MaterialsExclusiveDefault', lang)} />
               </div>
             </div>
-            <div className="col-span-2 border-t pt-2">
-              <Toggle id="csv_confirm_materials" checked={!!s.csv_require_confirm_refs} onChange={v => patch('csv_require_confirm_refs', !!v)} label={t('AskCsvConfirm', lang)} />
-              <Toggle id="materials_exclusive_default" checked={!!s.materials_exclusive_default} onChange={v => patch('materials_exclusive_default', !!v)} label={t('MaterialsExclusiveDefault', lang)} />
-            </div>
-          </div>
-        </SectionCard>
+          </SectionCard>
+        )}
 
-        <SectionCard title={t('Equipment', lang)}>
-          <div className="grid grid-cols-2 gap-3">
-            {/* Review months: label sx / input piccolo dx */}
-            <div className="col-span-2">
-              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-                <label className="text-sm text-gray-800">{t('ReviewMonths', lang)}</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={12}
-                  value={s.equipment_review_months}
-                  onChange={handleMonthsChange('equipment_review_months')}
-                  className="border rounded-lg px-2 py-1 text-gray-900 h-9 w-24"
-                />
-              </div>
-            </div>
-
-            {/* Default Import Markup × (moltiplicatore) */}
-            <div className="col-span-2">
-              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-                <label className="text-sm text-gray-800">
-                  {(t('DefaultImportMarkup', lang) || 'Default Import Markup')}{' '}
-                  <span className="text-gray-500">(×)</span>
-                </label>
-                <div className="w-24">
+        {myRole !== 'accountant' && (
+          <SectionCard title={t('Equipment', lang)}>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Review months: label sx / input piccolo dx */}
+              <div className="col-span-2">
+                <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                  <label className="text-sm text-gray-800">{t('ReviewMonths', lang)}</label>
                   <input
                     type="number"
-                    step={0.1}
                     min={0}
-                    value={s.default_markup_equipment_pct ?? 1.5}
-                    onChange={e => {
-                      const raw = e.target.value
-                      const v = raw === '' ? null : Number(raw)
-                      patch('default_markup_equipment_pct', v == null || !isFinite(v) ? null : clampFloat(v, 0, 100))
-                    }}
-                    placeholder="1.5"
-                    className="w-full border rounded-lg px-2 py-1 text-gray-900 h-9"
+                    max={12}
+                    value={s.equipment_review_months}
+                    onChange={handleMonthsChange('equipment_review_months')}
+                    className="border rounded-lg px-2 py-1 text-gray-900 h-9 w-24"
                   />
                 </div>
               </div>
-              <div className="text-xs text-gray-600 mt-1">
+
+              {/* Default Import Markup × (moltiplicatore) */}
+              <div className="col-span-2">
+                <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                  <label className="text-sm text-gray-800">
+                    {(t('DefaultImportMarkup', lang) || 'Default Import Markup')}{' '}
+                    <span className="text-gray-500">(×)</span>
+                  </label>
+                  <div className="w-24">
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0}
+                      value={s.default_markup_equipment_pct ?? 1.5}
+                      onChange={e => {
+                        const raw = e.target.value
+                        const v = raw === '' ? null : Number(raw)
+                        patch('default_markup_equipment_pct', v == null || !isFinite(v) ? null : clampFloat(v, 0, 100))
+                      }}
+                      placeholder="1.5"
+                      className="w-full border rounded-lg px-2 py-1 text-gray-900 h-9"
+                    />
+                  </div>
+                </div>
+                <div className="text-xs text-gray-600 mt-1">
+                </div>
+              </div>
+
+              <div className="col-span-2 border-t pt-2">
+                <Toggle id="csv_confirm_equipment" checked={!!s.equipment_csv_require_confirm_refs} onChange={v => patch('equipment_csv_require_confirm_refs', !!v)} label={t('AskCsvConfirm', lang)} />
               </div>
             </div>
-
-            <div className="col-span-2 border-t pt-2">
-              <Toggle id="csv_confirm_equipment" checked={!!s.equipment_csv_require_confirm_refs} onChange={v => patch('equipment_csv_require_confirm_refs', !!v)} label={t('AskCsvConfirm', lang)} />
-            </div>
-          </div>
-        </SectionCard>
+          </SectionCard>
+        )}
 
         <SectionCard title={t('Vat', lang)}>
           <div className="grid grid-cols-2 gap-3">
@@ -1022,23 +1034,25 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
           </div>
         </SectionCard>
 
-        <SectionCard title={t('Utilities', lang)}>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setCatModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
-              {t('EditCategories', lang)}
-            </button>
-            {/* ⬇️ NEW: Manage Tags (coerente con gli altri pulsanti) */}
-            <button type="button" onClick={() => setTagModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
-              {t('ManageTags', lang) || 'Manage tags'}
-            </button>
-            <button type="button" onClick={() => router.push('/trash')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
-              {t('Trash', lang)}
-            </button>
-            <button type="button" onClick={() => router.push('/archive')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
-              {t('Archive', lang)}
-            </button>
-          </div>
-        </SectionCard>
+        {myRole !== 'accountant' && (
+          <SectionCard title={t('Utilities', lang)}>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setCatModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+                {t('EditCategories', lang)}
+              </button>
+              {/* ⬇️ NEW: Manage Tags (coerente con gli altri pulsanti) */}
+              <button type="button" onClick={() => setTagModalOpen(true)} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+                {t('ManageTags', lang) || 'Manage tags'}
+              </button>
+              <button type="button" onClick={() => router.push('/trash')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+                {t('Trash', lang)}
+              </button>
+              <button type="button" onClick={() => router.push('/archive')} className="px-3 h-9 rounded-lg border hover:bg-gray-50 text-gray-800">
+                {t('Archive', lang)}
+              </button>
+            </div>
+          </SectionCard>
+        )}
 
 
         {canSeeAccounts && (

@@ -33,7 +33,10 @@ export default function PartnerDetail() {
     const router = useRouter()
     const { language, currency, crmPartnerRules, crmCommissionRules, crmCommissionType, crmAdvisorCommissionPct } = useSettings()
     const partnerId = params.id as string
-    const TABS = getTabs(language)
+    const [currentUser, setCurrentUser] = useState<{ id: string, name: string, role?: string } | null>(null)
+    const TABS = React.useMemo(() => {
+        return getTabs(language)
+    }, [language])
 
     /* month cursor */
     const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()))
@@ -47,7 +50,6 @@ export default function PartnerDetail() {
     const [partner, setPartner] = useState<CRMPartner | null>(null)
     const [ownerName, setOwnerName] = useState<string>('')
     const [createdByName, setCreatedByName] = useState<string>('')
-    const [currentUser, setCurrentUser] = useState<{ id: string, name: string, role?: string } | null>(null)
 
     const [isRejectModalOpen, setIsRejectModalOpen] = useState(false)
     const [rejectReasonText, setRejectReasonText] = useState('')
@@ -92,7 +94,7 @@ export default function PartnerDetail() {
         fetchNames()
         
         const fetchAssignees = async () => {
-            const { data } = await supabase.from('app_accounts').select('user_id, name, email').eq('role', 'sale advisor')
+            const { data } = await supabase.from('app_accounts').select('user_id, name, email').or('role.eq."sale advisor",is_sale_advisor.eq.true')
             if (data) {
                 const formatted = data
                     .filter(acc => acc.user_id)

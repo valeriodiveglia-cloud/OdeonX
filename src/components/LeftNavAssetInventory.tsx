@@ -3,10 +3,11 @@
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import React from 'react'
-import { Home, LayoutDashboard, Boxes, Settings, FileText } from 'lucide-react' // Using standard lucide icons
+import { LayoutDashboard, Boxes, Settings, FileText } from 'lucide-react' // Using standard lucide icons
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 import { HomeIcon } from '@heroicons/react/24/outline'
+import { supabase } from '@/lib/supabase_shim'
 
 const NAV = [
     { href: '/asset-inventory', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -27,6 +28,27 @@ export default function LeftNavAssetInventory() {
 
     const { language, setLanguage } = useSettings() // Reuse settings context if available
     const [open, setOpen] = React.useState(false)
+    const [role, setRole] = React.useState<string | null>(null)
+
+    React.useEffect(() => {
+        const fetchRole = async () => {
+            const { data: user } = await supabase.auth.getUser()
+            if (user?.user) {
+                const { data } = await supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single()
+                setRole(data?.role || 'staff')
+            }
+        }
+        fetchRole()
+    }, [])
+
+    const filteredNav = React.useMemo(() => {
+        return NAV.filter(item => {
+            if (item.label === 'Settings') {
+                return role && role !== 'accountant'
+            }
+            return true
+        })
+    }, [role])
 
     // Layout handling for overlay
     React.useEffect(() => {
@@ -62,7 +84,7 @@ export default function LeftNavAssetInventory() {
 
             {/* Nav Items */}
             <nav className="p-2 space-y-1 mt-2">
-                {NAV.map((item) => {
+                {filteredNav.map((item) => {
                     const active = item.exact ? pathname === item.href : pathname.startsWith(item.href)
 
                     // Append branchName if present

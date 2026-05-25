@@ -1,12 +1,12 @@
 import LeftNavLoyaltyManager from '@/components/LeftNavLoyaltyManager'
-import { requireAuth } from '@/lib/auth-check'
+import { requireRole } from '@/lib/auth-check'
 
 export default async function LoyaltyManagerLayout({
     children,
 }: {
     children: React.ReactNode
 }) {
-    await requireAuth()
+    await requireRole(['owner', 'admin', 'manager', 'staff', 'sale advisor'])
 
     // Lasciamo che la leftnav imposti --leftnav-w. Qui usiamo padding-left su tutta la sezione.
     return (

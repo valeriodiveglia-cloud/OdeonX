@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
-import { Save, Settings, Users, Briefcase, Key } from 'lucide-react'
+import { Save, Settings, Users, Briefcase, Key, X, Search, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { t } from '@/lib/i18n'
 
@@ -17,6 +17,32 @@ export default function CRMSettingsPage() {
         saveAllCrmSettings
     } = useSettings()
     const [activeTab, setActiveTab] = useState<'advisor' | 'partner' | 'advisors_list'>('advisors_list')
+    const [role, setRole] = useState<string | null>(null)
+    const [loadingRole, setLoadingRole] = useState(true)
+
+    useEffect(() => {
+        async function checkAccess() {
+            const { data: user } = await supabase.auth.getUser()
+            if (user?.user) {
+                const { data } = await supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single()
+                const userRole = data?.role || 'staff'
+                setRole(userRole)
+                if (userRole !== 'owner' && userRole !== 'admin' && userRole !== 'manager') {
+                    if (userRole === 'sale advisor') {
+                        window.location.href = '/crm/settings/password'
+                    } else {
+                        window.location.href = '/dashboard'
+                    }
+                    return
+                }
+            } else {
+                window.location.href = '/login'
+                return
+            }
+            setLoadingRole(false)
+        }
+        checkAccess()
+    }, [])
     
     // Form state for Advisor Commissions
     const [advisorFormData, setAdvisorFormData] = useState({
@@ -33,6 +59,10 @@ export default function CRMSettingsPage() {
     })
     const [fixedBonusInput, setFixedBonusInput] = useState('100')
     const [advisors, setAdvisors] = useState<any[]>([])
+    const [allUsers, setAllUsers] = useState<any[]>([])
+    const [selectedNewAdvisor, setSelectedNewAdvisor] = useState<string>('')
+    const [isAdvisorModalOpen, setIsAdvisorModalOpen] = useState(false)
+    const [searchAdvisorTerm, setSearchAdvisorTerm] = useState('')
 
     // Form state for Partner Incentives
     const [partnerFormData, setPartnerFormData] = useState({
@@ -90,13 +120,42 @@ export default function CRMSettingsPage() {
     }, [crmAdvisorCommissionPct, crmCommissionType, crmCommissionRules, crmPartnerRules])
 
     const fetchAdvisors = async () => {
-        const { data } = await supabase.from('app_accounts').select('*').eq('role', 'sale advisor')
+        const { data } = await supabase.from('app_accounts').select('*').or('role.eq."sale advisor",is_sale_advisor.eq.true')
         if (data) setAdvisors(data)
     }
 
+    const fetchAllUsers = async () => {
+        const { data } = await supabase.from('app_accounts').select('*').neq('role', 'sale advisor').or('is_sale_advisor.eq.false,is_sale_advisor.is.null')
+        if (data) setAllUsers(data)
+    }
+
     useEffect(() => {
-        if (activeTab === 'advisors_list') fetchAdvisors()
+        if (activeTab === 'advisors_list') {
+            fetchAdvisors()
+            fetchAllUsers()
+        }
     }, [activeTab])
+
+    const handleAddAdvisor = async (userId: string) => {
+        const user = allUsers.find(u => u.id === userId)
+        if (!user) return
+
+        let generatedReferralCode = user.referral_code
+        if (!generatedReferralCode) {
+            const parts = (user.name || user.email || 'Advisor').split(' ')
+            const first = parts[0].replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+            generatedReferralCode = `${first}10`
+        }
+
+        await supabase.from('app_accounts').update({ 
+            is_sale_advisor: true, 
+            ...(user.referral_code ? {} : { referral_code: generatedReferralCode })
+        }).eq('id', userId)
+
+        setIsAdvisorModalOpen(false)
+        fetchAdvisors()
+        fetchAllUsers()
+    }
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -133,6 +192,14 @@ export default function CRMSettingsPage() {
         } finally {
             setIsSaving(false)
         }
+    }
+
+    if (loadingRole) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            </div>
+        )
     }
 
     return (
@@ -346,143 +413,240 @@ export default function CRMSettingsPage() {
                             </div>
                         </div>
 
-                            <h3 className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wider">{t(language, 'AdvisorsListing')}</h3>
-                            {advisors.length === 0 ? (
-                                <p className="text-sm text-slate-500 italic">{t(language, 'NoSaleAdvisors')}</p>
-                            ) : (
-                                <div className="space-y-3">
-                                    {advisors.map(adv => (
-                                        <div key={adv.id} className="flex flex-wrap items-center justify-between gap-4 p-4 border border-slate-200 rounded-2xl bg-slate-50 hover:bg-slate-100/50 transition">
-                                            <div>
-                                                <div className="font-semibold text-slate-900">{adv.name || adv.email}</div>
-                                                <div className="text-xs text-slate-500">{adv.email}</div>
-                                            </div>
-                                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xs font-semibold text-slate-600 uppercase">{t(language, 'ReferralCode')}</span>
-                                                    <input 
-                                                        type="text" 
-                                                        value={adv.referral_code || ''}
-                                                        onChange={async (e) => {
-                                                            const newVal = e.target.value.toUpperCase().replace(/\s/g, '')
-                                                            setAdvisors(prev => prev.map(a => a.id === adv.id ? {...a, referral_code: newVal} : a))
-                                                        }}
-                                                        onBlur={async (e) => {
-                                                            const newVal = e.target.value.toUpperCase().replace(/\s/g, '')
-                                                            await supabase.from('app_accounts').update({ referral_code: newVal || null }).eq('id', adv.id)
-                                                        }}
-                                                        placeholder={t(language, 'ReferralCodeExpl')}
-                                                        className="w-32 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                                                    />
-                                                </div>
-                                                <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
-                                                    <span className="text-xs font-semibold text-slate-600 uppercase">PIT DEDUCTION (10%)</span>
-                                                    <label className="flex items-center cursor-pointer">
-                                                        <div className="relative">
-                                                            <input type="checkbox" className="sr-only" 
-                                                                checked={adv.deduct_pit !== false}
-                                                                onChange={async (e) => {
-                                                                    const checked = e.target.checked
-                                                                    setAdvisors(prev => prev.map(a => a.id === adv.id ? {...a, deduct_pit: checked} : a))
-                                                                    await supabase.from('app_accounts').update({ deduct_pit: checked }).eq('id', adv.id)
-                                                                }}
-                                                            />
-                                                            <div className={`block w-10 h-6 rounded-full transition-colors ${adv.deduct_pit !== false ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
-                                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${adv.deduct_pit !== false ? 'transform translate-x-4' : ''}`}></div>
-                                                        </div>
-                                                    </label>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <p className="text-xs text-slate-500 mt-2">{t(language, 'ChangesSaveAuto')}</p>
-                                </div>
-                            )}
-                    </div>
-                    )}
-
-                    {/* PARTNER COLUMN */}
-                    {activeTab === 'partner' && (
-                    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 h-fit">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                                <Users className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-bold text-slate-900">{t(language, 'PartnerIncentivesAndRules')}</h2>
-                                <p className="text-sm text-slate-500">{t(language, 'RewardReferringHotels')}</p>
-                            </div>
+        <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">{t(language, 'AdvisorsListing')}</h3>
+            <button
+                type="button"
+                onClick={() => setIsAdvisorModalOpen(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition shadow-sm flex items-center gap-2"
+            >
+                <Users className="w-4 h-4" /> {t(language, 'AddAdvisor')}
+            </button>
+        </div>
+        {advisors.length === 0 ? (
+            <p className="text-sm text-slate-500 italic">{t(language, 'NoSaleAdvisors')}</p>
+        ) : (
+            <div className="space-y-3">
+                {advisors.map(adv => (
+                    <div key={adv.id} className="flex flex-wrap items-center justify-between gap-4 p-4 border border-slate-200 rounded-2xl bg-slate-50 hover:bg-slate-100/50 transition">
+                        <div>
+                            <div className="font-semibold text-slate-900">{adv.name || adv.email}</div>
+                            <div className="text-xs text-slate-500">{adv.email}</div>
                         </div>
-
-                        <div className="space-y-6">
-                            {/* Commission Section */}
-                            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-bold text-slate-800">{t(language, 'PartnerCommissionTitle')}</h3>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs font-semibold text-slate-600 uppercase">{t(language, 'ReferralCode')}</span>
+                                <input 
+                                    type="text" 
+                                    value={adv.referral_code || ''}
+                                    onChange={async (e) => {
+                                        const newVal = e.target.value.toUpperCase().replace(/\s/g, '')
+                                        setAdvisors(prev => prev.map(a => a.id === adv.id ? {...a, referral_code: newVal} : a))
+                                    }}
+                                    onBlur={async (e) => {
+                                        const newVal = e.target.value.toUpperCase().replace(/\s/g, '')
+                                        await supabase.from('app_accounts').update({ referral_code: newVal || null }).eq('id', adv.id)
+                                    }}
+                                    placeholder={t(language, 'ReferralCodeExpl')}
+                                    className="w-32 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-2 border-l border-slate-200 pl-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-xs font-semibold text-slate-600 uppercase">{t(language, 'CommissionsUppercase')}</span>
                                     <label className="flex items-center cursor-pointer">
                                         <div className="relative">
                                             <input type="checkbox" className="sr-only" 
-                                                checked={partnerFormData.has_commission}
-                                                onChange={e => setPartnerFormData({...partnerFormData, has_commission: e.target.checked})}
+                                                checked={adv.earns_commission !== false}
+                                                onChange={async (e) => {
+                                                    const checked = e.target.checked
+                                                    setAdvisors(prev => prev.map(a => a.id === adv.id ? {...a, earns_commission: checked} : a))
+                                                    await supabase.from('app_accounts').update({ earns_commission: checked }).eq('id', adv.id)
+                                                }}
                                             />
-                                            <div className={`block w-10 h-6 rounded-full transition-colors ${partnerFormData.has_commission ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
-                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${partnerFormData.has_commission ? 'transform translate-x-4' : ''}`}></div>
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${adv.earns_commission !== false ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${adv.earns_commission !== false ? 'transform translate-x-4' : ''}`}></div>
                                         </div>
                                     </label>
                                 </div>
-
-                                {partnerFormData.has_commission && (
-                                    <div className="grid grid-cols-2 gap-4 mt-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t(language, 'Type')}</label>
-                                            <select 
-                                                value={partnerFormData.commission_type}
-                                                onChange={e => setPartnerFormData({...partnerFormData, commission_type: e.target.value})}
-                                                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 text-sm font-medium transition"
-                                            >
-                                                <option value="Percentage">{t(language, 'PercentageLabel')}</option>
-                                                <option value="Fixed">{t(language, 'FixedAmount')}</option>
-                                            </select>
+                                <div className={`flex items-center justify-between gap-3 transition-opacity ${adv.earns_commission === false ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    <span className="text-xs font-semibold text-slate-600 uppercase">{t(language, 'PitDeductionUppercase')}</span>
+                                    <label className="flex items-center cursor-pointer">
+                                        <div className="relative">
+                                            <input type="checkbox" className="sr-only" 
+                                                checked={adv.deduct_pit !== false}
+                                                disabled={adv.earns_commission === false}
+                                                onChange={async (e) => {
+                                                    const checked = e.target.checked
+                                                    setAdvisors(prev => prev.map(a => a.id === adv.id ? {...a, deduct_pit: checked} : a))
+                                                    await supabase.from('app_accounts').update({ deduct_pit: checked }).eq('id', adv.id)
+                                                }}
+                                            />
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${adv.deduct_pit !== false ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${adv.deduct_pit !== false ? 'transform translate-x-4' : ''}`}></div>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t(language, 'Value')}</label>
-                                            <div className="relative">
-                                                <input 
-                                                    type="number"
-                                                    required
-                                                    min="0"
-                                                    step={partnerFormData.commission_type === 'Percentage' ? "0.1" : "1"}
-                                                    value={partnerFormData.commission_value}
-                                                    onChange={e => setPartnerFormData({...partnerFormData, commission_value: parseFloat(e.target.value) || 0})}
-                                                    className="w-full pl-3 pr-8 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 text-sm font-bold transition"
-                                                />
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">
-                                                    {partnerFormData.commission_type === 'Percentage' ? '%' : currency}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div className="border-l border-slate-200 pl-4 w-20 flex items-center justify-center">
+                                {adv.role !== 'sale advisor' && (
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            await supabase.from('app_accounts').update({ is_sale_advisor: false }).eq('id', adv.id)
+                                            fetchAdvisors()
+                                            fetchAllUsers()
+                                        }}
+                                        className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
                                 )}
                             </div>
-
-
-
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'DealTerms')}</label>
-                                <textarea 
-                                    rows={3}
-                                    value={partnerFormData.details}
-                                    onChange={e => setPartnerFormData({...partnerFormData, details: e.target.value})}
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 transition resize-none placeholder-slate-400"
-                                    placeholder={t(language, 'DealTermsPlaceholder')}
-                                ></textarea>
-                            </div>
-
                         </div>
                     </div>
-                    )}
+                ))}
+                <p className="text-xs text-slate-500 mt-2">{t(language, 'ChangesSaveAuto')}</p>
+            </div>
+        )}
+</div>
+)}
+
+{/* PARTNER COLUMN */}
+{activeTab === 'partner' && (
+<div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 h-fit">
+    <div className="flex items-center gap-3 mb-6">
+        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <Users className="w-6 h-6" />
+        </div>
+        <div>
+            <h2 className="text-xl font-bold text-slate-900">{t(language, 'PartnerIncentivesAndRules')}</h2>
+            <p className="text-sm text-slate-500">{t(language, 'RewardReferringHotels')}</p>
+        </div>
+    </div>
+
+    <div className="space-y-6">
+        {/* Commission Section */}
+        <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-slate-800">{t(language, 'PartnerCommissionTitle')}</h3>
+                <label className="flex items-center cursor-pointer">
+                    <div className="relative">
+                        <input type="checkbox" className="sr-only" 
+                            checked={partnerFormData.has_commission}
+                            onChange={e => setPartnerFormData({...partnerFormData, has_commission: e.target.checked})}
+                        />
+                        <div className={`block w-10 h-6 rounded-full transition-colors ${partnerFormData.has_commission ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${partnerFormData.has_commission ? 'transform translate-x-4' : ''}`}></div>
+                    </div>
+                </label>
+            </div>
+
+            {partnerFormData.has_commission && (
+                <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t(language, 'Type')}</label>
+                        <select 
+                            value={partnerFormData.commission_type}
+                            onChange={e => setPartnerFormData({...partnerFormData, commission_type: e.target.value})}
+                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 text-sm font-medium transition"
+                        >
+                            <option value="Percentage">{t(language, 'PercentageLabel')}</option>
+                            <option value="Fixed">{t(language, 'FixedAmount')}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t(language, 'Value')}</label>
+                        <div className="relative">
+                            <input 
+                                type="number"
+                                required
+                                min="0"
+                                step={partnerFormData.commission_type === 'Percentage' ? "0.1" : "1"}
+                                value={partnerFormData.commission_value}
+                                onChange={e => setPartnerFormData({...partnerFormData, commission_value: parseFloat(e.target.value) || 0})}
+                                className="w-full pl-3 pr-8 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 text-sm font-bold transition"
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">
+                                {partnerFormData.commission_type === 'Percentage' ? '%' : currency}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </form>
+            )}
+        </div>
+
+
+
+        <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'DealTerms')}</label>
+            <textarea 
+                rows={3}
+                value={partnerFormData.details}
+                onChange={e => setPartnerFormData({...partnerFormData, details: e.target.value})}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 transition resize-none placeholder-slate-400"
+                placeholder={t(language, 'DealTermsPlaceholder')}
+            ></textarea>
+        </div>
+
+    </div>
+</div>
+)}
+</div>
+</form>
+
+{/* ADD ADVISOR MODAL */}
+{isAdvisorModalOpen && (
+<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+<div className="bg-white rounded-3xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
+    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+            <Users className="w-5 h-5 text-blue-500" />
+            {t(language, 'AddAdvisor')}
+        </h3>
+        <button onClick={() => setIsAdvisorModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition text-slate-500">
+            <X className="w-5 h-5" />
+        </button>
+    </div>
+    <div className="p-4 border-b border-slate-100">
+        <div className="relative">
+            <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input 
+                type="text" 
+                placeholder={t(language, 'SearchUsers')}
+                value={searchAdvisorTerm}
+                onChange={e => setSearchAdvisorTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+            />
+        </div>
+    </div>
+    <div className="p-2 overflow-y-auto flex-1">
+        {allUsers
+            .filter(u => (u.name || '').toLowerCase().includes(searchAdvisorTerm.toLowerCase()) || (u.email || '').toLowerCase().includes(searchAdvisorTerm.toLowerCase()))
+            .map(u => (
+            <button 
+                key={u.id}
+                onClick={() => handleAddAdvisor(u.id)}
+                className="w-full text-left px-4 py-3 hover:bg-slate-50 rounded-xl transition flex items-center justify-between group"
+            >
+                <div>
+                    <div className="font-bold text-slate-900 group-hover:text-blue-600 transition">{u.name || 'No Name'}</div>
+                    <div className="text-xs text-slate-500">{u.email} &bull; <span className="uppercase">{u.role}</span></div>
+                </div>
+                <div className="text-blue-600 font-bold text-sm opacity-0 group-hover:opacity-100 transition">
+                    {t(language, 'Add')}
+                </div>
+            </button>
+        ))}
+                            {allUsers.filter(u => (u.name || '').toLowerCase().includes(searchAdvisorTerm.toLowerCase()) || (u.email || '').toLowerCase().includes(searchAdvisorTerm.toLowerCase())).length === 0 && (
+                                <div className="p-8 text-center text-slate-500 text-sm">
+                                    No users found matching "{searchAdvisorTerm}"
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

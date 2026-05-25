@@ -20,6 +20,7 @@ import React from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 import { getMonthlyReportsDictionary } from '@/app/monthly-reports/_i18n'
+import { supabase } from '@/lib/supabase_shim'
 
 type Item = {
     href: string
@@ -75,6 +76,23 @@ export default function LeftNavMonthlyReports() {
     const { language, setLanguage } = useSettings()
     const dict = getMonthlyReportsDictionary(language)
     const t = dict.leftNav
+
+    const [role, setRole] = React.useState<string | null>(null)
+
+    React.useEffect(() => {
+        const fetchRole = async () => {
+            const { data: user } = await supabase.auth.getUser()
+            if (user?.user) {
+                const { data } = await supabase
+                    .from('app_accounts')
+                    .select('role')
+                    .eq('user_id', user.user.id)
+                    .single()
+                setRole(data?.role || 'staff')
+            }
+        }
+        fetchRole()
+    }, [])
 
     const _t = (key: string, fallback: string) => {
         return (t as any)[key] || fallback
@@ -169,6 +187,13 @@ export default function LeftNavMonthlyReports() {
     const stateClass = isOpen ? 'leftnav expanded' : 'leftnav collapsed'
     const norm = (s: string) => s.replace(/\/+$/, '')
 
+    const filteredNav = NAV.filter(item => {
+        if (item.href.endsWith('/activity-log')) {
+            return role === 'owner'
+        }
+        return true
+    })
+
     return (
         <div
             className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
@@ -210,7 +235,7 @@ export default function LeftNavMonthlyReports() {
 
             {/* Menu */}
             <nav className="p-2 space-y-1">
-                {NAV.map(({ href, i18nKey, fallback, icon: Icon, exact }) => {
+                {filteredNav.map(({ href, i18nKey, fallback, icon: Icon, exact }) => {
                     const active = exact
                         ? norm(pathname) === norm(href)
                         : pathname === href || pathname.startsWith(href + '/')

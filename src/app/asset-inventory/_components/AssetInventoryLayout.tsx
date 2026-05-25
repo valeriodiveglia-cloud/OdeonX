@@ -58,6 +58,7 @@ export default function AssetInventoryLayout() {
 
     // User State
     const [currentUser, setCurrentUser] = useState<string>('')
+    const [userRole, setUserRole] = useState<string | null>(null)
 
     // Load initial state
     useEffect(() => {
@@ -77,6 +78,17 @@ export default function AssetInventoryLayout() {
             setCurrentUser('Staff')
         }
         getUser()
+    }, [])
+
+    useEffect(() => {
+        const fetchRole = async () => {
+            const { data: user } = await import('@/lib/supabase_shim').then(m => m.supabase.auth.getUser())
+            if (user?.user) {
+                const { data } = await import('@/lib/supabase_shim').then(m => m.supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single())
+                setUserRole(data?.role || 'staff')
+            }
+        }
+        fetchRole()
     }, [])
 
     // Filter assets when branch or allAssets changes, AND when activeTab changes
@@ -303,6 +315,7 @@ export default function AssetInventoryLayout() {
                 onViewLog={() => setIsLogOpen(true)}
                 onViewNotifications={() => setIsNotificationCenterOpen(true)}
                 notificationCount={notifications.length}
+                userRole={userRole}
             />
 
             {/* Asset Type Tabs */}
@@ -352,6 +365,7 @@ export default function AssetInventoryLayout() {
                 onDelete={handleDeleteAsset}
                 onTransfer={handleTransferClick}
                 onCatering={handleCateringClick}
+                userRole={userRole}
             />
 
             <NewAssetModal
@@ -388,6 +402,7 @@ export default function AssetInventoryLayout() {
                 onClose={() => setIsNotificationCenterOpen(false)}
                 notifications={notifications}
                 onReceive={handleReceiveAsset}
+                userRole={userRole}
             />
         </div>
     )

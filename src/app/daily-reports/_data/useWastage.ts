@@ -448,7 +448,7 @@ export function useWastage(params: {
         )
         .single()
 
-      if (error && (error as any).message) {
+      if (error) {
         throw error
       }
       if (!data) throw new Error('No data returned from insert')
@@ -478,8 +478,8 @@ export function useWastage(params: {
 
       setRows(prev => [mapped, ...prev])
       return mapped
-    } catch (e) {
-      console.error('Insert wastage failed', e)
+    } catch (e: any) {
+      console.error('Insert wastage failed:', e?.message || e, e)
       return null
     }
   }
@@ -557,8 +557,8 @@ export function useWastage(params: {
         return prev
       })
       return mapped
-    } catch (e) {
-      console.error('Update wastage failed', e)
+    } catch (e: any) {
+      console.error('Update wastage failed:', e?.message || e, e)
       return null
     }
   }
@@ -569,8 +569,8 @@ export function useWastage(params: {
       if (error) throw error
       setRows(prev => prev.filter(r => r.id !== id))
       return true
-    } catch (e) {
-      console.error('Delete wastage failed', e)
+    } catch (e: any) {
+      console.error('Delete wastage failed:', e?.message || e, e)
       return false
     }
   }
@@ -581,8 +581,8 @@ export function useWastage(params: {
       if (error) throw error
       setRows(prev => prev.filter(r => !ids.includes(r.id)))
       return true
-    } catch (e) {
-      console.error('Bulk delete wastage failed', e)
+    } catch (e: any) {
+      console.error('Bulk delete wastage failed:', e?.message || e, e)
       return false
     }
   }

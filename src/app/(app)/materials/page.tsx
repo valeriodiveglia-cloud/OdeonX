@@ -195,18 +195,29 @@ type MaterialEditorProps = {
   cats: Cat[]
   sups: Sup[]
   uoms: Uom[]
+  initial?: Partial<Mat> | null
   onClose: () => void
   onSaved: () => void
   onDeleted: () => void
-  initial?: Partial<Mat> | null
   onCategoryCreated?: (c: Cat) => void
   onSupplierCreated?: (s: Sup) => void
+  userRole?: string | null
 }
+
 function MaterialEditor(props: MaterialEditorProps) {
   const {
-    mode, id, cats, sups, uoms,
-    onClose, onSaved, onDeleted,
-    initial, onCategoryCreated, onSupplierCreated
+    mode,
+    id,
+    cats,
+    sups,
+    uoms,
+    initial,
+    onClose,
+    onSaved,
+    onDeleted,
+    onCategoryCreated,
+    onSupplierCreated,
+    userRole,
   } = props
 
   const { language: lang, vatEnabled, vatRate, materialsExclusiveDefault } = useSettings()
@@ -551,12 +562,14 @@ function MaterialEditor(props: MaterialEditorProps) {
         <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
           <div className="flex items-center gap-2">
             {viewMode ? (
-              <button
-                onClick={() => setViewMode(false)}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95"
-              >
-                {t('Edit', lang)}
-              </button>
+              userRole !== 'accountant' && (
+                <button
+                  onClick={() => setViewMode(false)}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95"
+                >
+                  {t('Edit', lang)}
+                </button>
+              )
             ) : (
               id && (
                 <button
@@ -1142,6 +1155,19 @@ export default function MaterialsPage() {
     materialsExclusiveDefault,
   } = useSettings()
 
+  const [role, setRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      const { data: user } = await supabase.auth.getUser()
+      if (user?.user) {
+        const { data } = await supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single()
+        setRole(data?.role || 'staff')
+      }
+    }
+    fetchRole()
+  }, [])
+
   const locale = lang === 'vi' ? 'vi-VN' : 'en-US'
   const money = useMemo(() => new Intl.NumberFormat(locale, {
     style: 'currency',
@@ -1325,6 +1351,10 @@ export default function MaterialsPage() {
     setEditorMode('view'); setEditingId(mat.id); setInitialMat(mat); setOpenEditor(true)
   }
   async function openEdit(mat: Mat) {
+    if (role === 'accountant') {
+      openView(mat)
+      return
+    }
     setEditorMode('edit'); setEditingId(mat.id); setInitialMat(mat); setOpenEditor(true)
   }
 
@@ -2043,38 +2073,46 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
             {t('Export', lang)}
           </button>
 
-          <input ref={fileRef} type="file" accept=".csv" hidden onChange={handlePickFile} />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={progress != null}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-lg
-                       bg-blue-600/15 text-blue-200 hover:bg-blue-600/25
-                       border border-blue-400/30 disabled:opacity-60"
-            title={t('Import', lang)}
-          >
-            <ArrowDownTrayIcon className="w-5 h-5" />
-            {t('Import', lang)}
-          </button>
+          {role && role !== 'accountant' && (
+            <>
+              <input ref={fileRef} type="file" accept=".csv" hidden onChange={handlePickFile} />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={progress != null}
+                className="inline-flex items-center gap-2 px-3 h-9 rounded-lg
+                           bg-blue-600/15 text-blue-200 hover:bg-blue-600/25
+                           border border-blue-400/30 disabled:opacity-60"
+                title={t('Import', lang)}
+              >
+                <ArrowDownTrayIcon className="w-5 h-5" />
+                {t('Import', lang)}
+              </button>
+            </>
+          )}
 
-          <button
-            onClick={() => setSelectMode(s => !s)}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-              }`}
-            title={selectMode ? t('ExitSelection', lang) : t('EnterSelection', lang)}
-          >
-            <CheckCircleIcon className="w-5 h-5" />
-            {selectMode ? t('Selecting', lang) : t('Select', lang)}
-          </button>
+          {role && role !== 'accountant' && (
+            <button
+              onClick={() => setSelectMode(s => !s)}
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                }`}
+              title={selectMode ? t('ExitSelection', lang) : t('EnterSelection', lang)}
+            >
+              <CheckCircleIcon className="w-5 h-5" />
+              {selectMode ? t('Selecting', lang) : t('Select', lang)}
+            </button>
+          )}
 
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
-          >
-            <PlusIcon className="w-5 h-5" /> {t('NewMaterial', lang)}
-          </button>
+          {role && role !== 'accountant' && (
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
+            >
+              <PlusIcon className="w-5 h-5" /> {t('NewMaterial', lang)}
+            </button>
+          )}
         </div>
       </div>
 
@@ -2324,7 +2362,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
                   key={m.id}
                   className="border-t hover:bg-blue-50/40 cursor-pointer"
                   onClick={() => openView(m)}
-                  onDoubleClick={() => openEdit(m)}
+                  onDoubleClick={() => role === 'accountant' ? openView(m) : openEdit(m)}
                 >
                   <td className="p-2 w-7" onClick={e => e.stopPropagation()}>
                     {selectMode ? (
@@ -2427,7 +2465,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
 
       {openEditor && (
         <MaterialEditor
-          mode={editorMode}
+          mode={role === 'accountant' ? 'view' : editorMode}
           id={editingId}
           cats={cats}
           sups={sups}
@@ -2438,6 +2476,7 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
           onDeleted={async () => { setOpenEditor(false); await fetchAll() }}
           onCategoryCreated={(c) => setCats((prev) => [...prev, c])}
           onSupplierCreated={(s) => setSups((prev) => [...prev, s])}
+          userRole={role}
         />
       )}
     </div>

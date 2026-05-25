@@ -5,13 +5,23 @@ export interface FinChartOfAccount {
   code: string
   name: string
   simplified_name: string | null
-  account_type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'COGS' | 'OPEX' | 'Salary' | 'Tax' | 'Depreciation' | 'Other Expense' | 'Other Income'
+  account_type: 'Asset' | 'Liability' | 'Equity' | 'Operating Revenue' | 'Revenue Deduction' | 'Other Income' | 'Cost of Goods Sold' | 'Selling Expenses' | 'General & Admin Expenses' | 'Payroll' | 'Financial Income' | 'Financial Expenses' | 'Other Expenses' | 'Tax Expenses'
+  show_in_pnl: boolean
+  show_in_cashflow: boolean
   parent_id: string | null
   is_group: boolean
   simplified_group: string | null
+  cashflow_section: 'Operating' | 'Investing' | 'Financing' | 'Exclude'
   sort_order: number
   is_active: boolean
   description: string | null
+  created_at: string
+}
+
+export interface FinCashflowCategoryMapping {
+  id: string
+  category_name: string
+  cashflow_section: 'Operating' | 'Investing' | 'Financing' | 'Exclude'
   created_at: string
 }
 
@@ -32,12 +42,18 @@ export interface FinSupplier {
   updated_at: string
 }
 
+export interface Supplier {
+  id: string
+  name: string
+  tax_id?: string
+}
+
 export interface FinInvoice {
   id: string
   invoice_number: string
   invoice_date: string
   due_date: string | null
-  supplier_id: string
+  supplier_id: string | null
   branch_ids: string[] | null
   account_id: string | null
   description: string | null
@@ -53,12 +69,14 @@ export interface FinInvoice {
   paid_date: string | null
   paid_via: string | null
   paid_from_account_id: string | null
+  is_personal_deduction: boolean
+  custom_supplier_name: string | null
   notes: string | null
   created_by: string | null
   created_at: string
   updated_at: string
   // Joined fields
-  fin_suppliers?: Pick<FinSupplier, 'name' | 'tax_id'>
+  suppliers?: Pick<Supplier, 'name' | 'tax_id'>
   fin_chart_of_accounts?: Pick<FinChartOfAccount, 'code' | 'name' | 'simplified_name'>
   // No direct join for provider_branches since we use an array of UUIDs now. We will fetch branch data separately.
 }
@@ -68,6 +86,9 @@ export interface FinPaymentOrder {
   order_number: string
   order_date: string
   total_amount: number
+  is_variable_amount: boolean
+  is_online_payment: boolean
+  vat_invoice_status: 'Issued' | 'Pending' | 'None'
   status: 'Draft' | 'Pending Review' | 'Approved' | 'Paid' | 'Cancelled'
   payment_method: string | null
   bank_account_id: string | null
@@ -78,8 +99,11 @@ export interface FinPaymentOrder {
   created_by: string | null
   created_at: string
   updated_at: string
+  destination_account_id?: string | null
+  destination_bank_account?: Pick<FinBankAccount, 'account_name' | 'bank_name'> | null
   // Joined
   fin_bank_accounts?: Pick<FinBankAccount, 'account_name' | 'bank_name'> | null
+  app_accounts?: { name: string } | null
   fin_payment_order_items?: FinPaymentOrderItem[]
 }
 
@@ -90,14 +114,17 @@ export interface FinPaymentOrderItem {
   item_type: 'invoice' | 'manual'
   description: string | null
   account_id: string | null
+  supplier_id: string | null
   amount: number
+  requires_invoice: boolean
   branch_ids: string[] | null
+  corporate_card_expense_id?: string | null
   created_at: string
   // Joined
   fin_invoices?: Pick<FinInvoice, 'invoice_number' | 'supplier_id' | 'gross_amount' | 'description'> & {
-    fin_suppliers?: Pick<FinSupplier, 'name'>
+    suppliers?: Pick<Supplier, 'name'>
   } | null
-  fin_chart_of_accounts?: Pick<FinChartOfAccount, 'code' | 'name'> | null
+  fin_chart_of_accounts?: Pick<FinChartOfAccount, 'code' | 'name' | 'simplified_name'> | null
 }
 
 export interface FinBankAccount {
@@ -105,11 +132,16 @@ export interface FinBankAccount {
   account_name: string
   bank_name: string | null
   account_number: string | null
-  account_type: 'Checking' | 'Savings' | 'Cash' | 'Credit Card'
+  account_type: 'Checking' | 'Saving' | 'Capital' | 'Cash' | 'Wallet'
   currency: string
   opening_balance: number
   current_balance: number
+  online_payment_fee?: number
+  bank_transfer_fee?: number | null
+  fee_account_id?: string | null
   is_active: boolean
+  is_corporate_card?: boolean
+  is_default_corporate_card?: boolean
   branch_id: string | null
   notes: string | null
   created_at: string
@@ -155,21 +187,30 @@ export const PAYMENT_ORDER_STATUS_STYLES: Record<string, { bg: string; text: str
   Cancelled: { bg: 'bg-slate-100', text: 'text-slate-500' },
 }
 
-export interface FinRecurringPayment {
+export interface FinCorporateCardExpense {
   id: string
   description: string
   amount: number
   currency: string
   is_variable_amount: boolean
+  is_online_payment: boolean
+  is_paid: boolean
   frequency: string
-  next_due_date: string
+  expense_date: string
   account_id: string | null
   bank_account_id: string | null
+  supplier_id: string | null
+  has_vat_invoice: boolean
+  vat_invoice_status: 'Issued' | 'Pending' | 'None'
+  invoice_id: string | null
   branch_ids: string[]
-  is_active: boolean
+  final_amount_vnd?: number | null
+  is_projection?: boolean
   created_at: string
   updated_at: string
   // Joined
-  fin_chart_of_accounts?: Pick<FinChartOfAccount, 'code' | 'name'> | null
+  fin_chart_of_accounts?: Pick<FinChartOfAccount, 'code' | 'name' | 'simplified_name'> | null
   fin_bank_accounts?: Pick<FinBankAccount, 'account_name' | 'bank_name'> | null
+  suppliers?: Pick<{ name: string }, 'name'> | null
 }
+

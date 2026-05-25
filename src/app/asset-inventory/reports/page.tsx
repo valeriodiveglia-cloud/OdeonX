@@ -8,6 +8,7 @@ import BlindCountModal from './_components/BlindCountModal'
 import InventorySessionDetailModal from './_components/InventorySessionDetailModal'
 import InventoryTypeSelectionModal from './_components/InventoryTypeSelectionModal'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { supabase } from '@/lib/supabase_shim'
 
 const SESSION_STORAGE_KEY = 'mock_inventory_sessions_v1'
 const DRAFT_STORAGE_KEY = 'INVENTORY_DRAFT'
@@ -29,6 +30,20 @@ export default function InventoryReportsPage() {
     const [openMenuId, setOpenMenuId] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<AssetType>('fixed')
     const [countingType, setCountingType] = useState<AssetType | null>(null)
+    const [role, setRole] = useState<string | null>(null)
+
+    // Load User Role
+    useEffect(() => {
+        const fetchRole = async () => {
+            const { data: user } = await supabase.auth.getUser()
+            if (user?.user) {
+                const { data } = await supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single()
+                setRole(data?.role || 'staff')
+            }
+        }
+        fetchRole()
+    }, [])
+
     // Load Data
     useEffect(() => {
         // Load sessions
@@ -163,13 +178,15 @@ export default function InventoryReportsPage() {
                 </div>
 
                 <div className="flex flex-col md:flex-row gap-3">
-                    <button
-                        onClick={() => setIsTypeSelectionOpen(true)}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                        <ClipboardDocumentCheckIcon className="w-5 h-5" />
-                        Start Inventory
-                    </button>
+                    {role && role !== 'accountant' && (
+                        <button
+                            onClick={() => setIsTypeSelectionOpen(true)}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <ClipboardDocumentCheckIcon className="w-5 h-5" />
+                            Start Inventory
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -242,29 +259,31 @@ export default function InventoryReportsPage() {
                                     </button>
 
                                     {/* Kebab Menu */}
-                                    <div className="relative">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                setOpenMenuId(openMenuId === session.id ? null : session.id)
-                                            }}
-                                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                                        >
-                                            <EllipsisVerticalIcon className="w-5 h-5" />
-                                        </button>
+                                    {role && role !== 'accountant' && (
+                                        <div className="relative">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setOpenMenuId(openMenuId === session.id ? null : session.id)
+                                                }}
+                                                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                            >
+                                                <EllipsisVerticalIcon className="w-5 h-5" />
+                                            </button>
 
-                                        {openMenuId === session.id && (
-                                            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                                                <button
-                                                    onClick={(e) => handleDeleteSession(e, session.id)}
-                                                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left"
-                                                >
-                                                    <TrashIcon className="w-4 h-4" />
-                                                    Delete Report
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
+                                            {openMenuId === session.id && (
+                                                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                                                    <button
+                                                        onClick={(e) => handleDeleteSession(e, session.id)}
+                                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left"
+                                                    >
+                                                        <TrashIcon className="w-4 h-4" />
+                                                        Delete Report
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}

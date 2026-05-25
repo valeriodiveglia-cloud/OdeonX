@@ -3,20 +3,23 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React from 'react'
-import { Home, FileText, CreditCard, Landmark, BarChart3, ArrowDownUp, Settings, Calendar as CalendarIcon, RefreshCw } from 'lucide-react'
+import { Home, FileText, CreditCard, Landmark, BarChart3, ArrowDownUp, Settings, Calendar as CalendarIcon, PackageOpen, Banknote } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
+import { t } from '@/lib/i18n'
 
 const NAV = [
-    { href: '/finance', label: 'Dashboard', icon: Home, exact: true },
-    { href: '/finance/invoices', label: 'Invoices', icon: FileText },
-    { href: '/finance/recurring', label: 'Recurring Payments', icon: RefreshCw },
-    { href: '/finance/payments', label: 'Payment Orders', icon: CreditCard },
-    { href: '/finance/calendar', label: 'Calendar', icon: CalendarIcon },
-    { href: '/finance/accounts', label: 'Bank Accounts', icon: Landmark },
-    { href: '/finance/pnl', label: 'P&L Report', icon: BarChart3 },
-    { href: '/finance/cashflow', label: 'Cash Flow', icon: ArrowDownUp },
-    { href: '/finance/settings', label: 'Settings', icon: Settings },
+    { href: '/finance', key: 'FinanceDashboardTitle', icon: Home, exact: true },
+    { href: '/finance/invoices', key: 'FinanceInvoices', icon: FileText },
+    { href: '/finance/payments', key: 'FinancePaymentOrders', icon: Banknote },
+    { href: '/finance/corporate-card', key: 'FinanceCorporateCard', icon: CreditCard },
+    { href: '/finance/accounts', key: 'FinanceTreasury', icon: Landmark },
+    { href: '/finance/calendar', key: 'FinanceCalendar', icon: CalendarIcon },
+    { href: '/finance/closing-stock', key: 'FinanceClosingStock', icon: PackageOpen },
+    { href: '/finance/monthly-adjustments', key: 'FinanceMonthlyAdjustments', icon: FileText },
+    { href: '/finance/pnl', key: 'FinancePnLReport', icon: BarChart3 },
+    { href: '/finance/cashflow', key: 'FinanceCashFlow', icon: ArrowDownUp },
+    { href: '/finance/settings', key: 'FinanceSettings', icon: Settings },
 ]
 
 const EXP_W_REM = 16
@@ -51,11 +54,11 @@ export default function LeftNavFinance() {
         >
             {/* Header */}
             <div className="h-16 flex items-center px-3 border-b border-white/10">
-                <Link href="/dashboard" className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`} title="Back to Dashboard">
+                <Link href="/dashboard" className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0 ${open ? '' : 'mx-auto'}`} title={t(language, 'BackToDashboard')}>
                     <Home className="w-5 h-5 text-white" />
                 </Link>
                 <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
-                    {open ? 'Finance' : ''}
+                    {open ? t(language, 'Finance') : ''}
                 </div>
             </div>
 
@@ -76,7 +79,7 @@ export default function LeftNavFinance() {
                             <item.icon className={`w-5 h-5 ${active ? 'text-blue-400' : 'text-slate-400'}`} />
                             {open && (
                                 <span className={`whitespace-nowrap overflow-hidden transition-opacity ${active ? 'text-blue-100 font-medium' : 'text-slate-300'}`}>
-                                    {item.label}
+                                    {t(language, item.key)}
                                 </span>
                             )}
                         </Link>

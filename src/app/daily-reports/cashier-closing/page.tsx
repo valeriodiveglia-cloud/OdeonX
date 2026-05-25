@@ -11,7 +11,7 @@ import CircularLoader from '@/components/CircularLoader'
 import InitialInfoCard, { type Header as HeaderInfo, type PaymentBreakdown } from './_cards/InitialInfoCard'
 import CashCountCard from './_cards/CashCountCard'
 import SummaryCard from './_cards/SummaryCard'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useDRBranch } from '../_data/useDRBranch'
 import { supabase } from '@/lib/supabase_shim'
 import { useCashierLuke } from '../_data/useCashierLuke'
@@ -174,6 +174,7 @@ function signatureOfState(state: {
 export default function CashierClosingPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const initialIdFromUrl = searchParams.get('id')
   const { language } = useSettings()
   const dict = getDailyReportsDictionary(language).cashierClosing
@@ -795,7 +796,10 @@ export default function CashierClosingPage() {
 
       const payload = {
         id: lukeId || null,
-        header,
+        header: {
+          ...header,
+          branch: branchNameForClosing,
+        },
         floatTarget,
         payments,
         payouts,
@@ -813,7 +817,7 @@ export default function CashierClosingPage() {
       try {
         const params = new URLSearchParams(window.location.search)
         params.set('id', newId)
-        router.replace(`/daily-reports/cashier-closing?${params.toString()}`)
+        router.replace(`${pathname}?${params.toString()}`)
       } catch { }
 
       const now = Date.now()

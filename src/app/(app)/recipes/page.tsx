@@ -464,6 +464,7 @@ type PrepEditorProps = {
   initialHeader?: PrepHeaderDraft | null
   initialLines?: IngredientLine[] | null
   onCategoryCreated?: (c: Category) => void
+  userRole?: string | null
 }
 
 function PrepEditor(props: PrepEditorProps) {
@@ -480,6 +481,7 @@ function PrepEditor(props: PrepEditorProps) {
     initialHeader,
     initialLines,
     onCategoryCreated,
+    userRole,
   } = props
 
   const { language } = useSettings()
@@ -862,12 +864,14 @@ function PrepEditor(props: PrepEditorProps) {
         <div className="mt-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {viewMode ? (
-              <button
-                onClick={() => setViewMode(false)}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95"
-              >
-                {t('Edit', language)}
-              </button>
+              userRole !== 'accountant' && (
+                <button
+                  onClick={() => setViewMode(false)}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95"
+                >
+                  {t('Edit', language)}
+                </button>
+              )
             ) : (
               id && (
                 <button
@@ -918,6 +922,7 @@ type FinalEditorProps = {
   initialHeader?: FinalHeaderDraft | null
   initialLines?: IngredientLine[] | null
   onCategoryCreated?: (c: Category) => void
+  userRole?: string | null
 }
 
 type Tag = { id: number; name: string }
@@ -935,6 +940,7 @@ function FinalEditor(props: FinalEditorProps) {
     initialHeader,
     initialLines,
     onCategoryCreated,
+    userRole,
   } = props
 
   const { language, currency } = useSettings()
@@ -1485,12 +1491,14 @@ function FinalEditor(props: FinalEditorProps) {
         <div className="mt-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {viewMode ? (
-              <button
-                onClick={() => setViewMode(false)}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95"
-              >
-                {t('Edit', language)}
-              </button>
+              userRole !== 'accountant' && (
+                <button
+                  onClick={() => setViewMode(false)}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95"
+                >
+                  {t('Edit', language)}
+                </button>
+              )
             ) : (
               id && (
                 <button
@@ -1532,6 +1540,18 @@ function FinalEditor(props: FinalEditorProps) {
 
 export default function Page() {
   const { language, currency } = useSettings()
+  const [role, setRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      const { data: user } = await supabase.auth.getUser()
+      if (user?.user) {
+        const { data } = await supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single()
+        setRole(data?.role || 'staff')
+      }
+    }
+    fetchRole()
+  }, [])
 
   const [tab, setTab] = useState<'Dish' | 'Prep'>('Dish')
 
@@ -2455,13 +2475,15 @@ export default function Page() {
                 <span>{showSelectDish ? t('Selecting', language) : t('Select', language)}</span>
               </button>
 
-              <button
-                onClick={openCreateFinal}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white"
-              >
-                <PlusIcon className="w-5 h-5" />
-                {t('NewDish', language)}
-              </button>
+              {role && role !== 'accountant' && (
+                <button
+                  onClick={openCreateFinal}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  {t('NewDish', language)}
+                </button>
+              )}
             </div>
           </div>
 
@@ -2668,13 +2690,15 @@ export default function Page() {
                 <span>{showSelectPrep ? t('Selecting', language) : t('Select', language)}</span>
               </button>
 
-              <button
-                onClick={openCreatePrep}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white"
-              >
-                <PlusIcon className="w-5 h-5" />
-                {t('NewPrep', language)}
-              </button>
+              {role && role !== 'accountant' && (
+                <button
+                  onClick={openCreatePrep}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  {t('NewPrep', language)}
+                </button>
+              )}
             </div>
           </div>
 
@@ -2818,7 +2842,7 @@ export default function Page() {
       {/* Editors */}
       {openFinal && (
         <FinalEditor
-          mode={finalMode}
+          mode={role === 'accountant' ? 'view' : finalMode}
           id={editingFinalId}
           categories={dishCats}
           matOptions={matOptions}
@@ -2829,12 +2853,13 @@ export default function Page() {
           initialHeader={finalInitialHeader}
           initialLines={finalInitialLines}
           onCategoryCreated={handleDishCategoryCreated}
+          userRole={role}
         />
       )}
 
       {openPrep && (
         <PrepEditor
-          mode={prepMode}
+          mode={role === 'accountant' ? 'view' : prepMode}
           id={editingPrepId}
           categories={prepCats}
           matOptions={matOptions}
@@ -2846,6 +2871,7 @@ export default function Page() {
           initialHeader={prepInitialHeader}
           initialLines={prepInitialLines}
           onCategoryCreated={handlePrepCategoryCreated}
+          userRole={role}
         />
       )}
     </div>

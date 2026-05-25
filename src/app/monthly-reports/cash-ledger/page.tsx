@@ -42,28 +42,61 @@ export default function CashLedgerPage() {
     const [branches, setBranches] = useState<Branch[]>([])
     const [branchesLoading, setBranchesLoading] = useState(true)
 
+    const [role, setRole] = useState<string | null>(null)
+
+    useEffect(() => {
+        async function loadRole() {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+            const { data } = await supabase
+                .from('app_accounts')
+                .select('role')
+                .eq('email', user.email ?? '')
+                .eq('is_active', true)
+                .maybeSingle()
+            setRole(data?.role ?? null)
+        }
+        loadRole()
+    }, [])
+
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortAsc, setSortAsc] = useState(false)
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
     const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
 
-    // Load branches
+    const [depositModalOpen, setDepositModalOpen] = useState(false)
+    const [depositTargetRows, setDepositTargetRows] = useState<CashLedgerRow[]>([])
+    const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set())
+    const [bankAccounts, setBankAccounts] = useState<any[]>([])
+    const [selectedAccountId, setSelectedAccountId] = useState('')
+
+    // Load branches and accounts
     useEffect(() => {
-        async function loadBranches() {
-            const { data } = await supabase.from('provider_branches').select('id, name').order('name')
-            if (data) {
-                setBranches(data)
-            }
+        async function loadBranchesAndAccounts() {
+            const { data: brData } = await supabase.from('provider_branches').select('id, name').order('name')
+            if (brData) setBranches(brData)
+            
+            const { data: accData } = await supabase.from('fin_bank_accounts')
+                .select('id, account_name, account_type, currency, branch_id')
+                .eq('account_type', 'Checking')
+                .order('account_name')
+            if (accData) setBankAccounts(accData)
+                
             setBranchesLoading(false)
         }
-        loadBranches()
+        loadBranchesAndAccounts()
     }, [])
 
-    const { rows, loading, refresh, deposit, undeposit, updateDepositDate, totalPending } = useCashLedger({
+    const { rows, loading, refresh, deposit, depositBulk, undeposit, updateDepositDate, totalPending } = useCashLedger({
         year,
         month,
         branchName: selectedBranch || null
     })
+
+    // Clear selection on refresh or date change
+    useEffect(() => {
+        setSelectedRowKeys(new Set())
+    }, [rows])
 
     const handlePrevMonth = () => {
         if (month === 0) {
@@ -92,6 +125,29 @@ export default function CashLedgerPage() {
             setYear(y)
             setMonth(m - 1)
         }
+    }
+
+    const handleOpenDepositModal = (targetRows: CashLedgerRow[]) => {
+        setDepositTargetRows(targetRows)
+        // Try to auto-select bank account based on the first row's branch
+        const firstBranch = targetRows[0]?.branch
+        const branchObj = branches.find(b => b.name === firstBranch)
+        if (branchObj) {
+            const defAcc = bankAccounts.find(a => a.branch_id === branchObj.id && a.account_type === 'Checking')
+            if (defAcc) setSelectedAccountId(defAcc.id)
+            else setSelectedAccountId('')
+        } else {
+            setSelectedAccountId('')
+        }
+        setDepositModalOpen(true)
+    }
+
+    const confirmDeposit = async () => {
+        if (depositTargetRows.length === 0 || !selectedAccountId) return
+        await depositBulk(depositTargetRows, selectedAccountId)
+        setDepositModalOpen(false)
+        setDepositTargetRows([])
+        setSelectedRowKeys(new Set())
     }
 
     function applySort(k: SortKey, asc: boolean) {
@@ -173,6 +229,58 @@ export default function CashLedgerPage() {
         })
         return out
     }, [rows, sortKey, sortAsc, columnFilters, displayValue])
+
+    const toggleRowSelection = (rowKey: string) => {
+        if (role === 'accountant') return
+        const next = new Set(selectedRowKeys)
+        if (next.has(rowKey)) next.delete(rowKey)
+        else next.add(rowKey)
+        setSelectedRowKeys(next)
+    }
+
+    const selectableRows = sortedRows.filter(r => r.cash_to_take > 0)
+    const allSelectableSelected = selectableRows.length > 0 && selectableRows.every(r => selectedRowKeys.has(`${r.date}|${r.branch}`))
+
+    const toggleSelectAll = () => {
+        if (role === 'accountant') return
+        if (allSelectableSelected) {
+            setSelectedRowKeys(new Set())
+        } else {
+            const next = new Set<string>()
+            selectableRows.forEach(r => next.add(`${r.date}|${r.branch}`))
+            setSelectedRowKeys(next)
+        }
+    }
+
+    const selectedRowsList = rows.filter(r => selectedRowKeys.has(`${r.date}|${r.branch}`))
+    const allSelectedArePending = selectedRowsList.length > 0 && selectedRowsList.every(r => !r.deposited)
+    const allSelectedAreDeposited = selectedRowsList.length > 0 && selectedRowsList.every(r => r.deposited)
+
+    const handleBulkDepositClick = () => {
+        if (selectedRowsList.length > 0 && allSelectedArePending) handleOpenDepositModal(selectedRowsList)
+    }
+
+    const handleBulkUndoClick = async () => {
+        if (selectedRowsList.length > 0 && allSelectedAreDeposited) {
+            if (confirm("Are you sure you want to undo these deposits? If they are part of a bulk batch, the entire batch will be undone.")) {
+                const handledBatches = new Set<string>();
+                for (const row of selectedRowsList) {
+                    if (row.batch_id) {
+                        if (!handledBatches.has(row.batch_id)) {
+                            handledBatches.add(row.batch_id);
+                            await undeposit(row);
+                        }
+                    } else if (row.deposit_id) {
+                        if (!handledBatches.has(row.deposit_id)) {
+                            handledBatches.add(row.deposit_id);
+                            await undeposit(row);
+                        }
+                    }
+                }
+                setSelectedRowKeys(new Set());
+            }
+        }
+    }
 
     async function handleExport() {
         const columns: ExcelColumn[] = [
@@ -284,12 +392,49 @@ export default function CashLedgerPage() {
 
             {/* Table */}
             <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
+                {selectedRowKeys.size > 0 && (
+                    <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3">
+                        <span className="text-blue-800 font-medium">{selectedRowKeys.size} row(s) selected</span>
+                        <div className="flex gap-2">
+                            {allSelectedArePending && (
+                                <button
+                                    onClick={handleBulkDepositClick}
+                                    className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg shadow hover:bg-blue-700 transition-colors"
+                                >
+                                    Deposit Selected
+                                </button>
+                            )}
+                            {allSelectedAreDeposited && (
+                                <button
+                                    onClick={handleBulkUndoClick}
+                                    className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg shadow hover:bg-red-700 transition-colors"
+                                >
+                                    Undo Selected
+                                </button>
+                            )}
+                            {!allSelectedArePending && !allSelectedAreDeposited && (
+                                <span className="text-sm text-blue-600 font-medium px-2 py-2">
+                                    Please select only pending OR only deposited rows.
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
                 {loading ? (
                     <div className="flex justify-center p-12"><CircularLoader /></div>
                 ) : (
                     <table className="w-full table-auto text-sm text-gray-900">
                         <thead>
                             <tr>
+                                <th className="p-2 text-center w-10">
+                                    <input 
+                                        type="checkbox" 
+                                        className={`w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 ${role === 'accountant' ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                        checked={allSelectableSelected}
+                                        onChange={toggleSelectAll}
+                                        disabled={selectableRows.length === 0 || role === 'accountant'}
+                                    />
+                                </th>
                                 {([
                                     ['date', 'Date'],
                                     ['day', 'Day'],
@@ -317,7 +462,6 @@ export default function CashLedgerPage() {
                                         center={!!center}
                                     />
                                 ))}
-                                <th className="p-2 text-center font-semibold text-gray-700">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -330,8 +474,25 @@ export default function CashLedgerPage() {
                             )}
                             {sortedRows.map((row, idx) => {
                                 const dateObj = new Date(row.date)
+                                const rowKey = `${row.date}|${row.branch}`
+                                const isSelected = selectedRowKeys.has(rowKey)
+                                const isSelectable = row.cash_to_take > 0
+
                                 return (
-                                    <tr key={`${row.date}-${row.branch}-${idx}`} className="border-t hover:bg-blue-50/40">
+                                    <tr key={`${row.date}-${row.branch}-${idx}`} className={`border-t hover:bg-blue-50/40 ${isSelected ? 'bg-blue-50/50' : ''}`}>
+                                        <td className="p-2 text-center">
+                                            {isSelectable ? (
+                                                <input 
+                                                    type="checkbox" 
+                                                    className={`w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 ${role === 'accountant' ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                                    checked={isSelected}
+                                                    onChange={() => toggleRowSelection(rowKey)}
+                                                    disabled={role === 'accountant'}
+                                                />
+                                            ) : (
+                                                <span className="w-4 h-4 inline-block"></span>
+                                            )}
+                                        </td>
                                         <td className="p-2 whitespace-nowrap">{formatDMY(row.date)}</td>
                                         <td className="p-2 whitespace-nowrap text-gray-600">{formatDay(dateObj)}</td>
                                         <td className="p-2 whitespace-nowrap">{row.branch}</td>
@@ -357,31 +518,22 @@ export default function CashLedgerPage() {
                                             {row.deposited && row.deposit_date ? (
                                                 <div className="flex items-center justify-center gap-1 group">
                                                     <span className="text-gray-700">{formatDMY(row.deposit_date)}</span>
-                                                    <div className="relative w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-blue-500">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                                                        </svg>
-                                                        <input
-                                                            type="date"
-                                                            className="absolute inset-0 opacity-0 cursor-pointer"
-                                                            value={row.deposit_date}
-                                                            onChange={(e) => updateDepositDate(row, e.target.value)}
-                                                        />
-                                                    </div>
+                                                    {role !== 'accountant' && (
+                                                        <div className="relative w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-blue-500">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                                                            </svg>
+                                                            <input
+                                                                type="date"
+                                                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                                                value={row.deposit_date}
+                                                                onChange={(e) => updateDepositDate(row, e.target.value)}
+                                                            />
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <span className="text-gray-400">-</span>
-                                            )}
-                                        </td>
-                                        <td className="p-2 whitespace-nowrap text-center">
-                                            {row.cash_to_take > 0 && (
-                                                <button
-                                                    onClick={() => row.deposited ? undeposit(row) : deposit(row)}
-                                                    title={row.deposited ? "Undo Deposit" : "Mark as Deposited"}
-                                                    className={`p-0 h-auto w-auto bg-transparent hover:opacity-80 transition-opacity ${row.deposited ? 'text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
-                                                >
-                                                    <BuildingLibraryIcon className="w-5 h-5" />
-                                                </button>
                                             )}
                                         </td>
                                     </tr>
@@ -389,6 +541,7 @@ export default function CashLedgerPage() {
                             })}
                             {sortedRows.length > 0 && (
                                 <tr className="border-t bg-gray-50 font-semibold">
+                                    <td colSpan={1}></td>
                                     <td className="p-2" colSpan={3}>Totals</td>
                                     <td className="p-2 text-right tabular-nums text-gray-900">
                                         {fmt(sortedRows.reduce((sum, r) => sum + r.cash_to_take, 0))}
@@ -400,6 +553,73 @@ export default function CashLedgerPage() {
                     </table>
                 )}
             </div>
+
+            {/* Deposit Modal */}
+            {depositModalOpen && depositTargetRows.length > 0 && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="flex items-center justify-between p-5 border-b border-slate-100 flex-shrink-0">
+                            <h2 className="text-xl font-bold text-slate-900">Deposit Cash</h2>
+                            <button onClick={() => setDepositModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-lg">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-5 overflow-y-auto">
+                            <p className="text-slate-600 text-sm mb-4">
+                                You are about to deposit <strong className="text-slate-900">{depositTargetRows.length} day(s)</strong> of cash revenues.
+                            </p>
+                            
+                            <div className="mb-6 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-sm text-slate-500">Total Amount</span>
+                                    <span className="text-lg font-bold text-slate-900">{fmt(depositTargetRows.reduce((s, r) => s + r.cash_to_take, 0))} VND</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs text-slate-500">
+                                    <span>Branch</span>
+                                    <span className="font-medium">{depositTargetRows[0]?.branch}</span>
+                                </div>
+                            </div>
+                            
+                            <div className="mb-6">
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">Bank Account</label>
+                                <select
+                                    value={selectedAccountId}
+                                    onChange={e => setSelectedAccountId(e.target.value)}
+                                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 shadow-sm transition-all hover:border-slate-300 bg-slate-50 focus:bg-white"
+                                >
+                                    <option value="" disabled className="text-slate-400">Select an account...</option>
+                                    {bankAccounts.map(acc => {
+                                        const bName = branches.find(b => b.id === acc.branch_id)?.name || 'Unknown Branch'
+                                        return (
+                                            <option key={acc.id} value={acc.id} className="text-slate-900">
+                                                {acc.account_name} ({bName} - {acc.currency || 'VND'})
+                                            </option>
+                                        )
+                                    })}
+                                </select>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                                <button
+                                    onClick={() => setDepositModalOpen(false)}
+                                    className="px-4 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmDeposit}
+                                    disabled={!selectedAccountId}
+                                    className="px-4 py-2.5 text-sm font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+                                >
+                                    Confirm Deposit
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

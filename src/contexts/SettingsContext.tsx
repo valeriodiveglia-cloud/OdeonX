@@ -112,6 +112,10 @@ type Ctx = {
 
   saveAllCrmSettings: (type: string, rules: any, partnerRules: any) => void
 
+  // System Go-Live
+  financeStartDate: string
+  setFinanceStartDate: (d: string) => void
+
   // Forzare ricarica
   reloadSettings: () => Promise<void>
 
@@ -191,6 +195,9 @@ const SettingsCtx = createContext<Ctx>({
 
   saveAllCrmSettings: () => {},
 
+  financeStartDate: '',
+  setFinanceStartDate: () => {},
+
   reloadSettings: async () => {},
   revision: 0,
 })
@@ -248,6 +255,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [crmCommissionRules, setCrmCommissionRulesState] = useState<any>({ acquisition_pct: 10, maintenance_pct: 4 })
   const [crmPartnerRules, setCrmPartnerRulesState] = useState<any>({ has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '' })
 
+  // Go-Live
+  const [financeStartDate, setFinanceStartDateState] = useState<string>('')
+
   // Chiavi localStorage usate dall’app
   const LS_KEYS = [
     'app_materials_review_months',
@@ -294,6 +304,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     crmCommissionType?: string
     crmCommissionRules?: any
     crmPartnerRules?: any
+    financeStartDate?: string
   }) {
     const patch: Record<string, any> = { id: 'singleton' }
 
@@ -337,6 +348,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if ('crmCommissionType' in partial) patch.crm_commission_type = partial.crmCommissionType
     if ('crmCommissionRules' in partial) patch.crm_commission_rules = partial.crmCommissionRules
     if ('crmPartnerRules' in partial) patch.crm_partner_rules = partial.crmPartnerRules
+    if ('financeStartDate' in partial) patch.finance_start_date = partial.financeStartDate
 
     const { error } = await supabase.from('app_settings').upsert(patch, { onConflict: 'id' })
     if (error) {
@@ -356,23 +368,32 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase
       .from('app_settings')
       .select(
-        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs, hr_review_frequency, hr_bonus_14th_base_years, hr_bonus_14th_steps, hr_bonus_pt_max_cap, hr_bonus_pt_target_hours, hr_bonus_pt_min_hours, hr_bonus_pt_min_rating, hr_bonus_14th_min_rating, hr_bonus_13th_guaranteed_pct, hr_bonus_13th_perf_pct, hr_bonus_13th_perf_tiers, crm_advisor_commission_pct, crm_commission_type, crm_commission_rules, crm_partner_rules'
+        'language_code, currency, vat_enabled, vat_rate, default_markup_pct, default_markup_equipment_pct, materials_review_months, csv_require_confirm_refs, materials_exclusive_default, equipment_review_months, equipment_csv_require_confirm_refs, hr_review_frequency, hr_bonus_14th_base_years, hr_bonus_14th_steps, hr_bonus_pt_max_cap, hr_bonus_pt_target_hours, hr_bonus_pt_min_hours, hr_bonus_pt_min_rating, hr_bonus_14th_min_rating, hr_bonus_13th_guaranteed_pct, hr_bonus_13th_perf_pct, hr_bonus_13th_perf_tiers, crm_advisor_commission_pct, crm_commission_type, crm_commission_rules, crm_partner_rules, finance_start_date'
       )
       .eq('id', 'singleton')
       .maybeSingle()
     if (error) console.warn('Settings load error', error)
 
-    const lang = data?.language_code === 'vi' ? 'vi' : 'en'
-    const curRaw = (data?.currency as Currency) ?? 'VND'
-    const cur: Currency = (['VND', 'USD', 'EUR', 'GBP'] as const).includes(curRaw) ? curRaw : 'VND'
+    const dbLang = data?.language_code === 'vi' ? 'vi' : 'en'
+    
+    // Respect user's local language selection if present in localStorage
+    let activeLang: Lang = dbLang
+    try {
+      const lsLang = localStorage.getItem('app_lang') as Lang | null
+      if (lsLang === 'en' || lsLang === 'vi') {
+        activeLang = lsLang
+      }
+    } catch {}
 
     // Applica lingua subito a <html lang> e salva in LS
     try {
-      document.documentElement.lang = lang
-      localStorage.setItem('app_lang', lang)
+      document.documentElement.lang = activeLang
+      localStorage.setItem('app_lang', activeLang)
     } catch {}
 
-    setLanguageState(lang)
+    setLanguageState(activeLang)
+    const curRaw = (data?.currency as Currency) ?? 'VND'
+    const cur: Currency = (['VND', 'USD', 'EUR', 'GBP'] as const).includes(curRaw) ? curRaw : 'VND'
     setCurrencyState(cur)
     setVatEnabledState(toBool(data?.vat_enabled, false))
 
@@ -443,6 +464,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (data?.hr_bonus_13th_guaranteed_pct !== undefined) setHrBonus13thGuaranteedPctState(Number(data.hr_bonus_13th_guaranteed_pct))
     if (data?.hr_bonus_13th_perf_pct !== undefined) setHrBonus13thPerfPctState(Number(data.hr_bonus_13th_perf_pct))
     if (data?.hr_bonus_13th_perf_tiers !== undefined) setHrBonus13thPerfTiersState(data.hr_bonus_13th_perf_tiers as any)
+
+    if (data?.finance_start_date !== undefined && data?.finance_start_date !== null) {
+      setFinanceStartDateState(data.finance_start_date)
+    }
 
     try {
       // Local overrides
@@ -746,6 +771,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
+  function setFinanceStartDate(d: string) {
+    setFinanceStartDateState(d)
+    void saveToDb({ financeStartDate: d })
+  }
+
   if (!hydrated) return null
 
   return (
@@ -821,6 +851,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         crmPartnerRules,
         setCrmPartnerRules,
         saveAllCrmSettings,
+
+        financeStartDate,
+        setFinanceStartDate,
 
         reloadSettings,
         revision,

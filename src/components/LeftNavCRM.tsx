@@ -70,6 +70,9 @@ export default function LeftNavCRM() {
         return item
     }).filter(item => {
         if (role === null) return false; // Prevent flash of unauthorized icons while loading
+        if (role === 'accountant') {
+            return item.href === '/crm' || item.href === '/crm/payouts'
+        }
         if (role === 'staff') {
             return item.href === '/crm/referrals'
         }

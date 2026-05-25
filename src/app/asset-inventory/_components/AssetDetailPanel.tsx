@@ -12,9 +12,10 @@ type Props = {
     onDelete: (id: string) => void
     onTransfer: (asset: Asset) => void
     onCatering: (asset: Asset) => void
+    userRole?: string | null
 }
 
-export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onTransfer, onCatering }: Props) {
+export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onTransfer, onCatering, userRole }: Props) {
     const [duration, setDuration] = useState(6)
 
     useEffect(() => {
@@ -64,20 +65,24 @@ export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onT
                             <p className="text-sm text-slate-500 font-mono mt-1">{asset.sku}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={onEdit} className="p-2 rounded-lg hover:bg-slate-200 text-slate-500 transition-colors" title="Edit Asset">
-                                <PencilSquareIcon className="w-5 h-5" />
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (confirm('Are you sure you want to delete this asset?')) {
-                                        onDelete(asset.id)
-                                    }
-                                }}
-                                className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600 transition-colors"
-                                title="Delete Asset"
-                            >
-                                <TrashIcon className="w-5 h-5" />
-                            </button>
+                            {userRole !== 'accountant' && (
+                                <>
+                                    <button onClick={onEdit} className="p-2 rounded-lg hover:bg-slate-200 text-slate-500 transition-colors" title="Edit Asset">
+                                        <PencilSquareIcon className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Are you sure you want to delete this asset?')) {
+                                                onDelete(asset.id)
+                                            }
+                                        }}
+                                        className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600 transition-colors"
+                                        title="Delete Asset"
+                                    >
+                                        <TrashIcon className="w-5 h-5" />
+                                    </button>
+                                </>
+                            )}
                             <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-200 text-slate-500 transition-colors">
                                 <XMarkIcon className="w-5 h-5" />
                             </button>
@@ -209,42 +214,44 @@ export default function AssetDetailPanel({ asset, onClose, onEdit, onDelete, onT
                     </div>
 
                     {/* Footer Actions */}
-                    <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col gap-3">
-                        {asset.status === 'out_for_catering' ? (
-                            <button
-                                onClick={() => onCatering(asset!)}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100 transition-colors shadow-sm"
-                            >
-                                <TruckIcon className="w-5 h-5" />
-                                Return from Catering
-                            </button>
-                        ) : (
-                            <>
+                    {userRole !== 'accountant' && (
+                        <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col gap-3">
+                            {asset.status === 'out_for_catering' ? (
                                 <button
-                                    onClick={() => onTransfer(asset!)}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-blue-200 bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                                    onClick={() => onCatering(asset!)}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100 transition-colors shadow-sm"
                                 >
                                     <TruckIcon className="w-5 h-5" />
-                                    Transfer Asset
+                                    Return from Catering
                                 </button>
-                                <div className="grid grid-cols-2 gap-3">
+                            ) : (
+                                <>
                                     <button
-                                        onClick={() => onCatering(asset!)}
-                                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100 transition-colors"
+                                        onClick={() => onTransfer(asset!)}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-blue-200 bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
                                     >
                                         <TruckIcon className="w-5 h-5" />
-                                        Catering
+                                        Transfer Asset
                                     </button>
-                                    <button
-                                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 font-medium hover:bg-amber-100 transition-colors"
-                                    >
-                                        <WrenchScrewdriverIcon className="w-5 h-5" />
-                                        Maintenance
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => onCatering(asset!)}
+                                            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100 transition-colors"
+                                        >
+                                            <TruckIcon className="w-5 h-5" />
+                                            Catering
+                                        </button>
+                                        <button
+                                            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 font-medium hover:bg-amber-100 transition-colors"
+                                        >
+                                            <WrenchScrewdriverIcon className="w-5 h-5" />
+                                            Maintenance
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

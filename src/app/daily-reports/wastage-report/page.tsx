@@ -84,6 +84,7 @@ const DEFAULT_T = {
     delete: 'Delete',
     close: 'Close',
     save: 'Save',
+    saving: 'Saving…',
     typeTabs: { Dish: 'Dish', Material: 'Material', Prep: 'Prep' },
     fields: {
       date: 'Date',
@@ -380,8 +381,8 @@ function EditorModal({
   dishes: Dish[]
   preps: Prep[]
   onClose: () => void
-  onSaved: (row: WastageRow) => void
-  onDeleted: (id: string) => void
+  onSaved: (row: WastageRow) => Promise<void> | void
+  onDeleted: (id: string) => Promise<void> | void
   t: typeof DEFAULT_T['editor']
 }) {
   const safeCategories = Array.isArray(categories) ? categories : []
@@ -390,6 +391,7 @@ function EditorModal({
   const safePreps = Array.isArray(preps) ? preps : []
 
   const [viewMode, setViewMode] = useState(mode === 'view')
+  const [isSaving, setIsSaving] = useState(false)
   const [type, setType] = useState<WType>((initialRow?.type as WType) || initialType)
 
   const [date, setDate] = useState<string>(initialRow?.date || todayISO())
@@ -561,37 +563,51 @@ function EditorModal({
     return true
   }, [date, time, qty, itemId])
 
-  function handleSave() {
-    if (!canSave || viewMode) return
-    const row: WastageRow = {
-      id: initialRow?.id || uuid(),
-      date,
-      time,
-      type,
-      categoryId: type === 'Material' ? (categoryId || null) : undefined,
-      categoryName: type === 'Material' ? (categoryName || null) : categoryName || null,
-      itemId: itemId || null,
-      itemName: itemName || '',
-      unit: unit || null,
-      qty: qty || 0,
-      unitCost: Math.round(unitCost || 0),
-      totalCost: Math.round((unitCost || 0) * (qty || 0)),
-      chargeTo,
-      reason: reason ? reason : null,
-      responsible: responsible ? responsible : null,
-      enteredBy: enteredBy ? enteredBy : null,
+  async function handleSave() {
+    if (!canSave || viewMode || isSaving) return
+    setIsSaving(true)
+    try {
+      const row: WastageRow = {
+        id: initialRow?.id || uuid(),
+        date,
+        time,
+        type,
+        categoryId: type === 'Material' ? (categoryId || null) : undefined,
+        categoryName: type === 'Material' ? (categoryName || null) : categoryName || null,
+        itemId: itemId || null,
+        itemName: itemName || '',
+        unit: unit || null,
+        qty: qty || 0,
+        unitCost: Math.round(unitCost || 0),
+        totalCost: Math.round((unitCost || 0) * (qty || 0)),
+        chargeTo,
+        reason: reason ? reason : null,
+        responsible: responsible ? responsible : null,
+        enteredBy: enteredBy ? enteredBy : null,
+      }
+      await onSaved(row)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSaving(false)
     }
-    onSaved(row)
   }
 
-  function handleDelete() {
-    if (viewMode || !initialRow?.id) return
+  async function handleDelete() {
+    if (viewMode || !initialRow?.id || isSaving) return
     if (!window.confirm(t.confirmDelete)) return
-    onDeleted(initialRow.id)
+    setIsSaving(true)
+    try {
+      await onDeleted(initialRow.id)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={() => { if (!isSaving) onClose() }}>
       <div className="h-full flex flex-col text-gray-900">
         <div className="px-6 pt-5 pb-4 flex items-center justify-between border-b border-blue-100 bg-blue-50/20">
           <div className="flex items-center gap-3">
@@ -604,31 +620,31 @@ function EditorModal({
                   const active = tt === type
                   const typeLabel = t.typeTabs?.[tt] || tt
                   return (
-                    <button
-                      key={tt}
-                      onClick={() => {
-                        if (viewMode) return
-                        setType(tt)
-                        setCategoryId('')
-                        setCategoryName('')
-                        setItemId('')
-                        setItemName('')
-                        setUnit('')
-                        setPackageCost(0)
-                        setUnitCost(0)
-                        setQtyInput('')
-                      }}
-                      className={`px-3 py-2 text-sm transition ${active ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 hover:bg-blue-50'} ${tt === 'Dish' ? '' : 'border-l border-blue-300'}`}
-                      disabled={viewMode}
-                    >
-                      {typeLabel}
-                    </button>
+                     <button
+                       key={tt}
+                       onClick={() => {
+                         if (viewMode || isSaving) return
+                         setType(tt)
+                         setCategoryId('')
+                         setCategoryName('')
+                         setItemId('')
+                         setItemName('')
+                         setUnit('')
+                         setPackageCost(0)
+                         setUnitCost(0)
+                         setQtyInput('')
+                       }}
+                       className={`px-3 py-2 text-sm transition ${active ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 hover:bg-blue-50'} ${tt === 'Dish' ? '' : 'border-l border-blue-300'}`}
+                       disabled={viewMode || isSaving}
+                     >
+                       {typeLabel}
+                     </button>
                   )
                 })}
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50" title={t.close}>
+          <button onClick={onClose} disabled={isSaving} className="p-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50" title={t.close}>
             <XMarkIcon className="w-7 h-7" />
           </button>
         </div>
@@ -637,18 +653,18 @@ function EditorModal({
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="text-sm text-gray-800">{t.fields.date}</label>
-              <input type="date" className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={date} onChange={e => setDate(e.target.value)} disabled={viewMode} />
+              <input type="date" className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={date} onChange={e => setDate(e.target.value)} disabled={viewMode || isSaving} />
             </div>
             <div>
               <label className="text-sm text-gray-800">{t.fields.time}</label>
-              <input type="time" className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={time} onChange={e => setTime(e.target.value)} disabled={viewMode} />
+              <input type="time" className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={time} onChange={e => setTime(e.target.value)} disabled={viewMode || isSaving} />
             </div>
 
             {type === 'Material' ? (
               <>
                 <div>
                   <label className="text-sm text-gray-800">{t.fields.category}</label>
-                  <select className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={viewMode}>
+                  <select className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={viewMode || isSaving}>
                     <option value="">{t.fields.category}</option>
                     {safeCategories.map(c => (
                       <option key={c.id} value={c.id}>
@@ -670,7 +686,7 @@ function EditorModal({
                         if (m?.category_id) setCategoryId(m.category_id)
                       }
                     }}
-                    disabled={viewMode}
+                    disabled={viewMode || isSaving}
                   >
                     <option value="">{materialOpts.length ? t.fields.item : t.noItems}</option>
                     {materialOpts.map(m => (
@@ -689,7 +705,7 @@ function EditorModal({
                     className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
                     value={categoryName}
                     onChange={e => {
-                      if (viewMode) return
+                      if (viewMode || isSaving) return
                       setCategoryName(e.target.value)
                       setItemId('')
                       setItemName('')
@@ -697,7 +713,7 @@ function EditorModal({
                       setUnitCost(0)
                       setQtyInput('')
                     }}
-                    disabled={viewMode}
+                    disabled={viewMode || isSaving}
                   >
                     <option value="">{t.fields.category}</option>
                     {Array.from(new Set((type === 'Dish' ? safeDishes : safePreps).map(x => x.category || '').filter(Boolean)))
@@ -723,7 +739,7 @@ function EditorModal({
                         if (item?.category) setCategoryName(item.category)
                       }
                     }}
-                    disabled={viewMode}
+                    disabled={viewMode || isSaving}
                   >
                     <option value="">{(type === 'Dish' ? dishOpts : prepOpts).length ? t.fields.item : t.noItems}</option>
                     {(type === 'Dish' ? dishOpts : prepOpts).map(x => (
@@ -747,7 +763,7 @@ function EditorModal({
                   const val = e.target.value.replace(/[^0-9.,]/g, '')
                   setQtyInput(val)
                 }}
-                disabled={viewMode}
+                disabled={viewMode || isSaving}
                 placeholder="0"
               />
             </div>
@@ -788,7 +804,7 @@ function EditorModal({
                 placeholder={t.responsiblePh || ''}
                 value={responsible}
                 onChange={e => setResponsible(e.target.value)}
-                disabled={viewMode}
+                disabled={viewMode || isSaving}
               />
             </div>
 
@@ -804,7 +820,7 @@ function EditorModal({
                 placeholder={t.reasonPh || ''}
                 value={reason}
                 onChange={e => setReason(e.target.value)}
-                disabled={viewMode}
+                disabled={viewMode || isSaving}
               />
             </div>
 
@@ -818,7 +834,7 @@ function EditorModal({
                     { label: t.chargeToOpts.Restaurant, value: 'Restaurant' },
                     { label: t.chargeToOpts.Staff, value: 'Staff' },
                   ]}
-                  disabled={viewMode}
+                  disabled={viewMode || isSaving}
                 />
               </div>
               <div className="text-sm text-gray-600">
@@ -836,19 +852,37 @@ function EditorModal({
               </button>
             ) : (
               initialRow?.id && (
-                <button onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">
+                <button
+                  onClick={handleDelete}
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:bg-gray-50"
+                >
                   {t.delete}
                 </button>
               )
             )}
           </div>
           <div>
-            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-blue-300 bg-white hover:bg-blue-50">
+            <button
+              onClick={onClose}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-lg border border-blue-300 bg-white hover:bg-blue-50 disabled:opacity-50"
+            >
               {t.close}
             </button>
             {!viewMode && (
-              <button onClick={handleSave} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50">
-                {t.save}
+              <button
+                onClick={handleSave}
+                disabled={!canSave || isSaving}
+                className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {isSaving && (
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                )}
+                {isSaving ? t.saving : t.save}
               </button>
             )}
           </div>
@@ -1033,26 +1067,31 @@ export default function WastageReportPage() {
   }
 
   async function onSavedRow(r: WastageRow) {
-    try {
-      if (editorInitialRow?.id) {
-        // Edit existing
-        await updateWastage(editorInitialRow.id, { ...r, id: undefined }) // Ensure we pass partial, but ID is in arg 1
-      } else {
-        // Create new
-        await insertWastage(r)
-      }
-      setOpenEditor(false)
-      setEditorInitialRow(null)
-    } catch (err) {
-      console.error('Insert/update wastage failed', err)
-      alert(t.errors?.saveFailed || 'Failed to save wastage entry')
+    let result: WastageRow | null = null
+    if (editorInitialRow?.id) {
+      // Edit existing
+      result = await updateWastage(editorInitialRow.id, { ...r, id: undefined }) // Ensure we pass partial, but ID is in arg 1
+    } else {
+      // Create new
+      result = await insertWastage(r)
     }
+
+    if (!result) {
+      alert(t.errors?.saveFailed || 'Failed to save wastage entry')
+      throw new Error('Save failed')
+    }
+
+    setOpenEditor(false)
+    setEditorInitialRow(null)
   }
 
   async function onDeletedRow(id: string) {
     if (!id) return
     const ok = await deleteWastage(id)
-    if (!ok) return
+    if (!ok) {
+      alert(t.editor.deleteFail || 'Delete failed')
+      throw new Error('Delete failed')
+    }
     setOpenEditor(false)
     setEditorInitialRow(null)
   }

@@ -11,6 +11,7 @@ export type CashLedgerRow = {
     deposit_id?: string
     deposit_amount?: number
     deposit_date?: string | null
+    batch_id?: string | null
 }
 
 const DEFAULT_FLOAT = 3_000_000
@@ -82,7 +83,7 @@ export function useCashLedger(params: { year: number; month: number; branchName:
             // 2. Fetch Cash Ledger Deposits (Current Month)
             let qDeposits = supabase
                 .from('cash_ledger_deposits')
-                .select('id, date, amount, branch, deposit_date')
+                .select('id, date, amount, branch, deposit_date, batch_id')
                 .gte('date', startISO)
                 .lt('date', endISO)
 
@@ -153,7 +154,8 @@ export function useCashLedger(params: { year: number; month: number; branchName:
                     deposited: isDeposited,
                     deposit_id: relatedDeposits[0]?.id,
                     deposit_amount: totalDeposited,
-                    deposit_date: depositDate
+                    deposit_date: depositDate,
+                    batch_id: relatedDeposits[0]?.batch_id
                 }
             })
 
@@ -211,33 +213,186 @@ export function useCashLedger(params: { year: number; month: number; branchName:
         refresh()
     }, [refresh])
 
-    const deposit = async (row: CashLedgerRow, depositDate?: string) => {
-        if (row.deposited) return
+    const depositBulk = async (rows: CashLedgerRow[], accountId: string, depositDate?: string) => {
+        if (rows.length === 0) return
 
         try {
-            const { error } = await supabase.from('cash_ledger_deposits').insert({
-                date: row.date,
-                branch: row.branch,
-                amount: row.cash_to_take,
-                notes: 'Auto-deposit from Cash Ledger',
-                deposit_date: depositDate || new Date().toISOString().split('T')[0] // Default to TODAY
-            })
+            const finalDate = depositDate || new Date().toISOString().split('T')[0];
+            const batchId = crypto.randomUUID();
+            
+            // Assume all rows belong to the same branch for simplicity
+            const branchName = rows[0].branch;
 
-            if (error) throw error
+            // 1. Find Branch ID
+            const { data: branchData } = await supabase.from('provider_branches').select('id').eq('name', branchName).single();
+            if (!branchData) throw new Error("Branch non trovato");
+
+            // 2. Find the selected Bank Account
+            const { data: accountData } = await supabase.from('fin_bank_accounts')
+                .select('id, current_balance')
+                .eq('id', accountId)
+                .single();
+            if (!accountData) throw new Error("Conto bancario non trovato");
+
+            let totalAmount = 0;
+            const insertPayload = rows.map(r => {
+                totalAmount += r.cash_to_take;
+                return {
+                    date: r.date,
+                    branch: r.branch,
+                    amount: r.cash_to_take,
+                    notes: 'Bulk deposit from Cash Ledger',
+                    deposit_date: finalDate,
+                    batch_id: batchId
+                };
+            });
+
+            // 3. Create Deposits in cash_ledger_deposits
+            const { error } = await supabase.from('cash_ledger_deposits').insert(insertPayload);
+            if (error) throw error;
+
+            // Date Range Description
+            const dates = rows.map(r => r.date).sort();
+            const minDate = dates[0];
+            const maxDate = dates[dates.length - 1];
+            const desc = minDate === maxDate ? `Cash Revenue for ${minDate}` : `Cash Revenue from ${minDate} to ${maxDate}`;
+
+            // 4. Create Bank Transaction Inflow (To selected bank account)
+            const { error: txError } = await supabase.from('fin_bank_transactions').insert({
+                account_id: accountData.id,
+                type: 'Inflow',
+                category: 'Cash Deposit',
+                description: desc,
+                amount: totalAmount,
+                reference_id: batchId,
+                reference_type: 'cash_ledger_batch',
+                branch_id: branchData.id,
+                transaction_date: finalDate
+            });
+            if (txError) throw txError;
+
+            // 5. Update Bank Account Balance
+            const { error: balError } = await supabase.from('fin_bank_accounts')
+                .update({ current_balance: Number(accountData.current_balance) + totalAmount })
+                .eq('id', accountData.id);
+            if (balError) throw balError;
+
+            // --- NEW: Cash on Hand Outflow Logic ---
+            // Check Go-Live Date
+            const { data: settingsData } = await supabase.from('app_settings').select('finance_start_date').limit(1).single();
+            const goLiveStr = settingsData?.finance_start_date;
+            
+            if (goLiveStr && finalDate >= goLiveStr) {
+                // Find Cash on Hand account
+                const { data: cashAcc } = await supabase.from('fin_bank_accounts')
+                    .select('id, current_balance')
+                    .eq('account_type', 'Cash')
+                    .like('account_name', `Cash on Hand - ${branchName}%`)
+                    .limit(1).single();
+                
+                if (cashAcc) {
+                    // Create Outflow transaction
+                    const { error: outTxError } = await supabase.from('fin_bank_transactions').insert({
+                        account_id: cashAcc.id,
+                        type: 'Outflow',
+                        category: 'Cash Deposit',
+                        description: `Bank Deposit: ${desc}`,
+                        amount: totalAmount,
+                        reference_id: batchId,
+                        reference_type: 'cash_ledger_batch_outflow',
+                        branch_id: branchData.id,
+                        transaction_date: finalDate
+                    });
+                    if (outTxError) throw outTxError;
+
+                    // Update Cash on Hand balance
+                    const { error: cashBalError } = await supabase.from('fin_bank_accounts')
+                        .update({ current_balance: Number(cashAcc.current_balance) - totalAmount })
+                        .eq('id', cashAcc.id);
+                    if (cashBalError) throw cashBalError;
+                }
+            }
+            // ---------------------------------------
 
             await refresh(true)
         } catch (err: any) {
-            console.error('Error depositing:', err)
+            console.error('Error in bulk deposit:', err)
             alert('Failed to deposit: ' + err.message)
         }
     }
 
+    const deposit = async (row: CashLedgerRow, accountId: string, depositDate?: string) => {
+        return depositBulk([row], accountId, depositDate);
+    }
+
     const undeposit = async (row: CashLedgerRow) => {
-        if (!row.deposited || !row.deposit_id) return
+        if (!row.deposited) return
 
         try {
-            const { error } = await supabase.from('cash_ledger_deposits').delete().eq('id', row.deposit_id)
-            if (error) throw error
+            if (row.batch_id) {
+                // Bulk Undo
+                const { data: txData } = await supabase.from('fin_bank_transactions')
+                    .select('id, account_id, amount')
+                    .eq('reference_id', row.batch_id)
+                    .eq('reference_type', 'cash_ledger_batch')
+                    .single();
+                
+                if (txData) {
+                    const { data: accData } = await supabase.from('fin_bank_accounts')
+                        .select('current_balance').eq('id', txData.account_id).single();
+                    if (accData) {
+                        await supabase.from('fin_bank_accounts')
+                            .update({ current_balance: Number(accData.current_balance) - Number(txData.amount) })
+                            .eq('id', txData.account_id);
+                    }
+                    await supabase.from('fin_bank_transactions').delete().eq('id', txData.id);
+                }
+
+                // --- NEW: Revert Cash on Hand Outflow ---
+                const { data: outTxData } = await supabase.from('fin_bank_transactions')
+                    .select('id, account_id, amount')
+                    .eq('reference_id', row.batch_id)
+                    .eq('reference_type', 'cash_ledger_batch_outflow')
+                    .single();
+                
+                if (outTxData) {
+                    const { data: accData } = await supabase.from('fin_bank_accounts')
+                        .select('current_balance').eq('id', outTxData.account_id).single();
+                    if (accData) {
+                        await supabase.from('fin_bank_accounts')
+                            .update({ current_balance: Number(accData.current_balance) + Number(outTxData.amount) })
+                            .eq('id', outTxData.account_id);
+                    }
+                    await supabase.from('fin_bank_transactions').delete().eq('id', outTxData.id);
+                }
+                // ----------------------------------------
+
+                const { error } = await supabase.from('cash_ledger_deposits').delete().eq('batch_id', row.batch_id)
+                if (error) throw error
+
+            } else if (row.deposit_id) {
+                // Single Undo (Legacy)
+                const { data: txData } = await supabase.from('fin_bank_transactions')
+                    .select('id, account_id, amount')
+                    .eq('reference_id', row.deposit_id)
+                    .eq('reference_type', 'cash_ledger_deposit')
+                    .single();
+                
+                if (txData) {
+                    const { data: accData } = await supabase.from('fin_bank_accounts')
+                        .select('current_balance').eq('id', txData.account_id).single();
+                    if (accData) {
+                        await supabase.from('fin_bank_accounts')
+                            .update({ current_balance: Number(accData.current_balance) - Number(txData.amount) })
+                            .eq('id', txData.account_id);
+                    }
+                    await supabase.from('fin_bank_transactions').delete().eq('id', txData.id);
+                }
+
+                const { error } = await supabase.from('cash_ledger_deposits').delete().eq('id', row.deposit_id)
+                if (error) throw error
+            }
+            
             await refresh(true)
         } catch (err: any) {
             console.error('Error undepositing:', err)
@@ -255,6 +410,13 @@ export function useCashLedger(params: { year: number; month: number; branchName:
                 .eq('id', row.deposit_id)
 
             if (error) throw error
+
+            // Update bank transaction date
+            await supabase.from('fin_bank_transactions')
+                .update({ transaction_date: newDate })
+                .eq('reference_id', row.deposit_id)
+                .eq('reference_type', 'cash_ledger_deposit');
+
             await refresh(true)
         } catch (err: any) {
             console.error('Error updating deposit date:', err)
@@ -262,5 +424,5 @@ export function useCashLedger(params: { year: number; month: number; branchName:
         }
     }
 
-    return { rows, loading, error, refresh, deposit, undeposit, updateDepositDate, totalPending }
+    return { rows, loading, error, refresh, deposit, depositBulk, undeposit, updateDepositDate, totalPending }
 }

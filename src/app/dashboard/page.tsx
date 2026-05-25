@@ -195,7 +195,8 @@ export default function HomeDashboard() {
         if (storedRecent) {
           const paths: string[] = JSON.parse(storedRecent)
           const matched = paths.map(getPageByHref).filter(Boolean) as AppPage[]
-          setRecentVisits(matched)
+          const filtered = matched.filter(p => !p.requiresRole || p.requiresRole.includes(role || 'staff'))
+          setRecentVisits(filtered)
         }
         
         // Quick Access
@@ -270,14 +271,15 @@ export default function HomeDashboard() {
         if (storedRecent) {
           const paths: string[] = JSON.parse(storedRecent)
           const matched = paths.map(getPageByHref).filter(Boolean) as AppPage[]
-          setRecentVisits(matched)
+          const filtered = matched.filter(p => !p.requiresRole || p.requiresRole.includes(role || 'staff'))
+          setRecentVisits(filtered)
         }
       } catch (e) {}
     }
     
     window.addEventListener('recent_visits_updated', handleRecentUpdate)
     return () => window.removeEventListener('recent_visits_updated', handleRecentUpdate)
-  }, [user])
+  }, [user, role])
 
   const updatePreferences = async (newPrefs: any) => {
     if (!user) return
@@ -308,7 +310,8 @@ export default function HomeDashboard() {
 
   const quickAccessPages = quickAccessIds
     .map(id => APP_PAGES_DIRECTORY.find(p => p.id === id))
-    .filter(Boolean).slice(0, 6) as AppPage[]
+    .filter((p): p is AppPage => !!p && (!p.requiresRole || p.requiresRole.includes(role || 'staff')))
+    .slice(0, 6)
 
   const saveModuleOrder = (newOrder: string[]) => {
     if (!user) return
@@ -352,22 +355,22 @@ export default function HomeDashboard() {
   const defaultModules = [
     // Column 1
     { id: 'costing', href: '/materials', icon: CalculatorIcon, title: t(language, 'Costing') },
-    { id: 'crm', href: '/crm', icon: Handshake, title: t(language, 'CRMPartnerships') || 'CRM & Partnerships', roles: ['owner', 'admin', 'manager'] },
+    { id: 'crm', href: '/crm', icon: Handshake, title: t(language, 'CRMPartnerships') || 'CRM & Partnerships', roles: ['owner', 'admin', 'manager', 'accountant'] },
     { id: 'referrals', href: '/crm/referrals', icon: Target, title: t(language, 'RegisterReferral') || 'Register Referral', roles: ['owner', 'admin', 'manager', 'staff'] },
     
     // Column 2
-    { id: 'catering', href: '/catering', icon: BuildingOffice2Icon, title: t(language, 'Catering') },
-    { id: 'settings', href: '/general-settings', icon: Cog6ToothIcon, title: t(language, 'Settings') },
+    { id: 'catering', href: '/catering', icon: BuildingOffice2Icon, title: t(language, 'Catering'), roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+    { id: 'settings', href: '/general-settings', icon: Cog6ToothIcon, title: t(language, 'Settings'), roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
     
     // Column 3
-    { id: 'loyalty', href: '/loyalty-manager', icon: UserGroupIcon, title: t(language, 'LoyaltyManager') || 'Loyalty Manager' },
+    { id: 'loyalty', href: '/loyalty-manager', icon: UserGroupIcon, title: t(language, 'LoyaltyManager') || 'Loyalty Manager', roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
     { id: 'asset-branch-picker', Component: AssetBranchPickerCTA, title: t(language, 'AssetInventory') || 'Asset Inventory', icon: Boxes },
     
     // Column 4
-    { id: 'branch-picker', Component: BranchPickerCTA, title: t(language, 'CheckInSystem') || 'Check In System', icon: MapPinIcon },
-    { id: 'monthly-reports', href: '/monthly-reports', icon: LayoutDashboard, title: t(language, 'MonthlyReports') || 'Monthly Reports', roles: ['owner', 'admin'] },
-    { id: 'hr-module', Component: HRModuleCTA, title: t(language, 'HumanResources') || 'Human Resources', icon: UserGroupIcon },
-    { id: 'finance', href: '/finance', icon: DollarSign, title: 'Finance', roles: ['owner', 'accountant'] },
+    { id: 'branch-picker', Component: BranchPickerCTA, title: t(language, 'CheckInSystem') || 'Check In System', icon: MapPinIcon, roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+    { id: 'monthly-reports', href: '/monthly-reports', icon: LayoutDashboard, title: t(language, 'MonthlyReports') || 'Monthly Reports', roles: ['owner', 'admin', 'accountant'] },
+    { id: 'hr-module', Component: HRModuleCTA, title: t(language, 'HumanResources') || 'Human Resources', icon: UserGroupIcon, roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+    { id: 'finance', href: '/finance', icon: DollarSign, title: t(language, 'Finance') || 'Finance', roles: ['owner', 'accountant'] },
   ]
 
   // Filter based on roles

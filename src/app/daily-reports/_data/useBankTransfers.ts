@@ -185,6 +185,34 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
       return null
     }
 
+    // --- FIN BANK TRANSACTIONS SYNC ---
+    try {
+        const { data: branchData } = await supabase.from('provider_branches').select('id').eq('name', effectiveBranchName).single();
+        if (branchData) {
+            const { data: accountData } = await supabase.from('fin_bank_accounts')
+                .select('id, current_balance').eq('branch_id', branchData.id).eq('account_type', 'Checking').single();
+            if (accountData) {
+                await supabase.from('fin_bank_transactions').insert({
+                    account_id: accountData.id,
+                    type: 'Inflow',
+                    category: 'Bank Transfer',
+                    description: `Bank Transfer for ${data.date}${data.note ? ' - ' + data.note : ''}`,
+                    amount: payload.amount,
+                    reference_id: data.id,
+                    reference_type: 'daily_report_bank_transfer',
+                    branch_id: branchData.id,
+                    transaction_date: data.date
+                });
+                await supabase.from('fin_bank_accounts').update({
+                    current_balance: Number(accountData.current_balance) + payload.amount
+                }).eq('id', accountData.id);
+            }
+        }
+    } catch (syncErr) {
+        console.error('Sync to fin_bank_transactions failed', syncErr);
+    }
+    // ------------------------------------
+
     const row: BankTransferRow = {
       id: String(data.id),
       branch: data.branch ?? null,
@@ -213,6 +241,14 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
       payload.branch = effectiveBranchName
     }
 
+    // --- FETCH OLD TRANSACTION FOR BALANCE SYNC ---
+    const { data: oldTx } = await supabase.from('fin_bank_transactions')
+        .select('id, account_id, amount')
+        .eq('reference_type', 'daily_report_bank_transfer')
+        .eq('reference_id', input.id)
+        .single();
+    // ----------------------------------------------
+
     const { data, error: err } = await supabase
       .from('daily_report_bank_transfers')
       .update(payload)
@@ -224,6 +260,28 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
       console.error('update bank transfer error', err)
       return null
     }
+
+    // --- UPDATE FIN BANK TRANSACTIONS SYNC ---
+    if (oldTx) {
+        const diff = payload.amount - Number(oldTx.amount);
+        const description = `Bank Transfer for ${data.date}${data.note ? ' - ' + data.note : ''}`;
+        
+        await supabase.from('fin_bank_transactions').update({
+            amount: payload.amount,
+            transaction_date: data.date,
+            description
+        }).eq('id', oldTx.id);
+
+        if (diff !== 0) {
+            const { data: accData } = await supabase.from('fin_bank_accounts').select('current_balance').eq('id', oldTx.account_id).single();
+            if (accData) {
+                await supabase.from('fin_bank_accounts').update({
+                    current_balance: Number(accData.current_balance) + diff
+                }).eq('id', oldTx.account_id);
+            }
+        }
+    }
+    // -----------------------------------------
 
     const row: BankTransferRow = {
       id: String(data.id),
@@ -241,6 +299,25 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
 
   async function deleteTransfers(ids: string[]): Promise<boolean> {
     if (!ids.length) return true
+
+    // --- FIN BANK TRANSACTIONS SYNC ---
+    const { data: txsToDelete } = await supabase.from('fin_bank_transactions')
+        .select('id, account_id, amount')
+        .eq('reference_type', 'daily_report_bank_transfer')
+        .in('reference_id', ids);
+    
+    if (txsToDelete && txsToDelete.length > 0) {
+        for (const tx of txsToDelete) {
+            const { data: accData } = await supabase.from('fin_bank_accounts').select('current_balance').eq('id', tx.account_id).single();
+            if (accData) {
+                await supabase.from('fin_bank_accounts').update({
+                    current_balance: Number(accData.current_balance) - Number(tx.amount)
+                }).eq('id', tx.account_id);
+            }
+        }
+        await supabase.from('fin_bank_transactions').delete().in('id', txsToDelete.map(t => t.id));
+    }
+    // ----------------------------------
 
     const { error: err } = await supabase
       .from('daily_report_bank_transfers')

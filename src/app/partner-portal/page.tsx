@@ -18,6 +18,7 @@ type Lang = 'en' | 'vi'
 
 const PORTAL_DICT = {
   en: {
+    PartnerPortal: 'Partner Portal',
     Login: 'Login',
     PartnerCodeOrPhone: 'Partner Code or Phone',
     Password: 'Password',
@@ -69,6 +70,7 @@ const PORTAL_DICT = {
     Notes: 'Notes'
   },
   vi: {
+    PartnerPortal: 'Cổng Đối Tác',
     Login: 'Đăng nhập',
     PartnerCodeOrPhone: 'Mã Đối Tác hoặc Số Điện Thoại',
     Password: 'Mật khẩu',
@@ -359,7 +361,7 @@ function LoginView({
       </div>
 
       <div className="bg-[#fbf5e6] rounded-2xl shadow-xl border border-[#D9BD9C] p-6 sm:p-10 w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-6 text-[#149372] text-center">Partner Portal</h2>
+        <h2 className="text-2xl font-bold mb-6 text-[#149372] text-center">{pT(lang, 'PartnerPortal')}</h2>
 
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div>

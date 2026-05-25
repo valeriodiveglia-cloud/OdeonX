@@ -84,7 +84,7 @@ export default function CRMReferralsPage() {
                 .order('name'),
             supabase
                 .from('app_accounts')
-                .select('id, user_id, name, email, referral_code, role, deduct_pit')
+                .select('id, user_id, name, email, referral_code, role, deduct_pit, is_sale_advisor, earns_commission')
         ])
 
         if (refsRes.error) {
@@ -100,7 +100,7 @@ export default function CRMReferralsPage() {
         
         if (accountsRes.data) {
             setAllAccounts(accountsRes.data)
-            setAdvisors(accountsRes.data.filter(a => a.role === 'sale advisor' && a.referral_code))
+            setAdvisors(accountsRes.data.filter(a => (a.role === 'sale advisor' || a.is_sale_advisor) && a.referral_code))
 
             const map: Record<string, string> = {}
             for (const acc of accountsRes.data) {
@@ -149,6 +149,9 @@ export default function CRMReferralsPage() {
 
     const calculatedAdvisorCommission = React.useMemo(() => {
         if (formData.sourceType !== 'advisor' || isNaN(formData.revenue_generated)) return 0;
+        const advisor = allAccounts.find(a => a.user_id === formData.advisor_user_id);
+        if (advisor?.earns_commission === false) return 0;
+
         let baseAmount = formData.revenue_generated;
         let gross = 0;
         if (crmCommissionRules?.direct_commission_type === 'Fixed') {
@@ -157,7 +160,6 @@ export default function CRMReferralsPage() {
             gross = baseAmount * ((crmCommissionRules?.direct_commission_value || crmCommissionRules?.direct_commission_pct || 10) / 100);
         }
         
-        const advisor = allAccounts.find(a => a.user_id === formData.advisor_user_id);
         if (advisor?.deduct_pit !== false) {
             return gross * 0.9; // Deduct 10% PIT for advisor
         }
@@ -260,7 +262,9 @@ export default function CRMReferralsPage() {
                     
                     // Deduct 10% PIT for advisor
                     const advisor = allAccounts.find(a => a.user_id === targetSaleAdvisorId);
-                    if (advisor?.deduct_pit !== false) {
+                    if (advisor?.earns_commission === false) {
+                        advisor_commission_value = 0;
+                    } else if (advisor?.deduct_pit !== false) {
                         advisor_commission_value *= 0.9;
                     }
                 }

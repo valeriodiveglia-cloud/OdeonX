@@ -539,6 +539,7 @@ const en = {
       delete: 'Delete',
       close: 'Close',
       save: 'Save',
+      saving: 'Saving…',
       fields: {
         date: 'Date',
         time: 'Time',

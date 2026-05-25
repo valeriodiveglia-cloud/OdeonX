@@ -316,10 +316,32 @@ export function useCashierLuke(initialId?: string | null) {
             return null
           }
 
-          newId = data.id ? String(data.id) : null
         }
 
-        if (newId) safeSetId(newId)
+        if (newId) {
+          safeSetId(newId)
+          // Calc cash to take
+          const floatTarget = num(payload.floatTarget)
+          const countedCash = parseCashShape(payload.cash)
+          const planTotal = parseCashShape(payload.floatPlan)
+          let cCash = 0, pTotal = 0
+          for (const d of [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]) {
+             const key = d >= 1000000 ? `d${d/1000000}m` : `d${d/1000}k`
+             cCash += Number(countedCash[key] || 0) * d
+             pTotal += Number(planTotal[key] || 0) * d
+          }
+          const cashToTake = pTotal > 0 ? pTotal : Math.max(0, cCash - floatTarget)
+
+          // Call RPC
+          await supabase.rpc('sync_cashier_closing_to_ledger', {
+             p_closing_id: newId,
+             p_cash_to_take: cashToTake
+          })
+
+          await supabase.rpc('sync_payment_channels_from_closing', {
+             p_closing_id: newId
+          })
+        }
         return newId || null
       } catch (err) {
         if (!isActiveRef.current) return null

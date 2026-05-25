@@ -1,8 +1,8 @@
 import LeftNavHRSwitch from '@/components/LeftNavHRSwitch'
-import { requireAuth } from '@/lib/auth-check'
+import { requireRole } from '@/lib/auth-check'
 
 export default async function HRLayout({ children }: { children: React.ReactNode }) {
-    await requireAuth()
+    await requireRole(['owner', 'admin', 'manager', 'staff', 'sale advisor'])
 
     return (
         <div className="relative">

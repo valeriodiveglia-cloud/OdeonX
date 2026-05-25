@@ -15,9 +15,10 @@ type Props = {
     onClose: () => void
     notifications: NotificationType[]
     onReceive: (assetId: string) => void
+    userRole?: string | null
 }
 
-export default function AssetNotificationCenterModal({ open, onClose, notifications, onReceive }: Props) {
+export default function AssetNotificationCenterModal({ open, onClose, notifications, onReceive, userRole }: Props) {
 
     const incoming = notifications.filter(n => n.type === 'receiver_alert')
     const outgoing = notifications.filter(n => n.type === 'sender_reminder')
@@ -95,13 +96,15 @@ export default function AssetNotificationCenterModal({ open, onClose, notificati
                                                                     From: <span className="font-semibold">{n.asset.branch}</span>
                                                                     {n.asset.transferBy && <span className="text-slate-500"> (sent by {n.asset.transferBy})</span>}
                                                                 </p>
-                                                                <button
-                                                                    onClick={() => onReceive(n.asset.id)}
-                                                                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-500 transition-colors"
-                                                                >
-                                                                    <CheckCircleIcon className="w-4 h-4" />
-                                                                    Confirm Receipt
-                                                                </button>
+                                                                {userRole !== 'accountant' && (
+                                                                    <button
+                                                                        onClick={() => onReceive(n.asset.id)}
+                                                                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-500 transition-colors"
+                                                                    >
+                                                                        <CheckCircleIcon className="w-4 h-4" />
+                                                                        Confirm Receipt
+                                                                    </button>
+                                                                )}
                                                             </li>
                                                         ))}
                                                     </ul>

@@ -537,6 +537,7 @@ const vi = {
       delete: 'Xóa',
       close: 'Đóng',
       save: 'Lưu',
+      saving: 'Đang lưu…',
       fields: {
         date: 'Ngày',
         time: 'Giờ',

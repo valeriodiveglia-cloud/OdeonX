@@ -452,7 +452,7 @@ export default function MonthlyClosingListPage() {
                             <tr
                                 key={r.id}
                                 className="border-t hover:bg-blue-50/40 cursor-pointer"
-                                onClick={() => router.push(`/daily-reports/cashier-closing?id=${r.id}&mode=readonly`)}
+                                onClick={() => router.push(`/monthly-reports/cashier-closing?id=${r.id}&mode=readonly`)}
                             >
                                 <td className="p-2 truncate max-w-[100px] text-center" title={formatDMY(r.date)}>{formatDMY(r.date)}</td>
                                 <td className="p-2 lowercase font-mono text-center truncate max-w-[50px]" title={dow3(r.date)}>{dow3(r.date)}</td>

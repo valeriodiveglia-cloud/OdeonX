@@ -35,18 +35,20 @@ export default function CRMPartnersPage() {
     const [rejectReasonText, setRejectReasonText] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [dragActiveCol, setDragActiveCol] = useState<string | null>(null)
-    const [currentUser, setCurrentUser] = useState<{ id: string, name: string, role?: string } | null>(null)
+    const [currentUser, setCurrentUser] = useState<{ id: string, name: string, role?: string, is_sale_advisor?: boolean } | null>(null)
     const [accountsMap, setAccountsMap] = useState<Record<string, string>>({})
+    const [accountsData, setAccountsData] = useState<any[]>([])
 
     useEffect(() => {
         const fetchUser = async () => {
             const { data: auth } = await supabase.auth.getUser()
             if (auth?.user) {
-                const { data } = await supabase.from('app_accounts').select('name,email,role').eq('user_id', auth.user.id).maybeSingle()
+                const { data } = await supabase.from('app_accounts').select('name,email,role,is_sale_advisor').eq('user_id', auth.user.id).maybeSingle()
                 setCurrentUser({
                     id: auth.user.id,
                     name: data?.name || auth.user.user_metadata?.full_name || data?.email || auth.user.email || 'You',
-                    role: data?.role
+                    role: data?.role,
+                    is_sale_advisor: data?.is_sale_advisor
                 })
             }
         }
@@ -90,17 +92,24 @@ export default function CRMPartnersPage() {
         if (partner && (partner.pipeline_stage || partner.status) === newStage) return
 
         if (newStage === 'Active') {
-            alert('Partners can only automatically transition to Active once the first transaction is registered in the Referrals module.')
+            alert(t(language, 'AlertPartnersTransitionToActive') || 'Partners can only automatically transition to Active once the first transaction is registered in the Referrals module.')
             return
+        }
+
+        if (newStage === 'Waiting for Activation') {
+            if (currentUser?.role !== 'sale advisor' && !currentUser?.is_sale_advisor) {
+                alert(t(language, 'AlertOnlyActiveAdvisorsActivation') || 'Only Active Sale Advisors can move a partner to Waiting for Activation.')
+                return
+            }
         }
 
         if (newStage === 'Inactive/Paused') {
             if (currentUser?.role === 'sale advisor') {
-                alert('Only Owners and Managers can move a partner to Inactive / Paused.')
+                alert(t(language, 'AlertOnlyOwnersManagersInactive') || 'Only Owners and Managers can move a partner to Inactive / Paused.')
                 return
             }
             if ((partner?.pipeline_stage || partner?.status) !== 'Active') {
-                alert('Partners can only be moved to Inactive / Paused if they are currently Active.')
+                alert(t(language, 'AlertPartnersActiveToInactive') || 'Partners can only be moved to Inactive / Paused if they are currently Active.')
                 return
             }
         }
@@ -126,20 +135,29 @@ export default function CRMPartnersPage() {
             if (error) throw error
         } catch (error) {
             console.error('Error updating partner stage:', error)
-            alert('Failed to update stage.')
+            alert(t(language, 'AlertFailedUpdateStage') || 'Failed to update stage.')
             fetchPartners() // revert
         }
     }
 
     const fetchPartners = async () => {
-        const [partnersRes, accountsRes] = await Promise.all([
-            supabase.from('crm_partners').select('*').order('created_at', { ascending: false }),
-            supabase.from('app_accounts').select('user_id, name, email, role').in('role', ['sale advisor', 'manager', 'admin', 'owner'])
-        ])
+        setLoading(true)
+        const { data, error } = await supabase
+            .from('crm_partners')
+            .select('*')
+            .order('created_at', { ascending: false })
+            
+        if (error) {
+            console.error('Error fetching partners:', error)
+        } else if (data) {
+            setPartners(data)
+        }
         
-        if (partnersRes.data) setPartners(partnersRes.data)
+        // Fetch accounts for assigning mapping
+        const accountsRes = await supabase.from('app_accounts').select('user_id, name, email, role, is_sale_advisor')
         
         if (accountsRes.data) {
+            setAccountsData(accountsRes.data)
             const accMap: Record<string, string> = {}
             for (const acc of accountsRes.data) {
                 if (acc.user_id) {
@@ -150,7 +168,6 @@ export default function CRMPartnersPage() {
         }
         
         setLoading(false)
-        setLoading(false)
     }
 
     const handlePartnerAction = async (action: 'reject' | 'delete' | 'restore' | 'hard_delete' | 'recover_from_rejected' | 'set_inactive', partner: CRMPartner) => {
@@ -159,14 +176,14 @@ export default function CRMPartnersPage() {
             setRejectReasonText('');
             setIsRejectModalOpen(true);
         } else if (action === 'delete') {
-            if (!confirm(`Are you sure you want to delete ${partner.name}?`)) return;
+            if (!confirm(t(language, 'ConfirmDeletePartner')?.replace('{{name}}', partner.name) || `Are you sure you want to delete ${partner.name}?`)) return;
             try {
                 const { error } = await supabase.from('crm_partners').update({ is_deleted: true }).eq('id', partner.id);
                 if (error) throw error;
                 fetchPartners();
             } catch (err) {
                 console.error(err);
-                alert("Failed to delete partner");
+                alert(t(language, 'FailedDeletePartner') || "Failed to delete partner");
             }
         } else if (action === 'restore') {
              try {
@@ -175,17 +192,17 @@ export default function CRMPartnersPage() {
                 fetchPartners();
             } catch (err) {
                 console.error(err);
-                alert("Failed to restore partner");
+                alert(t(language, 'FailedRestorePartner') || "Failed to restore partner");
             }
         } else if (action === 'hard_delete') {
-            if (!confirm(`Are you sure you want to PERMANENTLY delete ${partner.name}? This action cannot be undone.`)) return;
+            if (!confirm(t(language, 'ConfirmHardDeletePartner')?.replace('{{name}}', partner.name) || `Are you sure you want to PERMANENTLY delete ${partner.name}? This action cannot be undone.`)) return;
             try {
                 const { error } = await supabase.from('crm_partners').delete().eq('id', partner.id);
                 if (error) throw error;
                 fetchPartners();
             } catch (err) {
                 console.error(err);
-                alert("Failed to delete partner");
+                alert(t(language, 'FailedDeletePartner') || "Failed to delete partner");
             }
         } else if (action === 'recover_from_rejected') {
              try {
@@ -194,17 +211,17 @@ export default function CRMPartnersPage() {
                 fetchPartners();
             } catch (err) {
                 console.error(err);
-                alert("Failed to restore partner from rejected state");
+                alert(t(language, 'FailedRestoreRejectedPartner') || "Failed to restore partner from rejected state");
             }
         } else if (action === 'set_inactive') {
-            if (!confirm(`Are you sure you want to mark ${partner.name} as Inactive/Paused?`)) return;
+            if (!confirm(t(language, 'ConfirmSetInactivePartner')?.replace('{{name}}', partner.name) || `Are you sure you want to mark ${partner.name} as Inactive/Paused?`)) return;
             try {
                 const { error } = await supabase.from('crm_partners').update({ pipeline_stage: 'Inactive/Paused', status: 'Inactive' }).eq('id', partner.id);
                 if (error) throw error;
                 fetchPartners();
             } catch (err) {
                 console.error(err);
-                alert("Failed to set partner to inactive");
+                alert(t(language, 'FailedSetInactivePartner') || "Failed to set partner to inactive");
             }
         }
     }
@@ -245,7 +262,13 @@ export default function CRMPartnersPage() {
         return matchesSearch && matchesAssignee
     })
 
-    const assigneesOptions = Object.entries(accountsMap).map(([id, name]) => ({ id, name })).sort((a,b) => a.name.localeCompare(b.name))
+    const assigneesOptions = Object.entries(accountsMap)
+        .filter(([id]) => {
+            const acc = accountsData.find(a => a.user_id === id);
+            return acc?.role === 'sale advisor' || acc?.is_sale_advisor === true;
+        })
+        .map(([id, name]) => ({ id, name }))
+        .sort((a,b) => a.name.localeCompare(b.name))
 
     const handleCreatePartner = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -317,13 +340,15 @@ export default function CRMPartnersPage() {
                     <p className="text-slate-500 mt-1">{t(language, 'PartnersAndPipelineDesc')}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button 
-                        onClick={() => setIsModalOpen(true)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2"
-                    >
-                        <Plus className="w-4 h-4" />
-                        {t(language, 'NewLead')}
-                    </button>
+                    {(currentUser?.role === 'sale advisor' || currentUser?.is_sale_advisor) && (
+                        <button 
+                            onClick={() => setIsModalOpen(true)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" />
+                            {t(language, 'NewLead')}
+                        </button>
+                    )}
                 </div>
             </div>
 

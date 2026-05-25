@@ -465,12 +465,13 @@ type EditorProps = {
   initial?: Partial<Equip> | null
   onCategoryCreated?: (c: Cat) => void
   onSupplierCreated?: (s: Sup) => void
+  userRole?: string | null
 }
 function EquipmentEditor(props: EditorProps) {
   const { language: lang, vatEnabled, vatRate } = useSettings()
 
   const {
-    mode, id, cats, sups, onClose, onSaved, onDeleted, initial, onCategoryCreated, onSupplierCreated
+    mode, id, cats, sups, onClose, onSaved, onDeleted, initial, onCategoryCreated, onSupplierCreated, userRole
   } = props
 
   const [viewMode, setViewMode] = useState(mode === 'view')
@@ -719,14 +720,16 @@ function EquipmentEditor(props: EditorProps) {
         <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
           <div className="flex items-center gap-2">
             {viewMode ? (
-              <button onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95">{t('Edit', lang)}</button>
+              userRole !== 'accountant' && (
+                <button onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95">{t('Edit', lang)}</button>
+              )
             ) : (
-              id && <button onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{t('Delete', lang)}</button>
+              id && userRole !== 'accountant' && <button onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{t('Delete', lang)}</button>
             )}
           </div>
           <div>
             <button onClick={onClose} className="px-4 py-2 rounded-lg border hover:opacity-80 active:scale-95">{t('Close', lang)}</button>
-            {!viewMode && (
+            {!viewMode && userRole !== 'accountant' && (
               <button onClick={save} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 active:scale-95 disabled:opacity-50">{t('Save', lang)}</button>
             )}
           </div>
@@ -1163,6 +1166,19 @@ type SortKey =
 export default function EquipmentPage() {
   const { language, currency, vatEnabled, vatRate, equipmentReviewMonths, equipmentCsvConfirm, askCsvConfirm, defaultMarkupEquipmentPct } = useSettings()
   const locale = language === 'vi' ? 'vi-VN' : 'en-US'
+
+  const [role, setRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      const { data: user } = await supabase.auth.getUser()
+      if (user?.user) {
+        const { data } = await supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single()
+        setRole(data?.role || 'staff')
+      }
+    }
+    fetchRole()
+  }, [])
 
   const reviewM = useMemo(() => {
     const n = Number(equipmentReviewMonths)
@@ -2071,38 +2087,46 @@ ${t('Skipped', language)}: ${skipped}`)
             {t('Export', language)}
           </button>
 
-          <input ref={fileRef} type="file" accept=".csv" hidden onChange={handlePickFile} />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={progress != null}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-lg
-                       bg-blue-600/15 text-blue-200 hover:bg-blue-600/25
-                       border border-blue-400/30 disabled:opacity-60"
-            title={t('ImportCSV', language)}
-          >
-            <ArrowDownTrayIcon className="w-5 h-5" />
-            {t('Import', language)}
-          </button>
+          {role && role !== 'accountant' && (
+            <>
+              <input ref={fileRef} type="file" accept=".csv" hidden onChange={handlePickFile} />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={progress != null}
+                className="inline-flex items-center gap-2 px-3 h-9 rounded-lg
+                           bg-blue-600/15 text-blue-200 hover:bg-blue-600/25
+                           border border-blue-400/30 disabled:opacity-60"
+                title={t('ImportCSV', language)}
+              >
+                <ArrowDownTrayIcon className="w-5 h-5" />
+                {t('Import', language)}
+              </button>
+            </>
+          )}
 
-          <button
-            onClick={() => setSelectMode(s => !s)}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-              }`}
-            title={selectMode ? t('ExitSelection', language) : t('EnterSelection', language)}
-          >
-            <CheckCircleIcon className="w-5 h-5" />
-            {selectMode ? t('Selecting', language) : t('Select', language)}
-          </button>
+          {role && role !== 'accountant' && (
+            <button
+              onClick={() => setSelectMode(s => !s)}
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                }`}
+              title={selectMode ? t('ExitSelection', language) : t('EnterSelection', language)}
+            >
+              <CheckCircleIcon className="w-5 h-5" />
+              {selectMode ? t('Selecting', language) : t('Select', language)}
+            </button>
+          )}
 
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
-          >
-            <PlusIcon className="w-5 h-5" /> {t('NewEquipment', language)}
-          </button>
+          {role && role !== 'accountant' && (
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
+            >
+              <PlusIcon className="w-5 h-5" /> {t('NewEquipment', language)}
+            </button>
+          )}
         </div>
       </div>
 
@@ -2337,7 +2361,7 @@ ${t('Skipped', language)}: ${skipped}`)
 
       {openEditor && (
         <EquipmentEditor
-          mode={editorMode}
+          mode={role === 'accountant' ? 'view' : editorMode}
           id={editingId}
           cats={cats}
           sups={sups}
@@ -2345,6 +2369,7 @@ ${t('Skipped', language)}: ${skipped}`)
           onClose={() => setOpenEditor(false)}
           onSaved={async () => { await fetchAll(); setOpenEditor(false) }}
           onDeleted={async () => { await fetchAll(); setOpenEditor(false) }}
+          userRole={role}
         />
       )}
 

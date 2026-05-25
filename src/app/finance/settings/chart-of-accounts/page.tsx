@@ -8,6 +8,8 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { t } from '@/lib/i18n'
 import CircularLoader from '@/components/CircularLoader'
 import type { FinChartOfAccount } from '@/types/finance'
+import MapOperationalCategoriesModal from './MapOperationalCategoriesModal'
+import MapInventoryCategoriesModal from './MapInventoryCategoriesModal'
 
 export default function ChartOfAccountsPage() {
   const { language } = useSettings()
@@ -16,17 +18,47 @@ export default function ChartOfAccountsPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('All')
 
+  const getAccountTypeLabel = (type: string) => {
+    if (language === 'vi') {
+      switch (type) {
+        case 'Asset': return 'Tài sản'
+        case 'Liability': return 'Nợ phải trả'
+        case 'Equity': return 'Vốn chủ sở hữu'
+        case 'Operating Revenue': return 'Doanh thu hoạt động'
+        case 'Revenue Deduction': return 'Khấu trừ doanh thu'
+        case 'Other Income': return 'Thu nhập khác'
+        case 'Cost of Goods Sold': return 'Giá vốn hàng bán'
+        case 'Selling Expenses': return 'Chi phí bán hàng'
+        case 'General & Admin Expenses': return 'Chi phí quản lý doanh nghiệp'
+        case 'Payroll': return 'Chi phí nhân sự'
+        case 'Financial Income': return 'Doanh thu tài chính'
+        case 'Financial Expenses': return 'Chi phí tài chính'
+        case 'Other Expenses': return 'Chi phí khác'
+        case 'Tax Expenses': return 'Chi phí thuế'
+        default: return type
+      }
+    }
+    return type
+  }
+
   // Modal State
   const [showModal, setShowModal] = useState(false)
+  const [showMappingModal, setShowMappingModal] = useState(false)
+  const [showInvMappingModal, setShowInvMappingModal] = useState(false)
   const [editingAccount, setEditingAccount] = useState<FinChartOfAccount | null>(null)
   
   // Form State
   const [formData, setFormData] = useState<Partial<FinChartOfAccount>>({
-    code: '', name: '', simplified_name: '', account_type: 'Asset', is_active: true, description: ''
+    code: '', name: '', simplified_name: '', account_type: 'Asset', cashflow_section: 'Operating', is_active: true, description: ''
   })
   const [saving, setSaving] = useState(false)
 
-  const accountTypes = ['Asset', 'Liability', 'Equity', 'Revenue', 'COGS', 'OPEX', 'Salary', 'Tax', 'Depreciation', 'Other Expense', 'Other Income']
+  const accountTypes = [
+    'Asset', 'Liability', 'Equity',
+    'Operating Revenue', 'Revenue Deduction', 'Other Income',
+    'Cost of Goods Sold', 'Selling Expenses', 'General & Admin Expenses', 'Payroll',
+    'Financial Income', 'Financial Expenses', 'Other Expenses', 'Tax Expenses'
+  ]
 
   useEffect(() => {
     fetchAccounts()
@@ -63,6 +95,7 @@ export default function ChartOfAccountsPage() {
       name: acc.name,
       simplified_name: acc.simplified_name || '',
       account_type: acc.account_type,
+      cashflow_section: acc.cashflow_section || 'Operating',
       is_active: acc.is_active,
       description: acc.description || ''
     })
@@ -72,7 +105,7 @@ export default function ChartOfAccountsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.code || !formData.name || !formData.account_type) {
-      alert('Code, Name, and Type are required.')
+      alert(language === 'vi' ? 'Mã, Tên và Loại tài khoản là bắt buộc.' : 'Code, Name, and Type are required.')
       return
     }
 
@@ -82,6 +115,7 @@ export default function ChartOfAccountsPage() {
       name: formData.name,
       simplified_name: formData.simplified_name || null,
       account_type: formData.account_type as any,
+      cashflow_section: formData.cashflow_section || 'Operating',
       is_active: formData.is_active ?? true,
       description: formData.description || null
     }
@@ -114,14 +148,14 @@ export default function ChartOfAccountsPage() {
   }
 
   const handleDelete = async (acc: FinChartOfAccount) => {
-    if (!confirm(`Are you sure you want to delete ${acc.code} - ${acc.name}?`)) return
+    if (!confirm(language === 'vi' ? `Bạn có chắc chắn muốn xóa ${acc.code} - ${acc.name}?` : `Are you sure you want to delete ${acc.code} - ${acc.name}?`)) return
     
     // Check if referenced
     const { count: poCount } = await supabase.from('fin_payment_order_items').select('*', { count: 'exact', head: true }).eq('account_id', acc.id)
     const { count: invCount } = await supabase.from('fin_invoices').select('*', { count: 'exact', head: true }).eq('account_id', acc.id)
     
     if ((poCount && poCount > 0) || (invCount && invCount > 0)) {
-      alert('Cannot delete this account because it is used in existing invoices or payment orders. Please deactivate it instead.')
+      alert(language === 'vi' ? 'Không thể xóa tài khoản này vì nó đã được sử dụng trong các hóa đơn hoặc lệnh chi hiện có. Vui lòng vô hiệu hóa tài khoản.' : 'Cannot delete this account because it is used in existing invoices or payment orders. Please deactivate it instead.')
       return
     }
 
@@ -135,30 +169,52 @@ export default function ChartOfAccountsPage() {
 
   return (
     <div className="max-w-7xl mx-auto p-6">
+      {/* Top minimalist back link */}
+      <div className="mb-4">
+        <Link
+          href="/finance/settings"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900 transition"
+        >
+          <ArrowLeftIcon className="w-4 h-4" />
+          <span>{t(language, 'BackToSettings')}</span>
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-slate-900">Chart of Accounts</h1>
+          <h1 className="text-3xl font-bold text-slate-900">{t(language, 'ChartOfAccounts')}</h1>
           <span className="px-2.5 py-1 bg-slate-100 text-slate-600 text-xs font-medium rounded-full border border-slate-200">
-            {accounts.length} Accounts
+            {accounts.length} {t(language, 'Accounts')}
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowMappingModal(true)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline transition"
+            >
+              {t(language, 'MapPnLCategories')}
+            </button>
+            <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+            <button
+              onClick={() => setShowInvMappingModal(true)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline transition"
+            >
+              {t(language, 'MapInventoryCategories')}
+            </button>
+          </div>
+          
+          <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+          
           <button
             onClick={openAddModal}
             className="h-10 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium inline-flex items-center gap-2 transition"
           >
             <PlusIcon className="w-5 h-5" />
-            <span>Add Account</span>
+            <span>{t(language, 'AddAccount')}</span>
           </button>
-          <Link
-            href="/finance/settings"
-            className="h-10 px-4 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium inline-flex items-center gap-2 transition shadow-sm"
-          >
-            <ArrowLeftIcon className="w-5 h-5" />
-            <span>Back to Settings</span>
-          </Link>
         </div>
       </div>
 
@@ -167,7 +223,7 @@ export default function ChartOfAccountsPage() {
         <div className="flex-1">
           <input
             type="text"
-            placeholder="Search by code or name..."
+            placeholder={t(language, 'SearchCodeName')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -179,9 +235,9 @@ export default function ChartOfAccountsPage() {
             onChange={(e) => setTypeFilter(e.target.value)}
             className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="All">All Account Types</option>
+            <option value="All">{t(language, 'AllAccountTypes')}</option>
             {accountTypes.map(t => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>{getAccountTypeLabel(t)}</option>
             ))}
           </select>
         </div>
@@ -196,18 +252,19 @@ export default function ChartOfAccountsPage() {
             <table className="w-full text-left text-sm text-slate-600">
               <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-semibold border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Account Name</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-4 py-3">{t(language, 'Code')}</th>
+                  <th className="px-4 py-3">{t(language, 'AccountName')}</th>
+                  <th className="px-4 py-3">{t(language, 'AccountType')}</th>
+                  <th className="px-4 py-3">{t(language, 'CFSection')}</th>
+                  <th className="px-4 py-3">{t(language, 'Status')}</th>
+                  <th className="px-4 py-3 text-right">{t(language, 'Actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredAccounts.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                      No accounts found.
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                      {t(language, 'NoAccountsFound')}
                     </td>
                   </tr>
                 ) : (
@@ -229,7 +286,20 @@ export default function ChartOfAccountsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="px-2.5 py-1 bg-slate-100 text-slate-600 text-xs font-medium rounded-md">
-                            {acc.account_type}
+                            {getAccountTypeLabel(acc.account_type)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2.5 py-1 text-xs font-medium rounded-md border ${
+                            acc.cashflow_section === 'Operating' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            acc.cashflow_section === 'Investing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            acc.cashflow_section === 'Financing' ? 'bg-violet-50 text-violet-700 border-violet-200' :
+                            'bg-slate-50 text-slate-500 border-slate-200'
+                          }`}>
+                            {acc.cashflow_section === 'Operating' ? (language === 'vi' ? 'Hoạt động kinh doanh' : 'Operating') :
+                             acc.cashflow_section === 'Investing' ? (language === 'vi' ? 'Hoạt động đầu tư' : 'Investing') :
+                             acc.cashflow_section === 'Financing' ? (language === 'vi' ? 'Hoạt động tài chính' : 'Financing') :
+                             (language === 'vi' ? 'Loại trừ' : 'Exclude')}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -241,7 +311,7 @@ export default function ChartOfAccountsPage() {
                                 : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                             }`}
                           >
-                            {acc.is_active ? 'Active' : 'Inactive'}
+                            {acc.is_active ? t(language, 'Active') : t(language, 'Inactive')}
                           </button>
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -249,14 +319,14 @@ export default function ChartOfAccountsPage() {
                             <button
                               onClick={() => openEditModal(acc)}
                               className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
-                              title="Edit Account"
+                              title={t(language, 'EditAccount')}
                             >
                               <PencilSquareIcon className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(acc)}
                               className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition"
-                              title="Delete Account"
+                              title={t(language, 'Delete')}
                             >
                               <TrashIcon className="w-4 h-4" />
                             </button>
@@ -278,7 +348,7 @@ export default function ChartOfAccountsPage() {
           <div className="bg-white rounded-2xl w-full max-w-lg border border-slate-200 shadow-2xl overflow-hidden flex flex-col">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h3 className="text-lg font-bold text-slate-900">
-                {editingAccount ? 'Edit Account' : 'Add New Account'}
+                {editingAccount ? t(language, 'EditAccount') : t(language, 'AddNewAccount')}
               </h3>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition">
                 <XMarkIcon className="w-5 h-5" />
@@ -288,7 +358,7 @@ export default function ChartOfAccountsPage() {
             <form onSubmit={handleSave} className="p-6 space-y-5">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Account Code *</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t(language, 'AccountCode')} *</label>
                   <input
                     type="text"
                     required
@@ -299,7 +369,7 @@ export default function ChartOfAccountsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Account Type *</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t(language, 'AccountType')} *</label>
                   <select
                     required
                     value={formData.account_type}
@@ -307,14 +377,32 @@ export default function ChartOfAccountsPage() {
                     className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {accountTypes.map(t => (
-                      <option key={t} value={t}>{t}</option>
+                      <option key={t} value={t}>{getAccountTypeLabel(t)}</option>
                     ))}
                   </select>
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t(language, 'CashFlowSection')} *</label>
+                  <select
+                    required
+                    value={formData.cashflow_section}
+                    onChange={e => setFormData({ ...formData, cashflow_section: e.target.value as any })}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Operating">{language === 'vi' ? 'Hoạt động kinh doanh' : 'Operating'}</option>
+                    <option value="Investing">{language === 'vi' ? 'Hoạt động đầu tư' : 'Investing'}</option>
+                    <option value="Financing">{language === 'vi' ? 'Hoạt động tài chính' : 'Financing'}</option>
+                    <option value="Exclude">{language === 'vi' ? 'Loại trừ' : 'Exclude'}</option>
+                  </select>
+                </div>
+                <div />
+              </div>
+
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Account Name (English) *</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t(language, 'AccountNameEn')} *</label>
                 <input
                   type="text"
                   required
@@ -326,7 +414,7 @@ export default function ChartOfAccountsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Local Name (Vietnamese)</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t(language, 'LocalNameVi')}</label>
                 <input
                   type="text"
                   value={formData.simplified_name || ''}
@@ -345,7 +433,7 @@ export default function ChartOfAccountsPage() {
                   className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 bg-white"
                 />
                 <label htmlFor="isActive" className="text-sm font-medium text-slate-700 select-none cursor-pointer">
-                  Account is Active (available for selection)
+                  {t(language, 'AccountIsActive')}
                 </label>
               </div>
 
@@ -355,7 +443,7 @@ export default function ChartOfAccountsPage() {
                   onClick={() => setShowModal(false)}
                   className="px-5 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition"
                 >
-                  Cancel
+                  {t(language, 'Cancel')}
                 </button>
                 <button
                   type="submit"
@@ -367,12 +455,28 @@ export default function ChartOfAccountsPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                  ) : (editingAccount ? 'Save Changes' : 'Add Account')}
+                  ) : (editingAccount ? t(language, 'Save') : t(language, 'AddAccount'))}
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* Mapping Modal */}
+      {showMappingModal && (
+        <MapOperationalCategoriesModal
+          accounts={accounts}
+          onClose={() => setShowMappingModal(false)}
+        />
+      )}
+
+      {/* Inventory Mapping Modal */}
+      {showInvMappingModal && (
+        <MapInventoryCategoriesModal
+          accounts={accounts}
+          onClose={() => setShowInvMappingModal(false)}
+        />
       )}
     </div>
   )

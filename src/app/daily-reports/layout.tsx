@@ -1,10 +1,10 @@
 // app/daily-reports/layout.tsx
 import type { ReactNode } from 'react'
 import LeftNavDailyReports from '@/components/LeftNavDailyReports'
-import { requireAuth } from '@/lib/auth-check'
+import { requireRole } from '@/lib/auth-check'
 
 export default async function DailyReportsLayout({ children }: { children: ReactNode }) {
-  await requireAuth()
+  await requireRole(['owner', 'admin', 'manager', 'staff', 'sale advisor'])
 
   // Lasciamo che la leftnav imposti --leftnav-w. Qui usiamo padding-left su tutta la sezione.
   return (
