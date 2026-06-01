@@ -674,7 +674,10 @@ export default function CashFlowPage() {
                         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
                             <div>
                                 <div className="text-sm font-bold text-slate-500 mb-1">{t(language, 'FinCFOpeningBalance')}</div>
-                                <div className="text-2xl font-black tabular-nums text-slate-900 mb-3">{currency} {fmt(summary.openingBalance)}</div>
+                                <div className="text-xl sm:text-2xl font-black tabular-nums text-slate-900 mb-3">
+                                    <span className="text-xs sm:text-sm font-semibold text-slate-400 mr-1">{currency}</span>
+                                    {fmt(summary.openingBalance)}
+                                </div>
                             </div>
                             <div className="space-y-1.5 border-t border-slate-100 pt-3">
                                 {summary.breakdown.filter(b => b.opening !== 0).map((b, i) => (
@@ -696,8 +699,11 @@ export default function CashFlowPage() {
                             </div>
                             <div>
                                 <div className="text-sm font-bold text-emerald-600 mb-1">{t(language, 'FinCFOperatingCashFlow')}</div>
-                                <div className={`text-3xl font-black tabular-nums ${summary.opNet >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-                                    {summary.opNet >= 0 ? '+' : ''}{currency} {fmt(summary.opNet)}
+                                <div className={`text-xl sm:text-2xl font-black tabular-nums mb-3 ${summary.opNet >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                                    {summary.opNet < 0 && <span className="mr-0.5">−</span>}
+                                    {summary.opNet >= 0 && <span className="mr-0.5">+</span>}
+                                    <span className="text-xs sm:text-sm font-semibold text-slate-400 mr-1">{currency}</span>
+                                    {fmt(Math.abs(summary.opNet))}
                                 </div>
                             </div>
                             <div className="text-xs text-slate-500 mt-4 border-t border-slate-100 pt-3">
@@ -709,7 +715,10 @@ export default function CashFlowPage() {
                         <div className="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-sm text-white flex flex-col justify-between">
                             <div>
                                 <div className="text-sm font-bold text-slate-400 mb-1">{t(language, 'FinCFClosingBalance')}</div>
-                                <div className="text-2xl font-black tabular-nums mb-3">{currency} {fmt(summary.closingBalance)}</div>
+                                <div className="text-xl sm:text-2xl font-black tabular-nums mb-3">
+                                    <span className="text-xs sm:text-sm font-semibold text-slate-500 mr-1">{currency}</span>
+                                    {fmt(summary.closingBalance)}
+                                </div>
                             </div>
                             <div className="space-y-1.5 border-t border-slate-800 pt-3">
                                 {summary.breakdown.filter(b => b.closing !== 0).map((b, i) => (

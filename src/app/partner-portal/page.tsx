@@ -67,7 +67,9 @@ const PORTAL_DICT = {
     InPayout: 'In Payout',
     Close: 'Close',
     Period: 'Period',
-    Notes: 'Notes'
+    Notes: 'Notes',
+    PitNotDeductedBelowThresholdNotes: 'PIT not deducted because the payment ({amount} VND) is below the threshold of {threshold} VND.',
+    PitNotDeductedBelowThreshold: 'PIT not deducted (below threshold)'
   },
   vi: {
     PartnerPortal: 'Cổng Đối Tác',
@@ -119,7 +121,9 @@ const PORTAL_DICT = {
     InPayout: 'Đang lên lịch',
     Close: 'Đóng',
     Period: 'Kỳ thanh toán',
-    Notes: 'Ghi chú'
+    Notes: 'Ghi chú',
+    PitNotDeductedBelowThresholdNotes: 'Không khấu trừ thuế TNCN vì khoản thanh toán ({amount} VND) dưới ngưỡng {threshold} VND.',
+    PitNotDeductedBelowThreshold: 'Không khấu trừ thuế TNCN (dưới ngưỡng)'
   }
 }
 
@@ -889,24 +893,50 @@ function DashboardView({ lang, logoUrl, data, onLogout }: { lang: Lang, logoUrl:
               </div>
 
               {/* Totals */}
-              {partner.issues_vat_invoice !== true && (
-                <div className="bg-[#fefaf0] rounded-2xl border border-[#ede0c9] p-5 space-y-3 mt-6">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="font-medium text-[#755533]">{pT(lang, 'GrossCommission')}</span>
-                    <span className="font-bold text-[#3E2C19]">{fmtCurrency(selectedPayout.amount / 0.9)} đ</span>
+              {partner.issues_vat_invoice !== true && (() => {
+                const payoutReferrals = referrals.filter(r => r.payout_id === selectedPayout.id)
+                const netSum = payoutReferrals.reduce((sum, r) => sum + Number(r.commission_value || 0), 0)
+                const pitWasDeducted = Math.abs(selectedPayout.amount - netSum) < 10
+
+                return (
+                  <div className="bg-[#fefaf0] rounded-2xl border border-[#ede0c9] p-5 space-y-3 mt-6 animate-in fade-in duration-200">
+                    {pitWasDeducted ? (
+                      <>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-medium text-[#755533]">{pT(lang, 'GrossCommission')}</span>
+                          <span className="font-bold text-[#3E2C19]">{fmtCurrency(selectedPayout.amount / 0.9)} đ</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-medium text-rose-600 flex items-center gap-2">
+                            {pT(lang, 'PITDeduction')} <span className="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md font-bold border border-rose-100 tracking-wider">10%</span>
+                          </span>
+                          <span className="font-bold text-rose-600">-{fmtCurrency((selectedPayout.amount / 0.9) - selectedPayout.amount)} đ</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-medium text-[#755533]">{pT(lang, 'GrossCommission')}</span>
+                          <span className="font-bold text-[#3E2C19]">{fmtCurrency(selectedPayout.amount)} đ</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-medium text-stone-500 flex items-center gap-2">
+                            {pT(lang, 'PITDeduction')} <span className="text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-bold border border-stone-200 tracking-wider">0%</span>
+                          </span>
+                          <span className="font-bold text-stone-500">0 đ</span>
+                        </div>
+                        <div className="text-[11px] text-amber-800 bg-[#eedebf] p-2 rounded-lg border border-[#ede0c9] mt-1 font-semibold leading-normal">
+                          {pT(lang, 'PitNotDeductedBelowThreshold')}
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between items-center text-sm pt-3 mt-1 border-t border-[#ede0c9]">
+                      <span className="font-bold text-[#3E2C19]">{pT(lang, 'NetCommission')}</span>
+                      <span className="font-black text-[#149372] text-lg">{fmtCurrency(selectedPayout.amount)} đ</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="font-medium text-rose-600 flex items-center gap-2">
-                      {pT(lang, 'PITDeduction')} <span className="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md font-bold border border-rose-100 tracking-wider">10%</span>
-                    </span>
-                    <span className="font-bold text-rose-600">-{fmtCurrency((selectedPayout.amount / 0.9) - selectedPayout.amount)} đ</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm pt-3 mt-1 border-t border-[#ede0c9]">
-                    <span className="font-bold text-[#3E2C19]">{pT(lang, 'NetCommission')}</span>
-                    <span className="font-black text-[#149372] text-lg">{fmtCurrency(selectedPayout.amount)} đ</span>
-                  </div>
-                </div>
-              )}
+                )
+              })()}
 
             </div>
           </div>

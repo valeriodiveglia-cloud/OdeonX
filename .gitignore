@@ -43,3 +43,6 @@ yarn-error.log*
 # escludo la parte event-calculator
 src/app/event-calculator/*.sql
 APP_AUDIT_*.txt
+
+# AI local instructions
+instructions.md

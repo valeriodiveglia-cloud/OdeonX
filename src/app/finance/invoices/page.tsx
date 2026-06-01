@@ -221,6 +221,20 @@ export default function InvoicesPage() {
         })
     }, [filtered])
 
+    const isFormInvalid = useMemo(() => {
+        const hasNumber = !!form.invoice_number.trim()
+        const hasDate = !!form.invoice_date
+        const hasNet = !!form.net_amount
+        const hasCategory = !!form.account_id
+        const hasDesc = !!form.description.trim()
+        const hasBranch = form.branch_ids.length >= 1
+        const hasSupplier = form.is_personal_deduction 
+            ? !!form.custom_supplier_name.trim() 
+            : !!form.supplier_id
+
+        return !(hasNumber && hasDate && hasNet && hasCategory && hasDesc && hasBranch && hasSupplier)
+    }, [form])
+
     const resetForm = () => {
         setForm({
             invoice_number: '', invoice_date: new Date().toISOString().split('T')[0],
@@ -437,10 +451,7 @@ export default function InvoicesPage() {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
-        const isValid = form.is_personal_deduction
-            ? (form.invoice_number && form.invoice_date && form.custom_supplier_name && form.net_amount)
-            : (form.invoice_number && form.invoice_date && form.supplier_id && form.net_amount);
-        if (!isValid) {
+        if (isFormInvalid) {
             alert(t(language, 'PleaseFillRequired')); return
         }
         setSaving(true)
@@ -827,7 +838,9 @@ export default function InvoicesPage() {
                                 {/* Row 4: Branch Allocation */}
                                 <div className="col-span-1 md:col-span-2">
                                     <div className="flex items-center justify-between mb-2">
-                                        <label className="block text-sm font-semibold text-slate-700">{t(language, 'FinInvBranchAllocation')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700">
+                                            {t(language, 'FinInvBranchAllocation')} <span className="text-red-500">*</span>
+                                        </label>
                                         <div className="flex items-center gap-3">
                                             <button type="button" onClick={() => setForm(f => ({ ...f, branch_ids: branches.map(b => b.id) }))} className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition">
                                                 {t(language, 'FinInvSelectAll')}
@@ -860,7 +873,9 @@ export default function InvoicesPage() {
 
                                 {/* Row 5: Category */}
                                 <div className="col-span-1 md:col-span-2">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinInvCategoryCoa')}</label>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                        {t(language, 'FinInvCategoryCoa')} <span className="text-red-500">*</span>
+                                    </label>
                                     <COACombobox
                                         coas={accounts}
                                         value={form.account_id || null}
@@ -871,8 +886,10 @@ export default function InvoicesPage() {
 
                                 {/* Row 6: Description */}
                                 <div className="col-span-1 md:col-span-2">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinInvDescription')}</label>
-                                    <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                        {t(language, 'FinInvDescription')} <span className="text-red-500">*</span>
+                                    </label>
+                                    <input required value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                                         className="w-full border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 bg-white shadow-sm" />
                                 </div>
 
@@ -915,8 +932,8 @@ export default function InvoicesPage() {
 
                             <div className="flex gap-3 justify-end pt-4 mt-4 border-t border-slate-100">
                                 <button type="button" onClick={() => setModalMode('none')} className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition">{t(language, 'Cancel')}</button>
-                                <button type="submit" disabled={saving}
-                                    className="px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl transition shadow-md flex items-center gap-2">
+                                <button type="submit" disabled={saving || isFormInvalid}
+                                    className="px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl transition shadow-md flex items-center gap-2">
                                     {saving ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FileText className="w-4 h-4" />}
                                     {modalMode === 'edit' ? t(language, 'FinInvUpdateInvoice') : t(language, 'FinInvCreateInvoice')}
                                 </button>

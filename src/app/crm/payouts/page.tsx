@@ -143,7 +143,7 @@ export default function CRMPayoutsPage() {
                 .from('crm_referrals')
                 .select(`
                     *,
-                    crm_partners ( owner_id )
+                    crm_partners ( owner_id, issues_vat_invoice )
                 `)
                 .eq('status', 'Pending')
                 .is(payoutField, null)
@@ -155,13 +155,17 @@ export default function CRMPayoutsPage() {
             let insertedCount = 0
 
             if (isPartner) {
-                const partnerGroups: Record<string, { amount: number, refIds: string[], owner_id: string | null }> = {}
+                const partnerGroups: Record<string, { netAmount: number, grossAmount: number, refIds: string[], owner_id: string | null, issues_vat_invoice: boolean }> = {}
                 for (const r of refs || []) {
+                    const partnerVat = r.crm_partners?.issues_vat_invoice === true
                     if (!partnerGroups[r.partner_id]) {
                         // @ts-ignore
-                        partnerGroups[r.partner_id] = { amount: 0, refIds: [], owner_id: r.sale_advisor_id || r.crm_partners?.owner_id || null }
+                        partnerGroups[r.partner_id] = { netAmount: 0, grossAmount: 0, refIds: [], owner_id: r.sale_advisor_id || r.crm_partners?.owner_id || null, issues_vat_invoice: partnerVat }
                     }
-                    partnerGroups[r.partner_id].amount += Number(r.commission_value || 0)
+                    const netVal = Number(r.commission_value || 0)
+                    const grossVal = partnerVat ? netVal : netVal / 0.9
+                    partnerGroups[r.partner_id].netAmount += netVal
+                    partnerGroups[r.partner_id].grossAmount += grossVal
                     partnerGroups[r.partner_id].refIds.push(r.id)
                 }
 
@@ -171,16 +175,33 @@ export default function CRMPayoutsPage() {
                     return
                 }
 
+                const threshold = crmPartnerRules?.pit_threshold_vnd ?? 2000000
+
                 for (const [partnerId, group] of Object.entries(partnerGroups)) {
-                    if (group.amount <= 0) continue
+                    if (group.grossAmount <= 0) continue
+
+                    let finalAmount = group.netAmount
+                    let payoutNotes = ''
+
+                    if (!group.issues_vat_invoice && group.grossAmount < threshold) {
+                        finalAmount = group.grossAmount
+                        const noteEn = (t('en', 'PitNotDeductedBelowThresholdNotes') || 'PIT not deducted because the payment ({amount} VND) is below the threshold of {threshold} VND.')
+                            .replace('{amount}', fmt(group.grossAmount))
+                            .replace('{threshold}', fmt(threshold))
+                        const noteVi = (t('vi', 'PitNotDeductedBelowThresholdNotes') || 'Không khấu trừ thuế TNCN vì khoản thanh toán ({amount} VND) dưới ngưỡng {threshold} VND.')
+                            .replace('{amount}', fmt(group.grossAmount))
+                            .replace('{threshold}', fmt(threshold))
+                        payoutNotes = `${noteEn} / ${noteVi}`
+                    }
 
                     const { data: newPayout, error: insErr } = await supabase.from('crm_payouts').insert({
                         partner_id: partnerId,
                         period: periodKey,
-                        amount: group.amount,
+                        amount: finalAmount,
                         status: 'Pending',
                         sale_advisor_id: group.owner_id,
-                        payout_type: 'partner'
+                        payout_type: 'partner',
+                        notes: payoutNotes || null
                     }).select().single()
 
                     if (insErr) throw insErr
@@ -758,22 +779,57 @@ export default function CRMPayoutsPage() {
                                 </div>
 
                                 {/* Totals with deductions if partner or advisor */}
-                                {(activeTab === 'partner' ? selectedPayout.crm_partners?.issues_vat_invoice === false : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id])) && (
-                                    <div className="bg-rose-50/50 rounded-xl border border-rose-100 p-3 space-y-2 mt-4">
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-slate-600">{t(language, 'GrossCommission')}</span>
-                                            <span className="font-semibold text-slate-900">{fmt(Number(selectedPayout.amount) / 0.9)} đ</span>
+                                {(() => {
+                                    const isPartner = activeTab === 'partner'
+                                    const issuesVat = isPartner ? selectedPayout.crm_partners?.issues_vat_invoice === true : false
+                                    const normalPitDeduct = isPartner ? !issuesVat : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id])
+
+                                    if (!normalPitDeduct) return null
+
+                                    const netSum = receiptReferrals.reduce((sum, r) => sum + Number((isPartner ? r.commission_value : r.advisor_commission_value) || 0), 0)
+                                    const grossSum = receiptReferrals.reduce((sum, r) => {
+                                        const val = Number((isPartner ? r.commission_value : r.advisor_commission_value) || 0)
+                                        const deduct = isPartner ? !issuesVat : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id])
+                                        return sum + (deduct ? val / 0.9 : val)
+                                    }, 0)
+
+                                    const pitWasDeducted = Math.abs(Number(selectedPayout.amount) - netSum) < 10
+
+                                    return (
+                                        <div className="bg-rose-50/50 rounded-xl border border-rose-100 p-3 space-y-2 mt-4 animate-in fade-in duration-200">
+                                            {pitWasDeducted ? (
+                                                <>
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-slate-600">{t(language, 'GrossCommission')}</span>
+                                                        <span className="font-semibold text-slate-900">{fmt(Number(selectedPayout.amount) / 0.9)} đ</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-rose-600 flex items-center gap-2">{t(language, 'PITDeduction')} <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200">10%</span></span>
+                                                        <span className="font-semibold text-rose-600">-{fmt((Number(selectedPayout.amount) / 0.9) - Number(selectedPayout.amount))} đ</span>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-slate-600">{t(language, 'GrossCommission')}</span>
+                                                        <span className="font-semibold text-slate-900">{fmt(Number(selectedPayout.amount))} đ</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-slate-500 flex items-center gap-2">{t(language, 'PITDeduction')} <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200">0%</span></span>
+                                                        <span className="font-semibold text-slate-500">0 đ</span>
+                                                    </div>
+                                                    <div className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-100/60 mt-1 font-semibold leading-normal">
+                                                        {t(language, 'PitNotDeductedBelowThreshold')}
+                                                    </div>
+                                                </>
+                                            )}
+                                            <div className="flex justify-between items-center text-sm font-bold pt-2 border-t border-rose-100">
+                                                <span className="text-slate-900">{t(language, 'NetCommission')}</span>
+                                                <span className="text-emerald-600">{fmt(Number(selectedPayout.amount))} đ</span>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-rose-600 flex items-center gap-2">{t(language, 'PITDeduction')} <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200">10%</span></span>
-                                            <span className="font-semibold text-rose-600">-{fmt((Number(selectedPayout.amount) / 0.9) - Number(selectedPayout.amount))} đ</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-sm font-bold pt-2 border-t border-rose-100">
-                                            <span className="text-slate-900">{t(language, 'NetCommission')}</span>
-                                            <span className="text-emerald-600">{fmt(Number(selectedPayout.amount))} đ</span>
-                                        </div>
-                                    </div>
-                                )}
+                                    )
+                                })()}
 
                                 <div className="flex gap-3 justify-end mt-2">
                                     <button onClick={closeModal} className="w-full px-5 py-2.5 text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition shadow-md">

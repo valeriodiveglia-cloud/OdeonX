@@ -120,6 +120,10 @@ export default function CorporateCardPage() {
     }, [form.currency, currency])
 
     const handleOpenModal = (item?: FinCorporateCardExpense) => {
+        const activeCards = bankAccounts.filter(a => a.is_corporate_card);
+        const defaultCard = bankAccounts.find(a => a.is_default_corporate_card) || activeCards[0];
+        const defaultCardId = defaultCard?.id || '';
+
         if (item) {
             setEditingItem(item)
             setForm({
@@ -133,7 +137,7 @@ export default function CorporateCardPage() {
                 frequency: item.frequency,
                 expense_date: item.expense_date,
                 account_id: item.account_id || '',
-                bank_account_id: item.bank_account_id || '',
+                bank_account_id: item.bank_account_id || defaultCardId,
                 supplier_id: item.supplier_id || '',
                 vat_invoice_status: item.vat_invoice_status || 'None',
                 branch_ids: item.branch_ids || [],
@@ -151,7 +155,7 @@ export default function CorporateCardPage() {
                 frequency: 'One-Time',
                 expense_date: new Date().toISOString().split('T')[0],
                 account_id: '',
-                bank_account_id: bankAccounts.find(a => a.is_default_corporate_card)?.id || '',
+                bank_account_id: defaultCardId,
                 supplier_id: '',
                 vat_invoice_status: 'None',
                 branch_ids: [],
@@ -162,6 +166,9 @@ export default function CorporateCardPage() {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (isFormInvalid) {
+            alert(t(language, 'PleaseFillRequired')); return
+        }
         setSaving(true)
         try {
             const payload = {
@@ -298,6 +305,17 @@ export default function CorporateCardPage() {
         
         return result.sort((a, b) => new Date(a.expense_date).getTime() - new Date(b.expense_date).getTime())
     }, [expenses, monthCursor, search])
+
+    const isFormInvalid = useMemo(() => {
+        const hasDesc = !!form.description.trim()
+        const hasAmount = form.amount > 0
+        const hasSupplier = !!form.supplier_id
+        const hasCategory = !!form.account_id
+        const hasBank = !!form.bank_account_id
+        const hasBranch = form.branch_ids.length >= 1
+
+        return !(hasDesc && hasAmount && hasSupplier && hasCategory && hasBank && hasBranch)
+    }, [form])
 
     return (
         <div className="p-6 max-w-[1400px] mx-auto">
@@ -445,12 +463,12 @@ export default function CorporateCardPage() {
                             <div className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalDescription')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalDescription')} <span className="text-red-500">*</span></label>
                                         <input type="text" required value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                                             placeholder="e.g. Google Workspace" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium" />
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalSupplier')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalSupplier')} <span className="text-red-500">*</span></label>
                                         <SupplierCombobox
                                             suppliers={suppliers}
                                             selectedId={form.supplier_id || null}
@@ -459,7 +477,7 @@ export default function CorporateCardPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalAmount')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalAmount')} <span className="text-red-500">*</span></label>
                                         <input type="text" required placeholder="0" value={form.amountStr !== undefined ? form.amountStr : (form.amount ? form.amount.toLocaleString('en-US') : '')} onChange={e => {
                                                 const clean = e.target.value.replace(/[^0-9]/g, '');
                                                 const num = parseInt(clean, 10);
@@ -543,7 +561,7 @@ export default function CorporateCardPage() {
                                     )}
 
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalCoa')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalCoa')} <span className="text-red-500">*</span></label>
                                         <COACombobox 
                                             coas={accounts}
                                             value={form.account_id}
@@ -553,16 +571,15 @@ export default function CorporateCardPage() {
                                     </div>
 
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalDefaultBank')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalDefaultBank')} <span className="text-red-500">*</span></label>
                                         <select value={form.bank_account_id} onChange={e => setForm(f => ({ ...f, bank_account_id: e.target.value }))}
                                             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium">
-                                            <option value="">{t(language, 'FinCCModalUnassigned')}</option>
                                             {bankAccounts.filter(a => a.is_corporate_card).map(a => <option key={a.id} value={a.id}>{a.account_name} {a.bank_name ? `(${a.bank_name})` : ''}</option>)}
                                         </select>
                                     </div>
 
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalVatStatus')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalVatStatus')} <span className="text-red-500">*</span></label>
                                         <select value={form.vat_invoice_status} onChange={e => setForm(f => ({ ...f, vat_invoice_status: e.target.value as any }))}
                                             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium">
                                             <option value="None">{t(language, 'FinCCVatNone')}</option>
@@ -572,7 +589,7 @@ export default function CorporateCardPage() {
                                     </div>
 
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'FinCCModalAttributedBranches')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'FinCCModalAttributedBranches')} <span className="text-red-500">*</span></label>
                                         <div className="flex flex-wrap gap-2">
                                             {branches.map(b => {
                                                 const active = form.branch_ids.includes(b.id)
@@ -592,7 +609,7 @@ export default function CorporateCardPage() {
 
                             <div className="flex gap-3 justify-end pt-6 mt-6 border-t border-slate-100">
                                 <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition">{t(language, 'Cancel')}</button>
-                                <button type="submit" disabled={saving || !form.supplier_id} className="px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl shadow-md transition flex items-center gap-2">
+                                <button type="submit" disabled={saving || isFormInvalid} className="px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl shadow-md transition flex items-center gap-2">
                                     {saving && <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                                     {t(language, 'FinCCModalSave')}
                                 </button>

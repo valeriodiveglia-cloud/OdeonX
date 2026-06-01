@@ -69,6 +69,9 @@ export default function PaymentOrdersPage() {
     const [saving, setSaving] = useState(false)
     const [supplierModalForId, setSupplierModalForId] = useState<string | null>(null)
     const [supplierModalQuery, setSupplierModalQuery] = useState('')
+    const [invoiceSearch, setInvoiceSearch] = useState('')
+    const [showOnlySelectedInvoices, setShowOnlySelectedInvoices] = useState(false)
+
 
     // Mark paid form
     const [paidDate, setPaidDate] = useState(() => toLocalDateStr(new Date()))
@@ -123,6 +126,8 @@ export default function PaymentOrdersPage() {
             setHasTransferFee(false)
             setTransferFeeAmount(0)
             setTransferFeeAmountStr('')
+            setInvoiceSearch('')
+            setShowOnlySelectedInvoices(false)
         }
     }, [showCreate])
 
@@ -195,6 +200,19 @@ export default function PaymentOrdersPage() {
         if (editingOrderId && i.payment_order_id === editingOrderId) return true;
         return getInvoiceBalance(i) > 0;
     }), [pendingInvoices, editingOrderId])
+
+    const filteredAvailableInvoices = useMemo(() => {
+        return availableInvoices.filter(inv => {
+            const matchesSearch = !invoiceSearch.trim() || 
+                inv.invoice_number.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                ((inv as any).suppliers?.name || '').toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                (inv.description || '').toLowerCase().includes(invoiceSearch.toLowerCase());
+                
+            const matchesSelected = !showOnlySelectedInvoices || selectedInvoiceIds.has(inv.id);
+            
+            return matchesSearch && matchesSelected;
+        });
+    }, [availableInvoices, invoiceSearch, showOnlySelectedInvoices, selectedInvoiceIds]);
 
     const invoiceTotal = useMemo(() =>
         availableInvoices.filter(i => selectedInvoiceIds.has(i.id)).reduce((s, i) => s + getInvoiceBalance(i), 0),
@@ -450,6 +468,8 @@ export default function PaymentOrdersPage() {
             setVatInvoiceStatus('None')
             setSelectedInvoiceIds(new Set())
             setManualItems([])
+            setInvoiceSearch('')
+            setShowOnlySelectedInvoices(false)
             fetchData()
         } catch (err: any) {
             alert((language === 'vi' ? 'Thất bại: ' : 'Failed: ') + err.message)
@@ -915,10 +935,12 @@ export default function PaymentOrdersPage() {
                             </button>
                         </div>
                         <div className="px-5 pt-3 pb-5 border-b border-slate-100 bg-white">
-                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t(language, 'FinPayPayFromAccount')}</label>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                                {t(language, 'FinPayPayFromAccount')} <span className="text-red-500">*</span>
+                            </label>
                             <select value={createAccountId} onChange={e => setCreateAccountId(e.target.value)}
-                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900">
-                                <option value="">{t(language, 'FinPayUnassignedSelectLater')}</option>
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium">
+                                <option value="" disabled>{language === 'vi' ? 'Chọn tài khoản ngân hàng...' : 'Select bank account...'}</option>
                                 {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.account_number ? `${a.account_number} - ` : ''}{a.account_name} {a.bank_name ? `(${a.bank_name})` : ''}</option>)}
                             </select>
                             {selectedCreateAccount && (
@@ -930,25 +952,70 @@ export default function PaymentOrdersPage() {
                         </div>
                         <div className="p-5 max-h-[50vh] overflow-y-auto space-y-5">
                             {createTab === 'invoices' && (
-                            <div>
-                                {/* Section 1: Invoices */}
-                                <div className="flex items-center justify-between mb-2">
+                            <div className="space-y-4">
+                                {/* Section 1: Invoices header and Search */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
                                     <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                        <FileText className="w-4 h-4" /> {t(language, 'FinPayInvoices')}
+                                        <FileText className="w-4 h-4 text-blue-500" /> {t(language, 'FinPayInvoices')}
                                     </h3>
+                                    <div className="flex items-center gap-3">
+                                        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer font-medium select-none">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={showOnlySelectedInvoices} 
+                                                onChange={e => setShowOnlySelectedInvoices(e.target.checked)} 
+                                                className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 bg-white" 
+                                            />
+                                            {language === 'vi' ? 'Đã chọn' : 'Selected only'} ({selectedInvoiceIds.size})
+                                        </label>
+                                    </div>
                                 </div>
-                                {availableInvoices.length === 0 ? (
-                                    <div className="text-center text-slate-400 py-4 text-sm border border-dashed border-slate-200 rounded-xl">{language === 'vi' ? 'Không có hóa đơn chờ thanh toán' : 'No pending invoices'}</div>
+
+                                <div className="relative">
+                                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input 
+                                        type="text" 
+                                        placeholder={language === 'vi' ? 'Tìm hóa đơn (số, nhà cung cấp, mô tả)...' : 'Search invoices (number, supplier, desc)...'} 
+                                        value={invoiceSearch} 
+                                        onChange={e => setInvoiceSearch(e.target.value)}
+                                        className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm text-slate-900 shadow-sm" 
+                                    />
+                                    {invoiceSearch && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setInvoiceSearch('')} 
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 hover:bg-slate-100 rounded-full"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {filteredAvailableInvoices.length === 0 ? (
+                                    <div className="text-center text-slate-400 py-8 text-sm border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                                        {invoiceSearch || showOnlySelectedInvoices ? (
+                                            language === 'vi' ? 'Không tìm thấy hóa đơn nào phù hợp với bộ lọc' : 'No invoices matched your filters'
+                                        ) : (
+                                            language === 'vi' ? 'Không có hóa đơn chờ thanh toán' : 'No pending invoices'
+                                        )}
+                                    </div>
                                 ) : (
-                                    <div className="space-y-2">
-                                        {availableInvoices.map(inv => (
-                                            <label key={inv.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${selectedInvoiceIds.has(inv.id) ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-blue-200'}`}>
-                                                <input type="checkbox" checked={selectedInvoiceIds.has(inv.id)} onChange={() => toggleInvoice(inv.id)} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                                    <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+                                        {filteredAvailableInvoices.map(inv => (
+                                            <label key={inv.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${selectedInvoiceIds.has(inv.id) ? 'border-blue-300 bg-blue-50/70 shadow-sm' : 'border-slate-200 hover:border-blue-200 hover:bg-slate-50/30'}`}>
+                                                <input type="checkbox" checked={selectedInvoiceIds.has(inv.id)} onChange={() => toggleInvoice(inv.id)} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 bg-white" />
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="font-semibold text-slate-800 text-sm">{inv.invoice_number} — {(inv as any).suppliers?.name}</div>
-                                                    <div className="text-xs text-slate-500">{inv.description || (language === 'vi' ? 'Không có mô tả' : 'No description')} • {new Date(inv.invoice_date).toLocaleDateString('en-GB')}</div>
+                                                    <div className="font-semibold text-slate-800 text-sm flex items-center gap-2 flex-wrap">
+                                                        <span>{inv.invoice_number}</span>
+                                                        <span className="text-slate-300">•</span>
+                                                        <span className="text-slate-600 font-medium text-xs">{(inv as any).suppliers?.name || t(language, 'FinCCModalUnassigned')}</span>
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 mt-0.5 truncate">{inv.description || (language === 'vi' ? 'Không có mô tả' : 'No description')}</div>
+                                                    <div className="text-[10px] text-slate-400 mt-0.5">{new Date(inv.invoice_date).toLocaleDateString('en-GB')}</div>
                                                 </div>
-                                                <div className="font-bold text-slate-900 tabular-nums text-sm">{fmt(getInvoiceBalance(inv))} {inv.currency || currency}</div>
+                                                <div className="font-bold text-slate-900 tabular-nums text-sm text-right shrink-0">
+                                                    {fmt(getInvoiceBalance(inv))} {inv.currency || currency}
+                                                </div>
                                             </label>
                                         ))}
                                     </div>
@@ -977,33 +1044,51 @@ export default function PaymentOrdersPage() {
                                             <div key={m.id} className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
                                                 <div className="flex-1 space-y-2">
                                                     <div className="flex gap-2">
-                                                        <input type="text" placeholder={t(language, 'FinPayDescriptionPlaceholder')} value={m.description}
-                                                            onChange={e => updateManualItem(m.id, 'description', e.target.value)}
-                                                            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900" />
-                                                        <div className="relative w-40 sm:w-48">
-                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium text-sm">{currency}</span>
-                                                            <input type="text" placeholder="0" value={m.amountStr !== undefined ? m.amountStr : (m.amount ? m.amount.toLocaleString('en-US') : '')}
-                                                                onChange={e => {
-                                                                    const clean = e.target.value.replace(/[^0-9]/g, '');
-                                                                    const num = parseInt(clean, 10);
-                                                                    updateManualItem(m.id, 'amount', isNaN(num) ? 0 : num);
-                                                                    updateManualItem(m.id, 'amountStr', isNaN(num) ? '' : num.toLocaleString('en-US'));
-                                                                }}
-                                                                className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm text-right tabular-nums focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 font-bold" />
+                                                        <div className="flex-1">
+                                                            <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                                                {t(language, 'FinInvDescription')} <span className="text-red-500">*</span>
+                                                            </label>
+                                                            <input type="text" placeholder={t(language, 'FinPayDescriptionPlaceholder')} value={m.description}
+                                                                onChange={e => updateManualItem(m.id, 'description', e.target.value)}
+                                                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 bg-white" />
+                                                        </div>
+                                                        <div className="w-40 sm:w-48">
+                                                            <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                                                {t(language, 'Amount')} <span className="text-red-500">*</span>
+                                                            </label>
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium text-xs">{currency}</span>
+                                                                <input type="text" placeholder="0" value={m.amountStr !== undefined ? m.amountStr : (m.amount ? m.amount.toLocaleString('en-US') : '')}
+                                                                    onChange={e => {
+                                                                        const clean = e.target.value.replace(/[^0-9]/g, '');
+                                                                        const num = parseInt(clean, 10);
+                                                                        updateManualItem(m.id, 'amount', isNaN(num) ? 0 : num);
+                                                                        updateManualItem(m.id, 'amountStr', isNaN(num) ? '' : num.toLocaleString('en-US'));
+                                                                    }}
+                                                                    className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm text-right tabular-nums focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 font-bold bg-white" />
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <SupplierCombobox
-                                                            suppliers={suppliers}
-                                                            selectedId={m.supplier_id || null}
-                                                            onChange={(id) => updateManualItem(m.id, 'supplier_id', id || '')}
-                                                            onAddNew={(query) => {
-                                                                setSupplierModalQuery(query)
-                                                                setSupplierModalForId(m.id)
-                                                            }}
-                                                            placeholder={t(language, 'FinPaySelectSupplier')}
-                                                        />
+                                                        <div className="flex-1">
+                                                            <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                                                {t(language, 'Supplier')} <span className="text-red-500">*</span>
+                                                            </label>
+                                                            <SupplierCombobox
+                                                                suppliers={suppliers}
+                                                                selectedId={m.supplier_id || null}
+                                                                onChange={(id) => updateManualItem(m.id, 'supplier_id', id || '')}
+                                                                onAddNew={(query) => {
+                                                                    setSupplierModalQuery(query)
+                                                                    setSupplierModalForId(m.id)
+                                                                }}
+                                                                placeholder={t(language, 'FinPaySelectSupplier')}
+                                                            />
+                                                        </div>
                                                         <div className="flex-1 min-w-[200px]">
+                                                            <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                                                {t(language, 'FinInvCategory')} <span className="text-red-500">*</span>
+                                                            </label>
                                                             <COACombobox
                                                                 coas={coaAccounts}
                                                                 value={m.account_id}
@@ -1023,22 +1108,27 @@ export default function PaymentOrdersPage() {
                                                             <span className="text-sm font-semibold text-slate-800">{t(language, 'FinPayExpectedVatInvoice')}</span>
                                                         </div>
                                                     </div>
-                                                    <div className="flex flex-wrap gap-2 mt-2">
-                                                        <button type="button" onClick={() => updateManualItem(m.id, 'branch_ids', branches.map(b => b.id))} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 rounded-md border border-slate-200 transition">
-                                                            {t(language, 'FinInvSelectAll')}
-                                                        </button>
-                                                        <button type="button" onClick={() => updateManualItem(m.id, 'branch_ids', [])} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 rounded-md border border-slate-200 transition">
-                                                            {t(language, 'FinInvClear')}
-                                                        </button>
-                                                        {branches.map(b => (
-                                                            <label key={b.id} className="flex items-center gap-1.5 cursor-pointer bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm transition hover:border-blue-300">
-                                                                <input type="checkbox" checked={m.branch_ids.includes(b.id)} onChange={e => {
-                                                                    const newIds = e.target.checked ? [...m.branch_ids, b.id] : m.branch_ids.filter(id => id !== b.id)
-                                                                    updateManualItem(m.id, 'branch_ids', newIds)
-                                                                }} className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500" />
-                                                                <span className="text-xs text-slate-700">{b.name}</span>
-                                                            </label>
-                                                        ))}
+                                                    <div className="mt-2">
+                                                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                                            {t(language, 'FinInvBranchAllocation')} <span className="text-red-500">*</span>
+                                                        </label>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button type="button" onClick={() => updateManualItem(m.id, 'branch_ids', branches.map(b => b.id))} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 rounded-md border border-slate-200 transition">
+                                                                {t(language, 'FinInvSelectAll')}
+                                                            </button>
+                                                            <button type="button" onClick={() => updateManualItem(m.id, 'branch_ids', [])} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 rounded-md border border-slate-200 transition">
+                                                                {t(language, 'FinInvClear')}
+                                                            </button>
+                                                            {branches.map(b => (
+                                                                <label key={b.id} className="flex items-center gap-1.5 cursor-pointer bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm transition hover:border-blue-300">
+                                                                    <input type="checkbox" checked={m.branch_ids.includes(b.id)} onChange={e => {
+                                                                        const newIds = e.target.checked ? [...m.branch_ids, b.id] : m.branch_ids.filter(id => id !== b.id)
+                                                                        updateManualItem(m.id, 'branch_ids', newIds)
+                                                                    }} className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500" />
+                                                                    <span className="text-xs text-slate-700">{b.name}</span>
+                                                                </label>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <button type="button" onClick={() => removeManualItem(m.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition mt-1">
@@ -1149,7 +1239,7 @@ export default function PaymentOrdersPage() {
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition">{t(language, 'Cancel')}</button>
                                 <button onClick={() => handleCreateOrder(false)} disabled={saving || isFormInvalid}
-                                    className="px-4 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl shadow-md transition flex items-center gap-2">
+                                    className="px-4 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl shadow-md transition flex items-center gap-2">
                                     {saving && <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                                     {editingOrderId ? (language === 'vi' ? 'Cập nhật lệnh' : 'Update Order') : (language === 'vi' ? 'Tạo lệnh chi' : 'Create Order')}
                                 </button>
@@ -1162,7 +1252,7 @@ export default function PaymentOrdersPage() {
             {/* Detail Modal */}
             {showDetail && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden">
                         <div className="flex items-center justify-between p-5 border-b border-slate-100">
                             <h2 className="text-xl font-bold text-slate-900">{showDetail.order_number}</h2>
                             <div className="flex items-center gap-2">
@@ -1297,9 +1387,20 @@ export default function PaymentOrdersPage() {
                                                                                         <td className="p-3 font-semibold text-slate-800">{item.description || '—'}</td>
                                                                                         <td className="p-3 text-slate-600">{item.fin_chart_of_accounts ? `${item.fin_chart_of_accounts.code} - ${item.fin_chart_of_accounts.name}` : '—'}</td>
                                                                                         <td className="p-3 text-slate-600">
-                                                                                            {(!item.branch_ids || item.branch_ids.length === 0) ? <span className="text-slate-500 italic">{t(language, 'FinInvGeneral')}</span>
-                                                                                            : item.branch_ids.length === 1 ? branches.find(b => b.id === item.branch_ids![0])?.name || '—'
-                                                                                            : <span className="text-blue-600 font-medium" title={item.branch_ids.map(id => branches.find(b => b.id === id)?.name).join(', ')}>{t(language, 'FinInvBranchesCount').replace('{n}', String(item.branch_ids.length))}</span>}
+                                                                                            {(!item.branch_ids || item.branch_ids.length === 0) ? (
+                                                                                                <span className="text-slate-500 italic text-xs">{t(language, 'FinInvGeneral')}</span>
+                                                                                            ) : (
+                                                                                                <div className="flex flex-wrap gap-1">
+                                                                                                    {item.branch_ids.map(bId => {
+                                                                                                        const bName = branches.find(b => b.id === bId)?.name || bId
+                                                                                                        return (
+                                                                                                            <span key={bId} className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 border border-blue-200 text-blue-700 whitespace-nowrap">
+                                                                                                                {bName}
+                                                                                                            </span>
+                                                                                                        )
+                                                                                                    })}
+                                                                                                </div>
+                                                                                            )}
                                                                                         </td>
                                                                                         <td className="p-3">
                                                                                             {item.invoice_id ? (
@@ -1332,9 +1433,20 @@ export default function PaymentOrdersPage() {
                                                                                 <td className="p-3 font-medium text-slate-600 italic">{item.description || t(language, 'FinPayGeneralBankFee')}</td>
                                                                                 <td className="p-3 text-slate-500">{item.fin_chart_of_accounts ? `${item.fin_chart_of_accounts.code} - ${item.fin_chart_of_accounts.name}` : <span className="italic text-slate-400">{t(language, 'FinPayUncategorized')}</span>}</td>
                                                                                 <td className="p-3 text-slate-500">
-                                                                                    {(!item.branch_ids || item.branch_ids.length === 0) ? <span className="text-slate-400 italic">{t(language, 'FinInvGeneral')}</span>
-                                                                                    : item.branch_ids.length === 1 ? branches.find(b => b.id === item.branch_ids![0])?.name || '—'
-                                                                                    : <span className="text-blue-500 font-medium" title={item.branch_ids.map(id => branches.find(b => b.id === id)?.name).join(', ')}>{t(language, 'FinInvBranchesCount').replace('{n}', String(item.branch_ids.length))}</span>}
+                                                                                    {(!item.branch_ids || item.branch_ids.length === 0) ? (
+                                                                                        <span className="text-slate-500 italic text-xs">{t(language, 'FinInvGeneral')}</span>
+                                                                                    ) : (
+                                                                                        <div className="flex flex-wrap gap-1">
+                                                                                            {item.branch_ids.map(bId => {
+                                                                                                const bName = branches.find(b => b.id === bId)?.name || bId
+                                                                                                return (
+                                                                                                    <span key={bId} className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 border border-blue-200 text-blue-700 whitespace-nowrap">
+                                                                                                        {bName}
+                                                                                                    </span>
+                                                                                                )
+                                                                                            })}
+                                                                                        </div>
+                                                                                    )}
                                                                                 </td>
                                                                                 <td className="p-3">
                                                                                     <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 uppercase tracking-wider">{t(language, 'FinPayNone')}</span>
@@ -1487,7 +1599,7 @@ export default function PaymentOrdersPage() {
                             </div>
                             <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
                                 <button type="button" onClick={() => setShowMarkPaid(null)} className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl">{t(language, 'Cancel')}</button>
-                                <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl shadow-md flex items-center gap-2">
+                                <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl shadow-md flex items-center gap-2">
                                     {saving && <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                                     <CheckCircle2 className="w-4 h-4" /> {language === 'vi' ? 'Xác nhận thanh toán' : 'Confirm Payment'}
                                 </button>

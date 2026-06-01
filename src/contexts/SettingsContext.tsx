@@ -190,7 +190,7 @@ const SettingsCtx = createContext<Ctx>({
   crmCommissionRules: { acquisition_pct: 10, maintenance_pct: 4 },
   setCrmCommissionRules: () => {},
 
-  crmPartnerRules: { has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '' },
+  crmPartnerRules: { has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '', pit_threshold_vnd: 2000000 },
   setCrmPartnerRules: () => {},
 
   saveAllCrmSettings: () => {},
@@ -253,7 +253,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [crmAdvisorCommissionPct, setCrmAdvisorCommissionPctState] = useState<number>(10)
   const [crmCommissionType, setCrmCommissionTypeState] = useState<string>('Acquisition + Maintenance')
   const [crmCommissionRules, setCrmCommissionRulesState] = useState<any>({ acquisition_pct: 10, maintenance_pct: 4 })
-  const [crmPartnerRules, setCrmPartnerRulesState] = useState<any>({ has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '' })
+  const [crmPartnerRules, setCrmPartnerRulesState] = useState<any>({ has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '', pit_threshold_vnd: 2000000 })
 
   // Go-Live
   const [financeStartDate, setFinanceStartDateState] = useState<string>('')
@@ -408,7 +408,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setCrmAdvisorCommissionPctState(Number.isFinite(parsedCrmPct) ? clampPct(parsedCrmPct) : 10)
     setCrmCommissionTypeState(data?.crm_commission_type || 'Acquisition + Maintenance')
     setCrmCommissionRulesState(data?.crm_commission_rules || { acquisition_pct: 10, maintenance_pct: 4 })
-    setCrmPartnerRulesState(data?.crm_partner_rules || { has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '' })
+    const defaultPartnerRules = { has_commission: true, commission_type: 'Percentage', commission_value: 10, has_discount: false, client_discount_type: 'Percentage', client_discount_value: 0, commission_base: 'Before Discount', details: '', pit_threshold_vnd: 2000000 }
+    setCrmPartnerRulesState(data?.crm_partner_rules ? { ...defaultPartnerRules, ...data.crm_partner_rules } : defaultPartnerRules)
 
     const parsedEquipMul =
       typeof data?.default_markup_equipment_pct === 'number'

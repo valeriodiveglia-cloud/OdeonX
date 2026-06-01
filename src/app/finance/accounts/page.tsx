@@ -73,6 +73,24 @@ export default function BankAccountsPage() {
     // Transaction form
     const [txForm, setTxForm] = useState({ type: 'Inflow' as string, category: '', description: '', amount: '', transaction_date: new Date().toISOString().split('T')[0], notes: '' })
 
+    const isFormInvalid = React.useMemo(() => {
+        if (!accForm.account_name.trim()) return true;
+
+        const isBankType = accForm.account_type === 'Checking' || accForm.account_type === 'Saving' || accForm.account_type === 'Capital';
+        if (isBankType) {
+            if (!accForm.bank_name.trim()) return true;
+            if (!accForm.account_number.trim()) return true;
+        }
+
+        const transferFee = parseFloat(String(accForm.bank_transfer_fee).replace(/,/g, '')) || 0;
+        const onlineFee = parseFloat(String(accForm.online_payment_fee).replace(/,/g, '')) || 0;
+        if (transferFee > 0 || onlineFee > 0) {
+            if (!accForm.fee_account_id) return true;
+        }
+
+        return false;
+    }, [accForm]);
+
     const fetchAccounts = async () => {
         setLoading(true)
         const [accRes, brRes, coaRes, mapRes] = await Promise.all([
@@ -254,7 +272,7 @@ export default function BankAccountsPage() {
 
     const handleSaveAccount = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!accForm.account_name) { alert(t(language, 'FinAccAlertNameRequired')); return }
+        if (isFormInvalid) return
         setSaving(true)
         try {
             const bal = parseFloat(String(accForm.opening_balance).replace(/,/g, '')) || 0
@@ -924,7 +942,7 @@ export default function BankAccountsPage() {
                                 </h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t(language, 'FinAccModalAccountName')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t(language, 'FinAccModalAccountName')} <span className="text-red-500">*</span></label>
                                         <input required value={accForm.account_name} onChange={e => setAccForm(f => ({ ...f, account_name: e.target.value }))} placeholder={language === 'vi' ? 'ví dụ: Tài khoản kinh doanh chính' : 'e.g. Main Business Account'}
                                             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 shadow-sm transition-all hover:border-slate-300 bg-slate-50 focus:bg-white" />
                                     </div>
@@ -962,12 +980,12 @@ export default function BankAccountsPage() {
                                         </h3>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t(language, 'FinAccModalBankName')}</label>
+                                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t(language, 'FinAccModalBankName')} <span className="text-red-500">*</span></label>
                                                 <input value={accForm.bank_name} onChange={e => setAccForm(f => ({ ...f, bank_name: e.target.value }))} placeholder={language === 'vi' ? 'ví dụ: Sacombank' : 'e.g. Sacombank'}
                                                     className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 shadow-sm transition-all hover:border-slate-300 bg-slate-50 focus:bg-white" />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t(language, 'FinAccModalAccountNumber')}</label>
+                                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t(language, 'FinAccModalAccountNumber')} <span className="text-red-500">*</span></label>
                                                 <input value={accForm.account_number} onChange={e => setAccForm(f => ({ ...f, account_number: e.target.value }))} placeholder="e.g. 111111111111"
                                                     className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 shadow-sm transition-all hover:border-slate-300 bg-slate-50 focus:bg-white" />
                                             </div>
@@ -1065,7 +1083,10 @@ export default function BankAccountsPage() {
                                         </div>
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t(language, 'FinAccModalFeeCoaCategory')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                                            {t(language, 'FinAccModalFeeCoaCategory')}
+                                            {(parseFloat(String(accForm.bank_transfer_fee).replace(/,/g, '')) > 0 || parseFloat(String(accForm.online_payment_fee).replace(/,/g, '')) > 0) && <span className="text-red-500"> *</span>}
+                                        </label>
                                         <div className="rounded-xl border border-slate-200 shadow-sm bg-slate-50 transition-all focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white">
                                             <COACombobox 
                                                 coas={coas} 
@@ -1083,7 +1104,7 @@ export default function BankAccountsPage() {
                                 <button type="button" onClick={() => setShowAddAccount(false)} className="px-6 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-xl transition-colors">
                                     {t(language, 'Cancel')}
                                 </button>
-                                <button type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2">
+                                <button type="submit" disabled={saving || isFormInvalid} className="px-6 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2">
                                     {saving ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : (
                                         <>
                                             <CheckCircle2 className="w-4 h-4" />
@@ -1138,7 +1159,7 @@ export default function BankAccountsPage() {
                                     className="w-full border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 shadow-sm" /></div>
                             <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
                                 <button type="button" onClick={() => setShowAddTx(false)} className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl">{t(language, 'Cancel')}</button>
-                                <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl shadow-md">
+                                <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl shadow-md">
                                     {saving ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t(language, 'FinAccModalTxRecordButton')}
                                 </button>
                             </div>

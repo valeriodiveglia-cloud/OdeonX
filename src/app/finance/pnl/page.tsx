@@ -94,7 +94,7 @@ export default function PnLReportPage() {
             const [coaRes, brRes, revRes, invRes, cashoutRes, wastageRes, adjRes, poRes, mapRes, bankFeesRes, allocRes, invRecordsRes, invMappingRes, materialsRes, prepRes, finalRes, taxSettingsRes] = await Promise.all([
                 supabase.from('fin_chart_of_accounts').select('*').eq('is_active', true).order('sort_order'),
                 supabase.from('provider_branches').select('id, name').order('name'),
-                supabase.from('cashier_closings').select('revenue_vnd, branch_name')
+                supabase.from('cashier_closings').select('revenue_vnd, branch_name, report_date, shift, cashier_name, notes')
                     .gte('report_date', startDate).lt('report_date', endDate),
                 supabase.from('fin_invoices').select('account_id, gross_amount, net_amount, branch_ids, invoice_number, invoice_date, description, is_personal_deduction, custom_supplier_name, suppliers(name)')
                     .gte('invoice_date', startDate).lt('invoice_date', endDate)
@@ -134,6 +134,10 @@ export default function PnLReportPage() {
 
             const selectedBranchName = branchFilter !== 'All' ? brRes.data?.find(b => b.id === branchFilter)?.name : null
 
+            // Initialize detail trackers early so they can be populated by revenue and adjustments
+            const byAccount: Record<string, number> = {}
+            const details: Record<string, DetailItem[]> = {}
+
 
 
             // Revenue per branch calculations for allocation
@@ -150,11 +154,33 @@ export default function PnLReportPage() {
 
             // Revenue
             let revenueAcc = 0
+            const revAcc = coaData.find(a => a.code === '5112')
+            const revAccId = revAcc?.id || '5112'
+
             if (revRes.data) {
                 for (const r of revRes.data) {
                     // Accumulate for total revenue UI
                     if (!selectedBranchName || r.branch_name === selectedBranchName) {
-                        revenueAcc += Number(r.revenue_vnd || 0)
+                        const amount = Number(r.revenue_vnd || 0)
+                        revenueAcc += amount
+
+                        if (amount !== 0) {
+                            if (!details[revAccId]) details[revAccId] = []
+                            
+                            let descParts = []
+                            if (r.shift) descParts.push(`Shift: ${r.shift}`)
+                            if (r.cashier_name) descParts.push(`Cashier: ${r.cashier_name}`)
+                            if (r.notes) descParts.push(`Notes: ${r.notes}`)
+                            const description = descParts.join(' | ') || 'Cashier Closing Revenue'
+
+                            details[revAccId].push({
+                                source: 'Closing',
+                                description,
+                                amount,
+                                date: r.report_date,
+                                branches: r.branch_name
+                            })
+                        }
                     }
                     
                     // Accumulate for branch-specific revenue percentages
@@ -226,9 +252,101 @@ export default function PnLReportPage() {
             }
             setCustomAdjustments(finalAdjustments)
 
+            // Process custom adjustments into detailsByAccount
+            for (const adj of finalAdjustments) {
+                const adjBranches = adj.allocated_branches?.map((id: string) => branchIdToName[id] || id).join(', ')
+                if (adj.method === 'extract') {
+                    // 1. Negative entry on source account (Product Sales - 5112)
+                    if (!details[revAccId]) details[revAccId] = []
+                    details[revAccId].push({
+                        source: 'Adjustment',
+                        description: `${adj.name} (Storno / Extract)`,
+                        amount: -adj.amount,
+                        date: startDate,
+                        branches: adjBranches
+                    })
+
+                    // 2. Positive entry on destination account (target_group)
+                    const destKey = adj.target_group
+                    if (destKey) {
+                        if (!details[destKey]) details[destKey] = []
+                        details[destKey].push({
+                            source: 'Adjustment',
+                            description: `${adj.name} (Received from storno)`,
+                            amount: adj.amount,
+                            date: startDate,
+                            branches: adjBranches
+                        })
+                    }
+                } else {
+                    // add or subtract
+                    const targetKey = adj.target_group
+                    if (targetKey) {
+                        if (!details[targetKey]) details[targetKey] = []
+                        const amt = adj.method === 'subtract' ? -adj.amount : adj.amount
+                        details[targetKey].push({
+                            source: 'Adjustment',
+                            description: adj.name,
+                            amount: amt,
+                            date: startDate,
+                            branches: adjBranches
+                        })
+                    }
+                }
+
+                // If this adjustment is part of the Gross-Up configuration, also append it to Sub Product Sales (5112) details
+                if (grossUpAccounts.has(adj.target_group) && (adj.method === 'add' || adj.method === 'extract')) {
+                    if (!details[revAccId]) details[revAccId] = []
+                    details[revAccId].push({
+                        source: 'Adjustment',
+                        description: `${adj.name} (Gross-Up)`,
+                        amount: adj.amount,
+                        date: startDate,
+                        branches: adjBranches
+                    })
+                }
+            }
+
+            // Process dynamic VAT / Revenue Deduction taxes into detailsByAccount
+            if (taxSettingsRes.data) {
+                const revenueTaxes = taxSettingsRes.data.filter(t => {
+                    const acc = coaData.find(a => a.id === t.account_id);
+                    return acc?.account_type === 'Revenue Deduction';
+                });
+                
+                for (const t of revenueTaxes) {
+                    const taxAccId = t.account_id;
+                    if (taxAccId) {
+                        if (!details[taxAccId]) details[taxAccId] = [];
+
+                        if (revRes.data) {
+                            for (const r of revRes.data) {
+                                if (!selectedBranchName || r.branch_name === selectedBranchName) {
+                                    const rev = Number(r.revenue_vnd || 0);
+                                    if (rev !== 0) {
+                                        const taxAmount = rev - (rev / (1 + Number(t.percentage) / 100));
+                                        
+                                        let descParts = [];
+                                        if (r.shift) descParts.push(`Shift: ${r.shift}`);
+                                        if (r.cashier_name) descParts.push(`Cashier: ${r.cashier_name}`);
+                                        const description = `${descParts.join(' | ') || 'Cashier Closing'} (VAT ${t.percentage}%)`;
+
+                                        details[taxAccId].push({
+                                            source: 'Closing',
+                                            description,
+                                            amount: taxAmount,
+                                            date: r.report_date,
+                                            branches: r.branch_name
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Expenses by Account (using account ID)
-            const byAccount: Record<string, number> = {}
-            const details: Record<string, DetailItem[]> = {}
             let personalExpensesAcc = 0
             if (invRes.data) {
                 for (const inv of invRes.data) {
@@ -559,7 +677,8 @@ export default function PnLReportPage() {
 
                     if (g.code === '01') {
                         const productsRevenue = Math.max(0, totalRevenue)
-                        children.push({ code: '5112', name: t(language, 'FinPnLSubProductSales'), amount: productsRevenue, isItem: true, parentCode: g.code })
+                        const revAcc = coa.find(a => a.code === '5112')
+                        children.push({ code: '5112', name: t(language, 'FinPnLSubProductSales'), amount: productsRevenue, isItem: true, parentCode: g.code, accountId: revAcc?.id })
                         groupTotal += productsRevenue
 
                         // Find how much was extracted in total from 5112 to ANY destination globally
@@ -611,7 +730,6 @@ export default function PnLReportPage() {
                         }
                         
                         // Check if 5112 had adjustments since we processed it manually
-                        const revAcc = coa.find(a => a.code === '5112')
                         if (revAcc) {
                             let revAccTrueAmount = children.find(c => c.code === '5112')?.amount || 0;
                             
@@ -975,7 +1093,7 @@ export default function PnLReportPage() {
                                                 <td className="p-3 pl-8">
                                                     <div className="text-sm font-medium text-slate-600 flex items-center gap-2">
                                                         <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0" />
-                                                        {line.accountId && line.amount !== 0 && (detailsByAccount[line.accountId]?.length || 0) > 0 ? (
+                                                        {line.accountId && (detailsByAccount[line.accountId]?.length || 0) > 0 ? (
                                                             <button onClick={() => setDrillAccount({ id: line.accountId!, name: line.name })} className="text-left hover:text-blue-600 hover:underline underline-offset-2 transition cursor-pointer">{line.name}</button>
                                                         ) : line.name}
                                                     </div>
@@ -1044,8 +1162,19 @@ export default function PnLReportPage() {
                                                         d.source === 'Cashout' ? 'bg-amber-50 text-amber-700' :
                                                         d.source === 'Bank Fee' ? 'bg-red-50 text-red-700' :
                                                         d.source === 'Wastage' ? 'bg-purple-50 text-purple-700' :
+                                                        d.source === 'Closing' ? 'bg-cyan-50 text-cyan-700' :
+                                                        d.source === 'Adjustment' ? 'bg-pink-50 text-pink-700' :
                                                         'bg-slate-100 text-slate-600'
-                                                    }`}>{d.source === 'Invoice' ? t(language, 'FinInvTitle').replace(/s$/, '') : d.source === 'Payment' ? t(language, 'FinPayTitle').replace(/s$/, '') : d.source === 'Cashout' ? t(language, 'FinPnLDrilldownSourceCashout') : d.source === 'Bank Fee' ? t(language, 'FinPnLDrilldownSourceBankFee') : d.source === 'Wastage' ? t(language, 'FinPnLDrilldownSourceWastage') : d.source}</span>
+                                                    }`}>{
+                                                        d.source === 'Invoice' ? t(language, 'FinInvTitle').replace(/s$/, '') :
+                                                        d.source === 'Payment' ? t(language, 'FinPayTitle').replace(/s$/, '') :
+                                                        d.source === 'Cashout' ? t(language, 'FinPnLDrilldownSourceCashout') :
+                                                        d.source === 'Bank Fee' ? t(language, 'FinPnLDrilldownSourceBankFee') :
+                                                        d.source === 'Wastage' ? t(language, 'FinPnLDrilldownSourceWastage') :
+                                                        d.source === 'Closing' ? t(language, 'FinPnLDrilldownSourceClosing') :
+                                                        d.source === 'Adjustment' ? t(language, 'FinPnLDrilldownSourceAdjustment') :
+                                                        d.source
+                                                    }</span>
                                                 </td>
                                                 <td className="p-3 align-top text-sm font-semibold text-slate-800 whitespace-nowrap">{d.supplier || <span className="text-slate-300 font-normal">—</span>}</td>
                                                 <td className="p-3 align-top">

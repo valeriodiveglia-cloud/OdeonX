@@ -132,7 +132,6 @@ export default function MonthlyAdjustmentsPage() {
             }
             if (accRes.data) {
                 setAccounts(accRes.data as any)
-                if (accRes.data.length > 0 && !newTargetGroup) setNewTargetGroup(accRes.data[0].id)
             }
             if (adjRes.data) {
                 setDbRowId(adjRes.data.id)
@@ -198,6 +197,7 @@ export default function MonthlyAdjustmentsPage() {
                 allocated_branches: newAllocatedBranches
             } : a))
             setEditingId(null)
+            setNewTargetGroup('')
             setNewAmount(0)
             setNewMethod('add')
             setNewIncludeInCashflow(true)
@@ -213,6 +213,7 @@ export default function MonthlyAdjustmentsPage() {
                 allocated_branches: newAllocatedBranches
             }
             setAdjustments([...adjustments, newAdj])
+            setNewTargetGroup('')
             setNewAmount(0)
             setNewMethod('add')
             setNewIncludeInCashflow(true)
@@ -235,6 +236,7 @@ export default function MonthlyAdjustmentsPage() {
 
     const handleCancelEdit = () => {
         setEditingId(null)
+        setNewTargetGroup('')
         setNewAmount(0)
         setNewMethod('add')
         setNewIncludeInCashflow(true)
@@ -340,7 +342,7 @@ export default function MonthlyAdjustmentsPage() {
                             <div className="flex flex-col gap-4">
                                 <div className="flex flex-col md:flex-row items-end gap-4">
                                     <div className="flex-1 w-full md:w-64">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinMATargetCategory')}</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinMATargetCategory')} <span className="text-red-500">*</span></label>
                                         <COACombobox 
                                             coas={accounts}
                                             value={newTargetGroup}
@@ -367,7 +369,7 @@ export default function MonthlyAdjustmentsPage() {
                                         )}
                                     </div>
                                     <div className="w-full md:w-48">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinMAAmountLabel')} ({currency})</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinMAAmountLabel')} ({currency}) <span className="text-red-500">*</span></label>
                                         <input 
                                             type="text" 
                                             value={newAmount ? newAmount.toLocaleString('en-US') : ''}
@@ -426,7 +428,8 @@ export default function MonthlyAdjustmentsPage() {
                                     </div>
                                     <button
                                         onClick={handleAddAdjustment}
-                                        className="w-full md:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition flex items-center justify-center whitespace-nowrap"
+                                        disabled={!newTargetGroup || newAmount <= 0}
+                                        className="w-full md:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-bold transition flex items-center justify-center whitespace-nowrap"
                                     >
                                         {editingId ? <><Edit2 className="w-4 h-4 mr-1.5" /> {t(language, 'Save')}</> : <><Plus className="w-4 h-4 mr-1.5" /> {t(language, 'Add')}</>}
                                     </button>
@@ -546,7 +549,7 @@ export default function MonthlyAdjustmentsPage() {
                         <button
                             onClick={handleSave}
                             disabled={saving}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-bold shadow-md shadow-blue-600/20 transition"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-md shadow-blue-600/20 transition"
                         >
                             {saving ? <CircularLoader /> : <Save className="w-5 h-5" />}
                             {t(language, 'FinMASaveAdjustmentsButton')}
