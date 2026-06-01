@@ -13,6 +13,14 @@ interface ExtendedPayout extends CRMPayout {
     sale_advisor_id?: string
     crm_partners: {
         name: string
+        type?: string
+        contact_name?: string
+        email?: string
+        phone?: string
+        location?: string
+        bank_name?: string
+        bank_account_name?: string
+        bank_account_number?: string
         issues_vat_invoice?: boolean
         crm_agreements?: { commission_value: number; commission_type: string }[]
     } | null
@@ -76,6 +84,14 @@ export default function CRMPayoutsPage() {
                 *,
                 crm_partners (
                     name,
+                    type,
+                    contact_name,
+                    email,
+                    phone,
+                    location,
+                    bank_name,
+                    bank_account_name,
+                    bank_account_number,
                     issues_vat_invoice,
                     crm_agreements (
                         commission_value,
@@ -302,6 +318,244 @@ export default function CRMPayoutsPage() {
             setReceiptReferrals([])
         }
         setLoadingReceipt(false)
+    }
+
+    const exportMinutesOfPayment = async () => {
+        if (!selectedPayout) return
+
+        try {
+            const ExcelJS = (await import('exceljs')).default
+            const wb = new ExcelJS.Workbook()
+            const ws = wb.addWorksheet('Minutes of Payment')
+
+            // Determine Branch
+            let branchName = 'Pasta Fresca Saigon'
+            const loc = selectedPayout.crm_partners?.location?.toLowerCase() || ''
+            if (loc.includes('đà lạt') || loc.includes('da lat') || loc.includes('yersin') || loc.includes('tô hiến thành') || loc.includes('hùng vương') || loc.includes('hồ tùng mậu')) {
+                branchName = 'Pasta Fresca Da Lat'
+            } else if (loc.includes('thảo điền') || loc.includes('thao dien') || loc.includes('an khánh') || loc.includes('an khanh')) {
+                branchName = 'Pasta Fresca Thao Dien'
+            } else if (loc.includes('thanh mỹ') || loc.includes('thanh my')) {
+                branchName = 'Pasta Fresca Thanh My Loi'
+            } else if (activeTab === 'advisor' && selectedPayout.sale_advisor_id) {
+                branchName = 'Pasta Fresca Da Lat'
+            }
+
+            // Company Info
+            ws.addRow(['CÔNG TY TNHH RUSTICO']).font = { name: 'Arial', size: 14, bold: true }
+            ws.addRow([`BRANCH: ${branchName}`]).font = { name: 'Arial', size: 12, bold: true }
+            
+            let address = '28 Thảo Điền, Phường An Khánh, TP Hồ Chí Minh, Việt Nam'
+            if (branchName === 'Pasta Fresca Da Lat') {
+                address = '03 Yersin, Phường 9, Đà Lạt, Lâm Đồng'
+            } else if (branchName === 'Pasta Fresca Thanh My Loi') {
+                address = '49 Hà Huy Tập, Phường 3, Đà Lạt'
+            }
+            ws.addRow([`Address: ${address}`]).font = { name: 'Arial', size: 10, italic: true }
+            ws.addRow([]) // Spacer
+
+            // Document Title
+            const titleRow = ws.addRow(['MINUTES OF PAYMENT / BIÊN BẢN THANH TOÁN'])
+            titleRow.font = { name: 'Arial', size: 16, bold: true }
+            titleRow.alignment = { horizontal: 'center' }
+            ws.addRow([]) // Spacer
+
+            // Beneficiary Header
+            ws.addRow(['1. BENEFICIARY INFORMATION / THÔNG TIN NGƯỜI NHẬN']).font = { name: 'Arial', size: 12, bold: true }
+            
+            const isPartner = activeTab === 'partner'
+            if (isPartner) {
+                const partner = selectedPayout.crm_partners
+                ws.addRow([`Name / Tên:`, partner?.name || 'Unknown'])
+                ws.addRow([`Type / Loại:`, partner?.type || 'Unknown'])
+                ws.addRow([`Contact Person / Người liên hệ:`, partner?.contact_name || 'N/A'])
+                ws.addRow([`Phone / Số điện thoại:`, partner?.phone || 'N/A'])
+                ws.addRow([`Email:`, partner?.email || 'N/A'])
+                ws.addRow([`Address / Địa chỉ:`, partner?.location || 'N/A'])
+                ws.addRow([`Bank / Ngân hàng:`, partner?.bank_name || 'N/A'])
+                ws.addRow([`Bank Account Name / Tên tài khoản:`, partner?.bank_account_name || 'N/A'])
+                ws.addRow([`Account Number / Số tài khoản:`, partner?.bank_account_number || 'N/A'])
+                ws.addRow([`Issues VAT Invoice / Xuất hóa đơn VAT:`, partner?.issues_vat_invoice ? 'Yes / Có' : 'No / Không'])
+            } else {
+                const advName = selectedPayout.sale_advisor_id ? accountsMap[selectedPayout.sale_advisor_id] || 'Unknown Advisor' : 'Unknown'
+                ws.addRow([`Name / Tên:`, advName])
+                ws.addRow([`Role / Vai trò:`, 'Sale Advisor / Nhân viên kinh doanh'])
+            }
+            ws.addRow([]) // Spacer
+
+            // Payout Details Header
+            ws.addRow(['2. PAYOUT DETAILS / CHI TIẾT THANH TOÁN']).font = { name: 'Arial', size: 12, bold: true }
+            ws.addRow([`Payout ID / Mã thanh toán:`, selectedPayout.id])
+            ws.addRow([`Period / Kỳ thanh toán:`, `${selectedPayout.period.split('-')[1]}/${selectedPayout.period.split('-')[0]}`])
+            ws.addRow([`Status / Trạng thái:`, selectedPayout.status])
+            ws.addRow([`Date Exported / Ngày xuất file:`, new Date().toLocaleDateString('en-GB')])
+            ws.addRow([]) // Spacer
+
+            // Transactions Header
+            ws.addRow(['3. TRANSACTIONS LIST / DANH SÁCH GIAO DỊCH']).font = { name: 'Arial', size: 12, bold: true }
+            
+            // Add Table Headers
+            const headers = [
+                'Ref / Tham chiếu',
+                'Date / Ngày',
+                'Guest Name / Tên khách',
+                'Guest Contact / Liên hệ',
+                'Pax / Số khách',
+                'Total Bill / Tổng hóa đơn',
+                'Comm. Rate / Tỷ lệ hoa hồng',
+                'Gross Comm. / Hoa hồng gộp'
+            ]
+            const headerRow = ws.addRow(headers)
+            headerRow.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } }
+            headerRow.eachCell(cell => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF1E293B' } // Slate-800
+                }
+                cell.alignment = { horizontal: 'center' }
+            })
+
+            // Calculations variables
+            const issuesVat = isPartner ? selectedPayout.crm_partners?.issues_vat_invoice === true : false
+            const deductPit = isPartner ? !issuesVat : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id])
+            
+            let totalRevenue = 0
+            let totalGross = 0
+            let totalPax = 0
+
+            // Add Data Rows
+            receiptReferrals.forEach(r => {
+                const gross = isPartner 
+                    ? (selectedPayout.crm_partners?.issues_vat_invoice === false ? Number(r.commission_value) / 0.9 : Number(r.commission_value)) 
+                    : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id] ? Number(r.advisor_commission_value) / 0.9 : Number(r.advisor_commission_value))
+                
+                const pct = r.revenue_generated > 0 ? (gross / r.revenue_generated) : 0
+
+                totalRevenue += Number(r.revenue_generated || 0)
+                totalGross += gross
+                totalPax += Number(r.party_size || 0)
+
+                const row = ws.addRow([
+                    r.id.split('-')[0].toUpperCase(),
+                    new Date(r.created_at).toLocaleDateString('en-GB') + ' ' + new Date(r.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                    r.guest_name || 'N/A',
+                    r.guest_contact || 'N/A',
+                    r.party_size,
+                    Number(r.revenue_generated),
+                    pct,
+                    gross
+                ])
+
+                row.getCell(1).alignment = { horizontal: 'center' }
+                row.getCell(2).alignment = { horizontal: 'center' }
+                row.getCell(5).alignment = { horizontal: 'right' }
+                row.getCell(6).alignment = { horizontal: 'right' }
+                row.getCell(6).numFmt = '#,##0'
+                row.getCell(7).alignment = { horizontal: 'right' }
+                row.getCell(7).numFmt = '0.0%'
+                row.getCell(8).alignment = { horizontal: 'right' }
+                row.getCell(8).numFmt = '#,##0'
+            })
+
+            // Spacer before totals
+            ws.addRow([])
+
+            // Summary Info
+            const netAmount = Number(selectedPayout.amount)
+            const pitWasDeducted = Math.abs(netAmount - receiptReferrals.reduce((sum, r) => sum + Number((isPartner ? r.commission_value : r.advisor_commission_value) || 0), 0)) < 10
+
+            // Apply PIT logic
+            let finalGross = totalGross
+            let pitRate = 0
+            let pitAmount = 0
+            let finalNet = netAmount
+
+            if (deductPit) {
+                if (pitWasDeducted) {
+                    pitRate = 0.1
+                    pitAmount = finalGross - finalNet
+                } else {
+                    pitRate = 0
+                    pitAmount = 0
+                    finalGross = finalNet
+                }
+            } else {
+                pitRate = 0
+                pitAmount = 0
+                finalGross = finalNet
+            }
+
+            // Summary rows
+            const grossRow = ws.addRow(['', '', '', '', '', '', 'Total Gross Commission / Tổng hoa hồng gộp:', finalGross])
+            grossRow.font = { name: 'Arial', size: 10, bold: true }
+            grossRow.getCell(8).numFmt = '#,##0'
+
+            const pitRow = ws.addRow(['', '', '', '', '', '', `PIT Deduction / Khấu trừ thuế TNCN (${pitRate * 100}%):`, -pitAmount])
+            pitRow.font = { name: 'Arial', size: 10, bold: true, color: { argb: pitAmount > 0 ? 'FFFF0000' : 'FF000000' } }
+            pitRow.getCell(8).numFmt = '#,##0'
+
+            const netRow = ws.addRow(['', '', '', '', '', '', 'Net Payable / Thực nhận (Net):', finalNet])
+            netRow.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FF15803D' } }
+            netRow.getCell(8).numFmt = '#,##0'
+
+            // Format borders for data table
+            let inTable = false
+            ws.eachRow((row, rowNumber) => {
+                const firstVal = row.getCell(1).value
+                if (firstVal === '3. TRANSACTIONS LIST / DANH SÁCH GIAO DỊCH') {
+                    inTable = true
+                    return
+                }
+                if (inTable) {
+                    if (!row.getCell(1).value && !row.getCell(5).value) {
+                        inTable = false
+                        return
+                    }
+                    row.eachCell(cell => {
+                        cell.border = {
+                            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                            right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+                        }
+                    })
+                }
+            })
+
+            // Auto-fit columns
+            ws.columns.forEach(col => {
+                let maxLen = 0
+                col.eachCell?.({ includeEmpty: true }, cell => {
+                    const val = cell.value
+                    if (val) {
+                        const len = String(val).length
+                        if (len > maxLen) maxLen = len
+                    }
+                })
+                col.width = Math.min(Math.max(maxLen + 3, 12), 40)
+            })
+
+            // Generate file
+            const buf = await wb.xlsx.writeBuffer()
+            const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+            const url = URL.createObjectURL(blob)
+            
+            const a = document.createElement('a')
+            a.href = url
+            const safeName = (isPartner ? selectedPayout.crm_partners?.name : (selectedPayout.sale_advisor_id ? accountsMap[selectedPayout.sale_advisor_id] : null)) || 'payout'
+            const cleanName = safeName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+            a.download = `minutes_of_payment_${cleanName}_${selectedPayout.period}.xlsx`
+            
+            document.body.appendChild(a)
+            a.click()
+            a.remove()
+            URL.revokeObjectURL(url)
+
+        } catch (err: any) {
+            console.error('Error exporting minutes of payment:', err)
+            alert('Failed to export minutes of payment: ' + err.message)
+        }
     }
 
     const closeModal = () => {
@@ -840,7 +1094,14 @@ export default function CRMPayoutsPage() {
                                 })()}
 
                                 <div className="flex gap-3 justify-end mt-2">
-                                    <button onClick={closeModal} className="w-full px-5 py-2.5 text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition shadow-md">
+                                    <button 
+                                        onClick={exportMinutesOfPayment}
+                                        className="w-full px-5 py-2.5 text-sm font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-xl transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        {t(language, 'ExportMinutesOfPayment')}
+                                    </button>
+                                    <button onClick={closeModal} className="w-full px-5 py-2.5 text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition shadow-md cursor-pointer">
                                         {t(language, 'CloseReceipt')}
                                     </button>
                                 </div>
