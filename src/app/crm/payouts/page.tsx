@@ -132,9 +132,12 @@ export default function CRMPayoutsPage() {
         try {
             const periodKey = `${monthCursor.getFullYear()}-${String(monthCursor.getMonth() + 1).padStart(2, '0')}`
 
-            // Fetch validated referrals for this month
-            const firstDay = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1).toISOString().split('T')[0]
-            const lastDay = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).toISOString().split('T')[0]
+            // Fetch validated referrals for this month using local date parts to prevent timezone shifts
+            const year = monthCursor.getFullYear()
+            const month = monthCursor.getMonth()
+            const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`
+            const lastDayDate = new Date(year, month + 1, 0)
+            const lastDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`
 
             const isPartner = activeTab === 'partner'
             const payoutField = isPartner ? 'payout_id' : 'advisor_payout_id'
@@ -157,6 +160,7 @@ export default function CRMPayoutsPage() {
             if (isPartner) {
                 const partnerGroups: Record<string, { netAmount: number, grossAmount: number, refIds: string[], owner_id: string | null, issues_vat_invoice: boolean }> = {}
                 for (const r of refs || []) {
+                    if (!r.partner_id) continue
                     const partnerVat = r.crm_partners?.issues_vat_invoice === true
                     if (!partnerGroups[r.partner_id]) {
                         // @ts-ignore
@@ -268,7 +272,11 @@ export default function CRMPayoutsPage() {
 
     const openMarkPaid = (payout: ExtendedPayout) => {
         setSelectedPayout(payout)
-        setPaymentDate(new Date().toISOString().split('T')[0])
+        const today = new Date()
+        const y = today.getFullYear()
+        const m = String(today.getMonth() + 1).padStart(2, '0')
+        const d = String(today.getDate()).padStart(2, '0')
+        setPaymentDate(`${y}-${m}-${d}`)
         setPaymentMethod('Cash')
         setPaymentNotes('')
         setModalMode('markPaid')
