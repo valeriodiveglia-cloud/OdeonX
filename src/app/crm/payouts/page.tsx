@@ -22,6 +22,8 @@ interface ExtendedPayout extends CRMPayout {
         bank_account_name?: string
         bank_account_number?: string
         issues_vat_invoice?: boolean
+        partner_code?: string
+        owner_id?: string
         crm_agreements?: { commission_value: number; commission_type: string }[]
     } | null
 }
@@ -58,6 +60,7 @@ export default function CRMPayoutsPage() {
 
     const [currentUser, setCurrentUser] = useState<{ id: string, role?: string } | null>(null)
     const [accountsMap, setAccountsMap] = useState<Record<string, string>>({})
+    const [accountsEmailMap, setAccountsEmailMap] = useState<Record<string, string>>({})
     const [accountsDeductPitMap, setAccountsDeductPitMap] = useState<Record<string, boolean>>({})
 
     const fetchData = async () => {
@@ -93,6 +96,8 @@ export default function CRMPayoutsPage() {
                     bank_account_name,
                     bank_account_number,
                     issues_vat_invoice,
+                    partner_code,
+                    owner_id,
                     crm_agreements (
                         commission_value,
                         commission_type
@@ -119,14 +124,17 @@ export default function CRMPayoutsPage() {
 
         if (accountsRes.data) {
             const map: Record<string, string> = {}
+            const emailMap: Record<string, string> = {}
             const deductMap: Record<string, boolean> = {}
             for (const acc of accountsRes.data) {
                 if (acc.user_id) {
                     map[acc.user_id] = acc.name || acc.email || 'Unknown User'
+                    emailMap[acc.user_id] = acc.email || ''
                     deductMap[acc.user_id] = acc.deduct_pit !== false
                 }
             }
             setAccountsMap(map)
+            setAccountsEmailMap(emailMap)
             setAccountsDeductPitMap(deductMap)
         }
 
@@ -328,6 +336,9 @@ export default function CRMPayoutsPage() {
             const wb = new ExcelJS.Workbook()
             const ws = wb.addWorksheet('Minutes of Payment')
 
+            // Show grid lines
+            ws.views = [{ showGridLines: true }]
+
             // Determine Branch
             let branchName = 'Pasta Fresca Saigon'
             const loc = selectedPayout.crm_partners?.location?.toLowerCase() || ''
@@ -341,127 +352,352 @@ export default function CRMPayoutsPage() {
                 branchName = 'Pasta Fresca Da Lat'
             }
 
-            // Company Info
-            ws.addRow(['CÔNG TY TNHH RUSTICO']).font = { name: 'Arial', size: 14, bold: true }
-            ws.addRow([`BRANCH: ${branchName}`]).font = { name: 'Arial', size: 12, bold: true }
-            
-            let address = '28 Thảo Điền, Phường An Khánh, TP Hồ Chí Minh, Việt Nam'
+            let address = '28 Thảo Điền, Phường An Khánh, TP Thủ Đức, TP Hồ Chí Minh, Việt Nam'
             if (branchName === 'Pasta Fresca Da Lat') {
                 address = '03 Yersin, Phường 9, Đà Lạt, Lâm Đồng'
             } else if (branchName === 'Pasta Fresca Thanh My Loi') {
                 address = '49 Hà Huy Tập, Phường 3, Đà Lạt'
             }
-            ws.addRow([`Address: ${address}`]).font = { name: 'Arial', size: 10, italic: true }
-            ws.addRow([]) // Spacer
 
-            // Document Title
-            const titleRow = ws.addRow(['MINUTES OF PAYMENT / BIÊN BẢN THANH TOÁN'])
-            titleRow.font = { name: 'Arial', size: 16, bold: true }
-            titleRow.alignment = { horizontal: 'center' }
-            ws.addRow([]) // Spacer
-
-            // Beneficiary Header
-            ws.addRow(['1. BENEFICIARY INFORMATION / THÔNG TIN NGƯỜI NHẬN']).font = { name: 'Arial', size: 12, bold: true }
+            const fontName = 'Arial'
+            const [year, month] = selectedPayout.period.split('-')
             
+            const today = new Date()
+            const todayD = today.getDate().toString().padStart(2, '0')
+            const todayM = (today.getMonth() + 1).toString().padStart(2, '0')
+            const todayY = today.getFullYear()
+
+            // Styling colors
+            const yellowFill: any = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFFED7A' } // Professional soft pastel yellow
+            }
+
+            // Helper to add merged bilingual rows (5 columns)
+            const addMergedTitleRow = (
+                val: string, 
+                size = 11, 
+                bold = false, 
+                italic = false, 
+                color = '000000', 
+                align: 'center' | 'left' | 'right' | 'justify' | 'fill' | 'centerContinuous' | 'distributed' | undefined = 'center'
+            ) => {
+                const row = ws.addRow([val])
+                ws.mergeCells(row.number, 1, row.number, 5)
+                row.getCell(1).font = { name: fontName, size, bold, italic, color: { argb: 'FF' + color } }
+                row.getCell(1).alignment = { horizontal: align, vertical: 'middle' }
+                return row
+            }
+
+            // Headers
+            addMergedTitleRow('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', 11, true, false, '000000', 'center')
+            addMergedTitleRow('SOCIALIST REPUBLIC OF VIETNAM', 10, true, false, '334155', 'center')
+            addMergedTitleRow('Độc lập – Tự do – Hạnh phúc', 11, true, false, '000000', 'center')
+            addMergedTitleRow('Independence – Freedom – Happiness', 10, false, true, '334155', 'center')
+            addMergedTitleRow('─────────────', 10, false, false, '94A3B8', 'center')
+            ws.addRow([]) // Spacer
+
+            addMergedTitleRow('BIÊN BẢN XÁC NHẬN HOA HỒNG GIỚI THIỆU', 14, true, false, '1E293B', 'center')
+            addMergedTitleRow('MINUTES OF REFERRAL COMMISSION CONFIRMATION', 12, true, false, '1E293B', 'center')
+            addMergedTitleRow(`Số: ……/BB-GTKH/${year} – Kỳ thanh toán: Tháng ${month} năm ${year}`, 10, false, false, '475569', 'center')
+            addMergedTitleRow(`No.: ……/BB-GTKH/${year} – Payment period: Month ${month} Year ${year}`, 10, false, true, '475569', 'center')
+            ws.addRow([]) // Spacer
+
+            // Introduction text
+            const todayTextVi = `Hôm nay, ngày ${todayD} tháng ${todayM} năm ${todayY}, tại …………………………, căn cứ Hợp đồng hợp tác giới thiệu khách hàng số ……/HĐHT-GTKH/${todayY} ngày …………… (sau đây gọi là “Hợp đồng”), chúng tôi gồm:`
+            const todayTextEn = `Today, on ${todayD}/${todayM}/${todayY}, at ……………………………, pursuant to Customer Referral Cooperation Agreement No. ……/HDHT-GTKH/${todayY} dated …………… (the “Agreement”), the undersigned Parties are:`
+
+            const r10 = ws.addRow([todayTextVi])
+            ws.mergeCells(r10.number, 1, r10.number, 5)
+            r10.getCell(1).font = { name: fontName, size: 10 }
+            r10.getCell(1).alignment = { horizontal: 'left', wrapText: true }
+            r10.height = 30
+
+            const r11 = ws.addRow([todayTextEn])
+            ws.mergeCells(r11.number, 1, r11.number, 5)
+            r11.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
+            r11.getCell(1).alignment = { horizontal: 'left', wrapText: true }
+            r11.height = 30
+            ws.addRow([]) // Spacer
+
+            // Helper to add double-column or single-column detail row for parties (5 columns)
+            const addPartyRow = (labelVi: string, labelEn: string, value: string, valueCol2Vi = '', valueCol2En = '', value2 = '') => {
+                if (!valueCol2Vi) {
+                    const row = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', value])
+                    ws.mergeCells(row.number, 1, row.number, 2)
+                    ws.mergeCells(row.number, 3, row.number, 5)
+                    
+                    const labelCell = row.getCell(1)
+                    labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
+                    labelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+                    
+                    const valCell = row.getCell(3)
+                    valCell.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
+                    valCell.alignment = { horizontal: 'left', vertical: 'middle' }
+                    if (!value || value === 'Unknown' || value.trim() === '') {
+                        valCell.fill = yellowFill
+                        valCell.value = ''
+                    }
+                    row.height = 24
+                    return row
+                } else {
+                    const row = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', value, `- ${valueCol2Vi} / ${valueCol2En}:`, value2])
+                    ws.mergeCells(row.number, 1, row.number, 2)
+                    ws.mergeCells(row.number, 3, row.number, 3)
+                    ws.mergeCells(row.number, 5, row.number, 5)
+                    
+                    const labelCell = row.getCell(1)
+                    labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
+                    labelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+                    
+                    const valCell1 = row.getCell(3)
+                    valCell1.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
+                    valCell1.alignment = { horizontal: 'left', vertical: 'middle' }
+                    if (!value || value === 'Unknown' || value.trim() === '') {
+                        valCell1.fill = yellowFill
+                        valCell1.value = ''
+                    }
+
+                    const labelCell2 = row.getCell(4)
+                    labelCell2.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
+                    labelCell2.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+                    
+                    const valCell2 = row.getCell(5)
+                    valCell2.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
+                    valCell2.alignment = { horizontal: 'left', vertical: 'middle' }
+                    if (!value2 || value2 === 'Unknown' || value2.trim() === '') {
+                        valCell2.fill = yellowFill
+                        valCell2.value = ''
+                    }
+                    row.height = 24
+                    return row
+                }
+            }
+
+            // Party A
+            const rPartyAHeader = ws.addRow(['BÊN A: CÔNG TY TNHH RUSTICO / PARTY A: RUSTICO COMPANY LIMITED'])
+            ws.mergeCells(rPartyAHeader.number, 1, rPartyAHeader.number, 5)
+            rPartyAHeader.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
+            
+            addPartyRow('Mã số thuế', 'Tax ID', '0313797471')
+            addPartyRow('Đại diện', 'Representative', '', 'Chức vụ', 'Position', '')
+            addPartyRow('Địa chỉ', 'Address', address)
+            ws.addRow([]) // Spacer
+
+            // Resolve Party B details
             const isPartner = activeTab === 'partner'
+            let partnerName = 'Unknown'
+            let contactName = ''
+            let phone = ''
+            let email = ''
+            let bankName = ''
+            let bankAccountName = ''
+            let bankAccountNumber = ''
+            let referralCode = ''
+
             if (isPartner) {
                 const partner = selectedPayout.crm_partners
-                ws.addRow([`Name / Tên:`, partner?.name || 'Unknown'])
-                ws.addRow([`Type / Loại:`, partner?.type || 'Unknown'])
-                ws.addRow([`Contact Person / Người liên hệ:`, partner?.contact_name || 'N/A'])
-                ws.addRow([`Phone / Số điện thoại:`, partner?.phone || 'N/A'])
-                ws.addRow([`Email:`, partner?.email || 'N/A'])
-                ws.addRow([`Address / Địa chỉ:`, partner?.location || 'N/A'])
-                ws.addRow([`Bank / Ngân hàng:`, partner?.bank_name || 'N/A'])
-                ws.addRow([`Bank Account Name / Tên tài khoản:`, partner?.bank_account_name || 'N/A'])
-                ws.addRow([`Account Number / Số tài khoản:`, partner?.bank_account_number || 'N/A'])
-                ws.addRow([`Issues VAT Invoice / Xuất hóa đơn VAT:`, partner?.issues_vat_invoice ? 'Yes / Có' : 'No / Không'])
+                partnerName = partner?.name || 'Unknown'
+                contactName = partner?.contact_name || ''
+                phone = partner?.phone || ''
+                email = partner?.email || ''
+                bankName = partner?.bank_name || ''
+                bankAccountName = partner?.bank_account_name || ''
+                bankAccountNumber = partner?.bank_account_number || ''
+                referralCode = partner?.partner_code || partner?.owner_id || ''
             } else {
                 const advName = selectedPayout.sale_advisor_id ? accountsMap[selectedPayout.sale_advisor_id] || 'Unknown Advisor' : 'Unknown'
-                ws.addRow([`Name / Tên:`, advName])
-                ws.addRow([`Role / Vai trò:`, 'Sale Advisor / Nhân viên kinh doanh'])
+                partnerName = advName
+                contactName = 'N/A'
+                referralCode = selectedPayout.sale_advisor_id || ''
+                email = selectedPayout.sale_advisor_id ? accountsEmailMap[selectedPayout.sale_advisor_id] || '' : ''
             }
+
+            // Party B
+            const rPartyBHeader = ws.addRow([`BÊN B: ${partnerName.toUpperCase()} / PARTY B: ${partnerName.toUpperCase()}`])
+            ws.mergeCells(rPartyBHeader.number, 1, rPartyBHeader.number, 5)
+            rPartyBHeader.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
+
+            addPartyRow('Mã số thuế / CCCD', 'Tax ID / Citizen ID', '')
+            addPartyRow('Đại diện (nếu là tổ chức)', 'Representative (if entity)', contactName, 'Chức vụ', 'Position', '')
+            addPartyRow('Số tài khoản', 'Bank Account No.', bankAccountNumber, 'Tại Ngân hàng', 'at Bank', bankName)
+            addPartyRow('Mã giới thiệu', 'Referral Code', referralCode)
             ws.addRow([]) // Spacer
 
-            // Payout Details Header
-            ws.addRow(['2. PAYOUT DETAILS / CHI TIẾT THANH TOÁN']).font = { name: 'Arial', size: 12, bold: true }
-            ws.addRow([`Payout ID / Mã thanh toán:`, selectedPayout.id])
-            ws.addRow([`Period / Kỳ thanh toán:`, `${selectedPayout.period.split('-')[1]}/${selectedPayout.period.split('-')[0]}`])
-            ws.addRow([`Status / Trạng thái:`, selectedPayout.status])
-            ws.addRow([`Date Exported / Ngày xuất file:`, new Date().toLocaleDateString('en-GB')])
+            // Transition text
+            const rTransVi = ws.addRow([`Hai Bên cùng tiến hành đối chiếu, xác nhận số liệu hoa hồng giới thiệu phát sinh trong tháng ${month} năm ${year} như sau:`])
+            ws.mergeCells(rTransVi.number, 1, rTransVi.number, 5)
+            rTransVi.getCell(1).font = { name: fontName, size: 10 }
+
+            const rTransEn = ws.addRow([`The Parties jointly reconcile and confirm the referral commission figures arising in Month ${month} Year ${year} as follows:`])
+            ws.mergeCells(rTransEn.number, 1, rTransEn.number, 5)
+            rTransEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
             ws.addRow([]) // Spacer
 
-            // Transactions Header
-            ws.addRow(['3. TRANSACTIONS LIST / DANH SÁCH GIAO DỊCH']).font = { name: 'Arial', size: 12, bold: true }
-            
-            // Add Table Headers
-            const headers = [
-                'Ref / Tham chiếu',
-                'Date / Ngày',
-                'Guest Name / Tên khách',
-                'Guest Contact / Liên hệ',
-                'Pax / Số khách',
-                'Total Bill / Tổng hóa đơn',
-                'Comm. Rate / Tỷ lệ hoa hồng',
-                'Gross Comm. / Hoa hồng gộp'
-            ]
-            const headerRow = ws.addRow(headers)
-            headerRow.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } }
-            headerRow.eachCell(cell => {
-                cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FF1E293B' } // Slate-800
+            // Section I - Table of Invoices
+            const rSec1Header1 = ws.addRow(['I. DANH SÁCH HÓA ĐƠN PHÁT SINH TỪ MÃ GIỚI THIỆU CỦA BÊN B'])
+            ws.mergeCells(rSec1Header1.number, 1, rSec1Header1.number, 5)
+            rSec1Header1.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
+
+            const rSec1Header2 = ws.addRow(['I. LIST OF INVOICES GENERATED FROM PARTY B’S REFERRAL CODE'])
+            ws.mergeCells(rSec1Header2.number, 1, rSec1Header2.number, 5)
+            rSec1Header2.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
+
+            // Determine commission rate for headers
+            let commRateText = '10%'
+            if (receiptReferrals.length > 0) {
+                const r = receiptReferrals[0]
+                const gross = isPartner 
+                    ? (selectedPayout.crm_partners?.issues_vat_invoice === false ? Number(r.commission_value) / 0.9 : Number(r.commission_value)) 
+                    : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id] ? Number(r.advisor_commission_value) / 0.9 : Number(r.advisor_commission_value))
+                const pct = r.revenue_generated > 0 ? (gross / r.revenue_generated) * 100 : 0
+                if (pct > 0) {
+                    commRateText = pct % 1 === 0 ? pct.toFixed(0) + '%' : pct.toFixed(1) + '%'
                 }
-                cell.alignment = { horizontal: 'center' }
-            })
+            }
 
-            // Calculations variables
+            const tableHeadersVi = [
+                'STT',
+                'Ngày',
+                'Mã tham chiếu',
+                'Giá trị HĐ (VNĐ, chưa VAT)',
+                `Hoa hồng ${commRateText} (VNĐ)`
+            ]
+            const tableHeadersEn = [
+                'No.',
+                'Date',
+                'Reference number',
+                'Invoice value (VND, ex-VAT)',
+                `Commission ${commRateText} (VND)`
+            ]
+
+            const rHeaderVi = ws.addRow(tableHeadersVi);
+            const rHeaderEn = ws.addRow(tableHeadersEn);
+
+            // Format headers
+            [rHeaderVi, rHeaderEn].forEach((row: any) => {
+                row.font = { name: fontName, size: 9.5, bold: true, color: { argb: 'FFFFFFFF' } }
+                row.eachCell((cell: any) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF1E293B' } // Slate-800
+                    }
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' }
+                })
+            });
+            rHeaderVi.height = 20
+            rHeaderEn.height = 20
+
+            // Fill transactions data
             const issuesVat = isPartner ? selectedPayout.crm_partners?.issues_vat_invoice === true : false
             const deductPit = isPartner ? !issuesVat : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id])
-            
+
             let totalRevenue = 0
             let totalGross = 0
-            let totalPax = 0
 
-            // Add Data Rows
-            receiptReferrals.forEach(r => {
+            receiptReferrals.forEach((r, idx) => {
                 const gross = isPartner 
                     ? (selectedPayout.crm_partners?.issues_vat_invoice === false ? Number(r.commission_value) / 0.9 : Number(r.commission_value)) 
                     : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id] ? Number(r.advisor_commission_value) / 0.9 : Number(r.advisor_commission_value))
                 
-                const pct = r.revenue_generated > 0 ? (gross / r.revenue_generated) : 0
-
                 totalRevenue += Number(r.revenue_generated || 0)
                 totalGross += gross
-                totalPax += Number(r.party_size || 0)
+
+                const dateStr = new Date(r.created_at).toLocaleDateString('en-GB')
 
                 const row = ws.addRow([
+                    idx + 1,
+                    dateStr,
                     r.id.split('-')[0].toUpperCase(),
-                    new Date(r.created_at).toLocaleDateString('en-GB') + ' ' + new Date(r.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                    r.guest_name || 'N/A',
-                    r.guest_contact || 'N/A',
-                    r.party_size,
                     Number(r.revenue_generated),
-                    pct,
                     gross
                 ])
 
-                row.getCell(1).alignment = { horizontal: 'center' }
-                row.getCell(2).alignment = { horizontal: 'center' }
-                row.getCell(5).alignment = { horizontal: 'right' }
-                row.getCell(6).alignment = { horizontal: 'right' }
-                row.getCell(6).numFmt = '#,##0'
-                row.getCell(7).alignment = { horizontal: 'right' }
-                row.getCell(7).numFmt = '0.0%'
-                row.getCell(8).alignment = { horizontal: 'right' }
-                row.getCell(8).numFmt = '#,##0'
+                row.height = 22
+                row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+                row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }
+                row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }
+                row.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
+                row.getCell(4).numFmt = '#,##0'
+                row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }
+                row.getCell(5).numFmt = '#,##0'
+                
+                row.eachCell(cell => {
+                    cell.font = { name: fontName, size: 10 }
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                        bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                        right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+                    }
+                })
             })
 
-            // Spacer before totals
-            ws.addRow([])
+            // Totals Row
+            const rTotal = ws.addRow([
+                'TỔNG CỘNG / TOTAL',
+                '',
+                '',
+                totalRevenue,
+                totalGross
+            ])
+            ws.mergeCells(rTotal.number, 1, rTotal.number, 3)
+            rTotal.height = 24
+            rTotal.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+            rTotal.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
+            rTotal.getCell(4).numFmt = '#,##0'
+            rTotal.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }
+            rTotal.getCell(5).numFmt = '#,##0'
+            
+            rTotal.eachCell(cell => {
+                cell.font = { name: fontName, size: 10, bold: true }
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFF1F5F9' } // Slate-100
+                }
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+                    bottom: { style: 'double', color: { argb: 'FF94A3B8' } },
+                    left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                    right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+                }
+            })
+            ws.addRow([]) // Spacer
 
-            // Summary Info
+            // Format total text summary rows
+            const formatVND = (val: number) => {
+                return new Intl.NumberFormat('vi-VN').format(Math.round(val)) + ' VNĐ'
+            }
+
+            const rTotalInvoiceTextVi = ws.addRow([`Tổng giá trị hóa đơn phát sinh trong kỳ (chưa bao gồm VAT): ${formatVND(totalRevenue)}`])
+            ws.mergeCells(rTotalInvoiceTextVi.number, 1, rTotalInvoiceTextVi.number, 5)
+            rTotalInvoiceTextVi.getCell(1).font = { name: fontName, size: 10 }
+
+            const rTotalInvoiceTextEn = ws.addRow([`Total invoice value during the period (excluding VAT): ${formatVND(totalRevenue)}`])
+            ws.mergeCells(rTotalInvoiceTextEn.number, 1, rTotalInvoiceTextEn.number, 5)
+            rTotalInvoiceTextEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
+
+            const rTotalCommTextVi = ws.addRow([`Tổng hoa hồng giới thiệu phải trả cho Bên B (${commRateText}): ${formatVND(totalGross)}`])
+            ws.mergeCells(rTotalCommTextVi.number, 1, rTotalCommTextVi.number, 5)
+            rTotalCommTextVi.getCell(1).font = { name: fontName, size: 10, bold: true }
+
+            const rTotalCommTextEn = ws.addRow([`Total referral commission payable to Party B (${commRateText}): ${formatVND(totalGross)}`])
+            ws.mergeCells(rTotalCommTextEn.number, 1, rTotalCommTextEn.number, 5)
+            rTotalCommTextEn.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
+            ws.addRow([]) // Spacer
+
+            // Section II - Tax Method
+            const rSec2Header1 = ws.addRow(['II. PHƯƠNG THỨC XỬ LÝ CHỨNG TỪ THUẾ'])
+            ws.mergeCells(rSec2Header1.number, 1, rSec2Header1.number, 5)
+            rSec2Header1.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
+
+            const rSec2Header2 = ws.addRow(['II. TAX DOCUMENTATION METHOD'])
+            ws.mergeCells(rSec2Header2.number, 1, rSec2Header2.number, 5)
+            rSec2Header2.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
+
             const netAmount = Number(selectedPayout.amount)
             const pitWasDeducted = Math.abs(netAmount - receiptReferrals.reduce((sum, r) => sum + Number((isPartner ? r.commission_value : r.advisor_commission_value) || 0), 0)) < 10
 
@@ -486,33 +722,88 @@ export default function CRMPayoutsPage() {
                 finalGross = finalNet
             }
 
-            // Summary rows
-            const grossRow = ws.addRow(['', '', '', '', '', '', 'Total Gross Commission / Tổng hoa hồng gộp:', finalGross])
-            grossRow.font = { name: 'Arial', size: 10, bold: true }
-            grossRow.getCell(8).numFmt = '#,##0'
+            if (issuesVat) {
+                // CASE 1 Header
+                const rCase1Vi = ws.addRow(['Bên B xuất hóa đơn (theo Khoản 4.1 Hợp đồng)'])
+                ws.mergeCells(rCase1Vi.number, 1, rCase1Vi.number, 5)
+                rCase1Vi.getCell(1).font = { name: fontName, size: 10, bold: true }
 
-            const pitRow = ws.addRow(['', '', '', '', '', '', `PIT Deduction / Khấu trừ thuế TNCN (${pitRate * 100}%):`, -pitAmount])
-            pitRow.font = { name: 'Arial', size: 10, bold: true, color: { argb: pitAmount > 0 ? 'FFFF0000' : 'FF000000' } }
-            pitRow.getCell(8).numFmt = '#,##0'
+                const rCase1En = ws.addRow(['Party B issues invoice (under Clause 4.1 of the Agreement)'])
+                ws.mergeCells(rCase1En.number, 1, rCase1En.number, 5)
+                rCase1En.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
+                ws.addRow([]) // Spacer
 
-            const netRow = ws.addRow(['', '', '', '', '', '', 'Net Payable / Thực nhận (Net):', finalNet])
-            netRow.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FF15803D' } }
-            netRow.getCell(8).numFmt = '#,##0'
-
-            // Format borders for data table
-            let inTable = false
-            ws.eachRow((row, rowNumber) => {
-                const firstVal = row.getCell(1).value
-                if (firstVal === '3. TRANSACTIONS LIST / DANH SÁCH GIAO DỊCH') {
-                    inTable = true
-                    return
-                }
-                if (inTable) {
-                    if (!row.getCell(1).value && !row.getCell(5).value) {
-                        inTable = false
-                        return
+                // CASE 1 Sub-fields
+                const addCase1Field = (labelVi: string, labelEn: string, val: string, isPrefilled = false) => {
+                    const r = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', val])
+                    ws.mergeCells(r.number, 1, r.number, 2)
+                    ws.mergeCells(r.number, 3, r.number, 5)
+                    
+                    const labelCell = r.getCell(1)
+                    labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
+                    labelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+                    
+                    const valCell = r.getCell(3)
+                    valCell.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
+                    valCell.alignment = { horizontal: 'left', vertical: 'middle' }
+                    if (!isPrefilled) {
+                        valCell.fill = yellowFill
+                        valCell.value = '' // empty value highlighted in yellow
                     }
-                    row.eachCell(cell => {
+                    r.height = 24
+                }
+
+                addCase1Field('Số hóa đơn', 'Invoice number', '')
+                addCase1Field('Ngày lập', 'Issue date', '')
+                addCase1Field('Ký hiệu', 'Serial', '')
+                addCase1Field('Giá trị hóa đơn (chưa VAT)', 'Invoice value (ex-VAT)', formatVND(finalNet), true)
+                addCase1Field('VAT (nếu có)', 'VAT (if any)', '')
+                addCase1Field('Tổng giá trị hóa đơn', 'Total invoice value', '')
+                ws.addRow([]) // Spacer
+
+                const rCase1FootVi = ws.addRow(['Bên A sẽ chuyển khoản số tiền theo hóa đơn cho Bên B trong vòng 05 (năm) ngày làm việc kể từ ngày nhận được hóa đơn hợp lệ.'])
+                ws.mergeCells(rCase1FootVi.number, 1, rCase1FootVi.number, 5)
+                rCase1FootVi.getCell(1).font = { name: fontName, size: 10 }
+                rCase1FootVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'middle' }
+                rCase1FootVi.height = 32
+
+                const rCase1FootEn = ws.addRow(['Party A shall transfer the invoice amount to Party B within 5 (five) working days from receipt of the valid invoice.'])
+                ws.mergeCells(rCase1FootEn.number, 1, rCase1FootEn.number, 5)
+                rCase1FootEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
+                rCase1FootEn.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'middle' }
+                rCase1FootEn.height = 32
+                ws.addRow([]) // Spacer
+            } else {
+                // CASE 2 Header
+                const rCase2Vi = ws.addRow(['Bên A khấu trừ 10% thuế TNCN tại nguồn (theo Khoản 4.2 Hợp đồng)'])
+                ws.mergeCells(rCase2Vi.number, 1, rCase2Vi.number, 5)
+                rCase2Vi.getCell(1).font = { name: fontName, size: 10, bold: true }
+
+                const rCase2En = ws.addRow(['Party A withholds 10% PIT at source (under Clause 4.2 of the Agreement)'])
+                ws.mergeCells(rCase2En.number, 1, rCase2En.number, 5)
+                rCase2En.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
+                ws.addRow([]) // Spacer
+
+                // Table for A, B, C calculations:
+                const addCase2Row = (labelLetter: string, labelVi: string, labelEn: string, valStr: string) => {
+                    const r = ws.addRow([
+                        `   ${labelLetter}`,
+                        `${labelVi}\n   ${labelEn}`,
+                        '', '', 
+                        valStr
+                    ])
+                    ws.mergeCells(r.number, 2, r.number, 4) // Merges Columns 2, 3, 4 (leaving Column 5 for values)
+                    const approxLinesVi = Math.ceil(labelVi.length / 70)
+                    const approxLinesEn = Math.ceil(labelEn.length / 70)
+                    r.height = Math.max(45, (approxLinesVi + approxLinesEn) * 16)
+                    r.getCell(1).font = { name: fontName, size: 10, bold: true }
+                    r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+                    r.getCell(2).font = { name: fontName, size: 9.5, color: { argb: 'FF475569' } }
+                    r.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+                    r.getCell(5).font = { name: fontName, size: 10, bold: true }
+                    r.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }
+                    
+                    r.eachCell(cell => {
                         cell.border = {
                             top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
                             bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
@@ -520,21 +811,183 @@ export default function CRMPayoutsPage() {
                             right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
                         }
                     })
+                    return r
                 }
+
+                const valA = formatVND(finalGross)
+                
+                let labelBVi = 'Khấu trừ thuế TNCN 10% (theo Điểm i Khoản 1 Điều 25 Thông tư 111/2013/TT-BTC)'
+                let labelBEn = '10% PIT withholding (per Point i, Clause 1, Article 25 of Circular 111/2013/TT-BTC)'
+                let valB = ''
+
+                if (pitWasDeducted) {
+                    valB = `(${formatVND(pitAmount)})`
+                } else {
+                    labelBVi = 'Khấu trừ thuế TNCN 10% (Dưới ngưỡng / Below threshold) (theo Điểm i Khoản 1 Điều 25 Thông tư 111/2013/TT-BTC)'
+                    labelBEn = '10% PIT withholding (Below threshold) (per Point i, Clause 1, Article 25 of Circular 111/2013/TT-BTC)'
+                    valB = '0 VNĐ'
+                }
+                
+                const valC = formatVND(finalNet)
+
+                addCase2Row(
+                    '(A)', 
+                    'Hoa hồng trước thuế (10% × Tổng giá trị hóa đơn)', 
+                    'Pre-tax commission (10% × Total invoice value)', 
+                    valA
+                )
+                addCase2Row(
+                    '(B)', 
+                    labelBVi, 
+                    labelBEn, 
+                    valB
+                )
+                const rNet = addCase2Row(
+                    '(C)', 
+                    'SỐ TIỀN THỰC NHẬN CỦA BÊN B (A − B)', 
+                    'NET AMOUNT PAYABLE TO PARTY B (A − B)', 
+                    valC
+                )
+                rNet.getCell(5).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF16803D' } } // Green for net amount
+                ws.addRow([]) // Spacer
+
+                const rCase2FootVi = ws.addRow(['Bên A sẽ cấp Chứng từ khấu trừ thuế TNCN cho Bên B và chuyển khoản số tiền thực nhận trong vòng 05 (năm) ngày làm việc kể từ ngày ký Biên bản này.'])
+                ws.mergeCells(rCase2FootVi.number, 1, rCase2FootVi.number, 5)
+                rCase2FootVi.getCell(1).font = { name: fontName, size: 10 }
+                rCase2FootVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'middle' }
+                rCase2FootVi.height = 32
+
+                const rCase2FootEn = ws.addRow(['Party A shall issue a PIT Withholding Certificate to Party B and transfer the net amount within 5 (five) working days from the signing of these Minutes.'])
+                ws.mergeCells(rCase2FootEn.number, 1, rCase2FootEn.number, 5)
+                rCase2FootEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
+                rCase2FootEn.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'middle' }
+                rCase2FootEn.height = 32
+                ws.addRow([]) // Spacer
+            }
+
+            // Exemption detail/general note
+            if (selectedPayout.notes) {
+                const rNotesVi = ws.addRow([`* Ghi chú / Notes: ${selectedPayout.notes}`])
+                ws.mergeCells(rNotesVi.number, 1, rNotesVi.number, 5)
+                rNotesVi.getCell(1).font = { name: fontName, size: 9.5, italic: true, color: { argb: 'FF475569' } }
+                rNotesVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'top' }
+                
+                const approxLines = Math.ceil((selectedPayout.notes.length + 18) / 80)
+                rNotesVi.height = Math.max(20, approxLines * 16)
+                ws.addRow([]) // Spacer
+            }
+
+            // Section III - Confirmations and Commitments
+            const rSec3Header1 = ws.addRow(['III. XÁC NHẬN VÀ CAM KẾT CỦA HAI BÊN'])
+            ws.mergeCells(rSec3Header1.number, 1, rSec3Header1.number, 5)
+            rSec3Header1.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
+
+            const rSec3Header2 = ws.addRow(['III. CONFIRMATIONS AND COMMITMENTS OF THE PARTIES'])
+            ws.mergeCells(rSec3Header2.number, 1, rSec3Header2.number, 5)
+            rSec3Header2.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
+            ws.addRow([]) // Spacer
+
+            const commitments = [
+                {
+                    vi: '3.1. Hai Bên xác nhận các số liệu nêu tại Mục I là chính xác, đúng với phát sinh thực tế trong kỳ và đúng với số liệu do hệ thống phần mềm của Bên A tự động ghi nhận.',
+                    en: '3.1. The Parties confirm that the figures stated in Section I are accurate, consistent with actual transactions during the period and consistent with the data automatically recorded by Party A’s software system.'
+                },
+                {
+                    vi: '3.2. Sau khi ký Biên bản này, Bên B không có quyền khiếu nại về số liệu của kỳ thanh toán nêu trên, trừ trường hợp phát hiện sai sót do nguyên nhân kỹ thuật của hệ thống và được Bên A xác nhận bằng văn bản.',
+                    en: '3.2. Upon signing these Minutes, Party B shall not have the right to dispute the figures for the above payment period, except where errors caused by system technical issues are identified and confirmed by Party A in writing.'
+                },
+                {
+                    vi: '3.3. Đối với Trường hợp 1, Bên B cam kết hóa đơn đã xuất là hóa đơn hợp lệ theo quy định của Nghị định 123/2020/NĐ-CP và Thông tư 78/2021/TT-BTC. Bên B chịu hoàn toàn trách nhiệm về tính hợp pháp của hóa đơn và thực hiện đầy đủ nghĩa vụ kê khai, nộp thuế đối với khoản hoa hồng nhận được.',
+                    en: '3.3. For Case 1, Party B warrants that the issued invoice is valid under Decree No. 123/2020/ND-CP and Circular No. 78/2021/TT-BTC. Party B is fully responsible for the legality of the invoice and shall fully comply with declaration and tax payment obligations on the commission received.'
+                },
+                {
+                    vi: '3.4. Đối với Trường hợp 2, Bên A khấu trừ 10% thuế TNCN tại nguồn và cấp Chứng từ khấu trừ thuế TNCN cho Bên B. Bên B có trách nhiệm tự thực hiện quyết toán thuế TNCN cuối năm theo quy định pháp luật.',
+                    en: '3.4. For Case 2, Party A withholds 10% PIT at source and issues a PIT Withholding Certificate to Party B. Party B is responsible for performing year-end PIT finalization in accordance with applicable law.'
+                },
+                {
+                    vi: '3.5. Trường hợp cơ quan thuế truy thu, xử phạt hoặc tính lãi chậm nộp đối với Bên A do nguyên nhân từ hóa đơn không hợp lệ hoặc từ việc Bên B không thực hiện đúng nghĩa vụ thuế, Bên B có nghĩa vụ hoàn trả toàn bộ cho Bên A theo quy định tại Khoản 4.4 Hợp đồng.',
+                    en: '3.5. If the tax authority imposes any tax assessment, penalty or late-payment interest on Party A due to invalid invoices or Party B’s failure to comply with tax obligations, Party B shall fully indemnify Party A under Clause 4.4 of the Agreement.'
+                },
+                {
+                    vi: '3.6. Biên bản này là chứng từ kế toán e là một phần không tách rời của Hợp đồng. Biên bản được lập thành 02 (hai) bản tiếng Việt – Anh có giá trị pháp lý ngang nhau, mỗi Bên giữ 01 (một) bản. Trường hợp có khác biệt giữa hai ngôn ngữ, bản tiếng Việt được ưu tiên áp dụng.',
+                    en: '3.6. These Minutes constitute an accounting record and are an integral part of the Agreement. They are made in 2 (two) Vietnamese–English copies of equal legal validity, with each Party keeping 1 (one) copy. In case of discrepancy, the Vietnamese version shall prevail.'
+                }
+            ]
+
+            commitments.forEach(item => {
+                const rVi = ws.addRow([item.vi])
+                ws.mergeCells(rVi.number, 1, rVi.number, 5)
+                rVi.getCell(1).font = { name: fontName, size: 9.5 }
+                rVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'top' }
+                
+                const rEn = ws.addRow([item.en])
+                ws.mergeCells(rEn.number, 1, rEn.number, 5)
+                rEn.getCell(1).font = { name: fontName, size: 9.5, italic: true, color: { argb: 'FF475569' } }
+                rEn.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'top' }
+                
+                const approxLinesVi = Math.ceil(item.vi.length / 80)
+                const approxLinesEn = Math.ceil(item.en.length / 80)
+                rVi.height = Math.max(16, approxLinesVi * 16)
+                rEn.height = Math.max(16, approxLinesEn * 16)
+                ws.addRow([]) // Spacer
             })
 
-            // Auto-fit columns
-            ws.columns.forEach(col => {
-                let maxLen = 0
-                col.eachCell?.({ includeEmpty: true }, cell => {
-                    const val = cell.value
-                    if (val) {
-                        const len = String(val).length
-                        if (len > maxLen) maxLen = len
-                    }
-                })
-                col.width = Math.min(Math.max(maxLen + 3, 12), 40)
-            })
+            // Signatures
+            const rSig1 = ws.addRow([
+                'ĐẠI DIỆN BÊN A', '', '',
+                'ĐẠI DIỆN BÊN B'
+            ])
+            ws.mergeCells(rSig1.number, 1, rSig1.number, 2)
+            ws.mergeCells(rSig1.number, 4, rSig1.number, 5)
+            rSig1.getCell(1).font = { name: fontName, size: 10, bold: true }
+            rSig1.getCell(1).alignment = { horizontal: 'center' }
+            rSig1.getCell(4).font = { name: fontName, size: 10, bold: true }
+            rSig1.getCell(4).alignment = { horizontal: 'center' }
+
+            const rSig2 = ws.addRow([
+                'ON BEHALF OF PARTY A', '', '',
+                'ON BEHALF OF PARTY B'
+            ])
+            ws.mergeCells(rSig2.number, 1, rSig2.number, 2)
+            ws.mergeCells(rSig2.number, 4, rSig2.number, 5)
+            rSig2.getCell(1).font = { name: fontName, size: 9.5, bold: true, italic: true, color: { argb: 'FF475569' } }
+            rSig2.getCell(1).alignment = { horizontal: 'center' }
+            rSig2.getCell(4).font = { name: fontName, size: 9.5, bold: true, italic: true, color: { argb: 'FF475569' } }
+            rSig2.getCell(4).alignment = { horizontal: 'center' }
+
+            const rSig3 = ws.addRow([
+                '(Ký, ghi rõ họ tên, đóng dấu)', '', '',
+                '(Ký, ghi rõ họ tên, đóng dấu nếu có)'
+            ])
+            ws.mergeCells(rSig3.number, 1, rSig3.number, 2)
+            ws.mergeCells(rSig3.number, 4, rSig3.number, 5)
+            rSig3.getCell(1).font = { name: fontName, size: 9, italic: true, color: { argb: 'FF64748B' } }
+            rSig3.getCell(1).alignment = { horizontal: 'center' }
+            rSig3.getCell(4).font = { name: fontName, size: 9, italic: true, color: { argb: 'FF64748B' } }
+            rSig3.getCell(4).alignment = { horizontal: 'center' }
+
+            const rSig4 = ws.addRow([
+                '(Signature, full name, stamp)', '', '',
+                '(Signature, full name, stamp if any)'
+            ])
+            ws.mergeCells(rSig4.number, 1, rSig4.number, 2)
+            ws.mergeCells(rSig4.number, 4, rSig4.number, 5)
+            rSig4.getCell(1).font = { name: fontName, size: 8.5, italic: true, color: { argb: 'FF64748B' } }
+            rSig4.getCell(1).alignment = { horizontal: 'center' }
+            rSig4.getCell(4).font = { name: fontName, size: 8.5, italic: true, color: { argb: 'FF64748B' } }
+            rSig4.getCell(4).alignment = { horizontal: 'center' }
+
+            // Add spaces for signing
+            for (let s = 0; s < 5; s++) {
+                ws.addRow([])
+            }
+
+            // Set explicit column widths
+            ws.getColumn(1).width = 10
+            ws.getColumn(2).width = 20
+            ws.getColumn(3).width = 26
+            ws.getColumn(4).width = 30
+            ws.getColumn(5).width = 30
 
             // Generate file
             const buf = await wb.xlsx.writeBuffer()
