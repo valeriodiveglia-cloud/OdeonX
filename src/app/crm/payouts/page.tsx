@@ -62,6 +62,7 @@ export default function CRMPayoutsPage() {
     const [accountsMap, setAccountsMap] = useState<Record<string, string>>({})
     const [accountsEmailMap, setAccountsEmailMap] = useState<Record<string, string>>({})
     const [accountsDeductPitMap, setAccountsDeductPitMap] = useState<Record<string, boolean>>({})
+    const [accountsReferralCodeMap, setAccountsReferralCodeMap] = useState<Record<string, string>>({})
 
     const fetchData = async () => {
         setLoading(true)
@@ -112,7 +113,7 @@ export default function CRMPayoutsPage() {
 
         const [payoutsRes, accountsRes] = await Promise.all([
             query,
-            supabase.from('app_accounts').select('user_id, name, email, deduct_pit')
+            supabase.from('app_accounts').select('user_id, name, email, deduct_pit, referral_code')
         ])
 
         if (payoutsRes.error) {
@@ -126,16 +127,19 @@ export default function CRMPayoutsPage() {
             const map: Record<string, string> = {}
             const emailMap: Record<string, string> = {}
             const deductMap: Record<string, boolean> = {}
+            const refCodeMap: Record<string, string> = {}
             for (const acc of accountsRes.data) {
                 if (acc.user_id) {
                     map[acc.user_id] = acc.name || acc.email || 'Unknown User'
                     emailMap[acc.user_id] = acc.email || ''
                     deductMap[acc.user_id] = acc.deduct_pit !== false
+                    refCodeMap[acc.user_id] = acc.referral_code || ''
                 }
             }
             setAccountsMap(map)
             setAccountsEmailMap(emailMap)
             setAccountsDeductPitMap(deductMap)
+            setAccountsReferralCodeMap(refCodeMap)
         }
 
         setLoading(false)
@@ -374,7 +378,7 @@ export default function CRMPayoutsPage() {
                 fgColor: { argb: 'FFFFED7A' } // Professional soft pastel yellow
             }
 
-            // Helper to add merged bilingual rows (5 columns)
+            // Helper to add merged bilingual rows (6 columns)
             const addMergedTitleRow = (
                 val: string, 
                 size = 11, 
@@ -384,7 +388,7 @@ export default function CRMPayoutsPage() {
                 align: 'center' | 'left' | 'right' | 'justify' | 'fill' | 'centerContinuous' | 'distributed' | undefined = 'center'
             ) => {
                 const row = ws.addRow([val])
-                ws.mergeCells(row.number, 1, row.number, 5)
+                ws.mergeCells(row.number, 1, row.number, 6)
                 row.getCell(1).font = { name: fontName, size, bold, italic, color: { argb: 'FF' + color } }
                 row.getCell(1).alignment = { horizontal: align, vertical: 'middle' }
                 return row
@@ -409,24 +413,24 @@ export default function CRMPayoutsPage() {
             const todayTextEn = `Today, on ${todayD}/${todayM}/${todayY}, at ……………………………, pursuant to Customer Referral Cooperation Agreement No. ……/HDHT-GTKH/${todayY} dated …………… (the “Agreement”), the undersigned Parties are:`
 
             const r10 = ws.addRow([todayTextVi])
-            ws.mergeCells(r10.number, 1, r10.number, 5)
+            ws.mergeCells(r10.number, 1, r10.number, 6)
             r10.getCell(1).font = { name: fontName, size: 10 }
             r10.getCell(1).alignment = { horizontal: 'left', wrapText: true }
             r10.height = 30
 
             const r11 = ws.addRow([todayTextEn])
-            ws.mergeCells(r11.number, 1, r11.number, 5)
+            ws.mergeCells(r11.number, 1, r11.number, 6)
             r11.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
             r11.getCell(1).alignment = { horizontal: 'left', wrapText: true }
             r11.height = 30
             ws.addRow([]) // Spacer
 
-            // Helper to add double-column or single-column detail row for parties (5 columns)
+            // Helper to add double-column or single-column detail row for parties (6 columns)
             const addPartyRow = (labelVi: string, labelEn: string, value: string, valueCol2Vi = '', valueCol2En = '', value2 = '') => {
                 if (!valueCol2Vi) {
                     const row = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', value])
                     ws.mergeCells(row.number, 1, row.number, 2)
-                    ws.mergeCells(row.number, 3, row.number, 5)
+                    ws.mergeCells(row.number, 3, row.number, 6)
                     
                     const labelCell = row.getCell(1)
                     labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
@@ -445,7 +449,7 @@ export default function CRMPayoutsPage() {
                     const row = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', value, `- ${valueCol2Vi} / ${valueCol2En}:`, value2])
                     ws.mergeCells(row.number, 1, row.number, 2)
                     ws.mergeCells(row.number, 3, row.number, 3)
-                    ws.mergeCells(row.number, 5, row.number, 5)
+                    ws.mergeCells(row.number, 5, row.number, 6)
                     
                     const labelCell = row.getCell(1)
                     labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
@@ -463,7 +467,7 @@ export default function CRMPayoutsPage() {
                     labelCell2.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
                     labelCell2.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
                     
-                    const valCell2 = row.getCell(5)
+                    const valCell2 = row.getCell(6)
                     valCell2.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
                     valCell2.alignment = { horizontal: 'left', vertical: 'middle' }
                     if (!value2 || value2 === 'Unknown' || value2.trim() === '') {
@@ -477,7 +481,7 @@ export default function CRMPayoutsPage() {
 
             // Party A
             const rPartyAHeader = ws.addRow(['BÊN A: CÔNG TY TNHH RUSTICO / PARTY A: RUSTICO COMPANY LIMITED'])
-            ws.mergeCells(rPartyAHeader.number, 1, rPartyAHeader.number, 5)
+            ws.mergeCells(rPartyAHeader.number, 1, rPartyAHeader.number, 6)
             rPartyAHeader.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
             
             addPartyRow('Mã số thuế', 'Tax ID', '0313797471')
@@ -505,18 +509,18 @@ export default function CRMPayoutsPage() {
                 bankName = partner?.bank_name || ''
                 bankAccountName = partner?.bank_account_name || ''
                 bankAccountNumber = partner?.bank_account_number || ''
-                referralCode = partner?.partner_code || partner?.owner_id || ''
+                referralCode = partner?.partner_code || (partner?.owner_id ? accountsReferralCodeMap[partner.owner_id] : '') || ''
             } else {
                 const advName = selectedPayout.sale_advisor_id ? accountsMap[selectedPayout.sale_advisor_id] || 'Unknown Advisor' : 'Unknown'
                 partnerName = advName
                 contactName = 'N/A'
-                referralCode = selectedPayout.sale_advisor_id || ''
+                referralCode = selectedPayout.sale_advisor_id ? accountsReferralCodeMap[selectedPayout.sale_advisor_id] || '' : ''
                 email = selectedPayout.sale_advisor_id ? accountsEmailMap[selectedPayout.sale_advisor_id] || '' : ''
             }
 
             // Party B
             const rPartyBHeader = ws.addRow([`BÊN B: ${partnerName.toUpperCase()} / PARTY B: ${partnerName.toUpperCase()}`])
-            ws.mergeCells(rPartyBHeader.number, 1, rPartyBHeader.number, 5)
+            ws.mergeCells(rPartyBHeader.number, 1, rPartyBHeader.number, 6)
             rPartyBHeader.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
 
             addPartyRow('Mã số thuế / CCCD', 'Tax ID / Citizen ID', '')
@@ -527,33 +531,39 @@ export default function CRMPayoutsPage() {
 
             // Transition text
             const rTransVi = ws.addRow([`Hai Bên cùng tiến hành đối chiếu, xác nhận số liệu hoa hồng giới thiệu phát sinh trong tháng ${month} năm ${year} như sau:`])
-            ws.mergeCells(rTransVi.number, 1, rTransVi.number, 5)
+            ws.mergeCells(rTransVi.number, 1, rTransVi.number, 6)
             rTransVi.getCell(1).font = { name: fontName, size: 10 }
 
             const rTransEn = ws.addRow([`The Parties jointly reconcile and confirm the referral commission figures arising in Month ${month} Year ${year} as follows:`])
-            ws.mergeCells(rTransEn.number, 1, rTransEn.number, 5)
+            ws.mergeCells(rTransEn.number, 1, rTransEn.number, 6)
             rTransEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
             ws.addRow([]) // Spacer
 
             // Section I - Table of Invoices
             const rSec1Header1 = ws.addRow(['I. DANH SÁCH HÓA ĐƠN PHÁT SINH TỪ MÃ GIỚI THIỆU CỦA BÊN B'])
-            ws.mergeCells(rSec1Header1.number, 1, rSec1Header1.number, 5)
+            ws.mergeCells(rSec1Header1.number, 1, rSec1Header1.number, 6)
             rSec1Header1.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
 
             const rSec1Header2 = ws.addRow(['I. LIST OF INVOICES GENERATED FROM PARTY B’S REFERRAL CODE'])
-            ws.mergeCells(rSec1Header2.number, 1, rSec1Header2.number, 5)
+            ws.mergeCells(rSec1Header2.number, 1, rSec1Header2.number, 6)
             rSec1Header2.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
 
-            // Determine commission rate for headers
+            // Determine commission rates dynamically (handling potential mix of rates like 4% and 10%)
             let commRateText = '10%'
             if (receiptReferrals.length > 0) {
-                const r = receiptReferrals[0]
-                const gross = isPartner 
-                    ? (selectedPayout.crm_partners?.issues_vat_invoice === false ? Number(r.commission_value) / 0.9 : Number(r.commission_value)) 
-                    : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id] ? Number(r.advisor_commission_value) / 0.9 : Number(r.advisor_commission_value))
-                const pct = r.revenue_generated > 0 ? (gross / r.revenue_generated) * 100 : 0
-                if (pct > 0) {
-                    commRateText = pct % 1 === 0 ? pct.toFixed(0) + '%' : pct.toFixed(1) + '%'
+                const rates = new Set<string>()
+                receiptReferrals.forEach(r => {
+                    const gross = isPartner 
+                        ? (selectedPayout.crm_partners?.issues_vat_invoice === false ? Number(r.commission_value) / 0.9 : Number(r.commission_value)) 
+                        : (selectedPayout.sale_advisor_id && accountsDeductPitMap[selectedPayout.sale_advisor_id] ? Number(r.advisor_commission_value) / 0.9 : Number(r.advisor_commission_value))
+                    const pctVal = r.revenue_generated > 0 ? (gross / r.revenue_generated) * 100 : 0
+                    if (pctVal > 0) {
+                        const fmtPct = pctVal % 1 === 0 ? pctVal.toFixed(0) + '%' : pctVal.toFixed(1) + '%'
+                        rates.add(fmtPct)
+                    }
+                })
+                if (rates.size > 0) {
+                    commRateText = Array.from(rates).sort((a, b) => parseFloat(a) - parseFloat(b)).join(' & ')
                 }
             }
 
@@ -562,14 +572,16 @@ export default function CRMPayoutsPage() {
                 'Ngày',
                 'Mã tham chiếu',
                 'Giá trị HĐ (VNĐ, chưa VAT)',
-                `Hoa hồng ${commRateText} (VNĐ)`
+                'Tỷ lệ hoa hồng',
+                'Hoa hồng (VNĐ)'
             ]
             const tableHeadersEn = [
                 'No.',
                 'Date',
                 'Reference number',
                 'Invoice value (VND, ex-VAT)',
-                `Commission ${commRateText} (VND)`
+                'Commission rate',
+                'Commission (VND)'
             ]
 
             const rHeaderVi = ws.addRow(tableHeadersVi);
@@ -605,6 +617,7 @@ export default function CRMPayoutsPage() {
                 totalRevenue += Number(r.revenue_generated || 0)
                 totalGross += gross
 
+                const pct = r.revenue_generated > 0 ? (gross / r.revenue_generated) : 0
                 const dateStr = new Date(r.created_at).toLocaleDateString('en-GB')
 
                 const row = ws.addRow([
@@ -612,6 +625,7 @@ export default function CRMPayoutsPage() {
                     dateStr,
                     r.id.split('-')[0].toUpperCase(),
                     Number(r.revenue_generated),
+                    pct,
                     gross
                 ])
 
@@ -621,8 +635,10 @@ export default function CRMPayoutsPage() {
                 row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }
                 row.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
                 row.getCell(4).numFmt = '#,##0'
-                row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }
-                row.getCell(5).numFmt = '#,##0'
+                row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' }
+                row.getCell(5).numFmt = '0%'
+                row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' }
+                row.getCell(6).numFmt = '#,##0'
                 
                 row.eachCell(cell => {
                     cell.font = { name: fontName, size: 10 }
@@ -641,6 +657,7 @@ export default function CRMPayoutsPage() {
                 '',
                 '',
                 totalRevenue,
+                '',
                 totalGross
             ])
             ws.mergeCells(rTotal.number, 1, rTotal.number, 3)
@@ -648,8 +665,8 @@ export default function CRMPayoutsPage() {
             rTotal.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
             rTotal.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
             rTotal.getCell(4).numFmt = '#,##0'
-            rTotal.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }
-            rTotal.getCell(5).numFmt = '#,##0'
+            rTotal.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' }
+            rTotal.getCell(6).numFmt = '#,##0'
             
             rTotal.eachCell(cell => {
                 cell.font = { name: fontName, size: 10, bold: true }
@@ -673,29 +690,29 @@ export default function CRMPayoutsPage() {
             }
 
             const rTotalInvoiceTextVi = ws.addRow([`Tổng giá trị hóa đơn phát sinh trong kỳ (chưa bao gồm VAT): ${formatVND(totalRevenue)}`])
-            ws.mergeCells(rTotalInvoiceTextVi.number, 1, rTotalInvoiceTextVi.number, 5)
+            ws.mergeCells(rTotalInvoiceTextVi.number, 1, rTotalInvoiceTextVi.number, 6)
             rTotalInvoiceTextVi.getCell(1).font = { name: fontName, size: 10 }
 
             const rTotalInvoiceTextEn = ws.addRow([`Total invoice value during the period (excluding VAT): ${formatVND(totalRevenue)}`])
-            ws.mergeCells(rTotalInvoiceTextEn.number, 1, rTotalInvoiceTextEn.number, 5)
+            ws.mergeCells(rTotalInvoiceTextEn.number, 1, rTotalInvoiceTextEn.number, 6)
             rTotalInvoiceTextEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
 
             const rTotalCommTextVi = ws.addRow([`Tổng hoa hồng giới thiệu phải trả cho Bên B (${commRateText}): ${formatVND(totalGross)}`])
-            ws.mergeCells(rTotalCommTextVi.number, 1, rTotalCommTextVi.number, 5)
+            ws.mergeCells(rTotalCommTextVi.number, 1, rTotalCommTextVi.number, 6)
             rTotalCommTextVi.getCell(1).font = { name: fontName, size: 10, bold: true }
 
             const rTotalCommTextEn = ws.addRow([`Total referral commission payable to Party B (${commRateText}): ${formatVND(totalGross)}`])
-            ws.mergeCells(rTotalCommTextEn.number, 1, rTotalCommTextEn.number, 5)
+            ws.mergeCells(rTotalCommTextEn.number, 1, rTotalCommTextEn.number, 6)
             rTotalCommTextEn.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
             ws.addRow([]) // Spacer
 
             // Section II - Tax Method
             const rSec2Header1 = ws.addRow(['II. PHƯƠNG THỨC XỬ LÝ CHỨNG TỪ THUẾ'])
-            ws.mergeCells(rSec2Header1.number, 1, rSec2Header1.number, 5)
+            ws.mergeCells(rSec2Header1.number, 1, rSec2Header1.number, 6)
             rSec2Header1.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
 
             const rSec2Header2 = ws.addRow(['II. TAX DOCUMENTATION METHOD'])
-            ws.mergeCells(rSec2Header2.number, 1, rSec2Header2.number, 5)
+            ws.mergeCells(rSec2Header2.number, 1, rSec2Header2.number, 6)
             rSec2Header2.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
 
             const netAmount = Number(selectedPayout.amount)
@@ -725,11 +742,11 @@ export default function CRMPayoutsPage() {
             if (issuesVat) {
                 // CASE 1 Header
                 const rCase1Vi = ws.addRow(['Bên B xuất hóa đơn (theo Khoản 4.1 Hợp đồng)'])
-                ws.mergeCells(rCase1Vi.number, 1, rCase1Vi.number, 5)
+                ws.mergeCells(rCase1Vi.number, 1, rCase1Vi.number, 6)
                 rCase1Vi.getCell(1).font = { name: fontName, size: 10, bold: true }
 
                 const rCase1En = ws.addRow(['Party B issues invoice (under Clause 4.1 of the Agreement)'])
-                ws.mergeCells(rCase1En.number, 1, rCase1En.number, 5)
+                ws.mergeCells(rCase1En.number, 1, rCase1En.number, 6)
                 rCase1En.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
                 ws.addRow([]) // Spacer
 
@@ -737,7 +754,7 @@ export default function CRMPayoutsPage() {
                 const addCase1Field = (labelVi: string, labelEn: string, val: string, isPrefilled = false) => {
                     const r = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', val])
                     ws.mergeCells(r.number, 1, r.number, 2)
-                    ws.mergeCells(r.number, 3, r.number, 5)
+                    ws.mergeCells(r.number, 3, r.number, 6)
                     
                     const labelCell = r.getCell(1)
                     labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
@@ -762,13 +779,13 @@ export default function CRMPayoutsPage() {
                 ws.addRow([]) // Spacer
 
                 const rCase1FootVi = ws.addRow(['Bên A sẽ chuyển khoản số tiền theo hóa đơn cho Bên B trong vòng 05 (năm) ngày làm việc kể từ ngày nhận được hóa đơn hợp lệ.'])
-                ws.mergeCells(rCase1FootVi.number, 1, rCase1FootVi.number, 5)
+                ws.mergeCells(rCase1FootVi.number, 1, rCase1FootVi.number, 6)
                 rCase1FootVi.getCell(1).font = { name: fontName, size: 10 }
                 rCase1FootVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'middle' }
                 rCase1FootVi.height = 32
 
                 const rCase1FootEn = ws.addRow(['Party A shall transfer the invoice amount to Party B within 5 (five) working days from receipt of the valid invoice.'])
-                ws.mergeCells(rCase1FootEn.number, 1, rCase1FootEn.number, 5)
+                ws.mergeCells(rCase1FootEn.number, 1, rCase1FootEn.number, 6)
                 rCase1FootEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
                 rCase1FootEn.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'middle' }
                 rCase1FootEn.height = 32
@@ -776,11 +793,11 @@ export default function CRMPayoutsPage() {
             } else {
                 // CASE 2 Header
                 const rCase2Vi = ws.addRow(['Bên A khấu trừ 10% thuế TNCN tại nguồn (theo Khoản 4.2 Hợp đồng)'])
-                ws.mergeCells(rCase2Vi.number, 1, rCase2Vi.number, 5)
+                ws.mergeCells(rCase2Vi.number, 1, rCase2Vi.number, 6)
                 rCase2Vi.getCell(1).font = { name: fontName, size: 10, bold: true }
 
                 const rCase2En = ws.addRow(['Party A withholds 10% PIT at source (under Clause 4.2 of the Agreement)'])
-                ws.mergeCells(rCase2En.number, 1, rCase2En.number, 5)
+                ws.mergeCells(rCase2En.number, 1, rCase2En.number, 6)
                 rCase2En.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
                 ws.addRow([]) // Spacer
 
@@ -789,10 +806,10 @@ export default function CRMPayoutsPage() {
                     const r = ws.addRow([
                         `   ${labelLetter}`,
                         `${labelVi}\n   ${labelEn}`,
-                        '', '', 
+                        '', '', '',
                         valStr
                     ])
-                    ws.mergeCells(r.number, 2, r.number, 4) // Merges Columns 2, 3, 4 (leaving Column 5 for values)
+                    ws.mergeCells(r.number, 2, r.number, 5) // Merges Columns 2, 3, 4, 5 (leaving Column 6 for values)
                     const approxLinesVi = Math.ceil(labelVi.length / 70)
                     const approxLinesEn = Math.ceil(labelEn.length / 70)
                     r.height = Math.max(45, (approxLinesVi + approxLinesEn) * 16)
@@ -800,8 +817,8 @@ export default function CRMPayoutsPage() {
                     r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
                     r.getCell(2).font = { name: fontName, size: 9.5, color: { argb: 'FF475569' } }
                     r.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
-                    r.getCell(5).font = { name: fontName, size: 10, bold: true }
-                    r.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }
+                    r.getCell(6).font = { name: fontName, size: 10, bold: true }
+                    r.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' }
                     
                     r.eachCell(cell => {
                         cell.border = {
@@ -830,10 +847,18 @@ export default function CRMPayoutsPage() {
                 
                 const valC = formatVND(finalNet)
 
+                const labelAVi = activeTab === 'advisor'
+                    ? 'Hoa hồng trước thuế (Kích hoạt & Trực tiếp: 10%, Duy trì: 4%)'
+                    : `Hoa hồng trước thuế (${commRateText} × Tổng giá trị hóa đơn)`
+                
+                const labelAEn = activeTab === 'advisor'
+                    ? 'Pre-tax commission (Activation & Direct: 10%, Maintenance: 4%)'
+                    : `Pre-tax commission (${commRateText} × Total invoice value)`
+
                 addCase2Row(
                     '(A)', 
-                    'Hoa hồng trước thuế (10% × Tổng giá trị hóa đơn)', 
-                    'Pre-tax commission (10% × Total invoice value)', 
+                    labelAVi, 
+                    labelAEn, 
                     valA
                 )
                 addCase2Row(
@@ -848,17 +873,17 @@ export default function CRMPayoutsPage() {
                     'NET AMOUNT PAYABLE TO PARTY B (A − B)', 
                     valC
                 )
-                rNet.getCell(5).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF16803D' } } // Green for net amount
+                rNet.getCell(6).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF16803D' } } // Green for net amount
                 ws.addRow([]) // Spacer
 
                 const rCase2FootVi = ws.addRow(['Bên A sẽ cấp Chứng từ khấu trừ thuế TNCN cho Bên B và chuyển khoản số tiền thực nhận trong vòng 05 (năm) ngày làm việc kể từ ngày ký Biên bản này.'])
-                ws.mergeCells(rCase2FootVi.number, 1, rCase2FootVi.number, 5)
+                ws.mergeCells(rCase2FootVi.number, 1, rCase2FootVi.number, 6)
                 rCase2FootVi.getCell(1).font = { name: fontName, size: 10 }
                 rCase2FootVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'middle' }
                 rCase2FootVi.height = 32
 
                 const rCase2FootEn = ws.addRow(['Party A shall issue a PIT Withholding Certificate to Party B and transfer the net amount within 5 (five) working days from the signing of these Minutes.'])
-                ws.mergeCells(rCase2FootEn.number, 1, rCase2FootEn.number, 5)
+                ws.mergeCells(rCase2FootEn.number, 1, rCase2FootEn.number, 6)
                 rCase2FootEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
                 rCase2FootEn.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'middle' }
                 rCase2FootEn.height = 32
@@ -868,7 +893,7 @@ export default function CRMPayoutsPage() {
             // Exemption detail/general note
             if (selectedPayout.notes) {
                 const rNotesVi = ws.addRow([`* Ghi chú / Notes: ${selectedPayout.notes}`])
-                ws.mergeCells(rNotesVi.number, 1, rNotesVi.number, 5)
+                ws.mergeCells(rNotesVi.number, 1, rNotesVi.number, 6)
                 rNotesVi.getCell(1).font = { name: fontName, size: 9.5, italic: true, color: { argb: 'FF475569' } }
                 rNotesVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'top' }
                 
@@ -879,11 +904,11 @@ export default function CRMPayoutsPage() {
 
             // Section III - Confirmations and Commitments
             const rSec3Header1 = ws.addRow(['III. XÁC NHẬN VÀ CAM KẾT CỦA HAI BÊN'])
-            ws.mergeCells(rSec3Header1.number, 1, rSec3Header1.number, 5)
+            ws.mergeCells(rSec3Header1.number, 1, rSec3Header1.number, 6)
             rSec3Header1.getCell(1).font = { name: fontName, size: 11, bold: true, color: { argb: 'FF0F172A' } }
 
             const rSec3Header2 = ws.addRow(['III. CONFIRMATIONS AND COMMITMENTS OF THE PARTIES'])
-            ws.mergeCells(rSec3Header2.number, 1, rSec3Header2.number, 5)
+            ws.mergeCells(rSec3Header2.number, 1, rSec3Header2.number, 6)
             rSec3Header2.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
             ws.addRow([]) // Spacer
 
@@ -916,12 +941,12 @@ export default function CRMPayoutsPage() {
 
             commitments.forEach(item => {
                 const rVi = ws.addRow([item.vi])
-                ws.mergeCells(rVi.number, 1, rVi.number, 5)
+                ws.mergeCells(rVi.number, 1, rVi.number, 6)
                 rVi.getCell(1).font = { name: fontName, size: 9.5 }
                 rVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'top' }
                 
                 const rEn = ws.addRow([item.en])
-                ws.mergeCells(rEn.number, 1, rEn.number, 5)
+                ws.mergeCells(rEn.number, 1, rEn.number, 6)
                 rEn.getCell(1).font = { name: fontName, size: 9.5, italic: true, color: { argb: 'FF475569' } }
                 rEn.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'top' }
                 
@@ -937,8 +962,8 @@ export default function CRMPayoutsPage() {
                 'ĐẠI DIỆN BÊN A', '', '',
                 'ĐẠI DIỆN BÊN B'
             ])
-            ws.mergeCells(rSig1.number, 1, rSig1.number, 2)
-            ws.mergeCells(rSig1.number, 4, rSig1.number, 5)
+            ws.mergeCells(rSig1.number, 1, rSig1.number, 3)
+            ws.mergeCells(rSig1.number, 4, rSig1.number, 6)
             rSig1.getCell(1).font = { name: fontName, size: 10, bold: true }
             rSig1.getCell(1).alignment = { horizontal: 'center' }
             rSig1.getCell(4).font = { name: fontName, size: 10, bold: true }
@@ -948,8 +973,8 @@ export default function CRMPayoutsPage() {
                 'ON BEHALF OF PARTY A', '', '',
                 'ON BEHALF OF PARTY B'
             ])
-            ws.mergeCells(rSig2.number, 1, rSig2.number, 2)
-            ws.mergeCells(rSig2.number, 4, rSig2.number, 5)
+            ws.mergeCells(rSig2.number, 1, rSig2.number, 3)
+            ws.mergeCells(rSig2.number, 4, rSig2.number, 6)
             rSig2.getCell(1).font = { name: fontName, size: 9.5, bold: true, italic: true, color: { argb: 'FF475569' } }
             rSig2.getCell(1).alignment = { horizontal: 'center' }
             rSig2.getCell(4).font = { name: fontName, size: 9.5, bold: true, italic: true, color: { argb: 'FF475569' } }
@@ -959,8 +984,8 @@ export default function CRMPayoutsPage() {
                 '(Ký, ghi rõ họ tên, đóng dấu)', '', '',
                 '(Ký, ghi rõ họ tên, đóng dấu nếu có)'
             ])
-            ws.mergeCells(rSig3.number, 1, rSig3.number, 2)
-            ws.mergeCells(rSig3.number, 4, rSig3.number, 5)
+            ws.mergeCells(rSig3.number, 1, rSig3.number, 3)
+            ws.mergeCells(rSig3.number, 4, rSig3.number, 6)
             rSig3.getCell(1).font = { name: fontName, size: 9, italic: true, color: { argb: 'FF64748B' } }
             rSig3.getCell(1).alignment = { horizontal: 'center' }
             rSig3.getCell(4).font = { name: fontName, size: 9, italic: true, color: { argb: 'FF64748B' } }
@@ -970,8 +995,8 @@ export default function CRMPayoutsPage() {
                 '(Signature, full name, stamp)', '', '',
                 '(Signature, full name, stamp if any)'
             ])
-            ws.mergeCells(rSig4.number, 1, rSig4.number, 2)
-            ws.mergeCells(rSig4.number, 4, rSig4.number, 5)
+            ws.mergeCells(rSig4.number, 1, rSig4.number, 3)
+            ws.mergeCells(rSig4.number, 4, rSig4.number, 6)
             rSig4.getCell(1).font = { name: fontName, size: 8.5, italic: true, color: { argb: 'FF64748B' } }
             rSig4.getCell(1).alignment = { horizontal: 'center' }
             rSig4.getCell(4).font = { name: fontName, size: 8.5, italic: true, color: { argb: 'FF64748B' } }
@@ -983,11 +1008,12 @@ export default function CRMPayoutsPage() {
             }
 
             // Set explicit column widths
-            ws.getColumn(1).width = 10
-            ws.getColumn(2).width = 20
-            ws.getColumn(3).width = 26
-            ws.getColumn(4).width = 30
-            ws.getColumn(5).width = 30
+            ws.getColumn(1).width = 8
+            ws.getColumn(2).width = 15
+            ws.getColumn(3).width = 20
+            ws.getColumn(4).width = 28
+            ws.getColumn(5).width = 18
+            ws.getColumn(6).width = 28
 
             // Generate file
             const buf = await wb.xlsx.writeBuffer()
