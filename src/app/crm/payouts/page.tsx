@@ -697,11 +697,11 @@ export default function CRMPayoutsPage() {
             ws.mergeCells(rTotalInvoiceTextEn.number, 1, rTotalInvoiceTextEn.number, 6)
             rTotalInvoiceTextEn.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
 
-            const rTotalCommTextVi = ws.addRow([`Tổng hoa hồng giới thiệu phải trả cho Bên B (${commRateText}): ${formatVND(totalGross)}`])
+            const rTotalCommTextVi = ws.addRow([`Tổng hoa hồng giới thiệu phải trả cho Bên B: ${formatVND(totalGross)}`])
             ws.mergeCells(rTotalCommTextVi.number, 1, rTotalCommTextVi.number, 6)
             rTotalCommTextVi.getCell(1).font = { name: fontName, size: 10, bold: true }
 
-            const rTotalCommTextEn = ws.addRow([`Total referral commission payable to Party B (${commRateText}): ${formatVND(totalGross)}`])
+            const rTotalCommTextEn = ws.addRow([`Total referral commission payable to Party B: ${formatVND(totalGross)}`])
             ws.mergeCells(rTotalCommTextEn.number, 1, rTotalCommTextEn.number, 6)
             rTotalCommTextEn.getCell(1).font = { name: fontName, size: 10, bold: true, italic: true, color: { argb: 'FF475569' } }
             ws.addRow([]) // Spacer
