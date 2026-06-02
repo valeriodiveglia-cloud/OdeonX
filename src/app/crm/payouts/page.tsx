@@ -432,58 +432,27 @@ export default function CRMPayoutsPage() {
             r11.height = 42
             ws.addRow([]) // Spacer
 
-            // Helper to add double-column or single-column detail row for parties (6 columns)
-            const addPartyRow = (labelVi: string, labelEn: string, value: string, valueCol2Vi = '', valueCol2En = '', value2 = '') => {
-                if (!valueCol2Vi) {
-                    const row = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', value])
-                    ws.mergeCells(row.number, 1, row.number, 2)
-                    ws.mergeCells(row.number, 3, row.number, 6)
-                    
-                    const labelCell = row.getCell(1)
-                    labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
-                    labelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
-                    
-                    const valCell = row.getCell(3)
-                    valCell.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
-                    valCell.alignment = { horizontal: 'left', vertical: 'middle' }
-                    if (!value || value === 'Unknown' || value.trim() === '') {
-                        valCell.fill = yellowFill
-                        valCell.value = ''
-                    }
-                    row.height = 28
-                    return row
-                } else {
-                    const row = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', value, `- ${valueCol2Vi} / ${valueCol2En}:`, value2])
-                    ws.mergeCells(row.number, 1, row.number, 2)
-                    ws.mergeCells(row.number, 3, row.number, 3)
-                    ws.mergeCells(row.number, 5, row.number, 6)
-                    
-                    const labelCell = row.getCell(1)
-                    labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
-                    labelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
-                    
-                    const valCell1 = row.getCell(3)
-                    valCell1.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
-                    valCell1.alignment = { horizontal: 'left', vertical: 'middle' }
-                    if (!value || value === 'Unknown' || value.trim() === '') {
-                        valCell1.fill = yellowFill
-                        valCell1.value = ''
-                    }
-
-                    const labelCell2 = row.getCell(4)
-                    labelCell2.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
-                    labelCell2.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
-                    
-                    const valCell2 = row.getCell(6)
-                    valCell2.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
-                    valCell2.alignment = { horizontal: 'left', vertical: 'middle' }
-                    if (!value2 || value2 === 'Unknown' || value2.trim() === '') {
-                        valCell2.fill = yellowFill
-                        valCell2.value = ''
-                    }
-                    row.height = 28
-                    return row
+            // Helper to add detail row for parties (single item per row, 6 columns)
+            const addPartyRow = (labelVi: string, labelEn: string, value: string) => {
+                const row = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', value])
+                ws.mergeCells(row.number, 1, row.number, 2)
+                ws.mergeCells(row.number, 3, row.number, 6)
+                
+                const labelCell = row.getCell(1)
+                labelCell.font = { name: fontName, size: 10, bold: true, color: { argb: 'FF475569' } }
+                labelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+                
+                const valCell = row.getCell(3)
+                valCell.font = { name: fontName, size: 10, color: { argb: 'FF0F172A' } }
+                valCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+                if (!value || value === 'Unknown' || value.trim() === '') {
+                    valCell.fill = yellowFill
+                    valCell.value = ''
                 }
+                
+                const approxLines = Math.ceil((value || '').length / 50)
+                row.height = Math.max(28, approxLines * 16)
+                return row
             }
 
             // Party A
@@ -494,7 +463,8 @@ export default function CRMPayoutsPage() {
             rPartyAHeader.height = 24
             
             addPartyRow('Mã số thuế', 'Tax ID', '0313797471')
-            addPartyRow('Đại diện', 'Representative', '', 'Chức vụ', 'Position', '')
+            addPartyRow('Đại diện', 'Representative', '')
+            addPartyRow('Chức vụ', 'Position', '')
             addPartyRow('Địa chỉ', 'Address', address)
             ws.addRow([]) // Spacer
 
@@ -535,8 +505,10 @@ export default function CRMPayoutsPage() {
             rPartyBHeader.height = 24
 
             addPartyRow('Mã số thuế / CCCD', 'Tax ID / Citizen ID', '')
-            addPartyRow('Đại diện (nếu là tổ chức)', 'Representative (if entity)', contactName, 'Chức vụ', 'Position', '')
-            addPartyRow('Số tài khoản', 'Bank Account No.', bankAccountNumber, 'Tại Ngân hàng', 'at Bank', bankName)
+            addPartyRow('Đại diện (nếu là tổ chức)', 'Representative (if entity)', contactName)
+            addPartyRow('Chức vụ', 'Position', '')
+            addPartyRow('Số tài khoản', 'Bank Account No.', bankAccountNumber)
+            addPartyRow('Tại Ngân hàng', 'at Bank', bankName)
             addPartyRow('Mã giới thiệu', 'Referral Code', referralCode)
             ws.addRow([]) // Spacer
 
