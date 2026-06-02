@@ -450,8 +450,11 @@ export default function CRMPayoutsPage() {
                     valCell.value = ''
                 }
                 
-                const approxLines = Math.ceil((value || '').length / 50)
-                row.height = Math.max(28, approxLines * 16)
+                const labelText = `- ${labelVi} / ${labelEn}:`
+                const labelLines = Math.ceil(labelText.length / 15)
+                const valLines = Math.ceil((value || '').length / 50)
+                const maxLines = Math.max(labelLines, valLines)
+                row.height = Math.max(28, maxLines * 16)
                 return row
             }
 
