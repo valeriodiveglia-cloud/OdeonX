@@ -340,8 +340,15 @@ export default function CRMPayoutsPage() {
             const wb = new ExcelJS.Workbook()
             const ws = wb.addWorksheet('Minutes of Payment')
 
-            // Show grid lines
+            // Show grid lines and configure page layout for A4 print fitting
             ws.views = [{ showGridLines: true }]
+            ws.pageSetup = {
+                paperSize: 9, // A4
+                orientation: 'portrait',
+                fitToPage: true,
+                fitToWidth: 1,
+                fitToHeight: 0
+            }
 
             // Determine Branch
             let branchName = 'Pasta Fresca Saigon'
@@ -416,13 +423,13 @@ export default function CRMPayoutsPage() {
             ws.mergeCells(r10.number, 1, r10.number, 6)
             r10.getCell(1).font = { name: fontName, size: 10 }
             r10.getCell(1).alignment = { horizontal: 'left', wrapText: true }
-            r10.height = 30
+            r10.height = 42
 
             const r11 = ws.addRow([todayTextEn])
             ws.mergeCells(r11.number, 1, r11.number, 6)
             r11.getCell(1).font = { name: fontName, size: 10, italic: true, color: { argb: 'FF475569' } }
             r11.getCell(1).alignment = { horizontal: 'left', wrapText: true }
-            r11.height = 30
+            r11.height = 42
             ws.addRow([]) // Spacer
 
             // Helper to add double-column or single-column detail row for parties (6 columns)
@@ -443,7 +450,7 @@ export default function CRMPayoutsPage() {
                         valCell.fill = yellowFill
                         valCell.value = ''
                     }
-                    row.height = 24
+                    row.height = 28
                     return row
                 } else {
                     const row = ws.addRow([`- ${labelVi} / ${labelEn}:`, '', value, `- ${valueCol2Vi} / ${valueCol2En}:`, value2])
@@ -474,7 +481,7 @@ export default function CRMPayoutsPage() {
                         valCell2.fill = yellowFill
                         valCell2.value = ''
                     }
-                    row.height = 24
+                    row.height = 28
                     return row
                 }
             }
@@ -810,8 +817,8 @@ export default function CRMPayoutsPage() {
                         valStr
                     ])
                     ws.mergeCells(r.number, 2, r.number, 5) // Merges Columns 2, 3, 4, 5 (leaving Column 6 for values)
-                    const approxLinesVi = Math.ceil(labelVi.length / 70)
-                    const approxLinesEn = Math.ceil(labelEn.length / 70)
+                    const approxLinesVi = Math.ceil(labelVi.length / 50)
+                    const approxLinesEn = Math.ceil(labelEn.length / 50)
                     r.height = Math.max(45, (approxLinesVi + approxLinesEn) * 16)
                     r.getCell(1).font = { name: fontName, size: 10, bold: true }
                     r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
@@ -897,7 +904,7 @@ export default function CRMPayoutsPage() {
                 rNotesVi.getCell(1).font = { name: fontName, size: 9.5, italic: true, color: { argb: 'FF475569' } }
                 rNotesVi.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'top' }
                 
-                const approxLines = Math.ceil((selectedPayout.notes.length + 18) / 80)
+                const approxLines = Math.ceil((selectedPayout.notes.length + 18) / 70)
                 rNotesVi.height = Math.max(20, approxLines * 16)
                 ws.addRow([]) // Spacer
             }
@@ -950,8 +957,8 @@ export default function CRMPayoutsPage() {
                 rEn.getCell(1).font = { name: fontName, size: 9.5, italic: true, color: { argb: 'FF475569' } }
                 rEn.getCell(1).alignment = { horizontal: 'left', wrapText: true, vertical: 'top' }
                 
-                const approxLinesVi = Math.ceil(item.vi.length / 80)
-                const approxLinesEn = Math.ceil(item.en.length / 80)
+                const approxLinesVi = Math.ceil(item.vi.length / 70)
+                const approxLinesEn = Math.ceil(item.en.length / 70)
                 rVi.height = Math.max(16, approxLinesVi * 16)
                 rEn.height = Math.max(16, approxLinesEn * 16)
                 ws.addRow([]) // Spacer
@@ -1007,13 +1014,13 @@ export default function CRMPayoutsPage() {
                 ws.addRow([])
             }
 
-            // Set explicit column widths
-            ws.getColumn(1).width = 8
-            ws.getColumn(2).width = 15
-            ws.getColumn(3).width = 20
-            ws.getColumn(4).width = 28
-            ws.getColumn(5).width = 18
-            ws.getColumn(6).width = 28
+            // Set explicit column widths optimized for A4 Portrait print size
+            ws.getColumn(1).width = 5   // STT / No.
+            ws.getColumn(2).width = 12  // Date
+            ws.getColumn(3).width = 12  // Reference number
+            ws.getColumn(4).width = 18  // Invoice value (ex-VAT)
+            ws.getColumn(5).width = 12  // Commission rate
+            ws.getColumn(6).width = 18  // Commission (VND)
 
             // Generate file
             const buf = await wb.xlsx.writeBuffer()
