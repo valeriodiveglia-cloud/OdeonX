@@ -271,6 +271,8 @@ function HistoryModal({
   fetchTotalsOne: (id: string) => Promise<Totals | null>
   t: ReturnType<typeof getDailyReportsDictionary>['credits']['history'] | any
 }) {
+  const { language } = useSettings()
+  const paymentsT = getDailyReportsDictionary(language).credits.payments
   const [items, setItems] = useState<PaymentItem[]>([])
   const [summary, setSummary] = useState<{ total: number; paid: number; left: number }>({
     total: Math.round(credit.amount || 0),
@@ -421,7 +423,7 @@ function HistoryModal({
               await refetch()
             }}
             updatePayment={updatePayment}
-            t={t}
+            t={paymentsT}
           />
         )}
       </div>
