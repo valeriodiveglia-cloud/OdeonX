@@ -1,8 +1,8 @@
-const fs = require('fs');
-const content = fs.readFileSync('src/app/crm/settings/page.tsx', 'utf8');
-let depth = 0;
-for(let i=0; i<content.length; i++) {
-  if (content[i] === '<' && content[i+1] !== '/' && content[i+1] !== ' ' && content[i+1] !== '=') depth++;
-  if (content[i] === '<' && content[i+1] === '/') depth--;
+require('dotenv').config({ path: '.env.local' });
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+async function run() {
+  const { data, error } = await supabase.from('hr_staff').select('id, full_name, hr_staff_performance(period)').eq('status', 'active');
+  console.log(JSON.stringify(data, null, 2));
 }
-console.log("depth roughly", depth);
+run();

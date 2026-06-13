@@ -587,7 +587,6 @@ export function useCredits(params?: { year?: number; month?: number; branchName?
       window.removeEventListener('credits:payments:changed', onPayments as any)
       window.removeEventListener('credits:credits:changed', onCredits as any)
       window.removeEventListener('credits:editor:set', onEditor as any)
-      isActiveRef.current = false
     }
   }, [fetchCredits, loadUserMeta])
 
