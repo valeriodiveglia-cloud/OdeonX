@@ -27,7 +27,20 @@ export function useBridgeLegacyBranch(): Bridge {
       if (k1 && k1.trim()) return k1.trim()
 
       const k2 = localStorage.getItem('dailyreports.selectedBranch')
-      if (k2 && k2.trim()) return k2.trim()
+      if (k2 && k2.trim()) {
+        const trimmed = k2.trim()
+        if (trimmed.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(trimmed)
+            if (parsed && typeof parsed.name === 'string' && parsed.name.trim()) {
+              return parsed.name.trim()
+            }
+          } catch {
+            // ignore
+          }
+        }
+        return trimmed
+      }
 
       const k3 = localStorage.getItem('DR_BRANCH_NAME')
       if (k3 && k3.trim()) return k3.trim()

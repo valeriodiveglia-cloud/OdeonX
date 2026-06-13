@@ -446,7 +446,7 @@ export default function HomeDashboard() {
                 <div className="flex-1 flex flex-col gap-3 w-full h-full justify-evenly">
                   {quickAccessPages.length > 0 ? (
                     quickAccessPages.map(page => {
-                      const needsBranch = page.module === 'Daily Reports' || page.module === 'Monthly Reports'
+                      const needsBranch = page.module === 'Daily Reports'
                       return (
                         <ModuleButton 
                           key={page.id} 
@@ -555,7 +555,7 @@ export default function HomeDashboard() {
                 <div className="flex-1 flex flex-col gap-3 w-full h-full justify-evenly">
                   {recentVisits.length > 0 ? (
                     recentVisits.map((page, idx) => {
-                      const needsBranch = page.module === 'Daily Reports' || page.module === 'Monthly Reports'
+                      const needsBranch = page.module === 'Daily Reports'
                       return (
                         <ModuleButton 
                           key={`${page.id}-${idx}`} 

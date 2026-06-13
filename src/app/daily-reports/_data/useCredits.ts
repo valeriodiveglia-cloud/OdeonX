@@ -26,7 +26,12 @@ export function todayISO() {
   const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
-function ymd(date: Date) { return date.toISOString().slice(0, 10) }
+function ymd(date: Date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
 function safeNumber(n: any, fallback = 0) { const x = Number(n); return Number.isFinite(x) ? x : fallback }
 const BASE_COLUMNS = `
   id, branch, date, type, customer_id, customer_name, customer_phone, customer_email,
