@@ -50,6 +50,7 @@ export default function BankAccountsPage() {
     }
     const [monthlyOpeningBalance, setMonthlyOpeningBalance] = useState<number | null>(null)
     const [monthlyClosingBalance, setMonthlyClosingBalance] = useState<number | null>(null)
+    const [priorTransactions, setPriorTransactions] = useState<{ amount: number; type: string; branch_id: string | null }[]>([])
     const [txSearch, setTxSearch] = useState('')
     const [txTypeFilter, setTxTypeFilter] = useState('All')
     const [txBranchFilter, setTxBranchFilter] = useState('All')
@@ -232,7 +233,7 @@ export default function BankAccountsPage() {
             
         // Calculate Opening and Closing Balances
         const { data: priorTx } = await supabase.from('fin_bank_transactions')
-            .select('amount, type')
+            .select('amount, type, branch_id')
             .eq('account_id', acc.id)
             .lt('transaction_date', startStr)
 
@@ -254,6 +255,7 @@ export default function BankAccountsPage() {
 
         setMonthlyOpeningBalance(openBal)
         setMonthlyClosingBalance(closeBal)
+        setPriorTransactions((priorTx || []) as any)
             
         setTransactions((data || []) as any)
         setLoadingTx(false)
@@ -437,9 +439,32 @@ export default function BankAccountsPage() {
         return result.reverse()
     }, [transactions, monthlyOpeningBalance])
 
+    // Filtered opening/closing balances when branch filter is active
+    const { filteredOpeningBalance, filteredClosingBalance } = React.useMemo(() => {
+        if (txBranchFilter === 'All' || monthlyOpeningBalance === null) {
+            return { filteredOpeningBalance: null, filteredClosingBalance: null }
+        }
+        // Opening = account opening_balance is shared, so branch opening = sum of prior branch transactions only
+        let branchOpen = 0
+        for (const tx of priorTransactions) {
+            if (tx.branch_id === txBranchFilter) {
+                if (tx.type === 'Inflow') branchOpen += Number(tx.amount)
+                else branchOpen -= Number(tx.amount)
+            }
+        }
+        let branchClose = branchOpen
+        for (const tx of transactions) {
+            if (tx.branch_id === txBranchFilter) {
+                if (tx.type === 'Inflow') branchClose += Number(tx.amount)
+                else branchClose -= Number(tx.amount)
+            }
+        }
+        return { filteredOpeningBalance: branchOpen, filteredClosingBalance: branchClose }
+    }, [txBranchFilter, priorTransactions, transactions, monthlyOpeningBalance])
+
     const filteredTx = transactionsWithBalances.filter(tx => {
         if (txTypeFilter !== 'All' && tx.type !== txTypeFilter) return false
-        if (txBranchFilter !== 'All' && tx.description && !tx.description.toLowerCase().includes(txBranchFilter.toLowerCase())) return false
+        if (txBranchFilter !== 'All' && tx.branch_id !== txBranchFilter) return false
         if (txSearch) {
             const q = txSearch.toLowerCase()
             const matchDesc = tx.description?.toLowerCase().includes(q)
@@ -836,20 +861,23 @@ export default function BankAccountsPage() {
                                                 className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]">
                                                 <option value="All">{t(language, 'FinAccAllBranches')}</option>
                                                 {branches.map(b => (
-                                                    <option key={b.id} value={b.name}>{b.name}</option>
+                                                    <option key={b.id} value={b.id}>{b.name}</option>
                                                 ))}
                                             </select>
                                         )}
                                     </div>
                                     <div className="flex items-center gap-2 pr-2">
-                                        <div className="bg-white border border-slate-200 shadow-sm rounded-md px-2.5 py-1 flex items-center gap-2">
+                                        <div className={`border shadow-sm rounded-md px-2.5 py-1 flex items-center gap-2 ${filteredOpeningBalance !== null ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-200'}`}>
                                             <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">{t(language, 'FinAccOpening')}</span>
-                                            <span className="font-black text-slate-700 tabular-nums">{monthlyOpeningBalance !== null ? fmt(monthlyOpeningBalance) : '...'}</span>
+                                            <span className="font-black text-slate-700 tabular-nums">{filteredOpeningBalance !== null ? fmt(filteredOpeningBalance) : monthlyOpeningBalance !== null ? fmt(monthlyOpeningBalance) : '...'}</span>
                                         </div>
-                                        <div className="bg-white border border-slate-200 shadow-sm rounded-md px-2.5 py-1 flex items-center gap-2">
+                                        <div className={`border shadow-sm rounded-md px-2.5 py-1 flex items-center gap-2 ${filteredClosingBalance !== null ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-200'}`}>
                                             <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">{t(language, 'FinAccClosing')}</span>
-                                            <span className="font-black text-slate-900 tabular-nums">{monthlyClosingBalance !== null ? fmt(monthlyClosingBalance) : '...'}</span>
+                                            <span className="font-black text-slate-900 tabular-nums">{filteredClosingBalance !== null ? fmt(filteredClosingBalance) : monthlyClosingBalance !== null ? fmt(monthlyClosingBalance) : '...'}</span>
                                         </div>
+                                        {filteredOpeningBalance !== null && (
+                                            <span className="text-[10px] font-semibold text-orange-600 uppercase tracking-wider">⊘ {branches.find(b => b.id === txBranchFilter)?.name || 'Branch'}</span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto">
