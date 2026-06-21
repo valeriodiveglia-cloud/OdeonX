@@ -191,7 +191,7 @@ export default function BankAccountsPage() {
                                 pendingFees += Number(tx.amount)
                             }
                         })
-                        return { ...acc, pending_balance: pendingBal, pending_fees: pendingFees }
+                        return { ...acc, current_balance: pendingBal, pending_fees: pendingFees }
                     }
                     return acc
                 })
