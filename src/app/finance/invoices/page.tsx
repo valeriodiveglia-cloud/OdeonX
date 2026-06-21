@@ -124,6 +124,7 @@ export default function InvoicesPage() {
     const [showLinkModal, setShowLinkModal] = useState(false)
     const [showAllPendingVat, setShowAllPendingVat] = useState(false)
     const [showPersonalOption, setShowPersonalOption] = useState(false)
+    const [activeTab, setActiveTab] = useState<'invoices' | 'awaiting'>('invoices')
 
     const [month, setMonth] = useState(() => {
         const d = new Date()
@@ -187,6 +188,155 @@ export default function InvoicesPage() {
     }
 
     useEffect(() => { fetchData() }, [month, financeStartDate])
+
+    const handleCreateInvoiceFromPending = (item: any, type: 'Payment Order' | 'Card' | 'Cash Out') => {
+        resetForm()
+        const newForm = {
+            invoice_number: '',
+            invoice_date: new Date().toISOString().split('T')[0],
+            due_date: '',
+            supplier_id: item.supplier_id || '',
+            branch_ids: [] as string[],
+            account_id: item.account_id || '',
+            description: item.description || '',
+            net_amount: '',
+            vat_rate: '10',
+            vat_amount: '',
+            currency: item.currency || currency || 'VND',
+            notes: '',
+            linked_item_ids: [] as string[],
+            linked_card_ids: [] as string[],
+            linked_cashout_ids: [] as string[],
+            is_already_paid: true,
+            is_personal_deduction: false,
+            custom_supplier_name: ''
+        }
+
+        if (type === 'Payment Order') {
+            newForm.linked_item_ids = [item.id]
+            newForm.branch_ids = item.branch_ids || []
+        } else if (type === 'Card') {
+            newForm.linked_card_ids = [item.id]
+            if (item.branch_id) newForm.branch_ids = [item.branch_id]
+        } else if (type === 'Cash Out') {
+            newForm.linked_cashout_ids = [item.id]
+            if (item.branch) {
+                const br = branches.find(b => b.id === item.branch || b.name === item.branch)
+                if (br) newForm.branch_ids = [br.id]
+            }
+        }
+
+        const gross = Number(item.amount)
+        if (gross > 0) {
+            const net = Math.round(gross / 1.1)
+            const vat = gross - net
+            newForm.net_amount = String(net)
+            newForm.vat_amount = String(vat)
+        }
+
+        setForm(newForm)
+        setEditingInvoice(null)
+        setModalMode('add')
+    }
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search)
+            const tabParam = params.get('tab')
+            if (tabParam === 'awaiting') {
+                setActiveTab('awaiting')
+            }
+            
+            const action = params.get('action')
+            const linkId = params.get('linkId')
+            const linkType = params.get('linkType')
+            
+            if (action === 'create' && linkId && linkType && (unlinkedManualItems.length > 0 || linkableCardExpenses.length > 0 || linkableCashOuts.length > 0)) {
+                let targetItem: any = null
+                if (linkType === 'Payment Order') {
+                    targetItem = unlinkedManualItems.find(i => i.id === linkId)
+                } else if (linkType === 'Card') {
+                    targetItem = linkableCardExpenses.find(i => i.id === linkId)
+                } else if (linkType === 'Cash Out') {
+                    targetItem = linkableCashOuts.find(i => i.id === linkId)
+                }
+                
+                if (targetItem) {
+                    handleCreateInvoiceFromPending(targetItem, linkType as any)
+                    window.history.replaceState({}, '', window.location.pathname + `?tab=awaiting`)
+                }
+            }
+        }
+    }, [unlinkedManualItems, linkableCardExpenses, linkableCashOuts])
+
+    const combinedAwaitingItems = useMemo(() => {
+        const manItems = unlinkedManualItems.map(item => ({
+            id: item.id,
+            date: item.fin_payment_orders?.order_date || '',
+            description: item.description || '',
+            amount: Number(item.amount),
+            type: 'Payment Order' as const,
+            ref: item.fin_payment_orders?.order_number || '',
+            supplier_id: item.supplier_id,
+            supplier_name: item.suppliers?.name || '',
+            branch_ids: item.branch_ids || [],
+            raw: item
+        }))
+
+        const cardItems = linkableCardExpenses.map(item => ({
+            id: item.id,
+            date: item.expense_date || '',
+            description: item.description || '',
+            amount: Number(item.amount),
+            type: 'Card' as const,
+            ref: item.frequency || '',
+            supplier_id: item.supplier_id,
+            supplier_name: item.suppliers?.name || '',
+            branch_ids: item.branch_id ? [item.branch_id] : [],
+            raw: item
+        }))
+
+        const cashoutItems = linkableCashOuts.map(item => {
+            let branchIds: string[] = []
+            if (item.branch) {
+                const br = branches.find(b => b.id === item.branch || b.name === item.branch)
+                if (br) branchIds = [br.id]
+            }
+            return {
+                id: item.id,
+                date: item.date || '',
+                description: item.description || '',
+                amount: Number(item.amount),
+                type: 'Cash Out' as const,
+                ref: 'Cash Out',
+                supplier_id: item.supplier_id,
+                supplier_name: suppliers.find(s => s.id === item.supplier_id)?.name || '',
+                branch_ids: branchIds,
+                raw: item
+            }
+        })
+
+        const all = [...manItems, ...cardItems, ...cashoutItems]
+            .filter(item => {
+                if (search.trim()) {
+                    const q = search.toLowerCase()
+                    const matchesSearch = item.description.toLowerCase().includes(q) ||
+                        item.supplier_name.toLowerCase().includes(q) ||
+                        item.ref.toLowerCase().includes(q)
+                    if (!matchesSearch) return false
+                }
+                if (branchFilter !== 'All') {
+                    if (branchFilter === 'General') {
+                        if (item.branch_ids.length > 0) return false
+                    } else {
+                        if (!item.branch_ids.includes(branchFilter)) return false
+                    }
+                }
+                return true
+            })
+            .sort((a, b) => b.date.localeCompare(a.date))
+        return all
+    }, [unlinkedManualItems, linkableCardExpenses, linkableCashOuts, search, branchFilter, branches, suppliers])
 
     const filtered = useMemo(() => {
         return invoices.filter(inv => {
@@ -552,6 +702,37 @@ export default function InvoicesPage() {
                 </button>
             </div>
 
+            {/* Tabs */}
+            <div className="flex items-center gap-6 border-b border-slate-200 mb-6">
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('invoices')}
+                    className={`pb-3 px-1 text-sm font-bold transition-all border-b-2 ${
+                        activeTab === 'invoices' 
+                            ? 'border-blue-600 text-blue-700' 
+                            : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    }`}
+                >
+                    {t(language, 'FinInvTitle')}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('awaiting')}
+                    className={`pb-3 px-1 text-sm font-bold transition-all border-b-2 flex items-center gap-2 ${
+                        activeTab === 'awaiting' 
+                            ? 'border-blue-600 text-blue-700' 
+                            : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    }`}
+                >
+                    {t(language, 'PaymentsAwaitingInvoice')}
+                    {(unlinkedManualItems.length + linkableCardExpenses.length + linkableCashOuts.length) > 0 && (
+                        <span className={`py-0.5 px-2 rounded-full text-xs font-bold ${activeTab === 'awaiting' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                            {unlinkedManualItems.length + linkableCardExpenses.length + linkableCashOuts.length}
+                        </span>
+                    )}
+                </button>
+            </div>
+
             {/* Filters */}
             <div className="flex flex-wrap gap-3 mb-4">
                 <div className="relative flex-1 min-w-[200px] max-w-xs">
@@ -559,10 +740,12 @@ export default function InvoicesPage() {
                     <input type="text" placeholder={t(language, 'FinInvSearchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-slate-900 shadow-sm" />
                 </div>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    {statuses.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
-                </select>
+                {activeTab === 'invoices' && (
+                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                        className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        {statuses.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
+                    </select>
+                )}
                 <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
                     className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                     <option value="All">{t(language, 'FinInvAllBranches')}</option>
@@ -572,138 +755,246 @@ export default function InvoicesPage() {
             </div>
 
             {/* Month Navigation */}
-            <div className="grid grid-cols-3 items-center mb-4">
-                <button onClick={() => {
-                    const [y, m] = month.split('-').map(Number);
-                    const d = new Date(y, m - 2, 1);
-                    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                }} className="justify-self-start text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                    <ChevronLeft className="w-4 h-4" /> {t(language, 'Previous')}
-                </button>
-                <div className="justify-self-center text-lg font-bold text-slate-900">
-                    {fmtMonth(month)}
+            {activeTab === 'invoices' ? (
+                <div className="grid grid-cols-3 items-center mb-4">
+                    <button onClick={() => {
+                        const [y, m] = month.split('-').map(Number);
+                        const d = new Date(y, m - 2, 1);
+                        setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                    }} className="justify-self-start text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
+                        <ChevronLeft className="w-4 h-4" /> {t(language, 'Previous')}
+                    </button>
+                    <div className="justify-self-center text-lg font-bold text-slate-900">
+                        {fmtMonth(month)}
+                    </div>
+                    <button onClick={() => {
+                        const [y, m] = month.split('-').map(Number);
+                        const d = new Date(y, m, 1);
+                        setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                    }} className="justify-self-end text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
+                        {t(language, 'Next')} <ChevronRight className="w-4 h-4" />
+                    </button>
                 </div>
-                <button onClick={() => {
-                    const [y, m] = month.split('-').map(Number);
-                    const d = new Date(y, m, 1);
-                    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                }} className="justify-self-end text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                    {t(language, 'Next')} <ChevronRight className="w-4 h-4" />
-                </button>
-            </div>
+            ) : (
+                <div className="flex items-center justify-between mb-4">
+                    <span className="text-slate-500 text-sm font-semibold">{t(language, 'FinCFStatutory')} ({t(language, 'AllTime') || 'All Time'})</span>
+                </div>
+            )}
 
             {/* Summary bar */}
             <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 px-4 py-3 mb-4 shadow-sm">
-                <span className="text-sm text-slate-600">{filtered.length} {filtered.length === 1 ? t(language, 'FinPayInvoiceSingular') : t(language, 'FinPayInvoicePlural')}</span>
-                <span className="text-sm font-bold text-slate-900 tabular-nums">{t(language, 'FinPayTotal')}: {currency} {fmt(totalFiltered, currency === 'VND')}</span>
+                {activeTab === 'invoices' ? (
+                    <>
+                        <span className="text-sm text-slate-600">{filtered.length} {filtered.length === 1 ? t(language, 'FinPayInvoiceSingular') : t(language, 'FinPayInvoicePlural')}</span>
+                        <span className="text-sm font-bold text-slate-900 tabular-nums">{t(language, 'FinPayTotal')}: {currency} {fmt(totalFiltered, currency === 'VND')}</span>
+                    </>
+                ) : (
+                    <>
+                        <span className="text-sm text-slate-600">{combinedAwaitingItems.length} {t(language, 'FinPayTitle')}</span>
+                        <span className="text-sm font-bold text-slate-900 tabular-nums">
+                            {t(language, 'FinPayTotal')}: {currency} {fmt(combinedAwaitingItems.reduce((s, i) => s + i.amount, 0), currency === 'VND')}
+                        </span>
+                    </>
+                )}
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
-                <table className="w-full table-auto text-sm text-gray-900 text-left border-collapse">
-                    <thead>
-                        <tr className="text-gray-500 font-semibold border-b border-slate-100 bg-slate-50/50">
-                            <th className="p-3 whitespace-nowrap">{t(language, 'FinInvInvoiceNo')}</th>
-                            <th className="p-3 whitespace-nowrap">{t(language, 'FinInvDate')}</th>
-                            <th className="p-3 whitespace-nowrap">{t(language, 'FinInvSupplier')}</th>
-                            <th className="p-3 whitespace-nowrap">{t(language, 'FinInvBranch')}</th>
-                            <th className="p-3 whitespace-nowrap">{t(language, 'FinInvCategory')}</th>
-                            <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvNet')}</th>
-                            <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvVat')}</th>
-                            <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvGross')}</th>
-                            {hasAnyBalanceDue && <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvBalance')}</th>}
-                            <th className="p-3 whitespace-nowrap">{t(language, 'FinInvStatus')}</th>
-                            <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvActions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr><td colSpan={hasAnyBalanceDue ? 11 : 10} className="p-8 text-center"><CircularLoader /></td></tr>
-                        ) : filtered.length === 0 ? (
-                            <tr><td colSpan={hasAnyBalanceDue ? 11 : 10} className="p-8 text-center text-gray-500">{t(language, 'FinInvNoInvoices')}</td></tr>
-                        ) : filtered.map(inv => {
-                            const paidItems = ((inv as any).fin_payment_order_items || []).filter((i: any) => i.fin_payment_orders?.status === 'Paid' || i.fin_payment_orders?.status === 'Approved')
-                            let paidAmount = paidItems.reduce((sum: number, i: any) => sum + Number(i.amount), 0)
-                            paidAmount += ((inv as any).cashout || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
-                            paidAmount += ((inv as any).fin_corporate_card_expenses || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
-                            
-                            const balanceDue = (inv.is_personal_deduction || inv.status === 'Cancelled') ? 0 : Math.max(0, Number(inv.gross_amount) - paidAmount)
-                            const displayStatus = (inv.is_personal_deduction || balanceDue <= 0 || inv.status === 'Paid') ? 'Paid' : inv.status;
-                            const sty = INVOICE_STATUS_STYLES[displayStatus] || INVOICE_STATUS_STYLES['Pending']
-                            const today = new Date().toISOString().split('T')[0]
-                            const isOverdue = displayStatus === 'Pending' && inv.due_date && inv.due_date < today
-                            return (
-                                <tr key={inv.id} className={`border-t border-slate-100 align-top hover:bg-blue-50/30 transition ${isOverdue ? 'bg-red-50/30' : ''}`}>
-                                    <td className="p-3 text-slate-800">
-                                        <div className="font-semibold">{inv.invoice_number}</div>
-                                        {inv.is_personal_deduction && (
-                                            <div className="text-[10px] text-amber-600 font-semibold mt-0.5 whitespace-nowrap">
-                                                {t(language, 'FinInvPersonalExpense')}
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className="p-3 text-slate-600 whitespace-nowrap">{new Date(inv.invoice_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
-                                    <td className="p-3 text-slate-700 font-medium">
-                                        {inv.is_personal_deduction ? inv.custom_supplier_name : ((inv as any).suppliers?.name || '—')}
-                                    </td>
-                                    <td className="p-3 text-slate-600 whitespace-nowrap">
-                                        <div className="flex flex-row items-center gap-1 overflow-hidden">
-                                            {(!inv.branch_ids || inv.branch_ids.length === 0) ? (
-                                                <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 whitespace-nowrap">
-                                                    {t(language, 'FinInvGeneral')}
-                                                </span>
-                                            ) : (
-                                                <div className="flex flex-wrap gap-1">
-                                                    {inv.branch_ids.map(id => {
-                                                        const br = branches.find(b => b.id === id);
-                                                        if (!br) return null;
-                                                        const col = getBranchColor(id, branches);
-                                                        return (
-                                                            <span key={id} className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${col.bg} ${col.text} whitespace-nowrap`}>
-                                                                {br.name}
-                                                            </span>
-                                                        );
-                                                    })}
+            {activeTab === 'invoices' ? (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                    <table className="w-full table-auto text-sm text-gray-900 text-left border-collapse">
+                        <thead>
+                            <tr className="text-gray-500 font-semibold border-b border-slate-100 bg-slate-50/50">
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvInvoiceNo')}</th>
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvDate')}</th>
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvSupplier')}</th>
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvBranch')}</th>
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvCategory')}</th>
+                                <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvNet')}</th>
+                                <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvVat')}</th>
+                                <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvGross')}</th>
+                                {hasAnyBalanceDue && <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvBalance')}</th>}
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvStatus')}</th>
+                                <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvActions')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr><td colSpan={hasAnyBalanceDue ? 11 : 10} className="p-8 text-center"><CircularLoader /></td></tr>
+                            ) : filtered.length === 0 ? (
+                                <tr><td colSpan={hasAnyBalanceDue ? 11 : 10} className="p-8 text-center text-gray-500">{t(language, 'FinInvNoInvoices')}</td></tr>
+                            ) : filtered.map(inv => {
+                                const paidItems = ((inv as any).fin_payment_order_items || []).filter((i: any) => i.fin_payment_orders?.status === 'Paid' || i.fin_payment_orders?.status === 'Approved')
+                                let paidAmount = paidItems.reduce((sum: number, i: any) => sum + Number(i.amount), 0)
+                                paidAmount += ((inv as any).cashout || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
+                                paidAmount += ((inv as any).fin_corporate_card_expenses || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
+                                
+                                const balanceDue = (inv.is_personal_deduction || inv.status === 'Cancelled') ? 0 : Math.max(0, Number(inv.gross_amount) - paidAmount)
+                                const displayStatus = (inv.is_personal_deduction || balanceDue <= 0 || inv.status === 'Paid') ? 'Paid' : inv.status;
+                                const sty = INVOICE_STATUS_STYLES[displayStatus] || INVOICE_STATUS_STYLES['Pending']
+                                const today = new Date().toISOString().split('T')[0]
+                                const isOverdue = displayStatus === 'Pending' && inv.due_date && inv.due_date < today
+                                return (
+                                    <tr key={inv.id} className={`border-t border-slate-100 align-top hover:bg-blue-50/30 transition ${isOverdue ? 'bg-red-50/30' : ''}`}>
+                                        <td className="p-3 text-slate-800">
+                                            <div className="font-semibold">{inv.invoice_number}</div>
+                                            {inv.is_personal_deduction && (
+                                                <div className="text-[10px] text-amber-600 font-semibold mt-0.5 whitespace-nowrap">
+                                                    {t(language, 'FinInvPersonalExpense')}
                                                 </div>
                                             )}
-                                        </div>
-                                    </td>
-                                    <td className="p-3">
-                                        {(inv as any).fin_chart_of_accounts ? (
-                                            <span className="text-sm font-medium text-slate-800">
-                                                {language === 'vi' 
-                                                    ? ((inv as any).fin_chart_of_accounts.simplified_name || (inv as any).fin_chart_of_accounts.name)
-                                                    : (inv as any).fin_chart_of_accounts.name}
+                                        </td>
+                                        <td className="p-3 text-slate-600 whitespace-nowrap">{new Date(inv.invoice_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+                                        <td className="p-3 text-slate-700 font-medium">
+                                            {inv.is_personal_deduction ? inv.custom_supplier_name : ((inv as any).suppliers?.name || '—')}
+                                        </td>
+                                        <td className="p-3 text-slate-600 whitespace-nowrap">
+                                            <div className="flex flex-row items-center gap-1 overflow-hidden">
+                                                {(!inv.branch_ids || inv.branch_ids.length === 0) ? (
+                                                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 whitespace-nowrap">
+                                                        {t(language, 'FinInvGeneral')}
+                                                    </span>
+                                                ) : (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {inv.branch_ids.map(id => {
+                                                            const br = branches.find(b => b.id === id);
+                                                            if (!br) return null;
+                                                            const col = getBranchColor(id, branches);
+                                                            return (
+                                                                <span key={id} className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${col.bg} ${col.text} whitespace-nowrap`}>
+                                                                    {br.name}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="p-3">
+                                            {(inv as any).fin_chart_of_accounts ? (
+                                                <span className="text-sm font-medium text-slate-800">
+                                                    {language === 'vi' 
+                                                        ? ((inv as any).fin_chart_of_accounts.simplified_name || (inv as any).fin_chart_of_accounts.name)
+                                                        : (inv as any).fin_chart_of_accounts.name}
+                                                </span>
+                                            ) : <span className="text-slate-400">—</span>}
+                                        </td>
+                                        <td className="p-3 text-right tabular-nums">{fmt(Number(inv.net_amount), (inv.currency || currency) === 'VND')}</td>
+                                        <td className="p-3 text-right tabular-nums text-slate-500">{fmt(Number(inv.vat_amount), (inv.currency || currency) === 'VND')}</td>
+                                        <td className="p-3 text-right tabular-nums font-bold text-slate-900">{fmt(Number(inv.gross_amount), (inv.currency || currency) === 'VND')}</td>
+                                        {hasAnyBalanceDue && (
+                                            <td className="p-3 text-right tabular-nums font-bold text-amber-600">{balanceDue <= 0 ? <span className="text-emerald-600">0</span> : fmt(balanceDue, (inv.currency || currency) === 'VND')}</td>
+                                        )}
+                                        <td className="p-3">
+                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${isOverdue ? 'bg-red-100 text-red-700' : `${sty.bg} ${sty.text}`}`}>
+                                                {isOverdue ? t(language, 'FinInvStatusOverdue') : translateStatus(displayStatus)}
                                             </span>
-                                        ) : <span className="text-slate-400">—</span>}
-                                    </td>
-                                    <td className="p-3 text-right tabular-nums">{fmt(Number(inv.net_amount), (inv.currency || currency) === 'VND')}</td>
-                                    <td className="p-3 text-right tabular-nums text-slate-500">{fmt(Number(inv.vat_amount), (inv.currency || currency) === 'VND')}</td>
-                                    <td className="p-3 text-right tabular-nums font-bold text-slate-900">{fmt(Number(inv.gross_amount), (inv.currency || currency) === 'VND')}</td>
-                                    {hasAnyBalanceDue && (
-                                        <td className="p-3 text-right tabular-nums font-bold text-amber-600">{balanceDue <= 0 ? <span className="text-emerald-600">0</span> : fmt(balanceDue, (inv.currency || currency) === 'VND')}</td>
-                                    )}
-                                    <td className="p-3">
-                                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${isOverdue ? 'bg-red-100 text-red-700' : `${sty.bg} ${sty.text}`}`}>
-                                            {isOverdue ? t(language, 'FinInvStatusOverdue') : translateStatus(displayStatus)}
-                                        </span>
-                                    </td>
-                                    <td className="p-3 text-right">
-                                        <div className="flex items-center justify-end gap-1">
-                                            <button onClick={() => openEdit(inv)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition" title={t(language, 'Edit')}>
-                                                <Pencil className="w-4 h-4" />
+                                        </td>
+                                        <td className="p-3 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                                <button onClick={() => openEdit(inv)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition" title={t(language, 'Edit')}>
+                                                    <Pencil className="w-4 h-4" />
+                                                </button>
+                                                <button onClick={() => handleDelete(inv.id)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-red-600 transition" title={t(language, 'Delete')}>
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                    <table className="w-full table-auto text-sm text-gray-900 text-left border-collapse">
+                        <thead>
+                            <tr className="text-gray-500 font-semibold border-b border-slate-100 bg-slate-50/50">
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvDate')}</th>
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvDescription')}</th>
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvSupplier')}</th>
+                                <th className="p-3 whitespace-nowrap">{t(language, 'FinInvBranch')}</th>
+                                <th className="p-3 whitespace-nowrap">{language === 'vi' ? 'Phương thức' : 'Method / Ref'}</th>
+                                <th className="p-3 whitespace-nowrap text-right">{language === 'vi' ? 'Số tiền' : 'Amount'}</th>
+                                <th className="p-3 whitespace-nowrap text-right">{t(language, 'FinInvActions')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr><td colSpan={7} className="p-8 text-center"><CircularLoader /></td></tr>
+                            ) : combinedAwaitingItems.length === 0 ? (
+                                <tr><td colSpan={7} className="p-8 text-center text-gray-500">{t(language, 'FinInvNoUnlinkedPayments')}</td></tr>
+                            ) : combinedAwaitingItems.map(item => {
+                                return (
+                                    <tr key={item.id} className="border-t border-slate-100 align-middle hover:bg-blue-50/30 transition">
+                                        <td className="p-3 text-slate-600 whitespace-nowrap">
+                                            {new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                        </td>
+                                        <td className="p-3 text-slate-800 font-semibold">
+                                            {item.description || t(language, 'NoDescription')}
+                                        </td>
+                                        <td className="p-3 text-slate-700 font-medium">
+                                            {item.supplier_name || '—'}
+                                        </td>
+                                        <td className="p-3 text-slate-600 whitespace-nowrap">
+                                            <div className="flex flex-row items-center gap-1 overflow-hidden">
+                                                {item.branch_ids.length === 0 ? (
+                                                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 whitespace-nowrap">
+                                                        {t(language, 'FinInvGeneral')}
+                                                    </span>
+                                                ) : (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {item.branch_ids.map((id: string) => {
+                                                            const br = branches.find(b => b.id === id);
+                                                            if (!br) return null;
+                                                            const col = getBranchColor(id, branches);
+                                                            return (
+                                                                <span key={id} className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${col.bg} ${col.text} whitespace-nowrap`}>
+                                                                    {br.name}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="p-3">
+                                            <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${
+                                                item.type === 'Payment Order' 
+                                                    ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                                    : item.type === 'Card'
+                                                        ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                                        : 'bg-orange-50 text-orange-700 border-orange-200'
+                                            }`}>
+                                                {item.type === 'Payment Order' 
+                                                    ? t(language, 'FinDsbPaymentOrder') 
+                                                    : item.type === 'Card' 
+                                                        ? t(language, 'FinInvCard') 
+                                                        : t(language, 'CashOut')}
+                                            </span>
+                                            {item.type === 'Payment Order' && item.ref && (
+                                                <span className="text-xs text-slate-500 ml-2">({item.ref})</span>
+                                            )}
+                                        </td>
+                                        <td className="p-3 text-right tabular-nums font-bold text-slate-900">
+                                            {fmt(item.amount, (item.type === 'Cash Out' || (item.raw.currency || currency) === 'VND'))} {item.raw.currency || (item.type === 'Cash Out' ? 'VND' : currency)}
+                                        </td>
+                                        <td className="p-3 text-right">
+                                            <button
+                                                onClick={() => handleCreateInvoiceFromPending(item.raw, item.type)}
+                                                className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm animate-in fade-in duration-200"
+                                            >
+                                                <Plus className="w-3.5 h-3.5" />
+                                                {language === 'vi' ? 'Tạo Hóa Đơn' : 'Create Invoice'}
                                             </button>
-                                            <button onClick={() => handleDelete(inv.id)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-red-600 transition" title={t(language, 'Delete')}>
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                    </tbody>
-                </table>
-            </div>
+                                        </td>
+                                    </tr>
+                                )
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             {/* Add/Edit Modal */}
             {modalMode !== 'none' && (

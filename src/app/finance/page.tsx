@@ -488,7 +488,7 @@ export default function FinanceDashboard() {
                 <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
                         <h2 className="text-lg font-bold text-slate-900">{t(language, 'PaymentsAwaitingInvoice')}</h2>
-                        <Link href="/finance/invoices" className="text-sm font-medium text-blue-600 hover:underline flex items-center gap-1">
+                        <Link href="/finance/invoices?tab=awaiting" className="text-sm font-medium text-blue-600 hover:underline flex items-center gap-1">
                             {t(language, 'ViewAll')} <ChevronRight className="w-4 h-4" />
                         </Link>
                     </div>
@@ -497,7 +497,7 @@ export default function FinanceDashboard() {
                             <div className="p-8 text-center text-slate-500">{t(language, 'NoPaymentsAwaitingInvoice')}</div>
                         ) : (
                             pendingVatItems.slice(0, 10).map(item => (
-                                <Link href="/finance/invoices" key={item.id} className="block hover:bg-slate-50 transition">
+                                <Link href={`/finance/invoices?tab=awaiting&action=create&linkId=${item.id}&linkType=${encodeURIComponent(item.type)}`} key={item.id} className="block hover:bg-slate-50 transition">
                                     <div className="p-4 flex items-center justify-between">
                                         <div className="flex items-center gap-4 min-w-0 flex-1">
                                             <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center font-bold shrink-0">
