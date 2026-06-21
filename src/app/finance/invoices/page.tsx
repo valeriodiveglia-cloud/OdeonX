@@ -938,7 +938,7 @@ export default function InvoicesPage() {
                                         </td>
                                         <td className="p-3 text-slate-600 whitespace-nowrap">
                                             <div className="flex flex-row items-center gap-1 overflow-hidden">
-                                                {item.branch_ids.length === 0 ? (
+                                                {(item.branch_ids.length === 0 || item.branch_ids.length === branches.length) ? (
                                                     <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 whitespace-nowrap">
                                                         {t(language, 'FinInvGeneral')}
                                                     </span>
@@ -959,24 +959,26 @@ export default function InvoicesPage() {
                                             </div>
                                         </td>
                                         <td className="p-3">
-                                            <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${
-                                                item.type === 'Payment Order' 
-                                                    ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                                                    : item.type === 'Card'
-                                                        ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                                        : 'bg-orange-50 text-orange-700 border-orange-200'
-                                            }`}>
-                                                {item.type === 'Payment Order' 
-                                                    ? t(language, 'FinDsbPaymentOrder') 
-                                                    : item.type === 'Card' 
-                                                        ? t(language, 'FinInvCard') 
-                                                        : t(language, 'CashOut')}
-                                            </span>
-                                            {item.type === 'Payment Order' && item.ref && (
-                                                <span className="text-xs text-slate-500 ml-2">({item.ref})</span>
-                                            )}
+                                            <div className="flex flex-col items-start gap-1">
+                                                <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${
+                                                    item.type === 'Payment Order' 
+                                                        ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                                        : item.type === 'Card'
+                                                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                                            : 'bg-orange-50 text-orange-700 border-orange-200'
+                                                }`}>
+                                                    {item.type === 'Payment Order' 
+                                                        ? t(language, 'FinDsbPaymentOrder') 
+                                                        : item.type === 'Card' 
+                                                            ? t(language, 'FinInvCard') 
+                                                            : t(language, 'CashOut')}
+                                                </span>
+                                                {item.type === 'Payment Order' && item.ref && (
+                                                    <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">({item.ref})</span>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="p-3 text-right tabular-nums font-bold text-slate-900">
+                                        <td className="p-3 text-right tabular-nums font-bold text-slate-900 whitespace-nowrap">
                                             {fmt(item.amount, (item.type === 'Cash Out' || (item.raw.currency || currency) === 'VND'))} {item.raw.currency || (item.type === 'Cash Out' ? 'VND' : currency)}
                                         </td>
                                         <td className="p-3 text-right">
