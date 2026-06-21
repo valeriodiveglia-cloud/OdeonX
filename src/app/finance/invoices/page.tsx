@@ -960,7 +960,7 @@ export default function InvoicesPage() {
                                         </td>
                                         <td className="p-3">
                                             <div className="flex flex-col items-start gap-1">
-                                                <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${
+                                                <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider whitespace-nowrap ${
                                                     item.type === 'Payment Order' 
                                                         ? 'bg-blue-50 text-blue-700 border-blue-200' 
                                                         : item.type === 'Card'
