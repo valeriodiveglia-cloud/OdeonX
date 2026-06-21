@@ -46,3 +46,4 @@ APP_AUDIT_*.txt
 
 # AI local instructions
 instructions.md
+.agents/

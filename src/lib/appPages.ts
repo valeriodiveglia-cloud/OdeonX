@@ -63,7 +63,7 @@ export type AppPage = {
 export const APP_PAGES_DIRECTORY: AppPage[] = [
   // Dashboard default
   { id: 'dashboard', href: '/dashboard', title: 'Dashboard', module: 'System', icon: LayoutDashboard },
-  { id: 'general-settings', href: '/general-settings', title: 'Global Settings', module: 'System', icon: Cog6ToothIcon, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'general-settings', href: '/general-settings', title: 'Global Settings', module: 'System', icon: Cog6ToothIcon, requiresRole: ['owner', 'admin'] },
   
   // Costing & Materials
   { id: 'materials', href: '/materials', title: 'Materials', module: 'Costing & Operations', icon: Boxes },

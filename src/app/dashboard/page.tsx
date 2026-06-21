@@ -360,7 +360,7 @@ export default function HomeDashboard() {
     
     // Column 2
     { id: 'catering', href: '/catering', icon: BuildingOffice2Icon, title: t(language, 'Catering'), roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-    { id: 'settings', href: '/general-settings', icon: Cog6ToothIcon, title: t(language, 'Settings'), roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+    { id: 'settings', href: '/general-settings', icon: Cog6ToothIcon, title: t(language, 'Settings'), roles: ['owner', 'admin'] },
     
     // Column 3
     { id: 'loyalty', href: '/loyalty-manager', icon: UserGroupIcon, title: t(language, 'LoyaltyManager') || 'Loyalty Manager', roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },

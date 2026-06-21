@@ -483,6 +483,8 @@ export default function PaymentOrdersPage() {
         setSaving(true)
         try {
             const isTransfer = !!showMarkPaid.destination_account_id
+            const previousStatus = showMarkPaid.status
+            const txErrors: string[] = []
 
             if (isTransfer) {
                 const items = showMarkPaid.fin_payment_order_items || [];
@@ -519,7 +521,7 @@ export default function PaymentOrdersPage() {
                         reference_type: 'payment_order',
                         counterpart_account_id: destAccountId
                     })
-                    if (txErr1) console.warn('Source Transaction log failed:', txErr1)
+                    if (txErr1) txErrors.push(language === 'vi' ? `Giao dịch nguồn thất bại: ${txErr1.message}` : `Source transaction failed: ${txErr1.message}`)
 
                     if (feeAmt > 0) {
                         const { error: feeErr } = await supabase.from('fin_bank_transactions').insert({
@@ -532,7 +534,7 @@ export default function PaymentOrdersPage() {
                             reference_id: showMarkPaid.id,
                             reference_type: 'payment_order',
                         })
-                        if (feeErr) console.warn('Fee Transaction log failed:', feeErr)
+                        if (feeErr) txErrors.push(language === 'vi' ? `Giao dịch phí thất bại: ${feeErr.message}` : `Fee transaction failed: ${feeErr.message}`)
                     }
 
                     // Inflow transaction on destination account
@@ -547,11 +549,31 @@ export default function PaymentOrdersPage() {
                         reference_type: 'payment_order',
                         counterpart_account_id: paidAccountId
                     })
-                    if (txErr2) console.warn('Destination Transaction log failed:', txErr2)
+                    if (txErr2) txErrors.push(language === 'vi' ? `Giao dịch đích thất bại: ${txErr2.message}` : `Destination transaction failed: ${txErr2.message}`)
 
-                    // Update balances in PostgreSQL via RPC
-                    await supabase.rpc('fin_update_account_balance', { p_account_id: paidAccountId })
-                    await supabase.rpc('fin_update_account_balance', { p_account_id: destAccountId })
+                    // Update balances in PostgreSQL via RPC if no transaction errors occurred
+                    if (txErrors.length === 0) {
+                        const { error: balErr1 } = await supabase.rpc('fin_update_account_balance', { p_account_id: paidAccountId })
+                        if (balErr1) txErrors.push(language === 'vi' ? `Cập nhật số dư nguồn thất bại: ${balErr1.message}` : `Source balance update failed: ${balErr1.message}`)
+                        
+                        const { error: balErr2 } = await supabase.rpc('fin_update_account_balance', { p_account_id: destAccountId })
+                        if (balErr2) txErrors.push(language === 'vi' ? `Cập nhật số dư đích thất bại: ${balErr2.message}` : `Destination balance update failed: ${balErr2.message}`)
+                    }
+                }
+
+                if (txErrors.length > 0) {
+                    // Rollback internal transfer changes
+                    await supabase.from('fin_bank_transactions').delete().eq('reference_id', showMarkPaid.id).eq('reference_type', 'payment_order')
+                    await supabase.from('fin_payment_orders').update({
+                        status: previousStatus, paid_date: null, bank_account_id: showMarkPaid.bank_account_id,
+                        notes: showMarkPaid.notes, total_amount: showMarkPaid.total_amount
+                    }).eq('id', showMarkPaid.id)
+
+                    throw new Error(
+                        language === 'vi'
+                            ? `Giao dịch chuyển khoản nội bộ thất bại. Đã khôi phục trạng thái lệnh chi thành ${previousStatus}. Chi tiết:\n${txErrors.join('\n')}`
+                            : `Internal transfer transactions failed. Reverted payment order status to ${previousStatus}. Details:\n${txErrors.join('\n')}`
+                    )
                 }
             } else {
                 const totalFeeVND = Object.values(itemFees).reduce((s, v) => s + v, 0);
@@ -571,7 +593,7 @@ export default function PaymentOrdersPage() {
                     const feeAmt = itemFees[item.id] || 0;
                     if (feeAmt > 0) {
                         const feeDesc = `Bank Fee for ${item.item_type === 'invoice' && item.fin_invoices ? item.fin_invoices.invoice_number : item.description}`
-                        await supabase.from('fin_payment_order_items').insert({
+                        const { error: feeItemErr } = await supabase.from('fin_payment_order_items').insert({
                             payment_order_id: showMarkPaid.id,
                             item_type: 'manual',
                             description: feeDesc,
@@ -579,42 +601,49 @@ export default function PaymentOrdersPage() {
                             account_id: selectedPaidAccount?.fee_account_id || item.account_id || null,
                             branch_ids: item.branch_ids || null
                         })
+                        if (feeItemErr) txErrors.push(language === 'vi' ? `Thêm phí giao dịch thất bại: ${feeItemErr.message}` : `Failed to add fee item: ${feeItemErr.message}`)
                     }
                 }
 
                 // Update manual item amount if changed
                 const firstManual = showMarkPaid.fin_payment_order_items?.find(i => i.item_type === 'manual')
-                if (firstManual) {
+                if (firstManual && txErrors.length === 0) {
                     if (paidFinalAmountVND !== showMarkPaid.total_amount) {
-                        await supabase.from('fin_payment_order_items').update({ amount: paidFinalAmountVND }).eq('id', firstManual.id)
+                        const { error: manItemErr } = await supabase.from('fin_payment_order_items').update({ amount: paidFinalAmountVND }).eq('id', firstManual.id)
+                        if (manItemErr) txErrors.push(language === 'vi' ? `Cập nhật số tiền thủ công thất bại: ${manItemErr.message}` : `Failed to update manual item amount: ${manItemErr.message}`)
                     }
                     if (firstManual.corporate_card_expense_id) {
-                        await supabase.from('fin_corporate_card_expenses').update({ final_amount_vnd: paidFinalAmountVND }).eq('id', firstManual.corporate_card_expense_id)
+                        const { error: ccErr } = await supabase.from('fin_corporate_card_expenses').update({ final_amount_vnd: paidFinalAmountVND }).eq('id', firstManual.corporate_card_expense_id)
+                        if (ccErr) txErrors.push(language === 'vi' ? `Cập nhật chi phí thẻ thất bại: ${ccErr.message}` : `Failed to update corporate card expense: ${ccErr.message}`)
                     }
                 }
 
                 // Update all child invoices
                 const invoiceIds = items.filter(i => i.invoice_id).map(i => i.invoice_id as string)
                 
-                if (invoiceIds.length > 0) {
-                    const { data: invData } = await supabase.from('fin_invoices').select('id, gross_amount, fin_payment_order_items(amount, fin_payment_orders(status, id))').in('id', invoiceIds)
-                    if (invData) {
+                if (invoiceIds.length > 0 && txErrors.length === 0) {
+                    const { data: invData, error: invFetchErr } = await supabase.from('fin_invoices').select('id, gross_amount, fin_payment_order_items(amount, fin_payment_orders(status, id))').in('id', invoiceIds)
+                    if (invFetchErr) {
+                        txErrors.push(language === 'vi' ? `Lấy dữ liệu hóa đơn thất bại: ${invFetchErr.message}` : `Failed to fetch invoice data: ${invFetchErr.message}`)
+                    } else if (invData) {
                         for (const inv of invData) {
                             const paidItems = (inv.fin_payment_order_items || []).filter((pi: any) => pi.fin_payment_orders?.status === 'Paid' || pi.fin_payment_orders?.status === 'Approved' || pi.fin_payment_orders?.id === showMarkPaid.id)
                             const paidAmount = paidItems.reduce((sum: number, pi: any) => sum + Number(pi.amount), 0)
                             if (paidAmount >= Number(inv.gross_amount)) {
-                                await supabase.from('fin_invoices').update({
+                                const { error: invUpdErr } = await supabase.from('fin_invoices').update({
                                     status: 'Paid', paid_date: paidDate, paid_via: paidMethod, paid_from_account_id: paidAccountId || null,
                                 }).eq('id', inv.id)
+                                if (invUpdErr) txErrors.push(language === 'vi' ? `Cập nhật trạng thái hóa đơn ${inv.id} thất bại: ${invUpdErr.message}` : `Failed to update invoice ${inv.id} to Paid: ${invUpdErr.message}`)
                             } else {
-                                await supabase.from('fin_invoices').update({ status: 'In Payment' }).eq('id', inv.id)
+                                const { error: invUpdErr } = await supabase.from('fin_invoices').update({ status: 'In Payment' }).eq('id', inv.id)
+                                if (invUpdErr) txErrors.push(language === 'vi' ? `Cập nhật hóa đơn ${inv.id} thành Đang thanh toán thất bại: ${invUpdErr.message}` : `Failed to update invoice ${inv.id} to In Payment: ${invUpdErr.message}`)
                             }
                         }
                     }
                 }
 
                 // Create bank transactions if account selected
-                if (paidAccountId) {
+                if (paidAccountId && txErrors.length === 0) {
                     const hasInvoices = items.some(i => i.item_type === 'invoice' || i.invoice_id)
                     const hasManual = items.some(i => i.item_type === 'manual')
                     const txCategory = hasInvoices && hasManual ? 'Mixed Payment' : hasManual ? 'Operational Payment' : 'Supplier Payment'
@@ -626,7 +655,7 @@ export default function PaymentOrdersPage() {
                         category: txCategory, description: `Payment Order ${showMarkPaid.order_number}`,
                         amount: baseAmount, reference_id: showMarkPaid.id, reference_type: 'payment_order',
                     })
-                    if (txErr) console.warn('Transaction log failed:', txErr)
+                    if (txErr) txErrors.push(language === 'vi' ? `Ghi nhận giao dịch ngân hàng thất bại: ${txErr.message}` : `Bank transaction failed: ${txErr.message}`)
 
                     for (const item of items) {
                         const feeAmt = itemFees[item.id] || 0;
@@ -637,12 +666,40 @@ export default function PaymentOrdersPage() {
                                 category: 'Bank Fees', description: feeDesc,
                                 amount: feeAmt, reference_id: showMarkPaid.id, reference_type: 'payment_order',
                             })
-                            if (feeErr) console.warn('Fee Transaction log failed:', feeErr)
+                            if (feeErr) txErrors.push(language === 'vi' ? `Ghi nhận giao dịch phí thất bại: ${feeErr.message}` : `Fee transaction failed: ${feeErr.message}`)
                         }
                     }
 
                     // Update balance
-                    await supabase.rpc('fin_update_account_balance', { p_account_id: paidAccountId })
+                    if (txErrors.length === 0) {
+                        const { error: balErr } = await supabase.rpc('fin_update_account_balance', { p_account_id: paidAccountId })
+                        if (balErr) txErrors.push(language === 'vi' ? `Ricalcolo số dư thất bại: ${balErr.message}` : `Balance update failed: ${balErr.message}`)
+                    }
+                }
+
+                if (txErrors.length > 0) {
+                    // Rollback standard payment changes
+                    await supabase.from('fin_bank_transactions').delete().eq('reference_id', showMarkPaid.id).eq('reference_type', 'payment_order')
+                    await supabase.from('fin_payment_order_items').delete().eq('payment_order_id', showMarkPaid.id).like('description', 'Bank Fee for %')
+                    if (invoiceIds.length > 0) {
+                        await supabase.from('fin_invoices').update({ status: 'Pending', paid_date: null, paid_via: null, paid_from_account_id: null }).in('id', invoiceIds)
+                    }
+                    if (firstManual) {
+                        await supabase.from('fin_payment_order_items').update({ amount: showMarkPaid.total_amount }).eq('id', firstManual.id)
+                        if (firstManual.corporate_card_expense_id) {
+                            await supabase.from('fin_corporate_card_expenses').update({ is_paid: false, final_amount_vnd: null }).eq('id', firstManual.corporate_card_expense_id)
+                        }
+                    }
+                    await supabase.from('fin_payment_orders').update({
+                        status: previousStatus, paid_date: null, bank_account_id: showMarkPaid.bank_account_id,
+                        notes: showMarkPaid.notes, total_amount: showMarkPaid.total_amount
+                    }).eq('id', showMarkPaid.id)
+
+                    throw new Error(
+                        language === 'vi'
+                            ? `Giao dịch thanh toán thất bại. Đã khôi phục trạng thái lệnh chi thành ${previousStatus}. Chi tiết:\n${txErrors.join('\n')}`
+                            : `Payment transactions failed. Reverted payment order status to ${previousStatus}. Details:\n${txErrors.join('\n')}`
+                    )
                 }
             }
 
@@ -659,20 +716,24 @@ export default function PaymentOrdersPage() {
         setLoading(true)
         try {
             // Delete bank transactions
-            await supabase.from('fin_bank_transactions').delete().eq('reference_id', po.id).eq('reference_type', 'payment_order')
+            const { error: delTxErr } = await supabase.from('fin_bank_transactions').delete().eq('reference_id', po.id).eq('reference_type', 'payment_order')
+            if (delTxErr) throw delTxErr
             
             const isTransfer = !!po.destination_account_id
 
             if (isTransfer) {
-                await supabase.from('fin_payment_orders').update({
+                const { error: poErr } = await supabase.from('fin_payment_orders').update({
                     status: 'Pending Review', paid_date: null, bank_account_id: null
                 }).eq('id', po.id)
+                if (poErr) throw poErr
 
                 if (po.bank_account_id) {
-                    await supabase.rpc('fin_update_account_balance', { p_account_id: po.bank_account_id })
+                    const { error: balErr1 } = await supabase.rpc('fin_update_account_balance', { p_account_id: po.bank_account_id })
+                    if (balErr1) throw balErr1
                 }
                 if (po.destination_account_id) {
-                    await supabase.rpc('fin_update_account_balance', { p_account_id: po.destination_account_id })
+                    const { error: balErr2 } = await supabase.rpc('fin_update_account_balance', { p_account_id: po.destination_account_id })
+                    if (balErr2) throw balErr2
                 }
             } else {
                 // Delete fee item(s) if they exist
@@ -680,24 +741,27 @@ export default function PaymentOrdersPage() {
                 const totalFees = feeItems.reduce((sum, item) => sum + Number(item.amount), 0)
                 
                 if (feeItems.length > 0) {
-                    await supabase.from('fin_payment_order_items').delete().in('id', feeItems.map(i => i.id))
+                    const { error: delFeesErr } = await supabase.from('fin_payment_order_items').delete().in('id', feeItems.map(i => i.id))
+                    if (delFeesErr) throw delFeesErr
                 }
 
                 // Update invoices back to Pending
                 const items = po.fin_payment_order_items || []
-                // Exclude fee items from the items list for invoice logic (though fee items don't have invoice_id anyway)
                 const invoiceIds = items.filter(i => i.invoice_id).map(i => i.invoice_id as string)
                 if (invoiceIds.length > 0) {
-                    await supabase.from('fin_invoices').update({ status: 'Pending', paid_date: null, paid_via: null, paid_from_account_id: null }).in('id', invoiceIds)
+                    const { error: invErr } = await supabase.from('fin_invoices').update({ status: 'Pending', paid_date: null, paid_via: null, paid_from_account_id: null }).in('id', invoiceIds)
+                    if (invErr) throw invErr
                 }
 
-                await supabase.from('fin_payment_orders').update({
+                const { error: poErr } = await supabase.from('fin_payment_orders').update({
                     status: 'Pending Review', paid_date: null, bank_account_id: null,
                     total_amount: po.total_amount - totalFees
                 }).eq('id', po.id)
+                if (poErr) throw poErr
 
                 if (po.bank_account_id) {
-                    await supabase.rpc('fin_update_account_balance', { p_account_id: po.bank_account_id })
+                    const { error: balErr } = await supabase.rpc('fin_update_account_balance', { p_account_id: po.bank_account_id })
+                    if (balErr) throw balErr
                 }
             }
             
