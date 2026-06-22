@@ -62,6 +62,7 @@ export default function CorporateCardPage() {
     const [branches, setBranches] = useState<any[]>([])
     const [suppliers, setSuppliers] = useState<{id: string; name: string}[]>([])
     const [showAddSupplier, setShowAddSupplier] = useState(false)
+    const [invoices, setInvoices] = useState<any[]>([])
     const [newSupplierName, setNewSupplierName] = useState('')
 
     // Month navigation
@@ -90,6 +91,7 @@ export default function CorporateCardPage() {
         bank_account_id: '',
         supplier_id: '' as string,
         vat_invoice_status: 'None' as 'Issued' | 'Pending' | 'None',
+        invoice_id: '',
         branch_ids: [] as string[],
     })
 
@@ -97,12 +99,13 @@ export default function CorporateCardPage() {
         setLoading(true)
         try { await supabase.rpc('fin_auto_generate_card_pos'); } catch (e) { console.warn('Auto-gen failed', e); }
 
-        const [recRes, accRes, bankRes, brRes, supRes] = await Promise.all([
+        const [recRes, accRes, bankRes, brRes, supRes, invListRes] = await Promise.all([
             supabase.from('fin_corporate_card_expenses').select(`
                 *,
                 fin_chart_of_accounts(code, name, simplified_name),
                 fin_bank_accounts(account_name, bank_name),
                 suppliers(name),
+                fin_invoices(invoice_number),
                 fin_payment_order_items(
                     id,
                     fin_payment_orders(
@@ -115,13 +118,15 @@ export default function CorporateCardPage() {
             supabase.from('fin_chart_of_accounts').select('*').eq('is_active', true).eq('is_group', false).order('sort_order'),
             supabase.from('fin_bank_accounts').select('*').eq('is_active', true).in('account_type', ['Checking', 'Saving']).order('account_name'),
             supabase.from('provider_branches').select('id, name').order('name'),
-            supabase.from('suppliers').select('id, name').order('name')
+            supabase.from('suppliers').select('id, name').order('name'),
+            supabase.from('fin_invoices').select('id, invoice_number, suppliers(name), gross_amount, invoice_date').order('invoice_date', { ascending: false })
         ])
         setExpenses(recRes.data || [])
         setAccounts(accRes.data || [])
         setBankAccounts(bankRes.data || [])
         setBranches(brRes.data || [])
         setSuppliers(supRes.data || [])
+        if (invListRes.data) setInvoices(invListRes.data)
         setLoading(false)
     }
 
@@ -164,6 +169,7 @@ export default function CorporateCardPage() {
                 bank_account_id: item.bank_account_id || defaultCardId,
                 supplier_id: item.supplier_id || '',
                 vat_invoice_status: item.vat_invoice_status || 'None',
+                invoice_id: item.invoice_id || '',
                 branch_ids: item.branch_ids || [],
             })
         } else {
@@ -182,6 +188,7 @@ export default function CorporateCardPage() {
                 bank_account_id: defaultCardId,
                 supplier_id: '',
                 vat_invoice_status: 'None',
+                invoice_id: '',
                 branch_ids: [],
             })
         }
@@ -208,6 +215,7 @@ export default function CorporateCardPage() {
                 supplier_id: form.supplier_id || null,
                 vat_invoice_status: form.vat_invoice_status,
                 has_vat_invoice: form.vat_invoice_status === 'Issued', // backward compat
+                invoice_id: form.vat_invoice_status === 'Issued' && form.invoice_id ? form.invoice_id : null,
                 branch_ids: form.branch_ids,
             }
 
@@ -484,9 +492,20 @@ export default function CorporateCardPage() {
                                             )}
                                         </td>
                                         <td className="p-4 align-top">
-                                            {r.vat_invoice_status === 'Issued' ? <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">{t(language, 'FinCCVatIssued')}</span>
-                                            : r.vat_invoice_status === 'Pending' ? <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">{t(language, 'FinCCVatPending')}</span>
-                                            : <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">{t(language, 'FinCCVatNone')}</span>}
+                                            <div>
+                                                {r.vat_invoice_status === 'Issued' ? (
+                                                    <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">{t(language, 'FinCCVatIssued')}</span>
+                                                ) : r.vat_invoice_status === 'Pending' ? (
+                                                    <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">{t(language, 'FinCCVatPending')}</span>
+                                                ) : (
+                                                    <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">{t(language, 'FinCCVatNone')}</span>
+                                                )}
+                                                {r.fin_invoices?.invoice_number && (
+                                                    <div className="text-[11px] font-bold text-blue-600 mt-1 leading-none">
+                                                        {r.fin_invoices.invoice_number}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="p-4 text-right align-top">
                                             <div className="font-black text-slate-900 tabular-nums text-base">
@@ -685,12 +704,27 @@ export default function CorporateCardPage() {
                                     <div className="col-span-2">
                                         <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalVatStatus')} <span className="text-red-500">*</span></label>
                                         <select value={form.vat_invoice_status} onChange={e => setForm(f => ({ ...f, vat_invoice_status: e.target.value as any }))}
-                                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium">
+                                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium col-span-2">
                                             <option value="None">{t(language, 'FinCCVatNone')}</option>
                                             <option value="Pending">{t(language, 'FinCCVatPending')}</option>
                                             <option value="Issued">{t(language, 'FinCCVatIssued')}</option>
                                         </select>
                                     </div>
+
+                                    {form.vat_invoice_status === 'Issued' && (
+                                        <div className="col-span-2">
+                                            <label className="block text-sm font-semibold text-slate-700 mb-1">{language === 'vi' ? 'Liên kết với hóa đơn VAT' : 'Link to VAT Invoice'}</label>
+                                            <select value={form.invoice_id} onChange={e => setForm(f => ({ ...f, invoice_id: e.target.value }))}
+                                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium">
+                                                <option value="">{language === 'vi' ? '-- Chọn hóa đơn --' : '-- Select invoice --'}</option>
+                                                {invoices.map(inv => (
+                                                    <option key={inv.id} value={inv.id}>
+                                                        {inv.invoice_number} - {inv.suppliers?.name || 'No Supplier'} ({fmt(Number(inv.gross_amount))} {currency})
+                                                     </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
 
                                     <div className="col-span-2">
                                         <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'FinCCModalAttributedBranches')} <span className="text-red-500">*</span></label>

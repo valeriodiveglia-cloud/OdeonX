@@ -225,5 +225,8 @@ export interface FinCorporateCardExpense {
       status: string
     } | null
   }> | null
+  fin_invoices?: {
+    invoice_number: string
+  } | null
 }
 
