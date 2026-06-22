@@ -212,5 +212,13 @@ export interface FinCorporateCardExpense {
   fin_chart_of_accounts?: Pick<FinChartOfAccount, 'code' | 'name' | 'simplified_name'> | null
   fin_bank_accounts?: Pick<FinBankAccount, 'account_name' | 'bank_name'> | null
   suppliers?: Pick<{ name: string }, 'name'> | null
+  fin_payment_order_items?: Array<{
+    id: string
+    fin_payment_orders: {
+      id: string
+      order_number: string
+      status: string
+    } | null
+  }> | null
 }
 

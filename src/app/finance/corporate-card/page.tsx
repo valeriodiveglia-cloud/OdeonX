@@ -44,6 +44,17 @@ export default function CorporateCardPage() {
         return freq
     }
 
+    const translateStatus = (status: string) => {
+        switch (status) {
+            case 'Draft': return t(language, 'FinPayStatusDraft')
+            case 'Pending Review': return t(language, 'FinPayStatusPendingReview')
+            case 'Approved': return t(language, 'FinPayStatusApproved')
+            case 'Paid': return t(language, 'FinPayStatusPaid')
+            case 'Cancelled': return t(language, 'FinPayStatusCancelled')
+            default: return status
+        }
+    }
+
     const [loading, setLoading] = useState(true)
     const [expenses, setExpenses] = useState<FinCorporateCardExpense[]>([])
     const [accounts, setAccounts] = useState<FinChartOfAccount[]>([])
@@ -87,7 +98,20 @@ export default function CorporateCardPage() {
         try { await supabase.rpc('fin_auto_generate_card_pos'); } catch (e) { console.warn('Auto-gen failed', e); }
 
         const [recRes, accRes, bankRes, brRes, supRes] = await Promise.all([
-            supabase.from('fin_corporate_card_expenses').select('*, fin_chart_of_accounts(code, name, simplified_name), fin_bank_accounts(account_name, bank_name), suppliers(name)').order('expense_date', { ascending: false }),
+            supabase.from('fin_corporate_card_expenses').select(`
+                *,
+                fin_chart_of_accounts(code, name, simplified_name),
+                fin_bank_accounts(account_name, bank_name),
+                suppliers(name),
+                fin_payment_order_items(
+                    id,
+                    fin_payment_orders(
+                        id,
+                        order_number,
+                        status
+                    )
+                )
+            `).order('expense_date', { ascending: false }),
             supabase.from('fin_chart_of_accounts').select('*').eq('is_active', true).eq('is_group', false).order('sort_order'),
             supabase.from('fin_bank_accounts').select('*').eq('is_active', true).in('account_type', ['Checking', 'Saving']).order('account_name'),
             supabase.from('provider_branches').select('id, name').order('name'),
@@ -190,6 +214,26 @@ export default function CorporateCardPage() {
             if (editingItem) {
                 const { error } = await supabase.from('fin_corporate_card_expenses').update(payload).eq('id', editingItem.id)
                 if (error) throw error
+
+                const linkedPoItem = editingItem.fin_payment_order_items?.[0]
+                const linkedPo = linkedPoItem?.fin_payment_orders
+                if (linkedPo && linkedPo.status !== 'Paid') {
+                    const { error: poItemErr } = await supabase.from('fin_payment_order_items').update({
+                        description: form.description,
+                        amount: form.amount,
+                        account_id: form.account_id || null,
+                        branch_ids: form.branch_ids,
+                        supplier_id: form.supplier_id || null,
+                    }).eq('id', linkedPoItem.id)
+                    if (poItemErr) throw poItemErr
+
+                    const { error: poErr } = await supabase.from('fin_payment_orders').update({
+                        total_amount: form.amount,
+                        bank_account_id: form.bank_account_id || null,
+                        notes: 'Corporate card expense: ' + form.description,
+                    }).eq('id', linkedPo.id)
+                    if (poErr) throw poErr
+                }
             } else {
                 const { error } = await supabase.from('fin_corporate_card_expenses').insert([payload])
                 if (error) throw error
@@ -204,8 +248,28 @@ export default function CorporateCardPage() {
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm(t(language, 'FinCCAlertDeleteConfirm'))) return
+        const item = expenses.find(e => e.id === id)
+        const linkedPoItem = item?.fin_payment_order_items?.[0]
+        const linkedPo = linkedPoItem?.fin_payment_orders
+
+        if (linkedPo) {
+            const confirmMsg = language === 'vi'
+                ? `Chi phí này được liên kết với Lệnh chi chưa thanh toán (${linkedPo.order_number}). Xóa chi phí này cũng sẽ xóa Lệnh chi liên kết. Bạn có muốn tiếp tục?`
+                : `This expense is linked to the unpaid Payment Order (${linkedPo.order_number}). Deleting this expense will also delete the associated Payment Order. Do you want to proceed?`
+
+            if (!confirm(confirmMsg)) return
+        } else {
+            if (!confirm(t(language, 'FinCCAlertDeleteConfirm'))) return
+        }
+
         try {
+            if (linkedPo) {
+                const { error: poItemErr } = await supabase.from('fin_payment_order_items').delete().eq('payment_order_id', linkedPo.id)
+                if (poItemErr) throw poItemErr
+                const { error: poErr } = await supabase.from('fin_payment_orders').delete().eq('id', linkedPo.id)
+                if (poErr) throw poErr
+            }
+
             const { error } = await supabase.from('fin_corporate_card_expenses').delete().eq('id', id)
             if (error) throw error
             fetchData()
@@ -241,7 +305,25 @@ export default function CorporateCardPage() {
 
     const handleDeleteRecurringSeries = async () => {
         if (!deletingRecurringItem) return
+        const linkedPoItem = deletingRecurringItem.fin_payment_order_items?.[0]
+        const linkedPo = linkedPoItem?.fin_payment_orders
+
+        if (linkedPo) {
+            const confirmMsg = language === 'vi'
+                ? `Chi phí này được liên kết với Lệnh chi chưa thanh toán (${linkedPo.order_number}). Xóa chi phí này cũng sẽ xóa Lệnh chi liên kết. Bạn có muốn tiếp tục?`
+                : `This expense is linked to the unpaid Payment Order (${linkedPo.order_number}). Deleting this expense will also delete the associated Payment Order. Do you want to proceed?`
+
+            if (!confirm(confirmMsg)) return
+        }
+
         try {
+            if (linkedPo) {
+                const { error: poItemErr } = await supabase.from('fin_payment_order_items').delete().eq('payment_order_id', linkedPo.id)
+                if (poItemErr) throw poItemErr
+                const { error: poErr } = await supabase.from('fin_payment_orders').delete().eq('id', linkedPo.id)
+                if (poErr) throw poErr
+            }
+
             const { error } = await supabase.from('fin_corporate_card_expenses').delete().eq('id', deletingRecurringItem.id)
             if (error) throw error
             setDeletingRecurringItem(null)
@@ -363,89 +445,94 @@ export default function CorporateCardPage() {
                                 <tr><td colSpan={8} className="p-8 text-center"><CircularLoader /></td></tr>
                             ) : filtered.length === 0 ? (
                                 <tr><td colSpan={8} className="p-8 text-center text-slate-500">{t(language, 'FinCCNoExpenses')}</td></tr>
-                            ) : filtered.map(r => (
-                                <tr key={r.id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition ${r.is_projection ? 'opacity-60 bg-slate-50/30' : ''}`}>
-                                    <td className="p-4 text-slate-600 flex items-center gap-1.5 align-top">
-                                        {r.is_projection ? <Repeat className="w-4 h-4 text-blue-400" /> : <Calendar className="w-4 h-4 text-slate-400" />} 
-                                        {new Date(r.expense_date).toLocaleDateString('en-GB')}
-                                    </td>
-                                    <td className="p-4 align-top">
-                                        <div className="font-bold text-slate-900">{r.description}</div>
-                                        {r.is_variable_amount && <div className="text-xs text-amber-600 font-medium flex items-center gap-1 mt-0.5"><AlertCircle className="w-3.5 h-3.5" /> {t(language, 'FinCCVariableExRate')}</div>}
-                                        {r.is_online_payment && <div className="text-xs text-indigo-600 font-medium flex items-center gap-1 mt-0.5"><AlertCircle className="w-3.5 h-3.5" /> {t(language, 'FinCCOnlinePayment')}</div>}
-                                    </td>
-                                    <td className="p-4 align-top">
-                                        <div className="font-medium text-slate-800">{r.fin_chart_of_accounts ? `${r.fin_chart_of_accounts.code} - ${language === 'vi' ? (r.fin_chart_of_accounts.simplified_name || r.fin_chart_of_accounts.name) : r.fin_chart_of_accounts.name}` : '—'}</div>
-                                        <div className="text-xs text-slate-500">{r.fin_bank_accounts?.account_name || t(language, 'FinCCModalUnassigned')}</div>
-                                    </td>
-                                    <td className="p-4 text-slate-600 align-top">
-                                        {(!r.branch_ids || r.branch_ids.length === 0 || (branches.length > 0 && r.branch_ids.length === branches.length)) ? (
-                                            <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
-                                                {t(language, 'FinCFAllBranches')}
-                                            </span>
-                                        ) : (
-                                            <div className="flex flex-wrap gap-1">
-                                                {r.branch_ids.map(id => {
-                                                    const br = branches.find(b => b.id === id);
-                                                    if (!br) return null;
-                                                    const col = getBranchColor(id, branches);
-                                                    return (
-                                                        <span key={id} className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${col.bg} ${col.text} border ${col.border} whitespace-nowrap`}>
-                                                            {br.name}
-                                                        </span>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className="p-4 align-top">
-                                        {r.vat_invoice_status === 'Issued' ? <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">{t(language, 'FinCCVatIssued')}</span>
-                                        : r.vat_invoice_status === 'Pending' ? <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">{t(language, 'FinCCVatPending')}</span>
-                                        : <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">{t(language, 'FinCCVatNone')}</span>}
-                                    </td>
-                                    <td className="p-4 text-right align-top">
-                                        <div className="font-black text-slate-900 tabular-nums text-base">
-                                            {r.final_amount_vnd ? fmt(Number(r.final_amount_vnd)) : (r.currency === currency 
-                                                ? fmt(Number(r.amount)) 
-                                                : fmt(Number(r.amount) * (exchangeRates[r.currency] ? (1 / exchangeRates[r.currency]) : 1)))} 
-                                            <span className="text-sm font-medium text-slate-500 ml-1">{currency}</span>
-                                        </div>
-                                        {r.currency !== currency && (
-                                            <div className="text-xs text-slate-500 font-bold mt-0.5">
-                                                {fmt(Number(r.amount))} {r.currency} {r.final_amount_vnd && <span className="text-slate-400 font-normal ml-1">(from PO)</span>}
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className="p-4 font-medium text-slate-700 align-top">
-                                        {r.frequency === 'One-Time' ? <span className="text-slate-400">—</span> : <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">{getFrequencyLabel(r.frequency)}</span>}
-                                        {r.is_paid && <div className="mt-2"><span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold">{t(language, 'FinCCPaid')}</span></div>}
-                                    </td>
-                                    <td className="p-4 text-right align-top whitespace-nowrap min-w-[130px]">
-                                        {r.is_paid ? (
-                                            <div className="text-xs text-slate-400 font-medium italic mt-1 mr-2">{t(language, 'FinCCEditViaPo')}</div>
-                                        ) : r.is_projection ? (
-                                            <div className="text-xs text-slate-400 font-medium italic mt-1 mr-2 text-blue-400/80">{t(language, 'FinCCProjection')}</div>
-                                        ) : (
-                                            <div className="flex items-center justify-end gap-2">
-                                                <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
-                                                    <button onClick={() => handleOpenModal(r)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition" title={t(language, 'Edit')}>
-                                                        <Pencil className="w-4 h-4" />
-                                                    </button>
-                                                    <button onClick={() => {
-                                                        if (r.frequency !== 'One-Time') {
-                                                            setDeletingRecurringItem(r)
-                                                        } else {
-                                                            handleDelete(r.id)
-                                                        }
-                                                    }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-red-600 transition" title={t(language, 'Delete')}>
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
+                            ) : filtered.map(r => {
+                                const linkedPo = r.fin_payment_order_items?.[0]?.fin_payment_orders
+                                const isPoPaid = linkedPo?.status === 'Paid'
+                                return (
+                                    <tr key={r.id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition ${r.is_projection ? 'opacity-60 bg-slate-50/30' : ''}`}>
+                                        <td className="p-4 text-slate-600 flex items-center gap-1.5 align-top">
+                                            {r.is_projection ? <Repeat className="w-4 h-4 text-blue-400" /> : <Calendar className="w-4 h-4 text-slate-400" />} 
+                                            {new Date(r.expense_date).toLocaleDateString('en-GB')}
+                                        </td>
+                                        <td className="p-4 align-top">
+                                            <div className="font-bold text-slate-900">{r.description}</div>
+                                            {r.is_variable_amount && <div className="text-xs text-amber-600 font-medium flex items-center gap-1 mt-0.5"><AlertCircle className="w-3.5 h-3.5" /> {t(language, 'FinCCVariableExRate')}</div>}
+                                            {r.is_online_payment && <div className="text-xs text-indigo-600 font-medium flex items-center gap-1 mt-0.5"><AlertCircle className="w-3.5 h-3.5" /> {t(language, 'FinCCOnlinePayment')}</div>}
+                                        </td>
+                                        <td className="p-4 align-top">
+                                            <div className="font-medium text-slate-800">{r.fin_chart_of_accounts ? `${r.fin_chart_of_accounts.code} - ${language === 'vi' ? (r.fin_chart_of_accounts.simplified_name || r.fin_chart_of_accounts.name) : r.fin_chart_of_accounts.name}` : '—'}</div>
+                                            <div className="text-xs text-slate-500">{r.fin_bank_accounts?.account_name || t(language, 'FinCCModalUnassigned')}</div>
+                                        </td>
+                                        <td className="p-4 text-slate-600 align-top">
+                                            {(!r.branch_ids || r.branch_ids.length === 0 || (branches.length > 0 && r.branch_ids.length === branches.length)) ? (
+                                                <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                                                    {t(language, 'FinCFAllBranches')}
+                                                </span>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {r.branch_ids.map(id => {
+                                                        const br = branches.find(b => b.id === id);
+                                                        if (!br) return null;
+                                                        const col = getBranchColor(id, branches);
+                                                        return (
+                                                            <span key={id} className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${col.bg} ${col.text} border ${col.border} whitespace-nowrap`}>
+                                                                {br.name}
+                                                            </span>
+                                                        );
+                                                    })}
                                                 </div>
+                                            )}
+                                        </td>
+                                        <td className="p-4 align-top">
+                                            {r.vat_invoice_status === 'Issued' ? <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">{t(language, 'FinCCVatIssued')}</span>
+                                            : r.vat_invoice_status === 'Pending' ? <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">{t(language, 'FinCCVatPending')}</span>
+                                            : <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">{t(language, 'FinCCVatNone')}</span>}
+                                        </td>
+                                        <td className="p-4 text-right align-top">
+                                            <div className="font-black text-slate-900 tabular-nums text-base">
+                                                {r.final_amount_vnd ? fmt(Number(r.final_amount_vnd)) : (r.currency === currency 
+                                                    ? fmt(Number(r.amount)) 
+                                                    : fmt(Number(r.amount) * (exchangeRates[r.currency] ? (1 / exchangeRates[r.currency]) : 1)))} 
+                                                <span className="text-sm font-medium text-slate-500 ml-1">{currency}</span>
                                             </div>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
+                                            {r.currency !== currency && (
+                                                <div className="text-xs text-slate-500 font-bold mt-0.5">
+                                                    {fmt(Number(r.amount))} {r.currency} {r.final_amount_vnd && <span className="text-slate-400 font-normal ml-1">(from PO)</span>}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="p-4 font-medium text-slate-700 align-top">
+                                            {r.frequency === 'One-Time' ? <span className="text-slate-400">—</span> : <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">{getFrequencyLabel(r.frequency)}</span>}
+                                            {isPoPaid && <div className="mt-2"><span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold">{t(language, 'FinCCPaid')}</span></div>}
+                                            {linkedPo && !isPoPaid && <div className="mt-2"><span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold">{translateStatus(linkedPo.status)}</span></div>}
+                                        </td>
+                                        <td className="p-4 text-right align-top whitespace-nowrap min-w-[130px]">
+                                            {isPoPaid ? (
+                                                <div className="text-xs text-slate-400 font-medium italic mt-1 mr-2">{t(language, 'FinCCEditViaPo')}</div>
+                                            ) : r.is_projection ? (
+                                                <div className="text-xs text-slate-400 font-medium italic mt-1 mr-2 text-blue-400/80">{t(language, 'FinCCProjection')}</div>
+                                            ) : (
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
+                                                        <button onClick={() => handleOpenModal(r)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition" title={t(language, 'Edit')}>
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                        <button onClick={() => {
+                                                            if (r.frequency !== 'One-Time') {
+                                                                setDeletingRecurringItem(r)
+                                                            } else {
+                                                                handleDelete(r.id)
+                                                            }
+                                                        }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-red-600 transition" title={t(language, 'Delete')}>
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -461,6 +548,23 @@ export default function CorporateCardPage() {
                         </div>
                         <form onSubmit={handleSave} className="p-5 overflow-y-auto max-h-[75vh]">
                             <div className="space-y-4">
+                                {editingItem && (() => {
+                                    const linkedPoItem = editingItem.fin_payment_order_items?.[0]
+                                    const linkedPo = linkedPoItem?.fin_payment_orders
+                                    if (linkedPo && linkedPo.status !== 'Paid') {
+                                        return (
+                                            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-sm font-medium flex items-start gap-2">
+                                                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                                <div>
+                                                    {language === 'vi'
+                                                        ? `Chi phí này được liên kết với Lệnh chi chưa thanh toán (${linkedPo.order_number}). Việc chỉnh sửa tại đây cũng sẽ cập nhật Lệnh chi liên kết.`
+                                                        : `This expense is linked to the unpaid Payment Order (${linkedPo.order_number}). Editing here will also update the Payment Order.`}
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+                                    return null
+                                })()}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="col-span-2">
                                         <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalDescription')} <span className="text-red-500">*</span></label>
