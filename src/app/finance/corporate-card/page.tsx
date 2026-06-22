@@ -64,7 +64,8 @@ export default function CorporateCardPage() {
     const [showAddSupplier, setShowAddSupplier] = useState(false)
     const [invoices, setInvoices] = useState<any[]>([])
     const [newSupplierName, setNewSupplierName] = useState('')
-    const [showAllInvoices, setShowAllInvoices] = useState(false)
+    const [showLinkInvoiceModal, setShowLinkInvoiceModal] = useState(false)
+    const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('')
 
     // Month navigation
     const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
@@ -96,12 +97,48 @@ export default function CorporateCardPage() {
         branch_ids: [] as string[],
     })
 
-    const filteredInvoices = useMemo(() => {
-        if (showAllInvoices || !form.supplier_id) {
-            return invoices
-        }
-        return invoices.filter(inv => inv.supplier_id === form.supplier_id)
-    }, [invoices, form.supplier_id, showAllInvoices])
+    const getInvoiceRemainingBalance = (inv: any) => {
+        if (!inv) return 0
+        const paidItems = (inv.fin_payment_order_items || []).filter((i: any) => 
+            (i.fin_payment_orders?.status === 'Paid' || i.fin_payment_orders?.status === 'Approved') &&
+            !i.corporate_card_expense_id
+        )
+        let paidAmount = paidItems.reduce((sum: number, i: any) => sum + Number(i.amount), 0)
+        paidAmount += (inv.cashout || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
+        paidAmount += (inv.fin_corporate_card_expenses || []).reduce((sum: number, i: any) => {
+            if (editingItem && i.id === editingItem.id) return sum
+            return sum + Number(i.amount)
+        }, 0)
+        return Math.max(0, Number(inv.gross_amount) - paidAmount)
+    }
+
+    const linkableInvoices = useMemo(() => {
+        if (!form.supplier_id) return []
+        const filtered = invoices.filter(inv => {
+            if (inv.supplier_id !== form.supplier_id) return false
+            
+            // Only show unpaid invoices (Pending, Overdue, In Payment) OR the currently linked invoice
+            const isCurrent = form.invoice_id === inv.id
+            const isUnpaid = inv.status === 'Pending' || inv.status === 'Overdue' || inv.status === 'In Payment'
+            if (!isCurrent && !isUnpaid) return false
+
+            // Filter out invoices that have 0 or less remaining balance, unless it is the currently linked invoice
+            if (!isCurrent && getInvoiceRemainingBalance(inv) <= 0) return false
+
+            if (invoiceSearchQuery.trim()) {
+                const q = invoiceSearchQuery.toLowerCase()
+                return inv.invoice_number.toLowerCase().includes(q) || (inv.description || '').toLowerCase().includes(q)
+            }
+            return true
+        })
+        console.log('[DEBUG] linkableInvoices:', {
+            selected_supplier_id: form.supplier_id,
+            total_invoices_loaded: invoices.length,
+            filtered_count: filtered.length,
+            invoices: invoices.map(i => ({ id: i.id, num: i.invoice_number, supplier_id: i.supplier_id, status: i.status, rem: getInvoiceRemainingBalance(i) }))
+        })
+        return filtered
+    }, [invoices, form.supplier_id, invoiceSearchQuery, form.invoice_id, editingItem])
 
     const fetchData = async () => {
         setLoading(true)
@@ -127,14 +164,29 @@ export default function CorporateCardPage() {
             supabase.from('fin_bank_accounts').select('*').eq('is_active', true).in('account_type', ['Checking', 'Saving']).order('account_name'),
             supabase.from('provider_branches').select('id, name').order('name'),
             supabase.from('suppliers').select('id, name').order('name'),
-            supabase.from('fin_invoices').select('id, invoice_number, supplier_id, suppliers(name), gross_amount, invoice_date').order('invoice_date', { ascending: false })
+            supabase.from('fin_invoices')
+                .select('id, invoice_number, supplier_id, suppliers(name), gross_amount, invoice_date, branch_ids, account_id, status, fin_payment_order_items(id, amount, corporate_card_expense_id, fin_payment_orders(status)), cashout(id, amount), fin_corporate_card_expenses(id, amount)')
+                .order('invoice_date', { ascending: false })
         ])
+
+        if (recRes.error) console.error('[ERROR] fin_corporate_card_expenses:', recRes.error)
+        if (accRes.error) console.error('[ERROR] fin_chart_of_accounts:', accRes.error)
+        if (bankRes.error) console.error('[ERROR] fin_bank_accounts:', bankRes.error)
+        if (brRes.error) console.error('[ERROR] provider_branches:', brRes.error)
+        if (supRes.error) console.error('[ERROR] suppliers:', supRes.error)
+        if (invListRes.error) console.error('[ERROR] fin_invoices:', invListRes.error)
+
         setExpenses(recRes.data || [])
         setAccounts(accRes.data || [])
         setBankAccounts(bankRes.data || [])
         setBranches(brRes.data || [])
         setSuppliers(supRes.data || [])
-        if (invListRes.data) setInvoices(invListRes.data)
+        if (invListRes.data) {
+            console.log('[DEBUG] Loaded invoices count:', invListRes.data.length, invListRes.data)
+            setInvoices(invListRes.data)
+        } else {
+            console.warn('[DEBUG] No invoices data loaded')
+        }
         setLoading(false)
     }
 
@@ -157,7 +209,6 @@ export default function CorporateCardPage() {
     }, [form.currency, currency])
 
     const handleOpenModal = (item?: FinCorporateCardExpense) => {
-        setShowAllInvoices(false)
         const activeCards = bankAccounts.filter(a => a.is_corporate_card);
         const defaultCard = bankAccounts.find(a => a.is_default_corporate_card) || activeCards[0];
         const defaultCardId = defaultCard?.id || '';
@@ -693,6 +744,86 @@ export default function CorporateCardPage() {
                                     )}
 
                                     <div className="col-span-2">
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalVatStatus')} <span className="text-red-500">*</span></label>
+                                        <select value={form.vat_invoice_status} onChange={e => setForm(f => ({ ...f, vat_invoice_status: e.target.value as any }))}
+                                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium col-span-2">
+                                            <option value="None">{t(language, 'FinCCVatNone')}</option>
+                                            <option value="Pending">{t(language, 'FinCCVatPending')}</option>
+                                            <option value="Issued">{t(language, 'FinCCVatIssued')}</option>
+                                        </select>
+                                    </div>
+
+                                    {form.vat_invoice_status === 'Issued' && (
+                                        <div className="col-span-2">
+                                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">{language === 'vi' ? 'Liên kết với hóa đơn VAT' : 'Link to VAT Invoice'}</label>
+                                            {form.invoice_id ? (() => {
+                                                const linkedInv = invoices.find(i => i.id === form.invoice_id)
+                                                if (!linkedInv) {
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setInvoiceSearchQuery(''); setShowLinkInvoiceModal(true); }}
+                                                            className="w-full flex items-center justify-between p-3 border border-dashed border-slate-300 hover:border-blue-400 rounded-xl text-sm font-semibold text-slate-600 hover:text-blue-600 transition bg-slate-50"
+                                                        >
+                                                            <span>{language === 'vi' ? '-- Chọn hóa đơn --' : '-- Select invoice --'}</span>
+                                                            <Plus className="w-4 h-4" />
+                                                        </button>
+                                                    )
+                                                }
+                                                const remBalance = getInvoiceRemainingBalance(linkedInv)
+                                                return (
+                                                    <div className="border border-blue-200 bg-blue-50/50 rounded-xl p-3 shadow-sm">
+                                                        <div className="flex justify-between items-start">
+                                                            <div>
+                                                                <div className="font-bold text-slate-900 text-sm">{linkedInv.invoice_number}</div>
+                                                                <div className="text-xs text-slate-500 mt-0.5">
+                                                                    {linkedInv.invoice_date} • {linkedInv.suppliers?.name || 'No Supplier'}
+                                                                </div>
+                                                                <div className="text-xs font-semibold text-slate-700 mt-1">
+                                                                    {language === 'vi' ? 'Tổng hóa đơn' : 'Invoice gross'}: <span className="tabular-nums">{fmt(Number(linkedInv.gross_amount))} {currency}</span>
+                                                                    {remBalance !== Number(linkedInv.gross_amount) && (
+                                                                        <span className="ml-2 pl-2 border-l border-slate-300">
+                                                                            {language === 'vi' ? 'Còn lại' : 'Remaining'}: <span className="tabular-nums font-bold text-blue-700">{fmt(remBalance)} {currency}</span>
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => { setInvoiceSearchQuery(''); setShowLinkInvoiceModal(true); }}
+                                                                    className="px-2.5 py-1 text-xs font-bold bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-slate-700 transition"
+                                                                >
+                                                                    {language === 'vi' ? 'Thay đổi' : 'Change'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setForm(f => ({ ...f, invoice_id: '' }))}
+                                                                    className="px-2.5 py-1 text-xs font-bold bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg text-rose-600 transition"
+                                                                >
+                                                                    {language === 'vi' ? 'Hủy liên kết' : 'Unlink'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })() : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setInvoiceSearchQuery(''); setShowLinkInvoiceModal(true); }}
+                                                    className="w-full flex items-center justify-between p-3.5 border border-dashed border-slate-300 hover:border-blue-400 rounded-xl text-sm font-bold text-slate-500 hover:text-blue-600 transition bg-slate-50/50"
+                                                >
+                                                    <span className="flex items-center gap-2">
+                                                        <CreditCard className="w-4 h-4 text-slate-400" />
+                                                        {language === 'vi' ? 'Chọn hóa đơn VAT' : 'Select VAT Invoice'}
+                                                    </span>
+                                                    <Plus className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="col-span-2">
                                         <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalCoa')} <span className="text-red-500">*</span></label>
                                         <COACombobox 
                                             coas={accounts}
@@ -709,62 +840,6 @@ export default function CorporateCardPage() {
                                             {bankAccounts.filter(a => a.is_corporate_card).map(a => <option key={a.id} value={a.id}>{a.account_name} {a.bank_name ? `(${a.bank_name})` : ''}</option>)}
                                         </select>
                                     </div>
-
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">{t(language, 'FinCCModalVatStatus')} <span className="text-red-500">*</span></label>
-                                        <select value={form.vat_invoice_status} onChange={e => setForm(f => ({ ...f, vat_invoice_status: e.target.value as any }))}
-                                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium col-span-2">
-                                            <option value="None">{t(language, 'FinCCVatNone')}</option>
-                                            <option value="Pending">{t(language, 'FinCCVatPending')}</option>
-                                            <option value="Issued">{t(language, 'FinCCVatIssued')}</option>
-                                        </select>
-                                    </div>
-
-                                    {form.vat_invoice_status === 'Issued' && (
-                                        <div className="col-span-2">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="block text-sm font-semibold text-slate-700">{language === 'vi' ? 'Liên kết với hóa đơn VAT' : 'Link to VAT Invoice'}</label>
-                                                {form.supplier_id && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setShowAllInvoices(!showAllInvoices)}
-                                                        className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition"
-                                                    >
-                                                        {showAllInvoices 
-                                                            ? (language === 'vi' ? 'Lọc theo nhà cung cấp' : 'Filter by supplier')
-                                                            : (language === 'vi' ? 'Xem tất cả hóa đơn VAT' : 'Browse all VAT invoices')
-                                                        }
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <select value={form.invoice_id} onChange={e => setForm(f => ({ ...f, invoice_id: e.target.value }))}
-                                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium">
-                                                <option value="">{language === 'vi' ? '-- Chọn hóa đơn --' : '-- Select invoice --'}</option>
-                                                {filteredInvoices.map(inv => (
-                                                    <option key={inv.id} value={inv.id}>
-                                                        {inv.invoice_number} - {inv.suppliers?.name || 'No Supplier'} ({fmt(Number(inv.gross_amount))} {currency})
-                                                     </option>
-                                                ))}
-                                            </select>
-                                            {form.supplier_id && (
-                                                <div className="text-xs mt-1.5 font-medium text-slate-500">
-                                                    {filteredInvoices.length === 0 ? (
-                                                        <span className="text-amber-600">
-                                                            {language === 'vi' 
-                                                                ? 'Không tìm thấy hóa đơn nào cho nhà cung cấp này.' 
-                                                                : 'No invoices found for this supplier.'}
-                                                        </span>
-                                                    ) : (
-                                                        <span>
-                                                            {showAllInvoices 
-                                                                ? (language === 'vi' ? 'Đang hiển thị tất cả hóa đơn VAT.' : 'Showing all VAT invoices.')
-                                                                : (language === 'vi' ? 'Đang hiển thị hóa đơn của nhà cung cấp này.' : 'Showing invoices for this supplier.')}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
 
                                     <div className="col-span-2">
                                         <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'FinCCModalAttributedBranches')} <span className="text-red-500">*</span></label>
@@ -806,6 +881,96 @@ export default function CorporateCardPage() {
                 }}
                 initialName={newSupplierName}
             />
+
+            {showLinkInvoiceModal && (
+                <div className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h2 className="text-base font-bold text-slate-900">
+                                    {language === 'vi' ? 'Chọn hóa đơn VAT' : 'Select VAT Invoice'}
+                                </h2>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    {language === 'vi' ? 'Chỉ hiển thị hóa đơn của nhà cung cấp này' : 'Showing only invoices for this supplier'}
+                                </p>
+                            </div>
+                            <button type="button" onClick={() => setShowLinkInvoiceModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-200 rounded-lg transition"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="p-3 border-b border-slate-100 bg-white">
+                            <input
+                                type="text"
+                                value={invoiceSearchQuery}
+                                onChange={e => setInvoiceSearchQuery(e.target.value)}
+                                placeholder={language === 'vi' ? 'Tìm hóa đơn (số, mô tả)...' : 'Search invoices (number, desc)...'}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 bg-slate-50 font-medium"
+                            />
+                        </div>
+                        <div className="p-3 overflow-y-auto bg-slate-50/50 flex-1 space-y-2">
+                            {linkableInvoices.length === 0 ? (
+                                <div className="text-center py-8 text-sm text-slate-500 italic bg-white border border-dashed border-slate-200 rounded-xl">
+                                    {language === 'vi' ? 'Không tìm thấy hóa đơn nào phù hợp.' : 'No matching invoices found.'}
+                                </div>
+                            ) : (
+                                linkableInvoices.map(inv => {
+                                    const isSelected = form.invoice_id === inv.id
+                                    const remBalance = getInvoiceRemainingBalance(inv)
+                                    return (
+                                        <div
+                                            key={inv.id}
+                                            onClick={() => {
+                                                setForm(f => ({ 
+                                                    ...f, 
+                                                    invoice_id: inv.id,
+                                                    branch_ids: inv.branch_ids || [],
+                                                    account_id: inv.account_id || ''
+                                                }))
+                                                setShowLinkInvoiceModal(false)
+                                            }}
+                                            className={`p-3 rounded-xl border transition cursor-pointer bg-white hover:border-blue-400 hover:shadow-sm flex justify-between items-center ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`}
+                                        >
+                                            <div>
+                                                <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                                                    {inv.invoice_number}
+                                                    {isSelected && (
+                                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                                            {language === 'vi' ? 'Đã chọn' : 'Selected'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-slate-500 mt-1">
+                                                    {inv.invoice_date} • {inv.suppliers?.name || 'No Supplier'}
+                                                </div>
+                                                {inv.description && (
+                                                    <div className="text-xs text-slate-400 mt-0.5">
+                                                        {inv.description}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="font-bold text-slate-900 text-sm tabular-nums">
+                                                    {fmt(Number(inv.gross_amount))} {currency}
+                                                </div>
+                                                <div className="text-[11px] font-semibold text-blue-600 mt-1">
+                                                    {language === 'vi' ? 'Còn lại' : 'Remaining'}: <span className="tabular-nums font-bold">{fmt(remBalance)} {currency}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })
+                            )}
+                        </div>
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowLinkInvoiceModal(false)}
+                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition"
+                            >
+                                {language === 'vi' ? 'Đóng' : 'Close'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Delete Recurring Modal */}
             {deletingRecurringItem && (

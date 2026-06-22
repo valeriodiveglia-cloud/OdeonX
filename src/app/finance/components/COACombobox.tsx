@@ -9,9 +9,10 @@ interface COAComboboxProps {
     value: string | null
     onChange: (id: string) => void
     placeholder?: string
+    disabled?: boolean
 }
 
-export function COACombobox({ coas, value, onChange, placeholder }: COAComboboxProps) {
+export function COACombobox({ coas, value, onChange, placeholder, disabled }: COAComboboxProps) {
     const { language } = useSettings()
     const [query, setQuery] = useState('')
 
@@ -28,16 +29,21 @@ export function COACombobox({ coas, value, onChange, placeholder }: COAComboboxP
     const finalPlaceholder = placeholder || defaultPlaceholder
 
     return (
-        <Combobox value={selectedCoa} onChange={(c: FinChartOfAccount | null) => { if (c) onChange(c.id) }}>
+        <Combobox value={selectedCoa} onChange={(c: FinChartOfAccount | null) => { if (c) onChange(c.id) }} disabled={disabled}>
             <div className="relative w-full">
-                <div className="relative w-full cursor-default overflow-hidden rounded-xl bg-white text-left shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500">
+                <div className={`relative w-full cursor-default overflow-hidden rounded-xl text-left shadow-sm border ${
+                    disabled 
+                        ? 'bg-slate-100 border-slate-200 opacity-75 cursor-not-allowed' 
+                        : 'bg-white border-slate-200 focus-within:ring-2 focus-within:ring-blue-500'
+                }`}>
                     <Combobox.Input
                         className="w-full border-none py-2.5 pl-3 pr-10 text-sm leading-5 text-slate-900 focus:outline-none focus:ring-0 bg-transparent"
                         displayValue={(c: FinChartOfAccount | null) => c ? `${c.code} - ${language === 'vi' && c.simplified_name ? c.simplified_name.trim() : c.name}` : ''}
                         onChange={(event) => setQuery(event.target.value)}
                         placeholder={finalPlaceholder}
+                        disabled={disabled}
                     />
-                    <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2">
+                    <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2" disabled={disabled}>
                         <ChevronsUpDown className="h-4 w-4 text-gray-400" aria-hidden="true" />
                     </Combobox.Button>
                 </div>

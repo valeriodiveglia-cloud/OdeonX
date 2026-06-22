@@ -99,7 +99,10 @@ export default function PaymentOrdersPage() {
                 .gte('order_date', startStr)
                 .lte('order_date', endStr)
                 .order('order_date', { ascending: false }),
-            supabase.from('fin_invoices').select('*, suppliers(name), fin_payment_order_items(amount, fin_payment_orders(status))').in('status', ['Pending', 'Overdue', 'In Payment']).order('invoice_date'),
+            supabase.from('fin_invoices')
+                .select('*, suppliers(name), fin_payment_order_items(amount, corporate_card_expense_id, fin_payment_orders(status)), cashout(amount), fin_corporate_card_expenses(amount)')
+                .in('status', ['Pending', 'Overdue', 'In Payment'])
+                .order('invoice_date'),
             supabase.from('fin_bank_accounts').select('*').eq('is_active', true).in('account_type', ['Checking', 'Saving']).order('account_name'),
             supabase.from('fin_chart_of_accounts').select('*').eq('is_active', true).eq('is_group', false).order('sort_order'),
             supabase.from('provider_branches').select('id, name').order('name'),
@@ -202,8 +205,13 @@ export default function PaymentOrdersPage() {
     }
 
     const getInvoiceBalance = (inv: any) => {
-        const paidItems = (inv.fin_payment_order_items || []).filter((pi: any) => pi.fin_payment_orders?.status === 'Paid' || pi.fin_payment_orders?.status === 'Approved')
-        const paidAmount = paidItems.reduce((sum: number, pi: any) => sum + Number(pi.amount), 0)
+        const paidItems = (inv.fin_payment_order_items || []).filter((pi: any) => 
+            (pi.fin_payment_orders?.status === 'Paid' || pi.fin_payment_orders?.status === 'Approved') &&
+            !pi.corporate_card_expense_id
+        )
+        let paidAmount = paidItems.reduce((sum: number, pi: any) => sum + Number(pi.amount), 0)
+        paidAmount += (inv.cashout || []).reduce((sum: number, c: any) => sum + Number(c.amount), 0)
+        paidAmount += (inv.fin_corporate_card_expenses || []).reduce((sum: number, cc: any) => sum + Number(cc.amount), 0)
         return Math.max(0, Number(inv.gross_amount) - paidAmount)
     }
 
@@ -634,13 +642,18 @@ export default function PaymentOrdersPage() {
                 const invoiceIds = items.filter(i => i.invoice_id).map(i => i.invoice_id as string)
                 
                 if (invoiceIds.length > 0 && txErrors.length === 0) {
-                    const { data: invData, error: invFetchErr } = await supabase.from('fin_invoices').select('id, gross_amount, fin_payment_order_items(amount, fin_payment_orders(status, id))').in('id', invoiceIds)
+                    const { data: invData, error: invFetchErr } = await supabase.from('fin_invoices').select('id, gross_amount, fin_payment_order_items(amount, corporate_card_expense_id, fin_payment_orders(status, id)), cashout(amount), fin_corporate_card_expenses(amount)').in('id', invoiceIds)
                     if (invFetchErr) {
                         txErrors.push(language === 'vi' ? `Lấy dữ liệu hóa đơn thất bại: ${invFetchErr.message}` : `Failed to fetch invoice data: ${invFetchErr.message}`)
                     } else if (invData) {
                         for (const inv of invData) {
-                            const paidItems = (inv.fin_payment_order_items || []).filter((pi: any) => pi.fin_payment_orders?.status === 'Paid' || pi.fin_payment_orders?.status === 'Approved' || pi.fin_payment_orders?.id === showMarkPaid.id)
-                            const paidAmount = paidItems.reduce((sum: number, pi: any) => sum + Number(pi.amount), 0)
+                            const paidItems = (inv.fin_payment_order_items || []).filter((pi: any) => 
+                                (pi.fin_payment_orders?.status === 'Paid' || pi.fin_payment_orders?.status === 'Approved' || pi.fin_payment_orders?.id === showMarkPaid.id) &&
+                                !pi.corporate_card_expense_id
+                            )
+                            let paidAmount = paidItems.reduce((sum: number, pi: any) => sum + Number(pi.amount), 0)
+                            paidAmount += (inv.cashout || []).reduce((sum: number, c: any) => sum + Number(c.amount), 0)
+                            paidAmount += (inv.fin_corporate_card_expenses || []).reduce((sum: number, cc: any) => sum + Number(cc.amount), 0)
                             if (paidAmount >= Number(inv.gross_amount)) {
                                 const { error: invUpdErr } = await supabase.from('fin_invoices').update({
                                     status: 'Paid', paid_date: paidDate, paid_via: paidMethod, paid_from_account_id: paidAccountId || null,
@@ -657,7 +670,7 @@ export default function PaymentOrdersPage() {
                 // Create bank transactions if account selected
                 if (paidAccountId && txErrors.length === 0) {
                     const hasInvoices = items.some(i => i.item_type === 'invoice' || i.invoice_id)
-                    const hasManual = items.some(i => i.item_type === 'manual')
+                    const hasManual = items.some(i => i.item_type === 'manual' && !i.invoice_id)
                     const txCategory = hasInvoices && hasManual ? 'Mixed Payment' : hasManual ? 'Operational Payment' : 'Supplier Payment'
 
                     const baseAmount = showMarkPaid.is_variable_amount || showMarkPaid.is_online_payment ? paidFinalAmountVND : Number(showMarkPaid.total_amount)
@@ -1410,7 +1423,7 @@ export default function PaymentOrdersPage() {
                                     const isFeeItem = (i: any) => i.description === 'Online Payment / Bank Fee' || i.description?.startsWith('Bank Fee for ')
                                     const feeItems = items.filter(isFeeItem)
                                     const invItems = items.filter(i => (i.item_type === 'invoice' || i.invoice_id) && !isFeeItem(i))
-                                    const mainManItems = items.filter(i => i.item_type === 'manual' && !isFeeItem(i))
+                                    const mainManItems = items.filter(i => i.item_type === 'manual' && !i.invoice_id && !isFeeItem(i))
                                     
                                     const unmatchedFees = feeItems.filter(f => 
                                         !invItems.some(i => f.description === `Bank Fee for ${i.fin_invoices?.invoice_number}`) && 

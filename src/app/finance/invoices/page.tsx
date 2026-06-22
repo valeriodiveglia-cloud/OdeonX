@@ -167,7 +167,7 @@ export default function InvoicesPage() {
 
         const [invRes, supRes, coaRes, brRes, manRes, cardRes, cashoutRes] = await Promise.all([
             supabase.from('fin_invoices')
-                .select('*, suppliers(name), fin_chart_of_accounts(code, name, simplified_name), fin_payment_order_items(id, amount, fin_payment_orders(status)), cashout(id, amount), fin_corporate_card_expenses(id, amount)')
+                .select('*, suppliers(name), fin_chart_of_accounts(code, name, simplified_name), fin_payment_order_items(id, amount, corporate_card_expense_id, fin_payment_orders(status)), cashout(id, amount), fin_corporate_card_expenses(id, amount)')
                 .gte('invoice_date', start).lte('invoice_date', end)
                 .order('invoice_date', { ascending: false }),
             supabase.from('suppliers').select('*').order('name'),
@@ -362,7 +362,10 @@ export default function InvoicesPage() {
     const hasAnyBalanceDue = useMemo(() => {
         return filtered.some(inv => {
             if (inv.is_personal_deduction || inv.status === 'Cancelled') return false
-            const paidItems = ((inv as any).fin_payment_order_items || []).filter((i: any) => i.fin_payment_orders?.status === 'Paid' || i.fin_payment_orders?.status === 'Approved')
+            const paidItems = ((inv as any).fin_payment_order_items || []).filter((i: any) => 
+                (i.fin_payment_orders?.status === 'Paid' || i.fin_payment_orders?.status === 'Approved') &&
+                !i.corporate_card_expense_id
+            )
             let paidAmount = paidItems.reduce((sum: number, i: any) => sum + Number(i.amount), 0)
             paidAmount += ((inv as any).cashout || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
             paidAmount += ((inv as any).fin_corporate_card_expenses || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
@@ -823,7 +826,10 @@ export default function InvoicesPage() {
                             ) : filtered.length === 0 ? (
                                 <tr><td colSpan={hasAnyBalanceDue ? 11 : 10} className="p-8 text-center text-gray-500">{t(language, 'FinInvNoInvoices')}</td></tr>
                             ) : filtered.map(inv => {
-                                const paidItems = ((inv as any).fin_payment_order_items || []).filter((i: any) => i.fin_payment_orders?.status === 'Paid' || i.fin_payment_orders?.status === 'Approved')
+                                const paidItems = ((inv as any).fin_payment_order_items || []).filter((i: any) => 
+                                    (i.fin_payment_orders?.status === 'Paid' || i.fin_payment_orders?.status === 'Approved') &&
+                                    !i.corporate_card_expense_id
+                                )
                                 let paidAmount = paidItems.reduce((sum: number, i: any) => sum + Number(i.amount), 0)
                                 paidAmount += ((inv as any).cashout || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
                                 paidAmount += ((inv as any).fin_corporate_card_expenses || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
@@ -884,7 +890,7 @@ export default function InvoicesPage() {
                                         {hasAnyBalanceDue && (
                                             <td className="p-3 text-right tabular-nums font-bold text-amber-600">{balanceDue <= 0 ? <span className="text-emerald-600">0</span> : fmt(balanceDue, (inv.currency || currency) === 'VND')}</td>
                                         )}
-                                        <td className="p-3">
+                                        <td className="p-3 whitespace-nowrap">
                                             <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${isOverdue ? 'bg-red-100 text-red-700' : `${sty.bg} ${sty.text}`}`}>
                                                 {isOverdue ? t(language, 'FinInvStatusOverdue') : translateStatus(displayStatus)}
                                             </span>

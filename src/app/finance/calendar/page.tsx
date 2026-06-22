@@ -200,6 +200,7 @@ export default function PaymentsCalendarPage() {
                 if (!rem.is_recurring) break
 
                 if (rem.frequency === 'Monthly') curr.setMonth(curr.getMonth() + 1)
+                else if (rem.frequency === 'Bi-Monthly') curr.setMonth(curr.getMonth() + 2)
                 else if (rem.frequency === 'Quarterly') curr.setMonth(curr.getMonth() + 3)
                 else if (rem.frequency === 'Semi-Annually') curr.setMonth(curr.getMonth() + 6)
                 else if (rem.frequency === 'Annually') curr.setFullYear(curr.getFullYear() + 1)
@@ -737,9 +738,10 @@ function ReminderModal({ language, onClose, onSave }: { language: string, onClos
                             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                                 {t(language, 'FinCalModalFrequency')}
                             </label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {['Monthly', 'Quarterly', 'Semi-Annually', 'Annually'].map(f => {
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                                {['Monthly', 'Bi-Monthly', 'Quarterly', 'Semi-Annually', 'Annually'].map(f => {
                                     let labelKey = 'FinCalFreqMonthly'
+                                    if (f === 'Bi-Monthly') labelKey = 'FinCalFreqBiMonthly'
                                     if (f === 'Quarterly') labelKey = 'FinCalFreqQuarterly'
                                     if (f === 'Semi-Annually') labelKey = 'FinCalFreqSemiAnnually'
                                     if (f === 'Annually') labelKey = 'FinCalFreqAnnually'
