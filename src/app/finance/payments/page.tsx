@@ -83,6 +83,7 @@ export default function PaymentOrdersPage() {
     const [paidFeeVND, setPaidFeeVND] = useState(0)
     const [paidFeeVNDStr, setPaidFeeVNDStr] = useState('')
     const [itemFees, setItemFees] = useState<Record<string, number>>({})
+    const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
     const [showFeeBreakdown, setShowFeeBreakdown] = useState(false)
 
     const fetchData = async () => {
@@ -94,7 +95,7 @@ export default function PaymentOrdersPage() {
 
         const [ordRes, invRes, accRes, coaRes, brRes, supRes, globalPendingRes] = await Promise.all([
             supabase.from('fin_payment_orders')
-                .select('*, app_accounts!fin_payment_orders_created_by_fkey(name), fin_bank_accounts:fin_bank_accounts!fin_payment_orders_bank_account_id_fkey(account_name, bank_name), destination_bank_account:fin_bank_accounts!fin_payment_orders_destination_account_id_fkey(account_name, bank_name), fin_payment_order_items(*, fin_invoices(invoice_number, gross_amount, description, suppliers(name)), fin_chart_of_accounts(code, name))')
+                .select('*, app_accounts!fin_payment_orders_created_by_fkey(name), fin_bank_accounts:fin_bank_accounts!fin_payment_orders_bank_account_id_fkey(account_name, bank_name), destination_bank_account:fin_bank_accounts!fin_payment_orders_destination_account_id_fkey(account_name, bank_name), fin_payment_order_items(*, fin_invoices(invoice_number, gross_amount, description, suppliers(name)), fin_chart_of_accounts(code, name), fin_corporate_card_expenses(amount, currency, is_variable_amount))')
                 .gte('order_date', startStr)
                 .lte('order_date', endStr)
                 .order('order_date', { ascending: false }),
@@ -116,6 +117,17 @@ export default function PaymentOrdersPage() {
     }
 
     useEffect(() => { fetchData() }, [monthCursor])
+
+    useEffect(() => {
+        if (currency) {
+            fetch(`https://open.er-api.com/v6/latest/${currency}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.rates) setExchangeRates(data.rates)
+                })
+                .catch(console.error)
+        }
+    }, [currency])
 
     useEffect(() => {
         if (!showCreate) {
@@ -687,7 +699,7 @@ export default function PaymentOrdersPage() {
                     if (firstManual) {
                         await supabase.from('fin_payment_order_items').update({ amount: showMarkPaid.total_amount }).eq('id', firstManual.id)
                         if (firstManual.corporate_card_expense_id) {
-                            await supabase.from('fin_corporate_card_expenses').update({ is_paid: false, final_amount_vnd: null }).eq('id', firstManual.corporate_card_expense_id)
+                            await supabase.from('fin_corporate_card_expenses').update({ final_amount_vnd: null }).eq('id', firstManual.corporate_card_expense_id)
                         }
                     }
                     await supabase.from('fin_payment_orders').update({
@@ -751,6 +763,13 @@ export default function PaymentOrdersPage() {
                 if (invoiceIds.length > 0) {
                     const { error: invErr } = await supabase.from('fin_invoices').update({ status: 'Pending', paid_date: null, paid_via: null, paid_from_account_id: null }).in('id', invoiceIds)
                     if (invErr) throw invErr
+                }
+
+                // Reset linked card expense final_amount_vnd
+                const firstManual = items.find(i => i.item_type === 'manual')
+                if (firstManual && firstManual.corporate_card_expense_id) {
+                    const { error: ccErr } = await supabase.from('fin_corporate_card_expenses').update({ final_amount_vnd: null }).eq('id', firstManual.corporate_card_expense_id)
+                    if (ccErr) throw ccErr
                 }
 
                 const { error: poErr } = await supabase.from('fin_payment_orders').update({
@@ -913,7 +932,27 @@ export default function PaymentOrdersPage() {
                                     <td className="p-3 font-semibold text-slate-800">{po.order_number}</td>
                                     <td className="p-3 text-slate-600">{new Date(po.order_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
                                     <td className="p-3 text-right tabular-nums">{itemCount}</td>
-                                    <td className="p-3 text-right tabular-nums font-bold">{fmt(Number(po.total_amount))}</td>
+                                    <td className="p-3 text-right tabular-nums">
+                                        {(() => {
+                                            const cardExpenseItem = po.fin_payment_order_items?.find(i => i.corporate_card_expense_id)?.fin_corporate_card_expenses
+                                            if (cardExpenseItem && cardExpenseItem.currency !== currency) {
+                                                return (
+                                                    <div className="text-right">
+                                                        <div className="font-bold text-amber-700">
+                                                            {po.status === 'Paid' ? `${fmt(Number(po.total_amount))} ${currency}` : `${cardExpenseItem.amount} ${cardExpenseItem.currency}`}
+                                                        </div>
+                                                        {po.status !== 'Paid' && (
+                                                            <div className="text-[10px] text-slate-400 font-medium leading-none mt-0.5">~ {fmt(Number(po.total_amount))} {currency}</div>
+                                                        )}
+                                                        {po.status === 'Paid' && (
+                                                            <div className="text-[10px] text-slate-400 font-medium leading-none mt-0.5">{cardExpenseItem.amount} {cardExpenseItem.currency}</div>
+                                                        )}
+                                                    </div>
+                                                )
+                                            }
+                                            return <span className="font-bold">{fmt(Number(po.total_amount))}</span>
+                                        })()}
+                                    </td>
                                     <td className="p-3 text-slate-600">
                                         {po.destination_account_id ? (
                                             <div className="flex items-center gap-1.5">
@@ -948,8 +987,16 @@ export default function PaymentOrdersPage() {
                                                     setPaidDate(toLocalDateStr(new Date())); 
                                                     setPaidAccountId(po.bank_account_id || ''); 
                                                     setPaidNotes('');
-                                                    setPaidFinalAmountVND(po.total_amount);
-                                                    setPaidFinalAmountVNDStr(po.total_amount.toLocaleString('en-US'));
+                                                    const cardExpenseItem = po.fin_payment_order_items?.find(i => i.corporate_card_expense_id)?.fin_corporate_card_expenses;
+                                                    let initialAmount = po.total_amount;
+                                                    if (cardExpenseItem && cardExpenseItem.currency !== currency) {
+                                                        const rate = exchangeRates[cardExpenseItem.currency];
+                                                        if (rate && rate > 0) {
+                                                            initialAmount = Math.round(cardExpenseItem.amount / rate);
+                                                        }
+                                                    }
+                                                    setPaidFinalAmountVND(initialAmount);
+                                                    setPaidFinalAmountVNDStr(initialAmount.toLocaleString('en-US'));
                                                 }}
                                                     className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1" title="Mark Paid">
                                                     <CheckCircle2 className="w-3.5 h-3.5" /> {t(language, 'FinPayMarkPaid')}
@@ -1337,7 +1384,20 @@ export default function PaymentOrdersPage() {
                             <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex justify-between items-center">
                                 <div>
                                     <div className="text-sm text-blue-700 font-medium">{t(language, 'FinPayTotalAmount')}</div>
-                                    <div className="text-2xl font-black text-blue-900 tabular-nums">{currency} {fmt(Number(showDetail.total_amount))}</div>
+                                    <div className="text-2xl font-black text-blue-900 tabular-nums">
+                                        {(() => {
+                                            const cardExpenseItem = showDetail.fin_payment_order_items?.find(i => i.corporate_card_expense_id)?.fin_corporate_card_expenses
+                                            if (cardExpenseItem && cardExpenseItem.currency !== currency) {
+                                                return (
+                                                    <div>
+                                                        <div>{currency} {fmt(Number(showDetail.total_amount))}</div>
+                                                        <div className="text-xs font-semibold text-slate-500 mt-1">Original: {cardExpenseItem.amount} {cardExpenseItem.currency}</div>
+                                                    </div>
+                                                )
+                                            }
+                                            return `${currency} ${fmt(Number(showDetail.total_amount))}`
+                                        })()}
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className={`px-3 py-1.5 rounded-full text-sm font-bold ${(PAYMENT_ORDER_STATUS_STYLES[showDetail.status] || {}).bg} ${(PAYMENT_ORDER_STATUS_STYLES[showDetail.status] || {}).text}`}>
@@ -1475,7 +1535,16 @@ export default function PaymentOrdersPage() {
                                                                                                 <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 uppercase tracking-wider">{t(language, 'FinPayNone')}</span>
                                                                                             )}
                                                                                         </td>
-                                                                                        <td className="p-3 text-right tabular-nums font-bold text-slate-900">{fmt(Number(item.amount))}</td>
+                                                                                        <td className="p-3 text-right tabular-nums font-bold text-slate-900">
+                                                                                            {item.fin_corporate_card_expenses && item.fin_corporate_card_expenses.currency !== currency ? (
+                                                                                                <div>
+                                                                                                    <div>{fmt(Number(item.amount))} {currency}</div>
+                                                                                                    <div className="text-xs text-slate-400 font-medium">{item.fin_corporate_card_expenses.amount} {item.fin_corporate_card_expenses.currency}</div>
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                fmt(Number(item.amount))
+                                                                                            )}
+                                                                                        </td>
                                                                                     </tr>
                                                                                     {matchedFee && (
                                                                                         <tr className="bg-slate-50/30">
@@ -1553,8 +1622,21 @@ export default function PaymentOrdersPage() {
                                 </div>
                             </div>
                             
+                            {(() => {
+                                const cardExpenseItem = showMarkPaid.fin_payment_order_items?.find(i => i.corporate_card_expense_id)?.fin_corporate_card_expenses
+                                if (cardExpenseItem && cardExpenseItem.currency !== currency) {
+                                    return (
+                                        <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 flex justify-between items-center text-sm flex-shrink-0 mb-3">
+                                            <span className="font-semibold text-amber-800">{language === 'vi' ? 'Số tiền gốc:' : 'Original Amount:'}</span>
+                                            <span className="font-bold text-amber-900">{cardExpenseItem.amount} {cardExpenseItem.currency}</span>
+                                        </div>
+                                    )
+                                }
+                                return null
+                            })()}
+                            
                             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
-                                {(showMarkPaid.is_variable_amount || showMarkPaid.is_online_payment) && (
+                                {(showMarkPaid.is_variable_amount || showMarkPaid.is_online_payment || showMarkPaid.fin_payment_order_items?.some(i => i.corporate_card_expense_id && i.fin_corporate_card_expenses && i.fin_corporate_card_expenses.currency !== currency)) && (
                                     <>
                                         <div className="text-sm font-semibold text-slate-800 mb-2 border-b border-slate-200 pb-2">{t(language, 'FinPayFinalAmountAdjustments')}</div>
                                         <div>
@@ -1565,6 +1647,19 @@ export default function PaymentOrdersPage() {
                                                 setPaidFinalAmountVND(isNaN(num) ? 0 : num);
                                                 setPaidFinalAmountVNDStr(isNaN(num) ? '' : num.toLocaleString('en-US'));
                                             }} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm tabular-nums text-slate-900" />
+                                            {(() => {
+                                                const cardExpenseItem = showMarkPaid.fin_payment_order_items?.find(i => i.corporate_card_expense_id)?.fin_corporate_card_expenses
+                                                if (cardExpenseItem && cardExpenseItem.currency !== currency && exchangeRates[cardExpenseItem.currency]) {
+                                                    return (
+                                                        <div className="mt-1.5 text-xs text-amber-600 font-semibold leading-normal">
+                                                            {language === 'vi' 
+                                                                ? `Tỷ giá hiện tại: 1 ${cardExpenseItem.currency} = ${fmt(Math.round(1 / exchangeRates[cardExpenseItem.currency]))} VND. Vui lòng điều chỉnh số tiền thực tế theo sao kê ngân hàng.` 
+                                                                : `Current rate: 1 ${cardExpenseItem.currency} = ${fmt(Math.round(1 / exchangeRates[cardExpenseItem.currency]))} VND. Please adjust to match your bank statement.`}
+                                                        </div>
+                                                    )
+                                                }
+                                                return null
+                                            })()}
                                         </div>
                                     </>
                                 )}

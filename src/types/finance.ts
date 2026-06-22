@@ -125,6 +125,11 @@ export interface FinPaymentOrderItem {
     suppliers?: Pick<Supplier, 'name'>
   } | null
   fin_chart_of_accounts?: Pick<FinChartOfAccount, 'code' | 'name' | 'simplified_name'> | null
+  fin_corporate_card_expenses?: {
+    amount: number
+    currency: string
+    is_variable_amount: boolean
+  } | null
 }
 
 export interface FinBankAccount {
