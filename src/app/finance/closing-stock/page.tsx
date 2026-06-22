@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import { Save, AlertCircle, ChevronLeft, ChevronRight, Download, Package } from 'lucide-react'
-import ExcelJS from 'exceljs'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
 import CircularLoader from '@/components/CircularLoader'
@@ -195,7 +194,7 @@ export default function FinanceClosingStockPage() {
 
     const handleSaveAll = async () => {
         // Prevent saving items with cost 0
-        const hasErrors = records.some(r => r.unit_cost <= 0)
+        const hasErrors = records.some(r => (r.unit_cost || 0) <= 0)
         if (hasErrors) {
             alert(t(language, 'FinCSAlertMissingCost'))
             return
@@ -242,6 +241,7 @@ export default function FinanceClosingStockPage() {
         const branchName = branches.find(b => b.id === branchFilter)?.name || 'Unknown Branch'
         const monthName = formatMonthLabel(monthCursor, language)
         
+        const ExcelJS = (await import('exceljs')).default
         const wb = new ExcelJS.Workbook()
         const ws = wb.addWorksheet('Stock Template')
 
@@ -279,7 +279,7 @@ export default function FinanceClosingStockPage() {
 
         // Data Rows
         records.forEach(r => {
-            const typeLabel = r.item_type.replace('_', ' ').toUpperCase()
+            const typeLabel = (r.item_type || '').replace('_', ' ').toUpperCase()
             const row = ws.addRow([
                 typeLabel,
                 r.name,
@@ -452,7 +452,7 @@ export default function FinanceClosingStockPage() {
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 bg-white">
                                         {records.map((r, i) => {
-                                            const hasError = r.unit_cost <= 0
+                                            const hasError = (r.unit_cost || 0) <= 0
                                             return (
                                                 <tr key={r.id || `${r.item_type}-${r.item_id}`} className={`hover:bg-slate-50 ${hasError ? 'bg-red-50/50' : ''}`}>
                                                     <td className="px-4 py-3 whitespace-nowrap">
@@ -461,7 +461,7 @@ export default function FinanceClosingStockPage() {
                                                             r.item_type === 'prep_recipe' ? 'bg-cyan-100 text-cyan-800' :
                                                             'bg-emerald-100 text-emerald-800'
                                                         }`}>
-                                                            {t(language, r.item_type as any) || r.item_type.replace('_', ' ')}
+                                                            {t(language, r.item_type as any) || (r.item_type || '').replace('_', ' ')}
                                                         </span>
                                                     </td>
                                                     <td className="px-4 py-3">
