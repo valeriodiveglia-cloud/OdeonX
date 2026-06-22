@@ -64,6 +64,7 @@ export default function CorporateCardPage() {
     const [showAddSupplier, setShowAddSupplier] = useState(false)
     const [invoices, setInvoices] = useState<any[]>([])
     const [newSupplierName, setNewSupplierName] = useState('')
+    const [showAllInvoices, setShowAllInvoices] = useState(false)
 
     // Month navigation
     const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
@@ -95,6 +96,13 @@ export default function CorporateCardPage() {
         branch_ids: [] as string[],
     })
 
+    const filteredInvoices = useMemo(() => {
+        if (showAllInvoices || !form.supplier_id) {
+            return invoices
+        }
+        return invoices.filter(inv => inv.supplier_id === form.supplier_id)
+    }, [invoices, form.supplier_id, showAllInvoices])
+
     const fetchData = async () => {
         setLoading(true)
         try { await supabase.rpc('fin_auto_generate_card_pos'); } catch (e) { console.warn('Auto-gen failed', e); }
@@ -119,7 +127,7 @@ export default function CorporateCardPage() {
             supabase.from('fin_bank_accounts').select('*').eq('is_active', true).in('account_type', ['Checking', 'Saving']).order('account_name'),
             supabase.from('provider_branches').select('id, name').order('name'),
             supabase.from('suppliers').select('id, name').order('name'),
-            supabase.from('fin_invoices').select('id, invoice_number, suppliers(name), gross_amount, invoice_date').order('invoice_date', { ascending: false })
+            supabase.from('fin_invoices').select('id, invoice_number, supplier_id, suppliers(name), gross_amount, invoice_date').order('invoice_date', { ascending: false })
         ])
         setExpenses(recRes.data || [])
         setAccounts(accRes.data || [])
@@ -149,6 +157,7 @@ export default function CorporateCardPage() {
     }, [form.currency, currency])
 
     const handleOpenModal = (item?: FinCorporateCardExpense) => {
+        setShowAllInvoices(false)
         const activeCards = bankAccounts.filter(a => a.is_corporate_card);
         const defaultCard = bankAccounts.find(a => a.is_default_corporate_card) || activeCards[0];
         const defaultCardId = defaultCard?.id || '';
@@ -713,16 +722,47 @@ export default function CorporateCardPage() {
 
                                     {form.vat_invoice_status === 'Issued' && (
                                         <div className="col-span-2">
-                                            <label className="block text-sm font-semibold text-slate-700 mb-1">{language === 'vi' ? 'Liên kết với hóa đơn VAT' : 'Link to VAT Invoice'}</label>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="block text-sm font-semibold text-slate-700">{language === 'vi' ? 'Liên kết với hóa đơn VAT' : 'Link to VAT Invoice'}</label>
+                                                {form.supplier_id && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowAllInvoices(!showAllInvoices)}
+                                                        className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition"
+                                                    >
+                                                        {showAllInvoices 
+                                                            ? (language === 'vi' ? 'Lọc theo nhà cung cấp' : 'Filter by supplier')
+                                                            : (language === 'vi' ? 'Xem tất cả hóa đơn VAT' : 'Browse all VAT invoices')
+                                                        }
+                                                    </button>
+                                                )}
+                                            </div>
                                             <select value={form.invoice_id} onChange={e => setForm(f => ({ ...f, invoice_id: e.target.value }))}
                                                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm text-slate-900 font-medium">
                                                 <option value="">{language === 'vi' ? '-- Chọn hóa đơn --' : '-- Select invoice --'}</option>
-                                                {invoices.map(inv => (
+                                                {filteredInvoices.map(inv => (
                                                     <option key={inv.id} value={inv.id}>
                                                         {inv.invoice_number} - {inv.suppliers?.name || 'No Supplier'} ({fmt(Number(inv.gross_amount))} {currency})
                                                      </option>
                                                 ))}
                                             </select>
+                                            {form.supplier_id && (
+                                                <div className="text-xs mt-1.5 font-medium text-slate-500">
+                                                    {filteredInvoices.length === 0 ? (
+                                                        <span className="text-amber-600">
+                                                            {language === 'vi' 
+                                                                ? 'Không tìm thấy hóa đơn nào cho nhà cung cấp này.' 
+                                                                : 'No invoices found for this supplier.'}
+                                                        </span>
+                                                    ) : (
+                                                        <span>
+                                                            {showAllInvoices 
+                                                                ? (language === 'vi' ? 'Đang hiển thị tất cả hóa đơn VAT.' : 'Showing all VAT invoices.')
+                                                                : (language === 'vi' ? 'Đang hiển thị hóa đơn của nhà cung cấp này.' : 'Showing invoices for this supplier.')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
