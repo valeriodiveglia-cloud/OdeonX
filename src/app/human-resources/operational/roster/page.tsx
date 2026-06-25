@@ -345,8 +345,10 @@ export default function RosterPage() {
         }
 
         // Determine weekly rotation offset if strategy is weekly
-        const weekMs = weekStart.getTime();
-        const weekIndex = Math.floor(weekMs / (7 * 24 * 60 * 60 * 1000));
+        const refMonday = new Date('2026-01-05T00:00:00'); // Stable reference Monday
+        const diffMs = weekStart.getTime() - refMonday.getTime();
+        const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
+        const weekIndex = Math.floor(diffDays / 7);
         let weeklyStaff = [...branchStaff];
         if (rotationSettings.strategy === 'weekly') {
             weeklyStaff = rotateArray(weeklyStaff, weekIndex);
