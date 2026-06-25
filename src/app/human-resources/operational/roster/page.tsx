@@ -1524,11 +1524,11 @@ export default function RosterPage() {
                 return (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDayDetailDate(null)}>
                         <div
-                            className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-5xl mx-4 overflow-hidden"
+                            className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col overflow-hidden"
                             onClick={e => e.stopPropagation()}
                         >
                             {/* Header */}
-                            <div className="px-6 py-5 border-b border-gray-200">
+                            <div className="px-6 py-5 border-b border-gray-200 shrink-0">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
@@ -1614,7 +1614,7 @@ export default function RosterPage() {
                             </div>
 
                             {/* Timeline area */}
-                            <div className="px-6 py-4 overflow-x-auto">
+                            <div className="px-6 py-4 overflow-y-auto overflow-x-auto flex-1">
                                 {/* Hour labels */}
                                 <div className="flex ml-[160px] mb-1">
                                     {Array.from({ length: TIMELINE_HOURS + 1 }, (_, i) => {
@@ -1681,8 +1681,8 @@ export default function RosterPage() {
                                                                 {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                                             </div>
                                                             <div className="min-w-0">
-                                                                <div className="text-xs font-semibold text-gray-880 truncate">{staff.name}</div>
-                                                                <div className="text-[10px] text-gray-450 truncate">{staff.role}</div>
+                                                                <div className="text-xs font-semibold text-gray-900 truncate">{staff.name}</div>
+                                                                <div className="text-[10px] text-gray-500 truncate">{staff.role}</div>
                                                             </div>
                                                         </div>
 
