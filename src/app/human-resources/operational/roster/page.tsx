@@ -8,10 +8,12 @@ import {
     getShiftTypes, getRosterData, saveRosterData, rosterKey,
     formatDate, getMonday, addDays, formatWeekRange, dayName,
     generateMockRoster, getStaffCrossBranchShifts, shiftsOverlap,
-    AutoScheduleTimeSlot, getAutoScheduleTimeSlots
+    AutoScheduleTimeSlot, getAutoScheduleTimeSlots,
+    getRosterRotationSettings
 } from '@/lib/hr-operational-data'
 import CircularLoader from '@/components/CircularLoader'
-import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User, Clock, Wand2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User, Clock, Wand2, ChevronDown } from 'lucide-react'
+import RosterDepartmentView from './RosterDepartmentView'
 
 export default function RosterPage() {
     const { language } = useSettings()
@@ -19,6 +21,8 @@ export default function RosterPage() {
     const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
     const [selectedBranch, setSelectedBranch] = useState('')
     const [weekStart, setWeekStart] = useState(getMonday(new Date()))
+    const [activeView, setActiveView] = useState<'weekly' | 'daily'>('weekly')
+    const [selectedDayIndex, setSelectedDayIndex] = useState<number>(7)
     const [roster, setRoster] = useState<Record<string, string>>({})
     const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([])
     const [staffList, setStaffList] = useState<{ id: string; name: string; role: string; department: string; position: string; employment_type: string; skill_level: number; branchIds: string[] }[]>([])
@@ -29,6 +33,8 @@ export default function RosterPage() {
     const [staffDetailId, setStaffDetailId] = useState<string | null>(null)
     const [dayDetailDate, setDayDetailDate] = useState<string | null>(null)
     const [borrowTab, setBorrowTab] = useState<'internal' | 'outsourced'>('internal')
+    const [isAutoMenuOpen, setIsAutoMenuOpen] = useState(false)
+    const autoMenuRef = useRef<HTMLDivElement>(null)
     const modalRef = useRef<HTMLDivElement>(null)
 
     // Load branches and staff
@@ -91,6 +97,28 @@ export default function RosterPage() {
         setBorrowedStaffIds([])
         setAutoScheduleTimeSlots(getAutoScheduleTimeSlots())
     }, [selectedBranch, weekStart, branches])
+
+    // Click outside listener for the auto-scheduling dropdown menu
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (autoMenuRef.current && !autoMenuRef.current.contains(event.target as Node)) {
+                setIsAutoMenuOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [])
+
+    const handleViewChange = (view: 'weekly' | 'daily') => {
+        setActiveView(view)
+        if (view === 'weekly') {
+            setSelectedDayIndex(7)
+        } else {
+            setSelectedDayIndex(0)
+        }
+    }
 
     const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
     const todayStr = formatDate(new Date())
@@ -229,6 +257,7 @@ export default function RosterPage() {
     const handleAutoSchedule = (overwrite: boolean) => {
         if (overwrite && !confirm('This will overwrite existing shifts for this week. Are you sure?')) return;
         
+        const rotationSettings = getRosterRotationSettings();
         let newRoster = { ...roster };
         const branchSlots = autoScheduleTimeSlots.filter(s => s.branchId === selectedBranch);
         const branchStaff = staffList.filter(s => s.branchIds.includes(selectedBranch) && s.employment_type !== 'outsourced');
@@ -265,6 +294,45 @@ export default function RosterPage() {
             return consecutive;
         }
 
+        // Helper to check consecutive working days on the same shift
+        const getConsecutiveSameShift = (staffId: string, shiftId: string, checkDate: Date, tempRoster: Record<string, string>) => {
+            let consecutive = 0;
+            for (let i = 1; i <= 6; i++) {
+                const d = new Date(checkDate);
+                d.setDate(d.getDate() - i);
+                const key = rosterKey(selectedBranch, staffId, formatDate(d));
+                if (tempRoster[key] === shiftId) {
+                    consecutive++;
+                } else {
+                    break;
+                }
+            }
+            return consecutive;
+        }
+
+        // Helper to count hours assigned to a staff member in the current week
+        const getStaffWeekHours = (staffId: string, tempRoster: Record<string, string>) => {
+            let hours = 0;
+            weekDays.forEach(d => {
+                const key = rosterKey(selectedBranch, staffId, formatDate(d));
+                const shiftId = tempRoster[key];
+                if (shiftId) {
+                    const shift = shiftTypes.find(s => s.id === shiftId);
+                    if (shift && shift.type === 'work') {
+                        hours += shift.hours;
+                    }
+                }
+            });
+            return hours;
+        }
+
+        // Helper to rotate array
+        function rotateArray<T>(arr: T[], offset: number): T[] {
+            if (arr.length === 0) return arr;
+            const shift = offset % arr.length;
+            return [...arr.slice(shift), ...arr.slice(0, shift)];
+        }
+
         if (overwrite) {
             // clear the week for branch staff
             weekDays.forEach(day => {
@@ -274,6 +342,14 @@ export default function RosterPage() {
                     delete newRoster[key];
                 });
             });
+        }
+
+        // Determine weekly rotation offset if strategy is weekly
+        const weekMs = weekStart.getTime();
+        const weekIndex = Math.floor(weekMs / (7 * 24 * 60 * 60 * 1000));
+        let weeklyStaff = [...branchStaff];
+        if (rotationSettings.strategy === 'weekly') {
+            weeklyStaff = rotateArray(weeklyStaff, weekIndex);
         }
 
         weekDays.forEach((day, dayIndex) => {
@@ -299,6 +375,14 @@ export default function RosterPage() {
                 }
             });
 
+            // Rotate staff list daily if strategy is daily
+            let dailyStaff = [...weeklyStaff];
+            if (rotationSettings.strategy === 'daily') {
+                const dayMs = day.getTime();
+                const dayIndexGlobal = Math.floor(dayMs / (24 * 60 * 60 * 1000));
+                dailyStaff = rotateArray(dailyStaff, dayIndexGlobal);
+            }
+
             // Try to meet targets for each slot and department
             branchSlots.forEach(slot => {
                 const targets = slot.targets || {};
@@ -308,7 +392,21 @@ export default function RosterPage() {
                     const target = targets[dept][dayIndex] || 0;
                     
                     while ((currentPoints[slot.id][dept] || 0) < target) {
-                        const availableStaff = branchStaff.find(staff => {
+                        const viableShift = workShifts.find(s => coversSlot(s, slot.startTime, slot.endTime));
+                        if (!viableShift) break; 
+
+                        // Determine the candidate staff array for this assignment step
+                        let candidateStaff = [...dailyStaff];
+                        if (rotationSettings.strategy === 'balanced') {
+                            // Sort by week hours ascending
+                            candidateStaff.sort((a, b) => {
+                                const hoursA = getStaffWeekHours(a.id, newRoster);
+                                const hoursB = getStaffWeekHours(b.id, newRoster);
+                                return hoursA - hoursB;
+                            });
+                        }
+
+                        const availableStaff = candidateStaff.find(staff => {
                             if ((staff.department || 'Unknown') !== dept) return false;
                             const key = rosterKey(selectedBranch, staff.id, dateStr);
                             if (newRoster[key]) return false; // already working
@@ -316,13 +414,16 @@ export default function RosterPage() {
                             // Ensure they don't have a conflict in another branch
                             const conflict = getCrossBranchShifts(staff.id, dateStr).length > 0;
                             if (conflict) return false;
+
+                            // Daily rotation constraint: Max consecutive days on same shift
+                            if (rotationSettings.strategy === 'daily') {
+                                const consecutiveSame = getConsecutiveSameShift(staff.id, viableShift.id, day, newRoster);
+                                if (consecutiveSame >= rotationSettings.max_consecutive_same_shift) return false;
+                            }
                             return true;
                         });
 
                         if (!availableStaff) break;
-
-                        const viableShift = workShifts.find(s => coversSlot(s, slot.startTime, slot.endTime));
-                        if (!viableShift) break; 
 
                         const newKey = rosterKey(selectedBranch, availableStaff.id, dateStr);
                         newRoster[newKey] = viableShift.id;
@@ -375,6 +476,21 @@ export default function RosterPage() {
         saveRosterData(newRoster);
     }
 
+    const handleClearWeek = () => {
+        if (!confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa tất cả phân công trong tuần này?' : 'Are you sure you want to clear all assignments for this week?')) return;
+        const newRoster = { ...roster };
+        const branchStaff = staffList.filter(s => s.branchIds.includes(selectedBranch) && s.employment_type !== 'outsourced');
+        weekDays.forEach(day => {
+            const dateStr = formatDate(day);
+            branchStaff.forEach(staff => {
+                const key = rosterKey(selectedBranch, staff.id, dateStr);
+                delete newRoster[key];
+            });
+        });
+        setRoster(newRoster);
+        saveRosterData(newRoster);
+    }
+
     const getWeeklyHours = (staffId: string): number => {
         return weekDays.reduce((t, day) => {
             const s = getCellShift(staffId, formatDate(day))
@@ -396,10 +512,11 @@ export default function RosterPage() {
         }, 0)
     }
 
-    const getDayCoverageStatus = (dateStr: string, dayIndex: number): { met: boolean; errors: string[] } => {
+    const getDayCoverageStatus = (dateStr: string, dayIndex: number): { met: boolean; errors: string[]; totalTargets: number } => {
         const branchSlots = autoScheduleTimeSlots.filter(s => s.branchId === selectedBranch);
-        if (branchSlots.length === 0) return { met: true, errors: [] }; // no targets to miss
+        if (branchSlots.length === 0) return { met: true, errors: [], totalTargets: 0 }; // no targets to miss
 
+        let totalTargets = 0;
         const currentPoints: Record<string, Record<string, number>> = {};
         branchSlots.forEach(slot => { currentPoints[slot.id] = {}; });
 
@@ -436,13 +553,14 @@ export default function RosterPage() {
             
             departments.forEach(dept => {
                 const target = targets[dept][dayIndex] || 0;
+                totalTargets += target;
                 if (target > 0 && (currentPoints[slot.id][dept] || 0) < target) {
                     errors.push(`${slot.name} (${dept}): ${currentPoints[slot.id][dept] || 0}/${target} pts`);
                 }
             });
         });
 
-        return { met: errors.length === 0, errors };
+        return { met: errors.length === 0, errors, totalTargets };
     }
 
     if (loading) {
@@ -455,35 +573,56 @@ export default function RosterPage() {
 
     return (
         <div className="min-h-screen bg-\[#0b1530\] max-w-none mx-auto p-4 text-gray-100 animate-in fade-in duration-300">
-            {/* Page Title */}
-            <div className="mb-6 ml-2">
-                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-                    Roster Management
-                </h1>
-                <p className="text-sm text-slate-400 mt-1">
-                    Manage weekly shift assignments and coverage across branches.
-                </p>
+            {/* Riga Superiore: Titolo e Branch Selector */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+                <h1 className="text-2xl font-bold text-white tracking-tight">Roster Management</h1>
+                
+                <div className="flex items-center gap-2 bg-[#1a2c56] border border-blue-500/20 px-3 py-1.5 rounded-lg text-blue-200">
+                    <MapPin className="w-4 h-4 shrink-0" />
+                    <span className="text-xs font-semibold uppercase">{language === 'vi' ? 'Chi nhánh:' : 'Branch:'}</span>
+                    <select
+                        value={selectedBranch}
+                        onChange={e => setSelectedBranch(e.target.value)}
+                        className="bg-transparent border-0 rounded-lg px-1 py-0.5 text-sm text-blue-100 focus:ring-0 focus:outline-none cursor-pointer"
+                    >
+                        {branches.map(b => (
+                            <option key={b.id} value={b.id} className="bg-[#1a2c56] text-gray-100">{b.name}</option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
-            {/* Header */}
-            <div className="mb-4">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    {/* Branch selector */}
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs text-blue-200 uppercase tracking-wider font-medium">Branch</label>
-                        <select
-                            value={selectedBranch}
-                            onChange={e => setSelectedBranch(e.target.value)}
-                            className="bg-blue-600/15 border border-blue-400/30 rounded-lg px-3 py-1.5 text-sm text-blue-100 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                            {branches.map(b => (
-                                <option key={b.id} value={b.id}>{b.name}</option>
-                            ))}
-                        </select>
-                    </div>
+            {/* Riga Inferiore: Tab Minimaliste & Navigazione Settimana */}
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/10">
+                {/* Tab Minimaliste */}
+                <div className="flex gap-6 -mb-px">
+                    <button
+                        onClick={() => handleViewChange('weekly')}
+                        className={`pb-2 px-1 text-sm font-semibold transition-all border-b-2 flex items-center gap-2 ${
+                            activeView === 'weekly'
+                                ? 'border-blue-500 text-blue-400'
+                                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
+                        }`}
+                    >
+                        <CalendarDays className="w-4 h-4" />
+                        {language === 'vi' ? 'Xem tuần' : 'Weekly View'}
+                    </button>
+                    <button
+                        onClick={() => handleViewChange('daily')}
+                        className={`pb-2 px-1 text-sm font-semibold transition-all border-b-2 flex items-center gap-2 ${
+                            activeView === 'daily'
+                                ? 'border-blue-500 text-blue-400'
+                                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
+                        }`}
+                    >
+                        <Clock className="w-4 h-4" />
+                        {language === 'vi' ? 'Xem ngày' : 'Daily View'}
+                    </button>
+                </div>
 
-                    {/* Week navigation */}
-                    <div className="flex items-center gap-2 sm:ml-auto">
+                {/* Navigazione settimana - Con placeholder invisibile in Daily View per mantenere l'altezza identica della riga */}
+                {activeView === 'weekly' ? (
+                    <div className="flex items-center gap-2 sm:ml-auto pb-2">
                         <button onClick={prevWeek} className="p-1.5 rounded-lg hover:bg-white/10 text-blue-200 hover:text-white transition">
                             <ChevronLeft className="w-5 h-5" />
                         </button>
@@ -497,45 +636,101 @@ export default function RosterPage() {
                             Today
                         </button>
                     </div>
-                </div>
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-blue-400/20 mb-4 flex justify-between items-center py-2">
-                <div className="text-sm font-semibold text-blue-200">
-                    {displayedStaff.length} Staff in roster
-                </div>
-                <div className="flex gap-2">
-                    <div className="flex items-center gap-1 bg-blue-600/10 rounded-lg p-1 border border-blue-500/20 mr-2">
-                        <button
-                            onClick={() => handleAutoSchedule(false)}
-                            className="px-3 py-1 text-xs rounded-md hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
-                            title="Auto-assign shifts to meet skill targets without overwriting existing shifts"
-                        >
-                            <Wand2 className="w-3.5 h-3.5" />
-                            Auto-Fill Gaps
+                ) : (
+                    <div className="invisible flex items-center gap-2 sm:ml-auto pb-2 pointer-events-none select-none">
+                        <button className="p-1.5">
+                            <ChevronLeft className="w-5 h-5" />
                         </button>
-                        <div className="w-px h-4 bg-blue-500/20"></div>
-                        <button
-                            onClick={() => handleAutoSchedule(true)}
-                            className="px-3 py-1 text-xs rounded-md hover:bg-red-500/20 text-red-300 hover:text-red-200 font-medium transition flex items-center gap-1.5"
-                            title="Clear this week and completely auto-generate roster based on targets"
-                        >
-                            Overwrite Week
+                        <div className="text-sm font-semibold min-w-[180px] text-center">
+                            {formatWeekRange(weekStart)}
+                        </div>
+                        <button className="p-1.5">
+                            <ChevronRight className="w-5 h-5" />
+                        </button>
+                        <button className="ml-2 px-3 py-1.5 text-xs">
+                            Today
                         </button>
                     </div>
-                    <button
-                        onClick={() => setIsBorrowModalOpen(true)}
-                        className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/50 hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
-                    >
-                        <User className="w-3.5 h-3.5" />
-                        Assign External Staff
-                    </button>
-                </div>
+                )}
             </div>
 
-            {/* Grid in white card */}
-            <div className="bg-white rounded-2xl shadow overflow-x-auto">
+            {/* Divider / Toolbar - Only in weekly view */}
+            {activeView === 'weekly' && (
+                <div className="mb-4 flex justify-between items-center py-2 animate-in fade-in duration-150">
+                    <div className="text-sm font-semibold text-blue-200">
+                        {displayedStaff.length} Staff in roster
+                    </div>
+                    <div className="flex gap-2">
+                        <div className="relative mr-2" ref={autoMenuRef}>
+                            <button
+                                onClick={() => setIsAutoMenuOpen(!isAutoMenuOpen)}
+                                className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/50 bg-blue-600/10 hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
+                            >
+                                <Wand2 className="w-3.5 h-3.5" />
+                                {language === 'vi' ? 'Tự động phân ca' : 'Auto-Schedule'}
+                                <ChevronDown className="w-3 h-3 ml-0.5" />
+                            </button>
+                            
+                            {isAutoMenuOpen && (
+                                <div className="absolute right-0 mt-1 z-30 w-64 rounded-xl bg-white border border-gray-200 shadow-xl py-1 text-left animate-in fade-in slide-in-from-top-2 duration-150">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsAutoMenuOpen(false);
+                                            handleAutoSchedule(false);
+                                        }}
+                                        className="w-full px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition flex flex-col items-start text-left gap-0.5"
+                                    >
+                                        <span className="font-semibold text-gray-800">
+                                            {language === 'vi' ? 'Tự động điền ca trống' : 'Auto-Fill Gaps'}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400 font-normal">
+                                            {language === 'vi' ? 'Không ghi đè ca đã phân' : 'Fills empty shifts, preserves existing'}
+                                        </span>
+                                    </button>
+                                    <div className="border-t border-gray-150 my-1"></div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsAutoMenuOpen(false);
+                                            handleAutoSchedule(true);
+                                        }}
+                                        className="w-full px-4 py-2 text-xs text-red-600 hover:bg-red-50 transition flex flex-col items-start text-left gap-0.5"
+                                    >
+                                        <span className="font-semibold text-red-600">
+                                            {language === 'vi' ? 'Xóa & Tạo lại mới' : 'Clear & Regenerate'}
+                                        </span>
+                                        <span className="text-[10px] text-red-400 font-normal">
+                                            {language === 'vi' ? 'Xóa sạch tuần này và tự động phân lại' : 'Clear week and auto-generate new shifts'}
+                                        </span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={handleClearWeek}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-medium transition flex items-center gap-1.5 mr-2"
+                            title={language === 'vi' ? 'Xóa tất cả các ca phân công trong tuần này' : 'Clear all shift assignments for this week'}
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {language === 'vi' ? 'Xóa tuần này' : 'Clear Week'}
+                        </button>
+                        <button
+                            onClick={() => setIsBorrowModalOpen(true)}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/50 hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
+                        >
+                            <User className="w-3.5 h-3.5" />
+                            Assign External Staff
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {activeView === 'weekly' ? (
+                <>
+                    {/* Grid in white card */}
+                    <div className="bg-white rounded-2xl shadow overflow-x-auto">
                 <table className="w-full border-collapse min-w-[800px]">
                     <thead>
                         <tr>
@@ -763,6 +958,31 @@ export default function RosterPage() {
                     ))}
                 </div>
             </div>
+                </>
+            ) : (
+                <RosterDepartmentView
+                    branches={branches}
+                    selectedBranch={selectedBranch}
+                    weekStart={weekStart}
+                    weekDays={weekDays}
+                    roster={roster}
+                    setRoster={setRoster}
+                    shiftTypes={shiftTypes}
+                    setShiftTypes={setShiftTypes}
+                    displayedStaff={displayedStaff}
+                    language={language}
+                    getBranchName={(id) => branches.find(b => b.id === id)?.name || id}
+                    prevWeek={prevWeek}
+                    nextWeek={nextWeek}
+                    goToday={goToday}
+                    onOpenBorrowModal={() => setIsBorrowModalOpen(true)}
+                    selectedDayIndex={selectedDayIndex}
+                    setSelectedDayIndex={setSelectedDayIndex}
+                    getDayCoverageStatus={getDayCoverageStatus}
+                    onViewCoverage={(dateStr) => setDayDetailDate(dateStr)}
+                    autoScheduleTimeSlots={autoScheduleTimeSlots}
+                />
+            )}
 
             {/* Assignment Modal */}
             {editingCell && (
