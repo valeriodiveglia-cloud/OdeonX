@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import { supabase } from '@/lib/supabase_shim'
+import { useSettings } from '@/contexts/SettingsContext'
 import {
     ShiftType, MOCK_STAFF,
     getShiftTypes, getRosterData, saveRosterData, rosterKey,
@@ -13,6 +14,7 @@ import CircularLoader from '@/components/CircularLoader'
 import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User, Clock, Wand2 } from 'lucide-react'
 
 export default function RosterPage() {
+    const { language } = useSettings()
     const [loading, setLoading] = useState(true)
     const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
     const [selectedBranch, setSelectedBranch] = useState('')
@@ -552,8 +554,24 @@ export default function RosterPage() {
                                         onClick={() => setDayDetailDate(ds)}
                                     >
                                         {!coverage.met && (
-                                            <div className="absolute top-2 right-2 text-red-500 cursor-help" title={`Missing targets:\n${coverage.errors.join('\n')}`}>
+                                            <div 
+                                                className="absolute top-2 right-2 text-red-500 cursor-help group/tooltip"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
                                                 <AlertTriangle className="w-3.5 h-3.5" />
+                                                <div className="pointer-events-none absolute right-0 top-full mt-1 z-30 w-64 bg-slate-900 text-white text-left text-xs rounded-xl shadow-2xl p-3 border border-slate-700/50 opacity-0 scale-95 origin-top-right group-hover/tooltip:opacity-100 group-hover/tooltip:scale-100 transition-all duration-150">
+                                                    <div className="font-semibold text-red-400 flex items-center gap-1.5 mb-1.5">
+                                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                                        <span>{language === 'vi' ? 'Thiếu chỉ tiêu' : 'Missing Targets'}</span>
+                                                    </div>
+                                                    <div className="space-y-1 text-slate-300">
+                                                        {coverage.errors.map((err, idx) => (
+                                                            <div key={idx} className="border-b border-slate-800 pb-1 last:border-0 last:pb-0">
+                                                                <p className="font-medium text-slate-200">{err}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             </div>
                                         )}
                                         <div className={`text-xs uppercase tracking-wider ${isToday ? 'text-blue-600' : 'text-gray-500'} group-hover/day:text-blue-600 transition-colors`}>
@@ -1192,6 +1210,8 @@ export default function RosterPage() {
                 // Find the actual Date object from weekDays to avoid timezone mismatch
                 const dateObj = weekDays.find(d => formatDate(d) === dayDetailDate) || new Date(dayDetailDate + 'T12:00:00')
                 const dateLabel = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                const dayIndex = weekDays.findIndex(d => formatDate(d) === dayDetailDate)
+                const coverageStatus = getDayCoverageStatus(dayDetailDate, dayIndex !== -1 ? dayIndex : 0)
 
                 // Timeline from 06:00 to 02:00 next day = 20 hours
                 const TIMELINE_START = 6 // 06:00
@@ -1313,16 +1333,49 @@ export default function RosterPage() {
                                     )}
                                     {gaps.length === 0 && (
                                         <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-                                                <span className="text-emerald-400 text-sm">✓</span>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs text-slate-400">Coverage</div>
-                                                <div className="text-sm font-semibold text-emerald-400">Full</div>
-                                            </div>
+                                            {coverageStatus.met ? (
+                                                <>
+                                                    <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                                                        <span className="text-emerald-400 text-sm">✓</span>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs text-slate-400">Coverage</div>
+                                                        <div className="text-sm font-semibold text-emerald-400">Full</div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                                                        <AlertTriangle className="w-4 h-4 text-amber-400" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs text-slate-400">Target Coverage</div>
+                                                        <div className="text-sm font-semibold text-amber-400">Deficits ({coverageStatus.errors.length})</div>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     )}
                                 </div>
+                                {/* Target warnings (Header Banner) */}
+                                {!coverageStatus.met && (
+                                    <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5">
+                                        <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                                        <div>
+                                            <p className="text-xs font-semibold text-amber-300">
+                                                {language === 'vi' ? 'Thiếu hụt chỉ tiêu nhân sự:' : 'Staffing targets not met:'}
+                                            </p>
+                                            <p className="text-xs text-slate-300 mt-0.5">
+                                                {coverageStatus.errors.join(', ')}.
+                                            </p>
+                                            <p className="text-[10px] text-slate-400 mt-1">
+                                                {language === 'vi' 
+                                                    ? '💡 Phân công thêm nhân sự hoặc mượn từ chi nhánh khác.' 
+                                                    : '💡 Assign more staff or borrow from another branch.'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Timeline area */}
