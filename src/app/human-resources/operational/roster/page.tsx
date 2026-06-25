@@ -1248,22 +1248,22 @@ export default function RosterPage() {
                 return (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setStaffDetailId(null)}>
                         <div
-                            className="bg-slate-800 rounded-2xl border border-white/10 shadow-2xl w-full max-w-4xl mx-4 overflow-hidden"
+                            className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-4xl mx-4 overflow-hidden"
                             onClick={e => e.stopPropagation()}
                         >
                             {/* Header */}
-                            <div className="px-6 py-5 border-b border-white/10">
+                            <div className="px-6 py-5 border-b border-gray-200">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-4">
                                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-sm font-bold text-white">
                                             {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold text-white">{staff.name}</h3>
-                                            <p className="text-sm text-slate-400">{staff.role} · {formatWeekRange(weekStart)}</p>
+                                            <h3 className="text-lg font-semibold text-gray-900">{staff.name}</h3>
+                                            <p className="text-sm text-gray-500">{staff.role} · {formatWeekRange(weekStart)}</p>
                                         </div>
                                     </div>
-                                    <button onClick={() => setStaffDetailId(null)} className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition">
+                                    <button onClick={() => setStaffDetailId(null)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
                                         <X className="w-5 h-5" />
                                     </button>
                                 </div>
@@ -1271,43 +1271,43 @@ export default function RosterPage() {
                                 {/* Summary stats */}
                                 <div className="flex items-center gap-6 mt-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                                            <CalendarDays className="w-4 h-4 text-blue-400" />
+                                        <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center bg-opacity-10">
+                                            <CalendarDays className="w-4 h-4 text-blue-600" />
                                         </div>
                                         <div>
-                                            <div className="text-xs text-slate-400">Work Days</div>
-                                            <div className="text-sm font-semibold text-white">{workDaysCount}</div>
+                                            <div className="text-xs text-gray-500 font-medium">Work Days</div>
+                                            <div className="text-sm font-bold text-gray-900">{workDaysCount}</div>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-                                            <span className="text-emerald-400 text-sm font-bold">h</span>
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center bg-opacity-10">
+                                            <span className="text-emerald-600 text-sm font-bold">h</span>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-slate-400">Total Hours</div>
-                                            <div className={`text-sm font-semibold ${totalWeekHours > 44 ? 'text-red-400' : totalWeekHours >= 40 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                            <div className="text-xs text-gray-500 font-medium">Total Hours</div>
+                                            <div className={`text-sm font-bold ${totalWeekHours > 44 ? 'text-red-600' : totalWeekHours >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
                                                 {totalWeekHours}h
                                             </div>
                                         </div>
                                     </div>
                                     {leaveDaysCount > 0 && (
                                         <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                                                <Globe className="w-4 h-4 text-amber-400" />
+                                            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center bg-opacity-10">
+                                                <Globe className="w-4 h-4 text-amber-600" />
                                             </div>
                                             <div>
-                                                <div className="text-xs text-slate-400">Leave</div>
-                                                <div className="text-sm font-semibold text-amber-400">{leaveDaysCount} day{leaveDaysCount !== 1 ? 's' : ''}</div>
+                                                <div className="text-xs text-gray-500 font-medium">Leave</div>
+                                                <div className="text-sm font-bold text-amber-600">{leaveDaysCount} day{leaveDaysCount !== 1 ? 's' : ''}</div>
                                             </div>
                                         </div>
                                     )}
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
-                                            <MapPin className="w-4 h-4 text-purple-400" />
+                                        <div className="w-8 h-8 rounded-lg bg-purple-500 flex items-center justify-center bg-opacity-10">
+                                            <MapPin className="w-4 h-4 text-purple-600" />
                                         </div>
                                         <div>
-                                            <div className="text-xs text-slate-400">Branches</div>
-                                            <div className="text-sm font-semibold text-purple-400">{activeBranches.length}</div>
+                                            <div className="text-xs text-gray-500 font-medium">Branches</div>
+                                            <div className="text-sm font-bold text-purple-600">{activeBranches.length}</div>
                                         </div>
                                     </div>
                                 </div>
@@ -1318,35 +1318,35 @@ export default function RosterPage() {
                                 <table className="w-full border-collapse">
                                     <thead>
                                         <tr>
-                                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-slate-500 bg-slate-800/80 border-b border-white/5 min-w-[140px]">Branch</th>
+                                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-200/60 min-w-[140px]">Branch</th>
                                             {weekDays.map(day => {
                                                 const ds = formatDate(day)
                                                 const isToday = ds === todayStr
                                                 return (
-                                                    <th key={ds} className={`px-2 py-3 text-center border-b border-white/5 min-w-[90px] ${isToday ? 'bg-blue-500/10' : 'bg-slate-800/80'}`}>
-                                                        <div className={`text-[10px] uppercase tracking-wider ${isToday ? 'text-blue-400' : 'text-slate-500'}`}>{dayName(day)}</div>
-                                                        <div className={`text-sm font-bold mt-0.5 ${isToday ? 'text-blue-300' : 'text-slate-300'}`}>{day.getDate()}</div>
+                                                    <th key={ds} className={`px-2 py-3 text-center border-b border-gray-200/60 min-w-[90px] ${isToday ? 'bg-blue-50/70' : 'bg-gray-50'}`}>
+                                                        <div className={`text-[10px] uppercase tracking-wider font-semibold ${isToday ? 'text-blue-600' : 'text-gray-400'}`}>{dayName(day)}</div>
+                                                        <div className={`text-sm font-bold mt-0.5 ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>{day.getDate()}</div>
                                                     </th>
                                                 )
                                             })}
-                                            <th className="px-3 py-3 text-center border-b border-white/5 bg-slate-800/80 text-xs uppercase tracking-wider text-slate-500 min-w-[60px]">Hours</th>
+                                            <th className="px-3 py-3 text-center border-b border-gray-200/60 bg-gray-50 text-xs uppercase tracking-wider text-gray-500 min-w-[60px]">Hours</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {activeBranches.length === 0 ? (
                                             <tr>
-                                                <td colSpan={9} className="px-4 py-12 text-center text-slate-500">
-                                                    <User className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                                                    <p>No shifts assigned this week</p>
+                                                <td colSpan={9} className="px-4 py-12 text-center text-gray-400 bg-white">
+                                                    <User className="w-8 h-8 mx-auto mb-2 opacity-30 text-gray-500" />
+                                                    <p className="text-sm font-medium">No shifts assigned this week</p>
                                                 </td>
                                             </tr>
                                         ) : (
                                             activeBranches.map((bd, bIdx) => (
-                                                <tr key={bd.branch.id} className={bIdx % 2 === 0 ? 'bg-slate-800/40' : 'bg-slate-700/20'}>
-                                                    <td className="px-4 py-2.5 border-b border-white/5">
+                                                <tr key={bd.branch.id} className={bIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                                                    <td className="px-4 py-3.5 border-b border-gray-100">
                                                         <div className="flex items-center gap-2">
-                                                            <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                                                            <span className="text-sm font-medium text-slate-200">
+                                                            <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                                                            <span className="text-sm font-semibold text-gray-800">
                                                                 {bd.branch.name.replace(/^Pasta Fresca\s*/i, '')}
                                                             </span>
                                                         </div>
@@ -1354,7 +1354,7 @@ export default function RosterPage() {
                                                     {bd.days.map(d => {
                                                         const isToday = d.date === todayStr
                                                         return (
-                                                            <td key={d.date} className={`px-1 py-2 border-b border-white/5 text-center ${isToday ? 'bg-blue-500/5' : ''}`}>
+                                                            <td key={d.date} className={`px-1 py-2 border-b border-gray-100 text-center ${isToday ? 'bg-blue-50/20' : ''}`}>
                                                                 {d.shift ? (
                                                                     <div
                                                                         className="inline-flex flex-col items-center rounded-lg px-2 py-1.5 min-w-[56px]"
@@ -1367,24 +1367,24 @@ export default function RosterPage() {
                                                                             {d.shift.code}
                                                                         </span>
                                                                         {d.shift.type === 'work' && d.shift.startTime && (
-                                                                            <span className="text-[9px] text-slate-400 mt-0.5">
+                                                                            <span className="text-[9px] text-gray-500 mt-0.5 font-medium">
                                                                                 {d.shift.startTime}–{d.shift.endTime}
                                                                             </span>
                                                                         )}
                                                                         {d.shift.type === 'leave' && (
-                                                                            <span className="text-[9px] mt-0.5" style={{ color: d.shift.color + 'CC' }}>
+                                                                            <span className="text-[9px] mt-0.5 font-semibold" style={{ color: d.shift.color + 'CC' }}>
                                                                                 {d.shift.name}
                                                                             </span>
                                                                         )}
                                                                     </div>
                                                                 ) : (
-                                                                    <span className="text-slate-600">—</span>
+                                                                    <span className="text-gray-300">—</span>
                                                                 )}
                                                             </td>
                                                         )
                                                     })}
-                                                    <td className="px-3 py-2 border-b border-white/5 text-center">
-                                                        <span className={`text-sm font-semibold ${bd.totalHours > 0 ? 'text-slate-200' : 'text-slate-600'}`}>
+                                                    <td className="px-3 py-2 border-b border-gray-100 text-center">
+                                                        <span className={`text-sm font-bold ${bd.totalHours > 0 ? 'text-gray-800' : 'text-gray-300'}`}>
                                                             {bd.totalHours > 0 ? `${bd.totalHours}h` : '—'}
                                                         </span>
                                                     </td>
@@ -1394,8 +1394,8 @@ export default function RosterPage() {
                                     </tbody>
                                     {activeBranches.length > 1 && (
                                         <tfoot>
-                                            <tr className="bg-slate-700/40">
-                                                <td className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400 font-semibold">Total</td>
+                                            <tr className="bg-gray-100/50 border-t border-gray-200">
+                                                <td className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-bold">Total</td>
                                                 {weekDays.map(day => {
                                                     const ds = formatDate(day)
                                                     const dayHours = activeBranches.reduce((t, b) => {
@@ -1404,14 +1404,14 @@ export default function RosterPage() {
                                                     }, 0)
                                                     return (
                                                         <td key={ds} className="px-2 py-3 text-center">
-                                                            <span className={`text-xs font-semibold ${dayHours > 0 ? 'text-slate-300' : 'text-slate-600'}`}>
+                                                            <span className={`text-xs font-bold ${dayHours > 0 ? 'text-gray-700' : 'text-gray-400'}`}>
                                                                 {dayHours > 0 ? `${dayHours}h` : '—'}
                                                             </span>
                                                         </td>
                                                     )
                                                 })}
                                                 <td className="px-3 py-3 text-center">
-                                                    <span className={`text-sm font-bold ${totalWeekHours > 44 ? 'text-red-400' : totalWeekHours >= 40 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                                    <span className={`text-sm font-black ${totalWeekHours > 44 ? 'text-red-600' : totalWeekHours >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
                                                         {totalWeekHours}h
                                                     </span>
                                                 </td>
@@ -1422,8 +1422,7 @@ export default function RosterPage() {
                             </div>
                         </div>
                     </div>
-                )
-            })()}
+                )            })()}
 
             {/* Day Detail Timeline Modal */}
             {dayDetailDate && (() => {
@@ -1462,6 +1461,22 @@ export default function RosterPage() {
                     const shift = shiftId ? shiftTypes.find(s => s.id === shiftId) : null
                     return { staff, shift }
                 }).filter((r): r is { staff: typeof r.staff; shift: NonNullable<typeof r.shift> } => r.shift !== null && r.shift !== undefined && r.shift.type === 'work') // only show staff with work shifts
+
+                // Group staff rows by department for rendering
+                const groupedStaffRows = (() => {
+                    const groups: Record<string, typeof staffRows> = {}
+                    staffRows.forEach(row => {
+                        const dept = row.staff.department || 'Unassigned'
+                        if (!groups[dept]) groups[dept] = []
+                        groups[dept].push(row)
+                    })
+                    // Sort rows within department by position
+                    for (const dep in groups) {
+                        groups[dep].sort((a, b) => a.staff.position.localeCompare(b.staff.position))
+                    }
+                    // Sort departments alphabetically
+                    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
+                })()
 
                 // Compute coverage: count staff working at each 30-min slot
                 const SLOTS = TIMELINE_HOURS * 2 // 30-min slots
@@ -1509,22 +1524,22 @@ export default function RosterPage() {
                 return (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDayDetailDate(null)}>
                         <div
-                            className="bg-slate-800 rounded-2xl border border-white/10 shadow-2xl w-full max-w-5xl mx-4 overflow-hidden"
+                            className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-5xl mx-4 overflow-hidden"
                             onClick={e => e.stopPropagation()}
                         >
                             {/* Header */}
-                            <div className="px-6 py-5 border-b border-white/10">
+                            <div className="px-6 py-5 border-b border-gray-200">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center">
-                                            <Clock className="w-5 h-5 text-blue-400" />
+                                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                                            <Clock className="w-5 h-5 text-blue-600" />
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold text-white">Daily Timeline</h3>
-                                            <p className="text-sm text-slate-400">{dateLabel} · {getBranchName(selectedBranch)}</p>
+                                            <h3 className="text-lg font-semibold text-gray-900">Daily Timeline</h3>
+                                            <p className="text-sm text-gray-500">{dateLabel} · {getBranchName(selectedBranch)}</p>
                                         </div>
                                     </div>
-                                    <button onClick={() => setDayDetailDate(null)} className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition">
+                                    <button onClick={() => setDayDetailDate(null)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
                                         <X className="w-5 h-5" />
                                     </button>
                                 </div>
@@ -1532,22 +1547,22 @@ export default function RosterPage() {
                                 {/* Quick stats */}
                                 <div className="flex items-center gap-6 mt-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                                            <User className="w-4 h-4 text-blue-400" />
+                                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                            <User className="w-4 h-4 text-blue-600" />
                                         </div>
                                         <div>
-                                            <div className="text-xs text-slate-400">Staff On</div>
-                                            <div className="text-sm font-semibold text-white">{staffRows.length}</div>
+                                            <div className="text-xs text-gray-500 font-medium">Staff On</div>
+                                            <div className="text-sm font-bold text-gray-900">{staffRows.length}</div>
                                         </div>
                                     </div>
                                     {gaps.length > 0 && (
                                         <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center">
-                                                <AlertTriangle className="w-4 h-4 text-red-400" />
+                                            <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
+                                                <AlertTriangle className="w-4 h-4 text-red-600" />
                                             </div>
                                             <div>
-                                                <div className="text-xs text-slate-400">Coverage Gaps</div>
-                                                <div className="text-sm font-semibold text-red-400">{gaps.length}</div>
+                                                <div className="text-xs text-gray-500 font-medium">Coverage Gaps</div>
+                                                <div className="text-sm font-bold text-red-600">{gaps.length}</div>
                                             </div>
                                         </div>
                                     )}
@@ -1555,22 +1570,22 @@ export default function RosterPage() {
                                         <div className="flex items-center gap-2">
                                             {coverageStatus.met ? (
                                                 <>
-                                                    <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-                                                        <span className="text-emerald-400 text-sm">✓</span>
+                                                    <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                                                        <span className="text-emerald-600 text-sm font-bold">✓</span>
                                                     </div>
                                                     <div>
-                                                        <div className="text-xs text-slate-400">Coverage</div>
-                                                        <div className="text-sm font-semibold text-emerald-400">Full</div>
+                                                        <div className="text-xs text-gray-500 font-medium">Coverage</div>
+                                                        <div className="text-sm font-bold text-emerald-600">Full</div>
                                                     </div>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                                                        <AlertTriangle className="w-4 h-4 text-amber-400" />
+                                                    <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                                                        <AlertTriangle className="w-4 h-4 text-amber-600" />
                                                     </div>
                                                     <div>
-                                                        <div className="text-xs text-slate-400">Target Coverage</div>
-                                                        <div className="text-sm font-semibold text-amber-400">Deficits ({coverageStatus.errors.length})</div>
+                                                        <div className="text-xs text-gray-500 font-medium">Target Coverage</div>
+                                                        <div className="text-sm font-bold text-amber-700">Deficits ({coverageStatus.errors.length})</div>
                                                     </div>
                                                 </>
                                             )}
@@ -1579,16 +1594,16 @@ export default function RosterPage() {
                                 </div>
                                 {/* Target warnings (Header Banner) */}
                                 {!coverageStatus.met && (
-                                    <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5">
-                                        <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                                    <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5">
+                                        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                                         <div>
-                                            <p className="text-xs font-semibold text-amber-300">
+                                            <p className="text-xs font-semibold text-amber-800">
                                                 {language === 'vi' ? 'Thiếu hụt chỉ tiêu nhân sự:' : 'Staffing targets not met:'}
                                             </p>
-                                            <p className="text-xs text-slate-300 mt-0.5">
+                                            <p className="text-xs text-gray-700 mt-0.5">
                                                 {coverageStatus.errors.join(', ')}.
                                             </p>
-                                            <p className="text-[10px] text-slate-400 mt-1">
+                                            <p className="text-[10px] text-gray-500 mt-1">
                                                 {language === 'vi' 
                                                     ? '💡 Phân công thêm nhân sự hoặc mượn từ chi nhánh khác.' 
                                                     : '💡 Assign more staff or borrow from another branch.'}
@@ -1607,7 +1622,7 @@ export default function RosterPage() {
                                         return (
                                             <div
                                                 key={i}
-                                                className="text-[10px] text-slate-500 shrink-0"
+                                                className="text-[10px] text-gray-400 font-medium shrink-0"
                                                 style={{ width: i < TIMELINE_HOURS ? `${100 / TIMELINE_HOURS}%` : 0, minWidth: 0 }}
                                             >
                                                 {String(h).padStart(2, '0')}:00
@@ -1617,14 +1632,14 @@ export default function RosterPage() {
                                 </div>
 
                                 {/* Coverage heatmap bar */}
-                                <div className="flex ml-[160px] mb-3 h-3 rounded-full overflow-hidden bg-slate-700/50">
+                                <div className="flex ml-[160px] mb-3 h-3 rounded-full overflow-hidden bg-gray-100">
                                     {coverage.map((count, i) => {
                                         let bg = 'bg-transparent'
                                         if (i >= OP_START_SLOT && i < OP_END_SLOT) {
-                                            if (count === 0) bg = 'bg-red-500/40'
-                                            else if (count === 1) bg = 'bg-amber-500/50'
-                                            else if (count === 2) bg = 'bg-emerald-500/50'
-                                            else bg = 'bg-blue-500/60'
+                                            if (count === 0) bg = 'bg-red-200'
+                                            else if (count === 1) bg = 'bg-amber-200'
+                                            else if (count === 2) bg = 'bg-emerald-200'
+                                            else bg = 'bg-blue-200'
                                         }
                                         return (
                                             <div
@@ -1639,82 +1654,92 @@ export default function RosterPage() {
 
                                 {/* Coverage legend */}
                                 <div className="flex items-center gap-3 ml-[160px] mb-4">
-                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-red-500/40" /><span className="text-[10px] text-slate-500">No cover</span></div>
-                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-amber-500/50" /><span className="text-[10px] text-slate-500">1 staff</span></div>
-                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" /><span className="text-[10px] text-slate-500">2 staff</span></div>
-                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-blue-500/60" /><span className="text-[10px] text-slate-500">3+ staff</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-red-200" /><span className="text-[10px] text-gray-500 font-medium">No cover</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-amber-200" /><span className="text-[10px] text-gray-500 font-medium">1 staff</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-emerald-200" /><span className="text-[10px] text-gray-500 font-medium">2 staff</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-blue-200" /><span className="text-[10px] text-gray-500 font-medium">3+ staff</span></div>
                                 </div>
 
                                 {/* Staff timeline rows */}
-                                <div className="space-y-1">
-                                    {staffRows.map(({ staff, shift }) => {
-                                        const barStyle = shift ? getBarStyle(shift) : null
-
-                                        return (
-                                            <div key={staff.id} className="flex items-center gap-0 h-10">
-                                                {/* Staff label */}
-                                                <div className="w-[160px] shrink-0 flex items-center gap-2 pr-3">
-                                                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-                                                        {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <div className="text-xs font-medium text-slate-200 truncate">{staff.name}</div>
-                                                        <div className="text-[10px] text-slate-500 truncate">{staff.role}</div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Timeline bar area */}
-                                                <div className="flex-1 relative h-8 bg-slate-700/30 rounded-lg overflow-hidden">
-                                                    {/* Hour grid lines */}
-                                                    {Array.from({ length: TIMELINE_HOURS }, (_, i) => (
-                                                        <div
-                                                            key={i}
-                                                            className="absolute top-0 bottom-0 border-l border-slate-600/30"
-                                                            style={{ left: `${(i / TIMELINE_HOURS) * 100}%` }}
-                                                        />
-                                                    ))}
-
-                                                    {/* Shift bar */}
-                                                    {barStyle && (
-                                                        <div
-                                                            className="absolute top-1 bottom-1 rounded-md flex items-center justify-center shadow-sm transition-all"
-                                                            style={{
-                                                                left: barStyle.left,
-                                                                width: barStyle.width,
-                                                                backgroundColor: shift!.color + 'CC',
-                                                            }}
-                                                        >
-                                                            <span className="text-[11px] font-bold text-white drop-shadow-sm">
-                                                                {shift!.code} {shift!.startTime}–{shift!.endTime}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                <div className="space-y-4">
+                                    {groupedStaffRows.map(([department, rows]) => (
+                                        <div key={department} className="space-y-1.5">
+                                            {/* Department header */}
+                                            <div className="bg-gray-50 border-y border-gray-200/80 px-3 py-1.5 rounded-lg text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                                {department}
                                             </div>
-                                        )
-                                    })}
+                                            
+                                            {rows.map(({ staff, shift }, idx) => {
+                                                const barStyle = shift ? getBarStyle(shift) : null
+                                                const isEven = idx % 2 === 0
+
+                                                return (
+                                                    <div key={staff.id} className={`flex items-center gap-0 h-10 px-2 rounded-lg ${isEven ? 'bg-transparent' : 'bg-gray-50/30'}`}>
+                                                        {/* Staff label */}
+                                                        <div className="w-[160px] shrink-0 flex items-center gap-2 pr-3">
+                                                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                                                                {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <div className="text-xs font-semibold text-gray-880 truncate">{staff.name}</div>
+                                                                <div className="text-[10px] text-gray-450 truncate">{staff.role}</div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Timeline bar area */}
+                                                        <div className="flex-1 relative h-8 bg-gray-100 rounded-lg overflow-hidden border border-gray-200/40">
+                                                            {/* Hour grid lines */}
+                                                            {Array.from({ length: TIMELINE_HOURS }, (_, i) => (
+                                                                <div
+                                                                    key={i}
+                                                                    className="absolute top-0 bottom-0 border-l border-gray-200/50"
+                                                                    style={{ left: `${(i / TIMELINE_HOURS) * 100}%` }}
+                                                                />
+                                                            ))}
+
+                                                            {/* Shift bar */}
+                                                            {barStyle && (
+                                                                <div
+                                                                    className="absolute top-1 bottom-1 rounded-md flex items-center justify-center shadow-sm transition-all"
+                                                                    style={{
+                                                                        left: barStyle.left,
+                                                                        width: barStyle.width,
+                                                                        backgroundColor: shift.color + 'D9',
+                                                                    }}
+                                                                >
+                                                                    <span className="text-[11px] font-bold text-white drop-shadow-sm">
+                                                                        {shift.code} {shift.startTime}–{shift.endTime}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    ))}
 
                                     {staffRows.length === 0 && (
-                                        <div className="py-12 text-center text-slate-500">
-                                            <Clock className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                                            <p>No shifts assigned for this day</p>
+                                        <div className="py-12 text-center text-gray-500">
+                                            <Clock className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                                            <p className="text-sm font-medium">No shifts assigned for this day</p>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Gap warnings */}
                                 {gaps.length > 0 && (
-                                    <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                                    <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200">
                                         <div className="flex items-start gap-2">
-                                            <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                                            <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
                                             <div>
-                                                <p className="text-xs font-medium text-red-300">Coverage gaps detected</p>
+                                                <p className="text-xs font-bold text-red-800">Coverage gaps detected</p>
                                                 {gaps.map((g, i) => {
                                                     const startH = TIMELINE_START + g.start * 0.5
                                                     const endH = TIMELINE_START + g.end * 0.5
                                                     const fmtH = (h: number) => `${String(Math.floor(h % 24)).padStart(2, '0')}:${h % 1 === 0 ? '00' : '30'}`
                                                     return (
-                                                        <p key={i} className="text-xs text-red-400/80 mt-0.5">
+                                                        <p key={i} className="text-xs text-red-700 mt-0.5 font-medium">
                                                             No coverage: {fmtH(startH)} – {fmtH(endH)}
                                                         </p>
                                                     )
