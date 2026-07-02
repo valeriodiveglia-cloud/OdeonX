@@ -1,0 +1,32 @@
+Created At: 2026-05-23T22:35:10Z
+Completed At: 2026-05-23T22:35:10Z
+The following changes were made by the replace_file_content tool to: /Users/valerio/.gemini/antigravity/brain/8c8b7827-f1fb-420a-b004-91d9a22c3062/walkthrough.md. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -102,5 +102,24 @@
+ 5. **Verifica della Build**:
+    - Compilazione completata con successo al 100% senza alcun errore o warning (`✓ Compiled successfully`).
+ 
++---
++
++## Modifiche Recenti (Finance Dashboard Card Update)
++
++Abbiamo apportato le seguenti modifiche alla Dashboard Finanziaria (`src/app/finance/page.tsx`):
++1. **Sostituzione Card "Recent Invoices" con "Invoices Awaiting VAT"**:
++   - Rimpiazzata la vecchia sezione delle fatture recenti con una nuova lista focalizzata sulle operazioni eseguite che sono in attesa di ricevere una fattura VAT.
++2. **Origine dei Dati e Logica di Filtro**:
++   - La card aggrega e ordina per data decrescente due tipologie di pagamenti privi di fattura associata (`invoice_id IS NULL`):
++     - **Payment Orders** (ordini di pagamento manuali con flag `requires_invoice = true` e stato diverso da `Cancelled`).
++     - **Cash Outs** (operazioni di cassa con flag `invoice = true`).
++   - I dati vengono estratti a partire dalla data di Go-Live impostata nelle impostazioni finanziarie (`financeStartDate`), escludendo i vecchi dati storici.
++3. **UI e Traduzioni**:
++   - Ciascun elemento mostra la data dell'operazione, la descrizione, il codice di riferimento e l'importo con la valuta attiva.
++   - Aggiunti badge colorati per distinguere a colpo d'occhio i tipi di operazione: badge blu per i *Payment Orders* e arancione per i *Cash Outs*.
++   - Aggiunte le traduzioni localizzate per le intestazioni della card e dello stato vuoto nel dizionario `src/lib/i18n.ts` per la lingua inglese (`en`) e vietnamita (`vi`).
++4. **Verifica della Build**:
++   - Il progetto compila correttamente al 100% (`✓ Compiled successfully`).
++
+ 
+ 
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

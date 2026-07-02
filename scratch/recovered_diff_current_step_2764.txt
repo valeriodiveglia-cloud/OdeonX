@@ -1,0 +1,31 @@
+Created At: 2026-05-23T14:15:49Z
+Completed At: 2026-05-23T14:15:49Z
+The following changes were made by the multi_replace_file_content tool to: /Users/valerio/Documents/Developement Apps/foodcost-webapp/src/lib/i18n.ts. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -994,6 +994,11 @@
+     Loss: 'Loss',
+     FromCashierClosings: 'From cashier closings',
+     InvoicesThisMonth: 'Invoices this month',
++    ViewAll: 'View All',
++    Review: 'Review',
++    Flat: 'Flat',
++    Traditional: 'Traditional',
++    NoDataAvailable: 'No data available yet',
+   },
+ 
+   vi: {
+@@ -1974,6 +1974,11 @@
+     Loss: 'Lỗ',
+     FromCashierClosings: 'Từ chốt ca thu ngân',
+     InvoicesThisMonth: 'Hóa đơn tháng này',
++    ViewAll: 'Xem tất cả',
++    Review: 'Xem xét',
++    Flat: 'Khoán',
++    Traditional: 'Truyền thống',
++    NoDataAvailable: 'Chưa có dữ liệu',
+   },
+ } as const
+ 
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

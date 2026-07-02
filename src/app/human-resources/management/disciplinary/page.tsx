@@ -5,6 +5,7 @@ import { Plus, Loader2, Trash2, Pencil, X, CheckCircle, ChevronLeft, ChevronRigh
 import { saveAs } from 'file-saver'
 import { supabase } from '@/lib/supabase_shim'
 import { HRDisciplinaryCatalog, HRStaffFine, HRStaffMember } from '@/types/human-resources'
+import { useSettings } from '@/contexts/SettingsContext'
 
 const fmtVND = (n: number | null) => {
     if (n === null || isNaN(n)) return '0'
@@ -18,6 +19,7 @@ const fmtDate = (d: string) => {
 }
 
 function ExportModal({ onClose, onExport }: { onClose: () => void, onExport: (range: 'this_month' | 'prev_month' | 'all' | 'custom', start?: string, end?: string) => void }) {
+    const { language } = useSettings()
     const [range, setRange] = useState<'this_month' | 'prev_month' | 'all' | 'custom'>('this_month')
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
@@ -25,34 +27,34 @@ function ExportModal({ onClose, onExport }: { onClose: () => void, onExport: (ra
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 animate-in fade-in zoom-in-95 duration-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Fines</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{language === 'vi' ? 'Xuất Tiền Phạt' : 'Export Fines'}</h3>
                 
                 <div className="space-y-3 mb-6">
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="radio" checked={range === 'this_month'} onChange={() => setRange('this_month')} className="text-blue-600 focus:ring-blue-500" />
-                        <span className="text-sm text-gray-700">This Month</span>
+                        <span className="text-sm text-gray-700">{language === 'vi' ? 'Tháng Này' : 'This Month'}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="radio" checked={range === 'prev_month'} onChange={() => setRange('prev_month')} className="text-blue-600 focus:ring-blue-500" />
-                        <span className="text-sm text-gray-700">Previous Month</span>
+                        <span className="text-sm text-gray-700">{language === 'vi' ? 'Tháng Trước' : 'Previous Month'}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="radio" checked={range === 'custom'} onChange={() => setRange('custom')} className="text-blue-600 focus:ring-blue-500" />
-                        <span className="text-sm text-gray-700">Custom Dates</span>
+                        <span className="text-sm text-gray-700">{language === 'vi' ? 'Tùy Chọn Ngày' : 'Custom Dates'}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="radio" checked={range === 'all'} onChange={() => setRange('all')} className="text-blue-600 focus:ring-blue-500" />
-                        <span className="text-sm text-gray-700">All Time</span>
+                        <span className="text-sm text-gray-700">{language === 'vi' ? 'Tất Cả Thời Gian' : 'All Time'}</span>
                     </label>
 
                     {range === 'custom' && (
                         <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-100">
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1">From</label>
+                                <label className="block text-xs text-gray-500 mb-1">{language === 'vi' ? 'Từ' : 'From'}</label>
                                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1">To</label>
+                                <label className="block text-xs text-gray-500 mb-1">{language === 'vi' ? 'Đến' : 'To'}</label>
                                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
                             </div>
                         </div>
@@ -60,14 +62,14 @@ function ExportModal({ onClose, onExport }: { onClose: () => void, onExport: (ra
                 </div>
 
                 <div className="flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">{language === 'vi' ? 'Hủy' : 'Cancel'}</button>
                     <button 
                         onClick={() => onExport(range, startDate, endDate)} 
                         disabled={range === 'custom' && (!startDate || !endDate)}
                         className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
                     >
                         <FileDown className="w-4 h-4" />
-                        Export
+                        {language === 'vi' ? 'Xuất' : 'Export'}
                     </button>
                 </div>
             </div>
@@ -76,6 +78,7 @@ function ExportModal({ onClose, onExport }: { onClose: () => void, onExport: (ra
 }
 
 export default function DisciplinaryPage() {
+    const { language } = useSettings()
     const [fines, setFines] = useState<(HRStaffFine & { staff?: { id: string, full_name: string } })[]>([])
     const [catalog, setCatalog] = useState<HRDisciplinaryCatalog[]>([])
     const [staffList, setStaffList] = useState<HRStaffMember[]>([])
@@ -103,7 +106,7 @@ export default function DisciplinaryPage() {
         return () => { isMounted = false }
     }, [])
 
-    const monthLabel = new Date(year, month).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    const monthLabel = new Date(year, month).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' })
     const monthInputValue = `${year}-${String(month + 1).padStart(2, '0')}`
 
     const fetchAll = useCallback(async () => {
@@ -182,19 +185,19 @@ export default function DisciplinaryPage() {
             setModalOpen(false)
         } catch (err) {
             console.error(err)
-            alert('Failed to save disciplinary action')
+            alert(language === 'vi' ? 'Không thể lưu quyết định kỷ luật' : 'Failed to save disciplinary action')
         }
     }
     
     async function handleDelete(id: string) {
-        if (!window.confirm('Are you sure you want to delete this action?')) return
+        if (!window.confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa quyết định này không?' : 'Are you sure you want to delete this action?')) return
         try {
             const { error } = await supabase.from('hr_staff_fines').delete().eq('id', id)
             if (error) throw error
             fetchAll()
         } catch (err) {
             console.error(err)
-            alert('Failed to delete disciplinary action')
+            alert(language === 'vi' ? 'Không thể xóa quyết định kỷ luật' : 'Failed to delete disciplinary action')
         }
     }
 
@@ -205,7 +208,7 @@ export default function DisciplinaryPage() {
             if (error) throw error
         } catch(err) {
             console.error(err)
-            alert('Failed to update status')
+            alert(language === 'vi' ? 'Không thể cập nhật trạng thái' : 'Failed to update status')
             fetchAll()
         }
     }
@@ -246,23 +249,23 @@ export default function DisciplinaryPage() {
 
         const { data, error } = await query.order('date', { ascending: false })
         if (error) {
-            alert('Error fetching data for export')
+            alert(language === 'vi' ? 'Lỗi khi tải dữ liệu để xuất' : 'Error fetching data for export')
             return
         }
 
         const dataToExport = data || []
 
         const workbook = new ExcelJS.Workbook()
-        const sheet = workbook.addWorksheet('Fines')
+        const sheet = workbook.addWorksheet(language === 'vi' ? 'Phạt tiền' : 'Fines')
 
         sheet.columns = [
-            { header: 'Date', key: 'date', width: 15 },
-            { header: 'Staff Name', key: 'name', width: 25 },
-            { header: 'Infraction', key: 'infraction', width: 30 },
-            { header: 'Notified By', key: 'notified_by', width: 20 },
-            { header: 'Source', key: 'source', width: 20 },
-            { header: 'Status', key: 'status', width: 15 },
-            { header: 'Amount (VND)', key: 'amount', width: 18, style: { numFmt: '#,##0' } },
+            { header: language === 'vi' ? 'Ngày' : 'Date', key: 'date', width: 15 },
+            { header: language === 'vi' ? 'Tên nhân viên' : 'Staff Name', key: 'name', width: 25 },
+            { header: language === 'vi' ? 'Vi phạm' : 'Infraction', key: 'infraction', width: 30 },
+            { header: language === 'vi' ? 'Người báo cáo' : 'Notified By', key: 'notified_by', width: 20 },
+            { header: language === 'vi' ? 'Nguồn' : 'Source', key: 'source', width: 20 },
+            { header: language === 'vi' ? 'Trạng thái' : 'Status', key: 'status', width: 15 },
+            { header: language === 'vi' ? 'Số tiền (VND)' : 'Amount (VND)', key: 'amount', width: 18, style: { numFmt: '#,##0' } },
         ]
 
         sheet.getRow(1).font = { bold: true }
@@ -271,13 +274,35 @@ export default function DisciplinaryPage() {
         dataToExport.forEach(e => {
             const s = Array.isArray(e.staff) ? e.staff[0] : e.staff
             
+            let sourceStr = '-'
+            if (e.deduction_source === 'salary') {
+                sourceStr = language === 'vi' ? 'Khấu trừ lương gộp' : 'Gross salary deduction'
+            } else if (e.deduction_source === 'service_charge') {
+                sourceStr = language === 'vi' ? 'Khấu trừ phí dịch vụ' : 'Service charge deduction'
+            } else if (e.deduction_source === 'cash') {
+                sourceStr = language === 'vi' ? 'Tiền mặt/Chuyển khoản' : 'Direct cash/transfer'
+            } else if (e.deduction_source) {
+                sourceStr = e.deduction_source.replace('_', ' ')
+            }
+
+            let statusStr = '-'
+            if (e.status === 'pending') {
+                statusStr = language === 'vi' ? 'Chờ xử lý' : 'Pending'
+            } else if (e.status === 'paid') {
+                statusStr = language === 'vi' ? 'Đã nộp' : 'Paid'
+            } else if (e.status === 'waived') {
+                statusStr = language === 'vi' ? 'Được miễn' : 'Waived'
+            } else if (e.status === 'disputed') {
+                statusStr = language === 'vi' ? 'Đang tranh chấp' : 'Disputed'
+            }
+
             sheet.addRow({
                 date: new Date(e.date).toLocaleDateString('en-GB'),
-                name: s ? s.full_name : 'Unknown',
+                name: s ? s.full_name : (language === 'vi' ? 'Không xác định' : 'Unknown'),
                 infraction: e.infraction,
                 notified_by: e.notified_by || '-',
-                source: (e.deduction_source || '-').replace('_', ' ').toUpperCase(),
-                status: e.status.toUpperCase(),
+                source: sourceStr.toUpperCase(),
+                status: statusStr.toUpperCase(),
                 amount: e.amount || 0
             })
         })
@@ -299,21 +324,25 @@ export default function DisciplinaryPage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Disciplinary Actions & Fines</h1>
-                        <p className="text-sm text-slate-400 mt-1">Manage global disciplinary records and salary deductions across all staff.</p>
+                        <h1 className="text-2xl font-bold text-white">
+                            {language === 'vi' ? 'Kỷ Luật & Phạt Tiền' : 'Disciplinary Actions & Fines'}
+                        </h1>
+                        <p className="text-sm text-slate-400 mt-1">
+                            {language === 'vi' ? 'Quản lý hồ sơ kỷ luật chung và các khoản khấu trừ lương của toàn bộ nhân viên.' : 'Manage global disciplinary records and salary deductions across all staff.'}
+                        </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <button 
                             onClick={() => setExportModalOpen(true)}
                             className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-white/10 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap"
                         >
-                            <FileDown className="w-4 h-4" /> Export
+                            <FileDown className="w-4 h-4" /> {language === 'vi' ? 'Xuất' : 'Export'}
                         </button>
                         <button 
                             onClick={() => { setEditingNode(null); setModalOpen(true); }} 
                             className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap"
                         >
-                            <Plus className="w-4 h-4" /> Add Action
+                            <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm Kỷ Luật' : 'Add Action'}
                         </button>
                     </div>
                 </div>
@@ -321,7 +350,7 @@ export default function DisciplinaryPage() {
                 {/* Month Nav */}
                 <div className="flex items-center justify-between text-sm text-blue-100 pt-4 mb-4">
                     <button type="button" onClick={prevMonth} className="flex items-center gap-1 hover:text-white transition-colors">
-                        <ChevronLeft className="w-4 h-4" /> <span>Previous</span>
+                        <ChevronLeft className="w-4 h-4" /> <span>{language === 'vi' ? 'Trước' : 'Previous'}</span>
                     </button>
                     <div className="flex items-center gap-2 text-white">
                         <span className="text-base font-semibold">{monthLabel}</span>
@@ -331,7 +360,7 @@ export default function DisciplinaryPage() {
                         </div>
                     </div>
                     <button type="button" onClick={nextMonth} className="flex items-center gap-1 hover:text-white transition-colors">
-                        <span>Next</span> <ChevronRight className="w-4 h-4" />
+                        <span>{language === 'vi' ? 'Sau' : 'Next'}</span> <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
 
@@ -341,14 +370,14 @@ export default function DisciplinaryPage() {
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
                                 <tr>
-                                    <th className="px-4 py-3 border-r border-gray-100">Date</th>
-                                    <th className="px-4 py-3 border-r border-gray-100">Staff Name</th>
-                                    <th className="px-4 py-3 border-r border-gray-100">Infraction</th>
-                                    <th className="px-4 py-3 border-r border-gray-100">Notified By</th>
-                                    <th className="px-4 py-3 border-r border-gray-100">Source</th>
-                                    <th className="px-4 py-3 border-r border-gray-100 text-center">Status</th>
-                                    <th className="px-4 py-3 border-r border-gray-100 text-right">Amount (VND)</th>
-                                    <th className="px-4 py-3 text-center w-24">Actions</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Ngày' : 'Date'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Tên Nhân Viên' : 'Staff Name'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Vi Phạm' : 'Infraction'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Nguồn' : 'Source'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100 text-center">{language === 'vi' ? 'Trạng Thái' : 'Status'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100 text-right">{language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'}</th>
+                                    <th className="px-4 py-3 text-center w-24">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -357,7 +386,7 @@ export default function DisciplinaryPage() {
                             ) : fines.length === 0 ? (
                                 <tr>
                                     <td colSpan={8} className="text-center py-12 text-gray-400">
-                                        No disciplinary actions recorded for {monthLabel}.
+                                        {language === 'vi' ? `Không có hồ sơ kỷ luật nào được ghi nhận cho ${monthLabel}.` : `No disciplinary actions recorded for ${monthLabel}.`}
                                     </td>
                                 </tr>
                             ) : (
@@ -367,7 +396,7 @@ export default function DisciplinaryPage() {
                                             {fmtDate(f.date)}
                                         </td>
                                         <td className="px-4 py-3 border-r border-gray-100 text-gray-900 font-medium">
-                                            {f.staff ? f.staff.full_name : <span className="text-gray-400 italic">Unknown</span>}
+                                            {f.staff ? f.staff.full_name : <span className="text-gray-400 italic">{language === 'vi' ? 'Không xác định' : 'Unknown'}</span>}
                                         </td>
                                         <td className="px-4 py-3 border-r border-gray-100 text-gray-700 max-w-xs truncate" title={f.infraction}>
                                             {f.infraction}
@@ -375,8 +404,11 @@ export default function DisciplinaryPage() {
                                         <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-600">
                                             {f.notified_by || '-'}
                                         </td>
-                                        <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-600 capitalize">
-                                            {(f.deduction_source || '-').replace('_', ' ')}
+                                        <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-600">
+                                            {f.deduction_source === 'salary' ? (language === 'vi' ? 'Khấu trừ lương gộp' : 'Gross salary deduction') :
+                                             f.deduction_source === 'service_charge' ? (language === 'vi' ? 'Khấu trừ phí phục vụ' : 'Service charge deduction') :
+                                             f.deduction_source === 'cash' ? (language === 'vi' ? 'Tiền mặt/Chuyển khoản' : 'Direct cash/transfer') :
+                                             (f.deduction_source || '-').replace('_', ' ')}
                                         </td>
                                         <td className="px-4 py-3 border-r border-gray-100 text-center">
                                             <select 
@@ -389,10 +421,10 @@ export default function DisciplinaryPage() {
                                                       'text-amber-600 border-amber-200'}
                                                 `}
                                             >
-                                                <option value="pending">PENDING</option>
-                                                <option value="paid">PAID</option>
-                                                <option value="waived">WAIVED</option>
-                                                <option value="disputed">DISPUTED</option>
+                                                <option value="pending">{language === 'vi' ? 'CHỜ XỬ LÝ' : 'PENDING'}</option>
+                                                <option value="paid">{language === 'vi' ? 'ĐÃ NỘP' : 'PAID'}</option>
+                                                <option value="waived">{language === 'vi' ? 'ĐƯỢC MIỄN' : 'WAIVED'}</option>
+                                                <option value="disputed">{language === 'vi' ? 'ĐANG TRANH CHẤP' : 'DISPUTED'}</option>
                                             </select>
                                         </td>
                                         <td className="px-4 py-3 border-r border-gray-100 text-right font-mono font-medium text-orange-600">
@@ -400,10 +432,10 @@ export default function DisciplinaryPage() {
                                         </td>
                                         <td className="px-4 py-3 text-center">
                                             <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => { setEditingNode(f); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                                <button onClick={() => { setEditingNode(f); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={language === 'vi' ? 'Chỉnh sửa' : 'Edit'}>
                                                     <Pencil className="w-4 h-4" />
                                                 </button>
-                                                <button onClick={() => handleDelete(f.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                                                <button onClick={() => handleDelete(f.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={language === 'vi' ? 'Xóa' : 'Delete'}>
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
                                             </div>
@@ -415,7 +447,7 @@ export default function DisciplinaryPage() {
                             {!loading && fines.length > 0 && (
                                 <tfoot className="bg-gray-50 border-t border-gray-200 text-sm font-bold text-gray-900">
                                     <tr>
-                                        <td colSpan={6} className="px-4 py-3 text-right">Total Disciplinary Fines</td>
+                                        <td colSpan={6} className="px-4 py-3 text-right">{language === 'vi' ? 'Tổng Tiền Phạt Kỷ Luật' : 'Total Disciplinary Fines'}</td>
                                         <td className="px-4 py-3 text-right text-orange-600 font-mono">{fmtVND(totalAmount)}</td>
                                         <td></td>
                                     </tr>
@@ -430,7 +462,9 @@ export default function DisciplinaryPage() {
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
                         <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
                             <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
-                                <h3 className="text-lg font-bold text-gray-900">{editingNode ? 'Edit Disciplinary Action' : 'Add Disciplinary Action'}</h3>
+                                <h3 className="text-lg font-bold text-gray-900">
+                                    {editingNode ? (language === 'vi' ? 'Chỉnh Sửa Quyết Định Kỷ Luật' : 'Edit Disciplinary Action') : (language === 'vi' ? 'Thêm Quyết Định Kỷ Luật' : 'Add Disciplinary Action')}
+                                </h3>
                                 <button onClick={() => setModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-900 transition-colors">
                                     <X className="w-5 h-5" />
                                 </button>
@@ -480,6 +514,7 @@ function FormFineGlobal({
     const [deductionSource, setDeductionSource] = useState(initialData?.deduction_source || 'salary')
     const [displayAmount, setDisplayAmount] = useState(initialData?.amount ? initialData.amount.toLocaleString('en-US') : '')
     const [submitting, setSubmitting] = useState(false)
+    const { language } = useSettings()
 
     // Staff searchable dropdown state
     const [searchStaff, setSearchStaff] = useState('')
@@ -524,7 +559,7 @@ function FormFineGlobal({
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (!staffId) {
-            alert('Please select a staff member.')
+            alert(language === 'vi' ? 'Vui lòng chọn một nhân viên.' : 'Please select a staff member.')
             return
         }
         if (!infraction || amount < 0 || !date) return
@@ -557,13 +592,15 @@ function FormFineGlobal({
             
             {/* Searchable Staff Selection */}
             <div className="relative" ref={dropdownRef}>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Staff Member <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    {language === 'vi' ? 'Nhân Viên' : 'Staff Member'} <span className="text-red-500">*</span>
+                </label>
                 <div 
                     className={`w-full px-3 py-2 bg-white border ${staffId ? 'border-blue-300' : 'border-gray-200'} rounded-lg text-sm focus-within:ring-2 focus-within:ring-blue-500 flex items-center justify-between cursor-pointer`}
                     onClick={() => setStaffDropdownOpen(true)}
                 >
                     <span className={staffId ? 'text-gray-900 font-medium' : 'text-gray-400'}>
-                        {selectedStaffObj ? selectedStaffObj.full_name : 'Search staff...'}
+                        {selectedStaffObj ? selectedStaffObj.full_name : (language === 'vi' ? 'Tìm kiếm nhân viên...' : 'Search staff...')}
                     </span>
                     <Search className="w-4 h-4 text-gray-400" />
                 </div>
@@ -576,13 +613,15 @@ function FormFineGlobal({
                                 autoFocus
                                 value={searchStaff}
                                 onChange={e => setSearchStaff(e.target.value)}
-                                placeholder="Type to filter..."
+                                placeholder={language === 'vi' ? 'Nhập để lọc...' : 'Type to filter...'}
                                 className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
                         <ul className="overflow-y-auto py-1">
                             {filteredStaff.length === 0 ? (
-                                <li className="px-4 py-3 text-sm text-gray-500 text-center">No active staff found.</li>
+                                <li className="px-4 py-3 text-sm text-gray-500 text-center">
+                                    {language === 'vi' ? 'Không tìm thấy nhân viên đang hoạt động.' : 'No active staff found.'}
+                                </li>
                             ) : (
                                 filteredStaff.map(s => (
                                     <li 
@@ -610,38 +649,50 @@ function FormFineGlobal({
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Date <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {language === 'vi' ? 'Ngày' : 'Date'} <span className="text-red-500">*</span>
+                    </label>
                     <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Deduction Source</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {language === 'vi' ? 'Nguồn Khấu Trừ' : 'Deduction Source'}
+                    </label>
                     <select value={deductionSource} onChange={e => setDeductionSource(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none">
-                        <option value="salary">Gross Salary Deduction</option>
-                        <option value="service_charge">Service Charge Deduction</option>
-                        <option value="cash">Direct Cash/Transfer</option>
+                        <option value="salary">{language === 'vi' ? 'Khấu Trừ Lương Gộp' : 'Gross Salary Deduction'}</option>
+                        <option value="service_charge">{language === 'vi' ? 'Khấu Trừ Phí Phục Vụ' : 'Service Charge Deduction'}</option>
+                        <option value="cash">{language === 'vi' ? 'Tiền Mặt/Chuyển Khoản Trực Tiếp' : 'Direct Cash/Transfer'}</option>
                     </select>
                 </div>
             </div>
 
             <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Infraction <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    {language === 'vi' ? 'Vi Phạm' : 'Infraction'} <span className="text-red-500">*</span>
+                </label>
                 <select required value={infraction} onChange={handleCatalogSelect} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="" disabled>Select an infraction...</option>
+                    <option value="" disabled>{language === 'vi' ? 'Chọn hành vi vi phạm...' : 'Select an infraction...'}</option>
                     {applicableCatalog.map(c => (
                         <option key={c.id} value={c.infraction_name}>{c.infraction_name}</option>
                     ))}
                     {initialData && !applicableCatalog.find(c => c.infraction_name === initialData.infraction) && (
-                        <option value={initialData.infraction}>{initialData.infraction} (Legacy/Manual)</option>
+                        <option value={initialData.infraction}>{initialData.infraction} {language === 'vi' ? '(Cũ/Thủ công)' : '(Legacy/Manual)'}</option>
                     )}
                 </select>
                 <p className="text-[11px] text-gray-400 mt-1">
-                    {staffId ? 'Showing applicable infractions for selected staff.' : 'Select a staff member to filter applicable infractions.'}
+                    {staffId ? (
+                        language === 'vi' ? 'Hiển thị các hành vi vi phạm áp dụng cho nhân viên đã chọn.' : 'Showing applicable infractions for selected staff.'
+                    ) : (
+                        language === 'vi' ? 'Chọn một nhân viên để lọc các hành vi vi phạm áp dụng.' : 'Select a staff member to filter applicable infractions.'
+                    )}
                 </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount (VND) <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'} <span className="text-red-500">*</span>
+                    </label>
                     <input type="text" required value={displayAmount} 
                         onChange={e => {
                             let val = e.target.value.replace(/[^0-9]/g, '');
@@ -656,23 +707,25 @@ function FormFineGlobal({
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Notified By</label>
-                    <input type="text" value={notifiedBy || ''} onChange={e => setNotifiedBy(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Name of enforcer" />
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}
+                    </label>
+                    <input type="text" value={notifiedBy || ''} onChange={e => setNotifiedBy(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" placeholder={language === 'vi' ? 'Tên người thực thi' : 'Name of enforcer'} />
                 </div>
             </div>
             {!notifiedBy && loggedUserName && (
                 <div className="flex justify-end -mt-2">
                     <button type="button" onClick={() => setNotifiedBy(loggedUserName)} className="px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs font-medium hover:bg-blue-100 transition whitespace-nowrap">
-                        Fill my name
+                        {language === 'vi' ? 'Điền tên tôi' : 'Fill my name'}
                     </button>
                 </div>
             )}
 
             <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
-                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition">Cancel</button>
+                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition">{language === 'vi' ? 'Hủy' : 'Cancel'}</button>
                 <button type="submit" disabled={submitting || !staffId || !infraction || amount < 0} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                    {submitting ? 'Saving...' : 'Save Fine'}
+                    {submitting ? (language === 'vi' ? 'Đang lưu...' : 'Saving...') : (language === 'vi' ? 'Lưu Tiền Phạt' : 'Save Fine')}
                 </button>
             </div>
         </form>

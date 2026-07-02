@@ -1,24 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Activity, Users, Settings, Home, CalendarDays } from 'lucide-react'
+import { Briefcase, Activity, Users, Settings, Home, CalendarDays, Clock } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
-
-const NAV = [
-    { href: '/human-resources', label: 'Dashboard', icon: Home, exact: true },
-    { href: '/human-resources/recruitment', label: 'Recruitment', icon: Briefcase },
-    { href: '/human-resources/activity', label: 'Activity', icon: Activity },
-    { href: '/human-resources/candidates', label: 'Candidates', icon: Users },
-    { href: '/human-resources/operational', label: 'HR Operational', icon: CalendarDays },
-    { href: '/human-resources/settings', label: 'Settings', icon: Settings },
-]
 
 // Reusing style constants
 const EXP_W_REM = 16
 const COLL_W_REM = 3.5
+
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v0.0'
 
 export default function LeftNavHR() {
     const pathname = usePathname()
@@ -39,6 +32,18 @@ export default function LeftNavHR() {
     const isEN = language === 'en'
     const toggleLang = () => setLanguage(isEN ? 'vi' : 'en')
 
+    const headerTitle = language === 'vi' ? 'HR & Tài năng' : 'HR & Talent'
+
+    const NAV = [
+        { href: '/human-resources', label: language === 'vi' ? 'Bảng điều khiển' : 'Dashboard', icon: Home, exact: true },
+        { href: '/human-resources/recruitment', label: language === 'vi' ? 'Tuyển dụng' : 'Recruitment', icon: Briefcase },
+        { href: '/human-resources/activity', label: language === 'vi' ? 'Hoạt động' : 'Activity', icon: Activity },
+        { href: '/human-resources/candidates', label: language === 'vi' ? 'Ứng viên' : 'Candidates', icon: Users },
+        { href: '/human-resources/operational', label: language === 'vi' ? 'Vận hành HR' : 'HR Operational', icon: CalendarDays },
+        { href: '/human-resources/time-keeping', label: language === 'vi' ? 'Chấm công' : 'Time Keeping', icon: Clock },
+        { href: '/human-resources/settings', label: language === 'vi' ? 'Cài đặt' : 'Settings', icon: Settings },
+    ]
+
     return (
         <div
             className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
@@ -52,7 +57,7 @@ export default function LeftNavHR() {
                     <Home className="w-5 h-5 text-white" />
                 </Link>
                 <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
-                    {open ? 'HR & Talent' : ''}
+                    {open ? headerTitle : ''}
                 </div>
             </div>
 
@@ -87,8 +92,20 @@ export default function LeftNavHR() {
                     onClick={toggleLang}
                     className="w-8 h-8 rounded-full overflow-hidden border border-white/20 hover:bg-white/10 flex items-center justify-center p-0"
                 >
-                    <ReactCountryFlag countryCode={isEN ? 'GB' : 'VN'} svg style={{ width: '1.2em', height: '1.2em' }} />
+                    <ReactCountryFlag
+                        countryCode={isEN ? 'GB' : 'VN'}
+                        svg
+                        style={{
+                            width: '110%',
+                            height: '110%',
+                            objectFit: 'cover',
+                            display: 'block',
+                        }}
+                    />
                 </button>
+                {open && (
+                    <div className="text-xs text-slate-300 px-2">{appVersion}</div>
+                )}
             </div>
 
         </div>

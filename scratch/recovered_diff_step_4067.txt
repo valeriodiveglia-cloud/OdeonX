@@ -1,0 +1,27 @@
+Created At: 2026-05-23T22:44:58Z
+Completed At: 2026-05-23T22:44:58Z
+The following changes were made by the multi_replace_file_content tool to: /Users/valerio/Documents/Developement Apps/foodcost-webapp/src/lib/i18n.ts. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -907,6 +907,9 @@
+     ClosingList: 'Closing List',
+     CashLedger: 'Cash Ledger',
+     ActivityLog: 'Activity Log',
++    PaymentsAwaitingInvoice: 'Payments Awaiting Invoice',
++    NoPaymentsAwaitingInvoice: 'No payments awaiting invoice',
++    FinDsbPaymentOrder: 'Payment Order',
+   },
+ 
+   vi: {
+@@ -1800,6 +1800,9 @@
+     ClosingList: 'Danh sách Chốt',
+     CashLedger: 'Sổ quỹ Tiền mặt',
+     ActivityLog: 'Nhật ký Hoạt động',
++    PaymentsAwaitingInvoice: 'Thanh toán chờ hóa đơn',
++    NoPaymentsAwaitingInvoice: 'Không có thanh toán nào chờ hóa đơn',
++    FinDsbPaymentOrder: 'Lệnh chi',
+   },
+ } as const
+ 
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

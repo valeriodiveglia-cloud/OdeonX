@@ -1,0 +1,8 @@
+    FromCashierClosings: 'Từ chốt ca thu ngân',
+    InvoicesThisMonth: 'Hóa đơn tháng này',
+    ViewAll: 'Xem tất cả',
+    Review: 'Xem xét',
+    Flat: 'Khoán',
+    Traditional: 'Truyền thống',
+    NoDataAvailable: 'Chưa có dữ liệu',
+  },

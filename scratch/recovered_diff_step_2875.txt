@@ -1,0 +1,87 @@
+Created At: 2026-05-23T14:20:24Z
+Completed At: 2026-05-23T14:20:24Z
+The following changes were made by the multi_replace_file_content tool to: /Users/valerio/Documents/Developement Apps/foodcost-webapp/src/lib/i18n.ts. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -937,7 +937,6 @@
+     MapPnLCategories: 'Map P&L Categories',
+     MapInventoryCategories: 'Map Inventory Categories',
+     AddAccount: 'Add Account',
+-    EditAccount: 'Edit Account',
+     AddNewAccount: 'Add New Account',
+     SearchCodeName: 'Search by code or name...',
+     AllAccountTypes: 'All Account Types',
+@@ -952,7 +952,6 @@
+     Inactive: 'Inactive',
+     FinanceSubtitle: "Overview of your restaurant's financial health",
+     TreasuryPosition: 'Treasury Position',
+-    Revenue: 'Revenue',
+     Expenses: 'Expenses',
+     NetProfit: 'Net Profit',
+     RevenueVsExpenses: 'Revenue vs Expenses',
+@@ -959,5 +959,5 @@
+-    ActionCenter: 'Action Center',
+-    ItemsRequiringAttention: 'Items requiring attention',
++    FinanceActionCenter: 'Action Center',
++    FinanceItemsRequiringAttention: 'Items requiring attention',
+     VATSimulator: 'VAT Simulator',
+     Management: 'Management',
+     Statutory: 'Statutory',
+@@ -964,7 +964,7 @@
+     PendingPayments: 'Pending Payments',
+     UpcomingDeadlines: 'Upcoming Deadlines',
+-    AllCaughtUp: 'All caught up!',
+-    NoPendingActions: 'No pending actions',
++    FinanceAllCaughtUp: 'All caught up!',
++    FinanceNoPendingActions: 'No pending actions',
+     VATRegimeSimulator: 'VAT Regime Simulator',
+     ComparingRegimes: 'Comparing Traditional Net VAT (simulated at {vatRate}%) vs Direct Method (Flat Rate: {flatRate}%)',
+     TraditionalMethod: 'Traditional Method',
+@@ -986,7 +986,7 @@
+     FromCashierClosings: 'From cashier closings',
+     InvoicesThisMonth: 'Invoices this month',
+     ViewAll: 'View All',
+-    Review: 'Review',
++    FinanceReview: 'Review',
+     Flat: 'Flat',
+     Traditiona
+<truncated 378 bytes>
+hoặc tên...',
+     AllAccountTypes: 'Tất cả loại tài khoản',
+@@ -1928,7 +1928,6 @@
+     Inactive: 'Không hoạt động',
+     FinanceSubtitle: 'Tổng quan về sức khỏe tài chính của nhà hàng',
+     TreasuryPosition: 'Vị thế ngân quỹ',
+-    Revenue: 'Doanh thu',
+     Expenses: 'Chi phí',
+     NetProfit: 'Lợi nhuận ròng',
+     RevenueVsExpenses: 'Doanh thu so với Chi phí',
+@@ -1935,5 +1935,5 @@
+-    ActionCenter: 'Trung tâm Hành động',
+-    ItemsRequiringAttention: 'Các hạng mục cần lưu ý',
++    FinanceActionCenter: 'Trung tâm Hành động',
++    FinanceItemsRequiringAttention: 'Các hạng mục cần lưu ý',
+     VATSimulator: 'Trình mô phỏng VAT',
+     Management: 'Quản trị',
+     Statutory: 'Pháp lý',
+@@ -1940,7 +1940,7 @@
+     PendingPayments: 'Thanh toán đang chờ',
+     UpcomingDeadlines: 'Hạn chót sắp tới',
+-    AllCaughtUp: 'Đã hoàn thành tất cả!',
+-    NoPendingActions: 'Không có hành động nào đang chờ',
++    FinanceAllCaughtUp: 'Đã hoàn thành tất cả!',
++    FinanceNoPendingActions: 'Không có hành động nào đang chờ',
+     VATRegimeSimulator: 'Trình mô phỏng Chế độ VAT',
+     ComparingRegimes: 'So sánh VAT ròng truyền thống (mô phỏng ở mức {vatRate}%) so với phương pháp trực tiếp (Thuế suất khoán: {flatRate}%)',
+     TraditionalMethod: 'Phương pháp Truyền thống',
+@@ -1962,7 +1962,7 @@
+     FromCashierClosings: 'Từ chốt ca thu ngân',
+     InvoicesThisMonth: 'Hóa đơn tháng này',
+     ViewAll: 'Xem tất cả',
+-    Review: 'Xem xét',
++    FinanceReview: 'Xem xét',
+     Flat: 'Khoán',
+     Traditional: 'Truyền thống',
+     NoDataAvailable: 'Chưa có dữ liệu',
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

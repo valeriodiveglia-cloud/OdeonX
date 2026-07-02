@@ -8,9 +8,9 @@ import CircularLoader from '@/components/CircularLoader'
 import {
     ArrowLeft, User, FileText, Activity, TrendingUp, Save, UploadCloud, ExternalLink,
     Calendar, Building2, Briefcase, Plus, Loader2, Trash2, BadgeCheck, Lock, Unlock,
-    ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen, FileDown, Star
+    ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen, FileDown, Star, Package, ChevronDown, RefreshCw
 } from 'lucide-react'
-import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog, HRStaffDocument, HRStaffContract } from '@/types/human-resources'
+import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog, HRStaffDocument, HRStaffContract, HRStaffAsset, HRStaffAssetStatus, HRStaffAssetHistory } from '@/types/human-resources'
 import PerformanceModal, { computePeriodLabel, OVERALL_LABELS } from '@/components/human-resources/PerformanceModal'
 import SalaryModal from '@/components/human-resources/SalaryModal'
 import { saveAs } from 'file-saver'
@@ -26,6 +26,7 @@ const TABS = [
     { id: 'profile', label: 'Profile', icon: User, color: 'text-blue-600', activeBg: 'bg-blue-50 text-blue-700' },
     { id: 'contract', label: 'Contract', icon: Briefcase, color: 'text-amber-600', activeBg: 'bg-amber-50 text-amber-700' },
     { id: 'documents', label: 'Documents', icon: FileText, color: 'text-indigo-600', activeBg: 'bg-indigo-50 text-indigo-700' },
+    { id: 'assets', label: 'Assets', icon: Package, color: 'text-teal-600', activeBg: 'bg-teal-50 text-teal-700' },
     { id: 'timeline', label: 'Career Journey', icon: Activity, color: 'text-purple-600', activeBg: 'bg-purple-50 text-purple-700' },
     { id: 'performance', label: 'Performance', icon: TrendingUp, color: 'text-emerald-600', activeBg: 'bg-emerald-50 text-emerald-700' },
     { id: 'disciplinary', label: 'Disciplinary', icon: NotebookPen, color: 'text-orange-600', activeBg: 'bg-orange-50 text-orange-700' },
@@ -53,6 +54,8 @@ export default function StaffDetailPage() {
     const [providerBranches, setProviderBranches] = useState<{id: string, name: string, city: string}[]>([])
     const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
     const [documents, setDocuments] = useState<HRStaffDocument[]>([])
+    const [assets, setAssets] = useState<HRStaffAsset[]>([])
+    const [assetReturnModalOpen, setAssetReturnModalOpen] = useState(false)
     const [loggedUserName, setLoggedUserName] = useState<string>('')
 
     const [perfModalOpen, setPerfModalOpen] = useState(false)
@@ -85,7 +88,17 @@ export default function StaffDetailPage() {
         setPerfSaving(false)
     }
 
+    const [pendingResignData, setPendingResignData] = useState<{ staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation' | 'rejection', reason: string, notes: string } | null>(null);
+
     const handleResign = async (data: { staffId: string, effectiveDate: string, type: 'dismissal' | 'resignation' | 'rejection', reason: string, notes: string }) => {
+        // Verifica se lo staff ha degli asset assegnati o nel suo storico
+        if (assets.length > 0) {
+            setPendingResignData(data);
+            setDismissalModalOpen(false);
+            setAssetReturnModalOpen(true);
+            return;
+        }
+
         if (data.type === 'rejection') {
             setDismissalSaving(true)
             try {
@@ -113,6 +126,44 @@ export default function StaffDetailPage() {
 
         setPendingResignation(data)
         setDismissalModalOpen(false)
+        setExitReviewModalOpen(true)
+    }
+
+    const confirmTerminationAfterAssets = async () => {
+        if (!pendingResignData) return;
+        
+        const data = pendingResignData;
+        setPendingResignData(null);
+        setAssetReturnModalOpen(false);
+
+        // Ricarica per allineare lo stato locale degli asset dopo il salvataggio
+        await fetchAll();
+
+        if (data.type === 'rejection') {
+            setDismissalSaving(true)
+            try {
+                const { error: histErr } = await supabase.from('hr_staff_role_history').insert([{
+                    staff_id: data.staffId,
+                    effective_date: data.effectiveDate,
+                    reason: `[REJECTION] ${data.reason}`,
+                    notes: data.notes,
+                    created_by: null
+                }])
+                if (histErr) throw histErr
+                
+                const { error: staffErr } = await supabase.from('hr_staff').update({ status: 'terminated' }).eq('id', data.staffId)
+                if (staffErr) throw staffErr
+                
+                router.push('/human-resources/management/staff')
+            } catch (err: any) {
+                console.error(err)
+                alert('Failed to record rejection: ' + (err.message || JSON.stringify(err)))
+            }
+            setDismissalSaving(false)
+            return
+        }
+
+        setPendingResignation(data)
         setExitReviewModalOpen(true)
     }
 
@@ -153,7 +204,7 @@ export default function StaffDetailPage() {
         if (!id) return;
         setLoading(true)
         try {
-            const [staffRes, deptsRes, posRes, roleReq, salReq, perfReq, branchesReq, catReq, docsReq] = await Promise.all([
+            const [staffRes, deptsRes, posRes, roleReq, salReq, perfReq, branchesReq, catReq, docsReq, assetsReq] = await Promise.all([
                 supabase.from('hr_staff').select('*, hr_departments(*), hr_positions(*), hr_staff_branches(*), hr_staff_contracts(*)').eq('id', id).single(),
                 supabase.from('hr_departments').select('*').order('sort_order'),
                 supabase.from('hr_positions').select('*').order('sort_order'),
@@ -166,7 +217,8 @@ export default function StaffDetailPage() {
                 supabase.from('hr_staff_performance').select('*').eq('staff_id', id).order('review_date', { ascending: false }),
                 supabase.from('provider_branches').select('id, name, city').order('name'),
                 supabase.from('hr_rating_categories').select('*').order('sort_order'),
-                supabase.from('hr_staff_documents').select('*').eq('staff_id', id).order('uploaded_at', { ascending: false })
+                supabase.from('hr_staff_documents').select('*').eq('staff_id', id).order('uploaded_at', { ascending: false }),
+                supabase.from('hr_staff_assets').select('*, hr_staff_asset_history(*)').eq('staff_id', id).order('created_at', { ascending: false })
             ])
             if (staffRes.data) setStaff(staffRes.data as any)
             if (deptsRes.data) setDepartments(deptsRes.data)
@@ -177,6 +229,7 @@ export default function StaffDetailPage() {
             if (branchesReq.data) setProviderBranches(branchesReq.data)
             if (catReq.data) setAllCategories(catReq.data)
             if (docsReq.data) setDocuments(docsReq.data)
+            if (assetsReq.data) setAssets(assetsReq.data)
         } catch (err) {
             console.error('Error fetching staff data', err)
         }
@@ -300,6 +353,7 @@ export default function StaffDetailPage() {
                         {activeTab === 'timeline' && <TabTimeline staff={staff} roleHistory={roleHistory} salaryHistory={salaryHistory} positions={positions} departments={departments} loggedUserName={loggedUserName} onUpdate={fetchAll} onResign={handleResign} />}
                         {activeTab === 'performance' && <TabPerformance staff={staff} performances={performances} onUpdate={fetchAll} allCategories={allCategories} />}
                         {activeTab === 'disciplinary' && <TabDisciplinary staff={staff} />}
+                        {activeTab === 'assets' && <TabAssets staff={staff} assets={assets} onUpdate={fetchAll} />}
                     </div>
                 </div>
 
@@ -342,6 +396,16 @@ export default function StaffDetailPage() {
                     preselectedStaffId={staff.id}
                     isProbationRejection={true}
                 />
+
+                {assetReturnModalOpen && (
+                    <AssetReturnModal 
+                        open={assetReturnModalOpen}
+                        staff={staff}
+                        assets={assets}
+                        onClose={() => setAssetReturnModalOpen(false)}
+                        onConfirm={confirmTerminationAfterAssets}
+                    />
+                )}
             </div>
         </div>
     )
@@ -356,6 +420,23 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
     const [displaySalary, setDisplaySalary] = useState<string>('')
     const [saving, setSaving] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
+    
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [deleteLoading, setDeleteLoading]         = useState(false)
+    const router = useRouter()
+
+    const handleDelete = async () => {
+        setDeleteLoading(true)
+        try {
+            const { error } = await supabase.from('hr_staff').delete().eq('id', staff.id)
+            if (error) throw error
+            router.push('/human-resources/management/staff')
+        } catch (err) {
+            console.error(err)
+            alert('Failed to delete staff member')
+        }
+        setDeleteLoading(false)
+    }
 
     useEffect(() => {
         setFormData({ ...staff })
@@ -442,22 +523,34 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                     <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">General Information</h2>
                     <p className="text-sm text-gray-500 mt-1">Basic contact and position details.</p>
                 </div>
-                <button 
-                    onClick={() => {
-                        if (isEditing) {
-                            // Reset changes if cancelling
-                            setFormData({ ...staff })
-                            setSelectedBranches((staff as any).hr_staff_branches?.map((b: any) => b.branch_id) || [])
-                            if (staff.salary_amount) setDisplaySalary(staff.salary_amount.toLocaleString('en-US', { maximumFractionDigits: 2 }))
-                            else setDisplaySalary('')
-                        }
-                        setIsEditing(!isEditing)
-                    }} 
-                    className={`p-2 rounded-xl border transition-all ${isEditing ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-                    title={isEditing ? "Cancel Editing" : "Enable Editing"}
-                >
-                    {isEditing ? <X className="w-5 h-5" /> : <Pencil className="w-5 h-5" />}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => {
+                            if (isEditing) {
+                                // Reset changes if cancelling
+                                setFormData({ ...staff })
+                                setSelectedBranches((staff as any).hr_staff_branches?.map((b: any) => b.branch_id) || [])
+                                if (staff.salary_amount) setDisplaySalary(staff.salary_amount.toLocaleString('en-US', { maximumFractionDigits: 2 }))
+                                else setDisplaySalary('')
+                            }
+                            setIsEditing(!isEditing)
+                        }} 
+                        className={`p-2 rounded-xl border transition-all ${isEditing ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                        title={isEditing ? "Cancel Editing" : "Enable Editing"}
+                    >
+                        {isEditing ? <X className="w-5 h-5" /> : <Pencil className="w-5 h-5" />}
+                    </button>
+                    {!isEditing && (
+                        <button 
+                            type="button"
+                            onClick={() => setShowDeleteConfirm(true)} 
+                            className="p-2 rounded-xl border border-red-100 bg-red-50 text-red-500 hover:text-red-700 hover:bg-red-100 hover:border-red-200 transition-all"
+                            title="Delete Staff Member"
+                        >
+                            <Trash2 className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -625,6 +718,14 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                         Save Changes
                     </button>
                 </div>
+            )}
+            {showDeleteConfirm && (
+                <DeleteConfirm
+                    name={staff.full_name || ''}
+                    onConfirm={handleDelete}
+                    onCancel={() => setShowDeleteConfirm(false)}
+                    deleting={deleteLoading}
+                />
             )}
         </div>
     )
@@ -1014,6 +1115,9 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments
                 salary_amount: payload.new_amount,
                 salary_type: payload.salary_type
             }
+            if (payload.employment_type) {
+                staffUpdates.employment_type = payload.employment_type
+            }
             if (payload.new_department_id) staffUpdates.department_id = payload.new_department_id
             if (payload.new_position_id) {
                 staffUpdates.position_id = payload.new_position_id
@@ -1094,9 +1198,11 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments
                                     <p className="text-sm text-gray-900 font-medium tracking-tight">
                                         {event.data.record_type === 'promotion' ? 'Promotion & Gross Salary Change' : 'Gross Salary Change'}
                                         <span className="text-gray-400 font-normal ml-1">
-                                            ({event.data.previous_salary_type && event.data.previous_salary_type !== event.data.salary_type 
-                                                ? `${event.data.previous_salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'} → ${event.data.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'}` 
-                                                : (event.data.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time')})
+                                            ({event.data.previous_employment_type && event.data.previous_employment_type !== event.data.employment_type 
+                                                ? `${event.data.previous_employment_type === 'full_time' ? 'Full-Time' : event.data.previous_employment_type === 'part_time' ? 'Part-Time' : 'Outsourced'} → ${event.data.employment_type === 'full_time' ? 'Full-Time' : event.data.employment_type === 'part_time' ? 'Part-Time' : 'Outsourced'}` 
+                                                : (event.data.employment_type 
+                                                    ? (event.data.employment_type === 'full_time' ? 'Full-Time' : event.data.employment_type === 'part_time' ? 'Part-Time' : 'Outsourced')
+                                                    : (event.data.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'))})
                                         </span>
                                     </p>
                                     {event.data.record_type === 'promotion' && (
@@ -1842,6 +1948,1267 @@ function FormFine({ initialData, catalog, loggedUserName, onSave, onCancel }: { 
                 </button>
             </div>
         </form>
+    )
+}
+
+// ==========================================
+// TAB: Assets
+// ==========================================
+
+function TabAssets({ staff, assets, onUpdate }: { staff: HRStaffMember, assets: HRStaffAsset[], onUpdate: () => Promise<void> }) {
+    const { language } = useSettings()
+    
+    const condLabel = (cond: string | null | undefined) => {
+        if (!cond) return '';
+        const m: Record<string, Record<string, string>> = {
+            good: { en: 'Good', vi: 'Tốt' },
+            fair: { en: 'Fair', vi: 'Trung bình' },
+            poor: { en: 'Poor', vi: 'Kém' }
+        };
+        return m[cond]?.[language === 'vi' ? 'vi' : 'en'] || cond;
+    };
+
+    const [modalOpen, setModalOpen] = useState(false)
+    const [editingAsset, setEditingAsset] = useState<HRStaffAsset | null>(null)
+    const [expandedAssetIds, setExpandedAssetIds] = useState<string[]>([])
+
+    const t = {
+        en: {
+            title: 'Assigned Assets',
+            subtitle: 'Manage company property assigned to this staff member (e.g. uniforms, phones, laptops).',
+            assignAsset: 'Assign Asset',
+            editAsset: 'Edit Asset',
+            assetName: 'Asset Name',
+            category: 'Category',
+            serialNumber: 'Serial Number',
+            qty: 'Qty',
+            quantity: 'Quantity',
+            assignedDate: 'Assigned Date',
+            returnDate: 'Return Date',
+            status: 'Status',
+            notes: 'Notes',
+            save: 'Save Asset',
+            saving: 'Saving...',
+            cancel: 'Cancel',
+            actions: 'Actions',
+            noAssets: 'No assets assigned to this staff member yet.',
+            assigned: 'Assigned',
+            returned: 'Returned',
+            damaged: 'Damaged',
+            lost: 'Lost',
+            confirmDelete: 'Are you sure you want to remove this asset assignment?',
+            deleteError: 'Failed to delete asset assignment',
+            saveError: 'Failed to save asset assignment',
+            placeholderName: 'e.g. iPhone 13, Chef Apron M',
+            placeholderSerial: 'e.g. SN123456789 (optional)',
+            placeholderNotes: 'Add any specific notes about condition, size, etc.',
+            categoryUniform: 'Uniform',
+            categoryDevice: 'Device',
+            categoryTool: 'Tool',
+            categoryOther: 'Other',
+            historyTitle: 'Asset Status History',
+            stateChangedTo: 'State changed to',
+            onDate: 'on',
+            registerStateChange: 'Register State Change',
+            newState: 'New State',
+            changeDate: 'Event Date',
+            placeholderChangeNotes: 'e.g. Returned clean, or size mistake',
+            stateChangeError: 'Could not log status change',
+            confirmAndContinue: 'Confirm & Continue',
+            assignedCondition: 'Initial Condition',
+            returnCondition: 'Return Condition',
+            conditionGood: 'Good',
+            conditionFair: 'Fair',
+            conditionPoor: 'Poor',
+            condition: 'Condition'
+        },
+        vi: {
+            title: 'Tài sản được bàn giao',
+            subtitle: 'Quản lý tài sản công ty được bàn giao cho nhân viên này (ví dụ: đồng phục, điện thoại, máy tính xách tay).',
+            assignAsset: 'Bàn giao tài sản',
+            editAsset: 'Sửa tài sản bàn giao',
+            assetName: 'Tên tài sản',
+            category: 'Danh mục',
+            serialNumber: 'Số seri',
+            qty: 'SL',
+            quantity: 'Số lượng',
+            assignedDate: 'Ngày bàn giao',
+            returnDate: 'Ngày thu hồi',
+            status: 'Trạng thái',
+            notes: 'Ghi chú',
+            save: 'Lưu tài sản',
+            saving: 'Đang lưu...',
+            cancel: 'Hủy',
+            actions: 'Thao tác',
+            noAssets: 'Chưa có tài sản nào được bàn giao cho nhân viên này.',
+            assigned: 'Đang sử dụng',
+            returned: 'Đã thu hồi',
+            damaged: 'Hỏng hóc',
+            lost: 'Thất lạc',
+            confirmDelete: 'Bạn có chắc chắn muốn xóa bàn giao tài sản này không?',
+            deleteError: 'Không thể xóa bàn giao tài sản',
+            saveError: 'Không thể lưu bàn giao tài sản',
+            placeholderName: 'Ví dụ: iPhone 13, Grembiule taglia M',
+            placeholderSerial: 'Ví dụ: SN123456789 (không bắt buộc)',
+            placeholderNotes: 'Thêm ghi chú cụ thể về tình trạng, kích thước, v.v.',
+            categoryUniform: 'Đồng phục',
+            categoryDevice: 'Thiết bị',
+            categoryTool: 'Công cụ',
+            categoryOther: 'Khác',
+            historyTitle: 'Lịch sử trạng thái tài sản',
+            stateChangedTo: 'Trạng thái chuyển sang',
+            onDate: 'vào ngày',
+            registerStateChange: 'Ghi nhận thay đổi trạng thái',
+            newState: 'Trạng thái mới',
+            changeDate: 'Ngày sự kiện',
+            placeholderChangeNotes: 'Ví dụ: Đã trả sạch sẽ, hoặc lỗi kích cỡ',
+            stateChangeError: 'Không thể ghi nhận thay đổi trạng thái',
+            confirmAndContinue: 'Xác nhận & Tiếp tục',
+            assignedCondition: 'Tình trạng bàn giao',
+            returnCondition: 'Tình trạng thu hồi',
+            conditionGood: 'Tốt',
+            conditionFair: 'Trung bình',
+            conditionPoor: 'Kém',
+            condition: 'Tình trạng'
+        }
+    }[language === 'vi' ? 'vi' : 'en']
+
+    const [stateChangeAsset, setStateChangeAsset] = useState<HRStaffAsset | null>(null)
+    const [stateChangeModalOpen, setStateChangeModalOpen] = useState<boolean>(false)
+
+    const [editingHistoryLog, setEditingHistoryLog] = useState<HRStaffAssetHistory | null>(null)
+    const [historySaving, setHistorySaving] = useState<boolean>(false)
+
+    async function handleDeleteHistoryLog(historyLogId: string) {
+        if (!window.confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa bản ghi lịch sử này?' : 'Are you sure you want to delete this history log?')) return
+        try {
+            const { error } = await supabase.from('hr_staff_asset_history').delete().eq('id', historyLogId)
+            if (error) throw error
+            await onUpdate()
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể xóa bản ghi lịch sử' : 'Could not delete history log')
+        }
+    }
+
+    async function handleSaveHistoryLog(updatedData: Partial<HRStaffAssetHistory>) {
+        if (!editingHistoryLog) return
+        setHistorySaving(true)
+        try {
+            const { error } = await supabase.from('hr_staff_asset_history').update(updatedData).eq('id', editingHistoryLog.id)
+            if (error) throw error
+            await onUpdate()
+            setEditingHistoryLog(null)
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể lưu bản ghi lịch sử' : 'Could not save history log')
+        } finally {
+            setHistorySaving(false)
+        }
+    }
+
+    const toggleExpand = (id: string) => {
+        setExpandedAssetIds(prev => 
+            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        );
+    }
+
+    async function handleStateChangeSubmit(assetId: string, status: HRStaffAssetStatus, date: string, notes: string) {
+        try {
+            const updateData: any = {
+                status,
+                notes: notes || null
+            }
+            if (status === 'returned' || status === 'damaged' || status === 'lost') {
+                updateData.return_date = date
+            } else {
+                updateData.return_date = null
+            }
+            
+            if (status === 'returned') {
+                updateData.return_condition = 'good';
+            } else if (status === 'damaged') {
+                updateData.return_condition = 'poor';
+            } else {
+                updateData.return_condition = null;
+            }
+
+            const { error } = await supabase.from('hr_staff_assets').update(updateData).eq('id', assetId)
+            if (error) throw error
+            
+            await onUpdate()
+        } catch (err) {
+            console.error(err)
+            alert(t.stateChangeError)
+            throw err
+        }
+    }
+
+    async function handleSave(formData: Partial<HRStaffAsset>) {
+        try {
+            if (editingAsset) {
+                const { error } = await supabase.from('hr_staff_assets').update(formData).eq('id', editingAsset.id)
+                if (error) throw error
+            } else {
+                const { error } = await supabase.from('hr_staff_assets').insert([{
+                    ...formData,
+                    staff_id: staff.id
+                }])
+                if (error) throw error
+            }
+            await onUpdate()
+            setModalOpen(false)
+        } catch (err) {
+            console.error(err)
+            alert(t.saveError)
+        }
+    }
+
+    async function handleDelete(id: string) {
+        if (!window.confirm(t.confirmDelete)) return
+        try {
+            const { error } = await supabase.from('hr_staff_assets').delete().eq('id', id)
+            if (error) throw error
+            await onUpdate()
+        } catch (err) {
+            console.error(err)
+            alert(t.deleteError)
+        }
+    }
+
+    return (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">
+                        {t.title}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {t.subtitle}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => { setEditingAsset(null); setModalOpen(true); }} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all whitespace-nowrap">
+                        <Plus className="w-4 h-4" /> {t.assignAsset}
+                    </button>
+                </div>
+            </div>
+
+            {/* Table */}
+            <div className="border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
+                            <tr>
+                                <th className="w-10 px-4 py-3 text-center"></th>
+                                <th className="px-4 py-3 border-r border-gray-100">{t.assignedDate}</th>
+                                <th className="px-4 py-3 border-r border-gray-100">{t.assetName}</th>
+                                <th className="px-4 py-3 border-r border-gray-100 text-center">{t.qty}</th>
+                                <th className="px-4 py-3 border-r border-gray-100">{t.category}</th>
+                                <th className="px-4 py-3 border-r border-gray-100">{t.serialNumber}</th>
+                                <th className="px-4 py-3 border-r border-gray-100">{t.returnDate}</th>
+                                <th className="px-4 py-3 border-r border-gray-100">{t.condition}</th>
+                                <th className="px-4 py-3 border-r border-gray-100 text-center">{t.status}</th>
+                                <th className="px-4 py-3 text-center">{t.actions}</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {assets.length === 0 ? (
+                                <tr>
+                                    <td colSpan={10} className="text-center py-8 text-gray-400">
+                                        {t.noAssets}
+                                    </td>
+                                </tr>
+                            ) : (
+                                assets.map(asset => {
+                                    const isExpanded = expandedAssetIds.includes(asset.id);
+                                    const historyLogs = asset.hr_staff_asset_history || [];
+
+                                    const statusBadgeColor = 
+                                        asset.status === 'assigned' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                        asset.status === 'returned' ? 'bg-gray-50 text-gray-600 border-gray-200' :
+                                        asset.status === 'damaged' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                        'bg-red-50 text-red-700 border-red-200';
+
+                                    const localizedStatus = 
+                                        asset.status === 'assigned' ? t.assigned :
+                                        asset.status === 'returned' ? t.returned :
+                                        asset.status === 'damaged' ? t.damaged :
+                                        t.lost;
+
+                                    const localizedCategory = 
+                                        asset.category === 'Uniform' ? t.categoryUniform :
+                                        asset.category === 'Device' ? t.categoryDevice :
+                                        asset.category === 'Tool' ? t.categoryTool :
+                                        asset.category === 'Other' ? t.categoryOther :
+                                        asset.category || '-';
+
+                                    return (
+                                        <React.Fragment key={asset.id}>
+                                            <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => toggleExpand(asset.id)}>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className="text-gray-400 hover:text-gray-600 transition">
+                                                        {isExpanded ? <ChevronDown className="w-4 h-4 mx-auto" /> : <ChevronRight className="w-4 h-4 mx-auto" />}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">
+                                                    {fmtDate(asset.assigned_date)}
+                                                </td>
+                                                <td className="px-4 py-3 border-r border-gray-100 font-semibold text-gray-900">
+                                                    {asset.asset_name}
+                                                </td>
+                                                <td className="px-4 py-3 border-r border-gray-100 text-gray-850 font-bold text-center">
+                                                    {asset.quantity}
+                                                </td>
+                                                <td className="px-4 py-3 border-r border-gray-100 text-gray-600">
+                                                    {localizedCategory}
+                                                </td>
+                                                <td className="px-4 py-3 border-r border-gray-100 font-mono text-xs text-gray-500">
+                                                    {asset.serial_number || '-'}
+                                                </td>
+                                                <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-600">
+                                                    {asset.return_date ? fmtDate(asset.return_date) : '-'}
+                                                </td>
+                                                <td className="px-4 py-3 border-r border-gray-100 text-gray-700 whitespace-nowrap text-xs font-semibold">
+                                                    {asset.initial_condition ? (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span>{condLabel(asset.initial_condition)}</span>
+                                                            {asset.return_date && asset.return_condition && (
+                                                                <>
+                                                                    <span className="text-gray-400">→</span>
+                                                                    <span className={asset.return_condition === 'poor' ? 'text-red-600 font-bold' : 'text-slate-900 font-semibold'}>
+                                                                        {condLabel(asset.return_condition)}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        '-'
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 border-r border-gray-100 text-center">
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusBadgeColor}`}>
+                                                        {localizedStatus}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <button 
+                                                            onClick={() => { 
+                                                                setStateChangeAsset(asset);
+                                                                setStateChangeModalOpen(true);
+                                                            }} 
+                                                            className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors" 
+                                                            title={t.registerStateChange}
+                                                        >
+                                                            <RefreshCw className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {isExpanded && (
+                                                <tr className="bg-slate-50/40">
+                                                    <td colSpan={10} className="px-8 py-5 border-t border-b border-slate-100">
+                                                        <div className="w-full space-y-4 text-left">
+                                                            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-semibold">
+                                                                <Activity className="w-3.5 h-3.5 text-slate-500" />
+                                                                {t.historyTitle}
+                                                            </h4>
+                                                            {historyLogs.length === 0 ? (
+                                                                <p className="text-xs text-slate-400 italic bg-white border border-slate-100 px-3 py-2 rounded-xl">
+                                                                    No history logged.
+                                                                </p>
+                                                            ) : (
+                                                                <div className="relative pl-4 border-l-2 border-slate-200 space-y-3 py-1 ml-2">
+                                                                    {historyLogs.map((log, idx) => {
+                                                                        const logStatusBadge = 
+                                                                            log.status === 'assigned' ? 'bg-blue-500' :
+                                                                            log.status === 'returned' ? 'bg-gray-500' :
+                                                                            log.status === 'damaged' ? 'bg-yellow-500' :
+                                                                            'bg-red-500';
+                                                                        const logLocalizedStatus = 
+                                                                            log.status === 'assigned' ? t.assigned :
+                                                                            log.status === 'returned' ? t.returned :
+                                                                            log.status === 'damaged' ? t.damaged :
+                                                                            t.lost;
+
+                                                                        return (
+                                                                            <div key={log.id || idx} className="group relative flex items-center justify-between gap-4 text-xs py-1 hover:bg-white px-2.5 rounded-lg border border-transparent hover:border-slate-150 hover:shadow-sm transition-all duration-200">
+                                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                                    <div className={`absolute -left-[21px] w-2.5 h-2.5 rounded-full ring-4 ring-white ${logStatusBadge}`} />
+                                                                                    <div className="font-semibold text-slate-700 flex items-center gap-1.5">
+                                                                                        {t.stateChangedTo} 
+                                                                                        <span className="font-bold underline uppercase text-slate-900">{logLocalizedStatus}</span>
+                                                                                    </div>
+                                                                                    <div className="text-slate-400 font-medium">
+                                                                                        {t.onDate} {fmtDate(log.changed_at)}
+                                                                                    </div>
+                                                                                    {log.notes && (
+                                                                                        <div className="text-slate-500 italic bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md sm:ml-2">
+                                                                                            "{log.notes}"
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                
+                                                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" onClick={e => e.stopPropagation()}>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setEditingHistoryLog(log)}
+                                                                                        className="p-1 text-blue-600 hover:bg-blue-50 rounded transition"
+                                                                                        title={language === 'vi' ? 'Sửa' : 'Edit state log'}
+                                                                                    >
+                                                                                        <Pencil className="w-3.5 h-3.5" />
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => handleDeleteHistoryLog(log.id)}
+                                                                                        className="p-1 text-red-600 hover:bg-red-50 rounded transition"
+                                                                                        title={language === 'vi' ? 'Xóa' : 'Delete state log'}
+                                                                                    >
+                                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Pulsante Delete Asset Globale */}
+                                                            <div className="pt-3 border-t border-slate-100/50 mt-3 flex justify-end items-center">
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => handleDelete(asset.id)}
+                                                                    className="text-xs font-bold text-red-600 hover:text-red-800 transition"
+                                                                >
+                                                                    {language === 'vi' ? 'Xóa' : 'Delete'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal */}
+            {modalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-900">
+                                {editingAsset ? t.editAsset : t.assignAsset}
+                            </h3>
+                            <button onClick={() => setModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-900 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto">
+                            <FormAsset 
+                                initialData={editingAsset}
+                                onSave={handleSave}
+                                onCancel={() => setModalOpen(false)}
+                                t={t}
+                                language={language}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {editingHistoryLog && (
+                <HistoryEditModal 
+                    historyLog={editingHistoryLog}
+                    onSave={handleSaveHistoryLog}
+                    onCancel={() => setEditingHistoryLog(null)}
+                    saving={historySaving}
+                    t={t}
+                    language={language}
+                />
+            )}
+
+            {stateChangeModalOpen && stateChangeAsset && (
+                <StateChangeModal 
+                    open={stateChangeModalOpen}
+                    asset={stateChangeAsset}
+                    onClose={() => {
+                        setStateChangeModalOpen(false);
+                        setStateChangeAsset(null);
+                    }}
+                    onSave={handleStateChangeSubmit}
+                    t={t}
+                    language={language}
+                />
+            )}
+        </div>
+    );
+}
+
+interface FormAssetProps {
+    initialData: HRStaffAsset | null;
+    onSave: (d: Partial<HRStaffAsset>) => void;
+    onCancel: () => void;
+    t: any;
+    language: string;
+}
+
+function FormAsset({ initialData, onSave, onCancel, t, language }: FormAssetProps) {
+    const [assetName, setAssetName] = useState(initialData?.asset_name || '')
+    const [category, setCategory] = useState(initialData?.category || 'Uniform')
+    const [serialNumber, setSerialNumber] = useState(initialData?.serial_number || '')
+    const [quantity, setQuantity] = useState(initialData?.quantity || 1)
+    const [assignedDate, setAssignedDate] = useState(initialData?.assigned_date || new Date().toISOString().split('T')[0])
+    const [initialCondition, setInitialCondition] = useState(initialData?.initial_condition || 'good')
+    const [notes, setNotes] = useState(initialData?.notes || '')
+    const [submitting, setSubmitting] = useState(false)
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!assetName || !assignedDate) return
+        setSubmitting(true)
+        
+        onSave({
+            asset_name: assetName,
+            category,
+            serial_number: serialNumber || null,
+            quantity,
+            assigned_date: assignedDate,
+            initial_condition: initialCondition,
+            notes: notes || null
+        })
+    }
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4 text-left">
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    {t.assetName} <span className="text-red-500">*</span>
+                </label>
+                <input 
+                    type="text" 
+                    required 
+                    value={assetName} 
+                    onChange={e => setAssetName(e.target.value)} 
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                    placeholder={t.placeholderName}
+                />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-1">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {t.quantity} <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="number" 
+                        required 
+                        min={1}
+                        value={quantity} 
+                        onChange={e => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))} 
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                    />
+                </div>
+                <div className="col-span-1">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {t.category}
+                    </label>
+                    <select 
+                        value={category} 
+                        onChange={e => setCategory(e.target.value)} 
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-semibold"
+                    >
+                        <option value="Uniform">{t.categoryUniform}</option>
+                        <option value="Device">{t.categoryDevice}</option>
+                        <option value="Tool">{t.categoryTool}</option>
+                        <option value="Other">{t.categoryOther}</option>
+                    </select>
+                </div>
+                <div className="col-span-1">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {t.serialNumber}
+                    </label>
+                    <input 
+                        type="text" 
+                        value={serialNumber} 
+                        onChange={e => setSerialNumber(e.target.value)} 
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                        placeholder={t.placeholderSerial}
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {t.assignedDate} <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="date" 
+                        required 
+                        value={assignedDate} 
+                        onChange={e => setAssignedDate(e.target.value)} 
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {t.assignedCondition}
+                    </label>
+                    <select 
+                        value={initialCondition} 
+                        onChange={e => setInitialCondition(e.target.value)} 
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-semibold"
+                    >
+                        <option value="good">{t.conditionGood}</option>
+                        <option value="fair">{t.conditionFair}</option>
+                        <option value="poor">{t.conditionPoor}</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    {t.notes}
+                </label>
+                <textarea 
+                    rows={3}
+                    value={notes} 
+                    onChange={e => setNotes(e.target.value)} 
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                    placeholder={t.placeholderNotes}
+                />
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
+                <button 
+                    type="button" 
+                    onClick={onCancel} 
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition"
+                >
+                    {t.cancel}
+                </button>
+                <button 
+                    type="submit" 
+                    disabled={submitting || !assetName || !assignedDate} 
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    {submitting ? t.saving : t.save}
+                </button>
+            </div>
+        </form>
+    );
+}
+
+// ==========================================
+// MODAL: AssetReturnModal
+// ==========================================
+
+interface AssetReturnModalProps {
+    open: boolean;
+    staff: HRStaffMember | null;
+    assets: HRStaffAsset[];
+    onClose: () => void;
+    onConfirm: () => Promise<void>;
+}
+
+function AssetReturnModal({ open, staff, assets, onClose, onConfirm }: AssetReturnModalProps) {
+    const { language } = useSettings()
+    const [submitting, setSubmitting] = useState(false)
+    const [localAssets, setLocalAssets] = useState<Array<{
+        id: string;
+        name: string;
+        quantity: number;
+        status: HRStaffAssetStatus;
+        assigned_date: string;
+        initial_condition: string;
+        return_condition: string;
+        return_date: string;
+        notes: string;
+    }>>([])
+
+    useEffect(() => {
+        if (open && assets) {
+            setLocalAssets(assets.map(a => ({
+                id: a.id,
+                name: a.asset_name,
+                quantity: a.quantity || 1,
+                status: a.status || 'assigned',
+                assigned_date: a.assigned_date || '',
+                initial_condition: a.initial_condition || 'good',
+                return_condition: a.return_condition || (a.status === 'returned' ? 'good' : a.status === 'damaged' ? 'poor' : ''),
+                return_date: a.return_date || (a.status === 'assigned' ? '' : new Date().toISOString().split('T')[0]),
+                notes: a.notes || ''
+            })))
+        }
+    }, [open, assets])
+
+    const t = {
+        en: {
+            title: 'Company Assets Check',
+            subtitle: "Please review the status of the staff member's company assets before proceeding to the Exit Review.",
+            assetName: 'Asset Name',
+            qty: 'Qty',
+            returnedLabel: 'Returned?',
+            condition: 'Condition / Status',
+            returnDate: 'Return Date',
+            notes: 'Notes',
+            cancel: 'Cancel',
+            confirmAndContinue: 'Confirm & Continue',
+            assigned: 'Still Assigned',
+            returned: 'Intact / Good',
+            damaged: 'Returned Damaged',
+            lost: 'Lost',
+            error: 'Failed to update asset status',
+            yes: 'Yes',
+            no: 'No',
+            assignedCondition: 'Assigned State',
+            returnCondition: 'Return State',
+            conditionGood: 'Good',
+            conditionFair: 'Fair',
+            conditionPoor: 'Poor / Damaged',
+            stillAssigned: 'Still Assigned',
+            assignedDate: 'Assigned Date'
+        },
+        vi: {
+            title: 'Kiểm tra tài sản công ty',
+            subtitle: 'Vui lòng kiểm tra trạng thái tài sản công ty của nhân viên trước khi chuyển sang Đánh giá nghỉ việc.',
+            assetName: 'Tên tài sản',
+            qty: 'SL',
+            returnedLabel: 'Đã trả?',
+            condition: 'Tình trạng / Chi tiết',
+            returnDate: 'Ngày thu hồi',
+            notes: 'Ghi chú',
+            cancel: 'Hủy',
+            confirmAndContinue: 'Xác nhận & Tiếp tục',
+            assigned: 'Chưa trả',
+            returned: 'Nguyên vẹn / Tốt',
+            damaged: 'Trả mà hỏng',
+            lost: 'Thất lạc',
+            error: 'Không thể cập nhật trạng thái tài sản',
+            yes: 'Có',
+            no: 'Không',
+            assignedCondition: 'Trạng thái bàn giao',
+            returnCondition: 'Trạng thái thu hồi',
+            conditionGood: 'Tốt',
+            conditionFair: 'Trung bình',
+            conditionPoor: 'Kém / Hỏng hóc',
+            stillAssigned: 'Chưa trả',
+            assignedDate: 'Ngày bàn giao'
+        }
+    }[language === 'vi' ? 'vi' : 'en']
+
+    const condLabel = (cond: string | null | undefined) => {
+        if (!cond) return '';
+        const m: Record<string, Record<string, string>> = {
+            good: { en: 'Good', vi: 'Tốt' },
+            fair: { en: 'Fair', vi: 'Trung bình' },
+            poor: { en: 'Poor', vi: 'Kém' }
+        };
+        return m[cond]?.[language === 'vi' ? 'vi' : 'en'] || cond;
+    };
+
+    const handleToggleReturn = (id: string, isReturned: boolean) => {
+        setLocalAssets(prev => prev.map(item => {
+            if (item.id === id) {
+                const nextStatus: HRStaffAssetStatus = isReturned ? 'returned' : 'assigned';
+                return {
+                    ...item,
+                    status: nextStatus,
+                    return_condition: isReturned ? 'good' : '',
+                    return_date: isReturned ? item.return_date || new Date().toISOString().split('T')[0] : ''
+                };
+            }
+            return item;
+        }));
+    };
+
+    const handleReturnConditionChange = (id: string, val: string) => {
+        setLocalAssets(prev => prev.map(item => {
+            if (item.id === id) {
+                let nextStatus: HRStaffAssetStatus = item.status;
+                if (val === 'good' || val === 'fair') {
+                    nextStatus = 'returned';
+                } else if (val === 'poor') {
+                    nextStatus = 'damaged';
+                } else if (val === 'assigned') {
+                    nextStatus = 'assigned';
+                } else if (val === 'lost') {
+                    nextStatus = 'lost';
+                }
+                return {
+                    ...item,
+                    status: nextStatus,
+                    return_condition: (val === 'assigned' || val === 'lost') ? '' : val,
+                    return_date: (val === 'assigned' || val === 'lost') ? '' : item.return_date || new Date().toISOString().split('T')[0]
+                }
+            }
+            return item;
+        }))
+    }
+
+    const handleDateChange = (id: string, val: string) => {
+        setLocalAssets(prev => prev.map(item => item.id === id ? { ...item, return_date: val } : item))
+    }
+
+    const handleNotesChange = (id: string, val: string) => {
+        setLocalAssets(prev => prev.map(item => item.id === id ? { ...item, notes: val } : item))
+    }
+
+    const handleSaveAll = async () => {
+        setSubmitting(true)
+        try {
+            await Promise.all(
+                localAssets.map(la => {
+                    const isReturned = la.status === 'returned' || la.status === 'damaged';
+                    const updateData: any = {
+                        status: la.status,
+                        return_condition: isReturned ? la.return_condition || 'good' : null,
+                        notes: la.notes || null
+                    };
+                    if (isReturned) {
+                        updateData.return_date = la.return_date || new Date().toISOString().split('T')[0];
+                    } else {
+                        updateData.return_date = null;
+                    }
+                    return supabase.from('hr_staff_assets').update(updateData).eq('id', la.id);
+                })
+            );
+            await onConfirm();
+        } catch (err) {
+            console.error(err);
+            alert(t.error);
+        }
+        setSubmitting(false)
+    }
+
+    if (!open) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in duration-200">
+                <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+                    <div className="flex items-center gap-2 text-teal-600">
+                        <Package className="w-5 h-5" />
+                        <h3 className="text-lg font-bold text-gray-900">
+                            {t.title}
+                        </h3>
+                    </div>
+                    <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-900 transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                <div className="p-6 overflow-y-auto space-y-4 text-left">
+                    <p className="text-sm text-slate-700 font-medium">
+                        {t.subtitle}
+                    </p>
+
+                    <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 bg-slate-50/30 p-3 rounded-xl border border-slate-100">
+                        {localAssets.map(la => {
+                            const isReturned = la.status === 'returned' || la.status === 'damaged';
+                            return (
+                                <div key={la.id} className="bg-white border border-slate-100 rounded-xl p-4 shadow-[0_2px_12px_-4px_rgba(148,163,184,0.12)] hover:shadow-[0_4px_16px_-4px_rgba(148,163,184,0.18)] transition-all duration-200 space-y-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        {/* Left side: Asset Info */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-slate-900 text-sm sm:text-base">{la.name}</span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold">
+                                                <div className="text-left">
+                                                    <span className="text-slate-600 font-bold uppercase text-[9px] tracking-wider block mb-0.5">{t.qty}</span>
+                                                    <span className="text-slate-900 font-bold">{la.quantity}</span>
+                                                </div>
+                                                <div className="w-px h-5 bg-slate-250" />
+                                                <div className="text-left">
+                                                    <span className="text-slate-600 font-bold uppercase text-[9px] tracking-wider block mb-0.5">{t.assignedDate}</span>
+                                                    <span className="text-slate-900 font-semibold">{fmtDate(la.assigned_date)}</span>
+                                                </div>
+                                                <div className="w-px h-5 bg-slate-250" />
+                                                <div className="text-left">
+                                                    <span className="text-slate-600 font-bold uppercase text-[9px] tracking-wider block mb-0.5">{t.assignedCondition}</span>
+                                                    <span className="text-slate-900 font-semibold">{condLabel(la.initial_condition)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Right side: Controls */}
+                                        <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                                            {/* Returned Toggle */}
+                                            <div className="flex flex-col gap-1 text-left">
+                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.returnedLabel}</label>
+                                                <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-250">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleReturn(la.id, true)}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 border border-transparent
+                                                            ${isReturned 
+                                                                ? 'bg-emerald-50 text-emerald-900 border-emerald-300 shadow-sm' 
+                                                                : 'text-slate-600 hover:text-slate-850'}`}
+                                                    >
+                                                        <CheckCircle className="w-3.5 h-3.5" />
+                                                        {t.yes}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleReturn(la.id, false)}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 border border-transparent
+                                                            ${!isReturned 
+                                                                ? 'bg-rose-50 text-rose-950 border-rose-350 shadow-sm' 
+                                                                : 'text-slate-600 hover:text-slate-855'}`}
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                        {t.no}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Condition Dropdown */}
+                                            <div className="flex flex-col gap-1 text-left">
+                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.condition}</label>
+                                                {isReturned ? (
+                                                    <select
+                                                        value={la.return_condition || 'good'}
+                                                        onChange={e => handleReturnConditionChange(la.id, e.target.value)}
+                                                        className="px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition w-40 text-slate-800"
+                                                    >
+                                                        <option value="good">{t.conditionGood}</option>
+                                                        <option value="fair">{t.conditionFair}</option>
+                                                        <option value="poor">{t.conditionPoor}</option>
+                                                    </select>
+                                                ) : (
+                                                    <select
+                                                        value={la.status}
+                                                        onChange={e => handleReturnConditionChange(la.id, e.target.value)}
+                                                        className="px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition w-40 text-slate-800"
+                                                    >
+                                                        <option value="assigned">{t.assigned}</option>
+                                                        <option value="lost">{t.lost}</option>
+                                                    </select>
+                                                )}
+                                            </div>
+
+                                            {/* Date Picker */}
+                                            <div className="flex flex-col gap-1 text-left">
+                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.returnDate}</label>
+                                                <input 
+                                                    type="date"
+                                                    value={la.return_date}
+                                                    disabled={!isReturned}
+                                                    onChange={e => handleDateChange(la.id, e.target.value)}
+                                                    className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs disabled:opacity-50 transition w-36 font-semibold text-slate-800"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Notes input at the bottom of the card */}
+                                    <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">{t.notes}:</span>
+                                        <input 
+                                            type="text"
+                                            value={la.notes}
+                                            placeholder={language === 'vi' ? 'Ghi chú thêm...' : 'Add details...'}
+                                            onChange={e => handleNotesChange(la.id, e.target.value)}
+                                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none transition text-slate-800 placeholder-slate-400 font-medium"
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-gray-50 border-t flex justify-end gap-2">
+                    <button 
+                        type="button" 
+                        onClick={onClose} 
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition"
+                    >
+                        {t.cancel}
+                    </button>
+                    <button 
+                        type="button" 
+                        onClick={handleSaveAll}
+                        disabled={submitting}
+                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-75"
+                    >
+                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        {t.confirmAndContinue}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ==========================================
+// MODAL: HistoryEditModal
+// ==========================================
+
+interface HistoryEditModalProps {
+    historyLog: HRStaffAssetHistory;
+    onSave: (d: Partial<HRStaffAssetHistory>) => Promise<void>;
+    onCancel: () => void;
+    saving: boolean;
+    t: any;
+    language: string;
+}
+
+function HistoryEditModal({ historyLog, onSave, onCancel, saving, t, language }: HistoryEditModalProps) {
+    const [status, setStatus] = useState<HRStaffAssetStatus>(historyLog.status as HRStaffAssetStatus)
+    const [changedAt, setChangedAt] = useState<string>(
+        historyLog.changed_at ? new Date(historyLog.changed_at).toISOString().split('T')[0] : ''
+    )
+    const [notes, setNotes] = useState<string>(historyLog.notes || '')
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        await onSave({
+            status,
+            changed_at: changedAt,
+            notes: notes || null
+        })
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+                <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+                    <h3 className="text-base font-bold text-gray-900">
+                        {language === 'vi' ? 'Sửa lịch sử trạng thái' : 'Edit Status History'}
+                    </h3>
+                    <button onClick={onCancel} className="p-1 text-gray-400 hover:text-gray-900 transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 text-left">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {t.status}
+                        </label>
+                        <select 
+                            value={status} 
+                            onChange={e => setStatus(e.target.value as HRStaffAssetStatus)} 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                        >
+                            <option value="assigned">{t.assigned}</option>
+                            <option value="returned">{t.returned}</option>
+                            <option value="damaged">{t.damaged}</option>
+                            <option value="lost">{t.lost}</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {t.changeDate}
+                        </label>
+                        <input 
+                            type="date"
+                            required
+                            value={changedAt} 
+                            onChange={e => setChangedAt(e.target.value)} 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium" 
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {t.notes}
+                        </label>
+                        <textarea 
+                            rows={3}
+                            value={notes} 
+                            onChange={e => setNotes(e.target.value)} 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium" 
+                            placeholder={t.placeholderChangeNotes}
+                        />
+                    </div>
+
+                    <div className="pt-4 flex justify-end gap-2 border-t border-gray-100">
+                        <button 
+                            type="button" 
+                            onClick={onCancel} 
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition"
+                        >
+                            {t.cancel}
+                        </button>
+                        <button 
+                            type="submit" 
+                            disabled={saving || !changedAt} 
+                            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                            {saving ? t.saving : t.save}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
+// ==========================================
+// MODAL: StateChangeModal
+// ==========================================
+
+interface StateChangeModalProps {
+    open: boolean;
+    asset: HRStaffAsset | null;
+    onClose: () => void;
+    onSave: (assetId: string, status: HRStaffAssetStatus, date: string, notes: string) => Promise<void>;
+    t: any;
+    language: string;
+}
+
+function StateChangeModal({ open, asset, onClose, onSave, t, language }: StateChangeModalProps) {
+    const [status, setStatus] = useState<HRStaffAssetStatus>('returned')
+    const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0])
+    const [notes, setNotes] = useState<string>('')
+    const [saving, setSaving] = useState<boolean>(false)
+
+    useEffect(() => {
+        if (open && asset) {
+            const nextStatus: HRStaffAssetStatus = asset.status === 'assigned' ? 'returned' : 'assigned';
+            setStatus(nextStatus);
+            setDate(new Date().toISOString().split('T')[0]);
+            setNotes('');
+        }
+    }, [open, asset])
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!status || !date || !asset) return
+        setSaving(true)
+        try {
+            await onSave(asset.id, status, date, notes)
+            onClose()
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    if (!open || !asset) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+                <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+                    <h3 className="text-base font-bold text-gray-900">
+                        {t.registerStateChange}
+                    </h3>
+                    <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-900 transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 text-left">
+                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl mb-2">
+                        <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">{t.assetName}</div>
+                        <div className="text-sm font-bold text-slate-800">{asset.asset_name}</div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {t.newState}
+                        </label>
+                        <select 
+                            value={status} 
+                            onChange={e => setStatus(e.target.value as HRStaffAssetStatus)} 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                        >
+                            <option value="assigned">{t.assigned}</option>
+                            <option value="returned">{t.returned}</option>
+                            <option value="damaged">{t.damaged}</option>
+                            <option value="lost">{t.lost}</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {t.changeDate}
+                        </label>
+                        <input 
+                            type="date"
+                            required
+                            value={date} 
+                            onChange={e => setDate(e.target.value)} 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium" 
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {t.notes}
+                        </label>
+                        <textarea 
+                            rows={3}
+                            value={notes} 
+                            onChange={e => setNotes(e.target.value)} 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium" 
+                            placeholder={t.placeholderChangeNotes}
+                        />
+                    </div>
+
+                    <div className="pt-4 flex justify-end gap-2 border-t border-gray-100">
+                        <button 
+                            type="button" 
+                            onClick={onClose} 
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition"
+                        >
+                            {t.cancel}
+                        </button>
+                        <button 
+                            type="submit" 
+                            disabled={saving || !date} 
+                            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                            {saving ? t.saving : t.save}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
+function DeleteConfirm({ name, onConfirm, onCancel, deleting }: {
+    name: string; onConfirm: () => void; onCancel: () => void; deleting: boolean
+}) {
+    const { language } = useSettings()
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-left">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {language === 'vi' ? 'Xóa nhân viên' : 'Delete Staff Member'}
+                </h3>
+                <p className="text-sm text-gray-600 mb-6">
+                    {language === 'vi' ? (
+                        <>Bạn có chắc chắn muốn xóa <strong>{name}</strong>? Hành động này không thể hoàn tác.</>
+                    ) : (
+                        <>Are you sure you want to delete <strong>{name}</strong>? This action cannot be undone.</>
+                    )}
+                </p>
+                <div className="flex justify-end gap-3">
+                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                        {language === 'vi' ? 'Hủy' : 'Cancel'}
+                    </button>
+                    <button onClick={onConfirm} disabled={deleting}
+                        className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2">
+                        {deleting && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                        {language === 'vi' ? 'Xóa' : 'Delete'}
+                    </button>
+                </div>
+            </div>
+        </div>
     )
 }
 

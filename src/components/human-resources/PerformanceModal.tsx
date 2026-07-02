@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Star, X, TrendingUp, TrendingDown, Plus, Trash2, Pencil } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffPerformance, HRStaffMember, HRRatingCategory } from '@/types/human-resources'
+import { useSettings } from '@/contexts/SettingsContext'
 
 // Helper to make a stable key from a label
 const labelToKey = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '')
@@ -15,6 +16,34 @@ export const OVERALL_LABELS: Record<number, { label: string; color: string; bg: 
     3: { label: 'Average',       color: 'text-amber-700',   bg: 'bg-amber-50' },
     4: { label: 'Good',          color: 'text-blue-700',    bg: 'bg-blue-50' },
     5: { label: 'Excellent',     color: 'text-emerald-700', bg: 'bg-emerald-50' },
+}
+
+export const getOverallLabel = (rating: number, language: string) => {
+    if (language === 'vi') {
+        const viLabels: Record<number, string> = {
+            1: 'Yếu',
+            2: 'Dưới trung bình',
+            3: 'Trung bình',
+            4: 'Tốt',
+            5: 'Xuất sắc'
+        }
+        return viLabels[rating] || ''
+    }
+    return OVERALL_LABELS[rating]?.label || ''
+}
+
+export const translateCategoryLabel = (label: string, lang: string) => {
+    if (lang !== 'vi') return label
+    const l = label.toLowerCase().trim()
+    if (l === 'job knowledge') return 'Kiến thức công việc'
+    if (l === 'quality of work') return 'Chất lượng công việc'
+    if (l === 'productivity') return 'Năng suất làm việc'
+    if (l === 'dependability') return 'Độ tin cậy'
+    if (l === 'attendance punctuality' || l === 'attendance and punctuality') return 'Chuyên cần & Đúng giờ'
+    if (l === 'communication skills') return 'Kỹ năng giao tiếp'
+    if (l === 'initiative') return 'Sự chủ động'
+    if (l === 'cooperation teamwork' || l === 'cooperation and teamwork') return 'Hợp tác & Làm việc nhóm'
+    return label
 }
 
 export function computeAverage(ratings: Record<string, number>): number {
@@ -63,6 +92,7 @@ export function RatingStars({ rating, size = 'sm' }: { rating: number; size?: 's
 
 /* ─── Interactive Star Picker ─── */
 function StarPicker({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
+    const { language } = useSettings()
     const [hover, setHover] = useState(0)
     const activeValue = hover || value
 
@@ -88,11 +118,11 @@ function StarPicker({ value, onChange, disabled }: { value: number; onChange: (v
             <div className="w-32 text-right shrink-0 whitespace-nowrap">
                 {activeValue > 0 ? (
                     <span className={`text-[11px] font-bold uppercase tracking-wider ${OVERALL_LABELS[activeValue]?.color || 'text-gray-500'}`}>
-                        {OVERALL_LABELS[activeValue]?.label}
+                        {getOverallLabel(activeValue, language)}
                     </span>
                 ) : (
                     <span className="text-[11px] font-bold uppercase tracking-wider text-gray-300">
-                        Not Rated
+                        {language === 'vi' ? 'Chưa đánh giá' : 'Not Rated'}
                     </span>
                 )}
             </div>
@@ -100,7 +130,7 @@ function StarPicker({ value, onChange, disabled }: { value: number; onChange: (v
     )
 }
 
-export function computePeriodLabel(periodType: string, dateStr: string, offset: number): string {
+export function computePeriodLabel(periodType: string, dateStr: string, offset: number, language = 'en'): string {
     if (!periodType || !dateStr) return '';
     const parts = dateStr.split('-');
     if (parts.length !== 3) return periodType;
@@ -111,7 +141,7 @@ export function computePeriodLabel(periodType: string, dateStr: string, offset: 
 
     if (type.includes('daily') || type.includes('giornal')) {
         d.setDate(d.getDate() + offset);
-        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        return d.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     }
     if (type.includes('week') || type.includes('settiman')) {
         d.setDate(d.getDate() + offset * 7);
@@ -120,21 +150,21 @@ export function computePeriodLabel(periodType: string, dateStr: string, offset: 
         const startOfWeek = new Date(y, m - 1, diff);
         const endOfWeek = new Date(startOfWeek);
         endOfWeek.setDate(startOfWeek.getDate() + 6);
-        return `${startOfWeek.getDate()} ${startOfWeek.toLocaleString('en-US', { month: 'short' })} - ${endOfWeek.getDate()} ${endOfWeek.toLocaleString('en-US', { month: 'short', year: 'numeric' })}`;
+        return `${startOfWeek.getDate()} ${startOfWeek.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { month: 'short' })} - ${endOfWeek.getDate()} ${endOfWeek.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { month: 'short', year: 'numeric' })}`;
     }
     if (type.includes('month') || type.includes('mensil')) {
         d.setMonth(d.getMonth() + offset);
-        return d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        return d.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' });
     }
     if (type.includes('quarter') || type.includes('trimestr')) {
         d.setMonth(d.getMonth() + offset * 3);
         const q = Math.floor(d.getMonth() / 3) + 1;
-        return `Q${q} ${d.getFullYear()}`;
+        return language === 'vi' ? `Quý ${q} ${d.getFullYear()}` : `Q${q} ${d.getFullYear()}`;
     }
     if (type.includes('semi-annual') || type.includes('semestr')) {
         d.setMonth(d.getMonth() + offset * 6);
         const h = Math.floor(d.getMonth() / 6) + 1;
-        return `H${h} ${d.getFullYear()}`;
+        return language === 'vi' ? `Nửa năm ${h} ${d.getFullYear()}` : `H${h} ${d.getFullYear()}`;
     }
     if (type.includes('annual') || type.includes('annua')) {
         d.setFullYear(d.getFullYear() + offset);
@@ -162,6 +192,7 @@ export interface PerformanceModalProps {
 }
 
 export default function PerformanceModal({ open, onClose, onSave, review, staffList, allCategories, saving, preselectedStaffId, preselectedPeriod, onDelete, isProbation, isExitReview, readOnly, previousGoals }: PerformanceModalProps) {
+    const { language } = useSettings()
     const [isEditing, setIsEditing]       = useState(false)
     const [staffId, setStaffId]           = useState('')
     const [reviewDate, setReviewDate]     = useState('')
@@ -207,7 +238,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
             const today = new Date().toISOString().slice(0, 10)
             setReviewDate(today)
             setReviewerName('')
-            setPeriod(preselectedPeriod || computePeriodLabel('Quarterly', today, 0))
+            setPeriod(preselectedPeriod || computePeriodLabel('Quarterly', today, 0, language))
             
             // Auto-fill reviewer name
             ;(async () => {
@@ -221,7 +252,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
         return () => {
             alive = false
         }
-    }, [review, preselectedStaffId, preselectedPeriod])
+    }, [review, preselectedStaffId, preselectedPeriod, language])
 
     // Re-init category ratings when applicable categories change (for new reviews)
     useEffect(() => {
@@ -277,7 +308,10 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
             <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
                     <h2 className="text-lg font-semibold text-gray-900">
-                        {review ? 'Edit Performance Review' : 'New Performance Review'}
+                        {review 
+                            ? (language === 'vi' ? 'Chỉnh sửa đánh giá hiệu quả' : 'Edit Performance Review') 
+                            : (language === 'vi' ? 'Đánh giá hiệu quả mới' : 'New Performance Review')
+                        }
                     </h2>
                     <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
                         <X className="w-5 h-5" />
@@ -288,12 +322,16 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                     {/* ── Staff + Date ── */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Staff Member *</label>
-                            <input type="text" readOnly disabled value={selectedStaff ? `${selectedStaff.full_name} — ${selectedStaff.position || 'No Pos'}` : ''}
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {language === 'vi' ? 'Nhân viên *' : 'Staff Member *'}
+                            </label>
+                            <input type="text" readOnly disabled value={selectedStaff ? `${selectedStaff.full_name} — ${selectedStaff.position || (language === 'vi' ? 'Không có vị trí' : 'No Pos')}` : ''}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Review Date</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {language === 'vi' ? 'Ngày đánh giá' : 'Review Date'}
+                            </label>
                             <input type="date" value={reviewDate} onChange={e => handleDateChange(e.target.value)}
                                 disabled
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
@@ -303,14 +341,18 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                     {/* ── Reviewer + Period ── */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Reviewer</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {language === 'vi' ? 'Người đánh giá' : 'Reviewer'}
+                            </label>
                             <input value={reviewerName} onChange={e => setReviewerName(e.target.value)}
-                                placeholder="e.g. Manager Name"
+                                placeholder={language === 'vi' ? 'Ví dụ: Tên quản lý' : 'e.g. Manager Name'}
                                 disabled={!isEditing}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-500" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {language === 'vi' ? 'Kỳ đánh giá' : 'Period'}
+                            </label>
                             <input disabled value={period}
                                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
                         </div>
@@ -318,7 +360,9 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
 
                     {previousGoals && (
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                            <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wider mb-2">Goals from Previous Period</h4>
+                            <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wider mb-2">
+                                {language === 'vi' ? 'Mục tiêu từ kỳ trước' : 'Goals from Previous Period'}
+                            </h4>
                             <p className="text-sm text-amber-900 whitespace-pre-wrap">{previousGoals}</p>
                         </div>
                     )}
@@ -329,14 +373,24 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                             {/* Category Ratings */}
                             <div className="border border-gray-200 rounded-xl overflow-hidden">
                                 <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                                    <h3 className="text-sm font-semibold text-gray-800">Rating Categories *</h3>
+                                    <h3 className="text-sm font-semibold text-gray-800">
+                                        {language === 'vi' ? 'Danh mục đánh giá *' : 'Rating Categories *'}
+                                    </h3>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs text-gray-500">{ratedCount}/{applicableCategories.length} rated</span>
+                                        <span className="text-xs text-gray-500">
+                                            {language === 'vi' 
+                                                ? `${ratedCount}/${applicableCategories.length} đã đánh giá` 
+                                                : `${ratedCount}/${applicableCategories.length} rated`
+                                            }
+                                        </span>
                                     </div>
                                 </div>
                                 {applicableCategories.length === 0 ? (
                                     <div className="px-4 py-8 text-center text-sm text-gray-400">
-                                        No rating categories configured for this staff member
+                                        {language === 'vi' 
+                                            ? 'Chưa cấu hình danh mục đánh giá cho nhân viên này' 
+                                            : 'No rating categories configured for this staff member'
+                                        }
                                     </div>
                                 ) : (
                                     <div className="divide-y divide-gray-100">
@@ -344,7 +398,9 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                             const key = labelToKey(cat.label)
                                             return (
                                                 <div key={cat.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 transition">
-                                                    <span className="text-sm text-gray-700 font-medium">{cat.label}</span>
+                                                    <span className="text-sm text-gray-700 font-medium">
+                                                        {translateCategoryLabel(cat.label, language)}
+                                                    </span>
                                                     <StarPicker
                                                         value={categoryRatings[key] || 0}
                                                         onChange={(v) => setCatRating(key, v)}
@@ -357,7 +413,9 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                 )}
                                 {/* Overall average bar */}
                                 <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
-                                    <span className="text-sm font-bold text-white">Overall Average</span>
+                                    <span className="text-sm font-bold text-white">
+                                        {language === 'vi' ? 'Điểm trung bình chung' : 'Overall Average'}
+                                    </span>
                                     <div className="flex items-center gap-3">
                                         <RatingStars rating={overallAvg} size="md" />
                                         <span className={`text-lg font-bold ${
@@ -377,11 +435,11 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         <span className="inline-flex items-center gap-1.5">
                                             <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                                            Strengths *
+                                            {language === 'vi' ? 'Điểm mạnh *' : 'Strengths *'}
                                         </span>
                                     </label>
                                     <textarea value={strengths} onChange={e => setStrengths(e.target.value)} rows={3}
-                                        placeholder="Key strengths observed during this period…"
+                                        placeholder={language === 'vi' ? 'Các điểm mạnh chính ghi nhận trong kỳ này…' : 'Key strengths observed during this period…'}
                                         disabled={!isEditing}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
                                 </div>
@@ -389,11 +447,11 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         <span className="inline-flex items-center gap-1.5">
                                             <TrendingDown className="w-3.5 h-3.5 text-orange-500" />
-                                            Areas for Improvement *
+                                            {language === 'vi' ? 'Điểm cần cải thiện *' : 'Areas for Improvement *'}
                                         </span>
                                     </label>
                                     <textarea value={improvements} onChange={e => setImprovements(e.target.value)} rows={3}
-                                        placeholder="Areas that need improvement…"
+                                        placeholder={language === 'vi' ? 'Các điểm cần cải thiện thêm…' : 'Areas that need improvement…'}
                                         disabled={!isEditing}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
                                 </div>
@@ -402,9 +460,11 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                             {/* ── Goals ── */}
                             {!isExitReview && !(isProbation && overallAvg < 2.5) && (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Goals for Next Period *</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {language === 'vi' ? 'Mục tiêu cho kỳ tiếp theo *' : 'Goals for Next Period *'}
+                                    </label>
                                     <textarea value={goals} onChange={e => setGoals(e.target.value)} rows={2}
-                                        placeholder="Objectives and targets for the next review period…"
+                                        placeholder={language === 'vi' ? 'Mục tiêu và chỉ tiêu cho kỳ đánh giá tiếp theo…' : 'Objectives and targets for the next review period…'}
                                         disabled={!isEditing}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
                                 </div>
@@ -412,7 +472,9 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
 
                             {/* ── Notes ── */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Ghi chú bổ sung' : 'Additional Notes'}
+                                </label>
                                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
                                     disabled={!isEditing}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
@@ -430,7 +492,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                 }}
                                     className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition flex items-center gap-1.5 border border-red-100">
                                     <Trash2 className="w-4 h-4" />
-                                    Delete
+                                    {language === 'vi' ? 'Xóa' : 'Delete'}
                                 </button>
                             )}
                         </div>
@@ -442,7 +504,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                     else onClose()
                                 }}
                                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                                    Cancel
+                                    {language === 'vi' ? 'Hủy' : 'Cancel'}
                                 </button>
                             )}
                             {(review && !isEditing) && (
@@ -451,7 +513,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                     onClose()
                                 }}
                                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                                    Close
+                                    {language === 'vi' ? 'Đóng' : 'Close'}
                                 </button>
                             )}
                             
@@ -462,7 +524,7 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                 }}
                                     className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-lg transition flex items-center gap-1.5">
                                     <Pencil className="w-4 h-4" />
-                                    Edit
+                                    {language === 'vi' ? 'Sửa' : 'Edit'}
                                 </button>
                             )}
                             {(!review || isEditing) && !readOnly && (
@@ -471,12 +533,12 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                         <button type="button" onClick={(e) => handleSubmit(e, 'reject')} disabled={saving || !isFormValid}
                                             className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2">
                                             {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <TrendingDown className="w-4 h-4" />}
-                                            Reject
+                                            {language === 'vi' ? 'Từ chối' : 'Reject'}
                                         </button>
                                         <button type="button" onClick={(e) => handleSubmit(e, 'confirm')} disabled={saving || !isFormValid || (isProbation && overallAvg < 2.5)}
                                             className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 flex items-center gap-2">
                                             {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-                                            Confirm
+                                            {language === 'vi' ? 'Xác nhận' : 'Confirm'}
                                         </button>
                                     </>
                                 ) : (
@@ -487,7 +549,12 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                         ) : (
                                             <Plus className="w-4 h-4" />
                                         )}
-                                        {review ? 'Update Review' : (isExitReview ? 'Set Inactive' : 'Create Review')}
+                                        {review 
+                                            ? (language === 'vi' ? 'Cập nhật đánh giá' : 'Update Review') 
+                                            : (isExitReview 
+                                                ? (language === 'vi' ? 'Đặt trạng thái ngưng hoạt động' : 'Set Inactive') 
+                                                : (language === 'vi' ? 'Tạo đánh giá' : 'Create Review'))
+                                        }
                                     </button>
                                 )
                             )}

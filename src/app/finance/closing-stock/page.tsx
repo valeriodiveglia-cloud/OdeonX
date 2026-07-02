@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
-import { Save, AlertCircle, ChevronLeft, ChevronRight, Download, Package } from 'lucide-react'
+import { Save, AlertCircle, Download, Package } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
+import MonthPicker from '@/components/MonthPicker'
 import CircularLoader from '@/components/CircularLoader'
 import { t } from '@/lib/i18n'
 
@@ -399,18 +400,13 @@ export default function FinanceClosingStockPage() {
                         </div>
                     </div>
 
-                    {/* Month Navigation */}
-                    <div className="grid grid-cols-3 items-center mb-4 mt-6">
-                        <button onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))} className="justify-self-start text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                            <ChevronLeft className="w-4 h-4" /> {t(language, 'Previous')}
-                        </button>
-                        <div className="justify-self-center text-lg font-bold text-slate-900">
-                            {formatMonthLabel(monthCursor, language)}
-                        </div>
-                        <button onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))} className="justify-self-end text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                            {t(language, 'Next')} <ChevronRight className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <MonthPicker
+                        value={monthInputValue}
+                        onChange={(val) => setMonthCursor(fromMonthInputValue(val))}
+                        language={language}
+                        colorClass="text-blue-600 hover:text-blue-800"
+                        className="mb-4 mt-6"
+                    />
 
                     {/* Main Table */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">

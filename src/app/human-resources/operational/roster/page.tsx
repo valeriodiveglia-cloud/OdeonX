@@ -4,21 +4,290 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'rea
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
 import {
-    ShiftType, MOCK_STAFF,
-    getShiftTypes, getRosterData, saveRosterData, rosterKey,
+    ShiftType,
+    getShiftTypes, saveShiftTypes, getRosterData, saveRosterData, rosterKey, parseRosterKey,
     formatDate, getMonday, addDays, formatWeekRange, dayName,
     generateMockRoster, getStaffCrossBranchShifts, shiftsOverlap,
     AutoScheduleTimeSlot, getAutoScheduleTimeSlots,
-    getRosterRotationSettings
+    getRosterRotationSettings, getWeekOpeningHours, freezeWeekOpeningHours, DayOpeningHours,
+    initOperationalDataFromDb, getTranslatedShiftName
 } from '@/lib/hr-operational-data'
 import CircularLoader from '@/components/CircularLoader'
-import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User, Clock, Wand2, ChevronDown } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, X, Trash2, AlertTriangle, MapPin, Globe, User, Clock, Wand2, ChevronDown, Lock, Unlock, Send, Download, FileImage, FileText, FileSpreadsheet, Star, History } from 'lucide-react'
 import RosterDepartmentView from './RosterDepartmentView'
+import html2canvas from 'html2canvas-pro'
+import jsPDF from 'jspdf'
+import ExcelJS from 'exceljs'
+import { saveAs } from 'file-saver'
+
+const parseTimeToMinutes = (t: string): number => {
+    if (!t) return 0
+    const [h, m] = t.split(':').map(Number)
+    return (h || 0) * 60 + (m || 0)
+}
+
+const cleanShiftName = (name: string): string => {
+    if (!name) return ''
+    return name
+        .replace(/\b\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\b/g, '')
+        .replace(/\s*&\s*/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+const getBlendedColor = (hex: string): string => {
+    if (!hex || !hex.startsWith('#')) return hex || 'transparent';
+    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    const fullHex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b);
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex);
+    if (!result) return hex;
+    const rVal = parseInt(result[1], 16);
+    const gVal = parseInt(result[2], 16);
+    const bVal = parseInt(result[3], 16);
+    
+    // Blend with white (255, 255, 255) using alpha 0.08235 (equivalent to '15')
+    const alpha = 0.08235;
+    const r = Math.round((1 - alpha) * 255 + alpha * rVal);
+    const g = Math.round((1 - alpha) * 255 + alpha * gVal);
+    const b = Math.round((1 - alpha) * 255 + alpha * bVal);
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+const getBlendedBorderColor = (hex: string, opacity: number = 0.1875): string => {
+    if (!hex || !hex.startsWith('#')) return hex || 'transparent';
+    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    const fullHex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b);
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex);
+    if (!result) return hex;
+    const rVal = parseInt(result[1], 16);
+    const gVal = parseInt(result[2], 16);
+    const bVal = parseInt(result[3], 16);
+    
+    const r = Math.round((1 - opacity) * 255 + opacity * rVal);
+    const g = Math.round((1 - opacity) * 255 + opacity * gVal);
+    const b = Math.round((1 - opacity) * 255 + opacity * bVal);
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+const isShiftCompatibleWithDayHours = (sh: ShiftType, dayHours: DayOpeningHours | undefined): boolean => {
+    if (sh.type !== 'work') return true; // Leave/DO are always compatible
+    if (!dayHours) return true; // fallback
+    if (!dayHours.isOpen) return false; // Closed today -> no work shifts
+    if (!dayHours.slots || dayHours.slots.length === 0) return true; // open but no hours defined -> allowed
+
+    const getPeriods = (shift: ShiftType) => {
+        const periods = []
+        if (shift.startTime && shift.endTime) {
+            const s = parseTimeToMinutes(shift.startTime)
+            let e = parseTimeToMinutes(shift.endTime)
+            if (e <= s) e += 24 * 60
+            periods.push({ start: s, end: e })
+        }
+        if (shift.startTime2 && shift.endTime2) {
+            const s = parseTimeToMinutes(shift.startTime2)
+            let e = parseTimeToMinutes(shift.endTime2)
+            if (e <= s) e += 24 * 60
+            periods.push({ start: s, end: e })
+        }
+        return periods
+    }
+
+    const sPeriods = getPeriods(sh);
+    if (sPeriods.length === 0) return true;
+
+    // Map open slots to minutes
+    const openIntervals = dayHours.slots.map(s => {
+        const start = parseTimeToMinutes(s.startTime);
+        let end = parseTimeToMinutes(s.endTime);
+        if (end <= start) end += 24 * 60;
+        return { start, end };
+    });
+
+    if (openIntervals.length === 0) return true;
+
+    const minOpenTime = Math.min(...openIntervals.map(i => i.start));
+    const maxOpenTime = Math.max(...openIntervals.map(i => i.end));
+
+    const BUFFER_BEFORE = 120; // 2 hours
+    const BUFFER_AFTER = 120;  // 2 hours
+
+    for (const period of sPeriods) {
+        // Must be within open slots limits (with buffer)
+        if (period.start < minOpenTime - BUFFER_BEFORE || period.end > maxOpenTime + BUFFER_AFTER) {
+            return false;
+        }
+        // Must have at least some overlap with open slots
+        const hasOverlap = openIntervals.some(open => {
+            return period.start < open.end && open.start < period.end;
+        });
+        if (!hasOverlap) return false;
+    }
+
+    return true;
+}
+
+const getCombinedTimeSpan = (shifts: ShiftType[], lang: 'en' | 'vi') => {
+    // If there's an all-day shift, return All Day
+    if (shifts.some(s => s.type === 'leave' && (s.allDay ?? true))) {
+        return lang === 'vi' ? 'Cả ngày' : 'All day'
+    }
+    // Gather all times
+    const parseTime = (t: string) => {
+        const [h, m] = t.split(':').map(Number)
+        return h * 60 + m
+    }
+    let minStart = Infinity
+    let maxEnd = -Infinity
+    let minStartStr = ''
+    let maxEndStr = ''
+
+    shifts.forEach(s => {
+        if (s.startTime && s.endTime) {
+            const start = parseTime(s.startTime)
+            let end = parseTime(s.endTime)
+            if (end <= start) end += 24 * 60
+
+            if (start < minStart) {
+                minStart = start
+                minStartStr = s.startTime
+            }
+            if (end > maxEnd) {
+                maxEnd = end
+                maxEndStr = s.endTime
+            }
+        }
+        if (s.startTime2 && s.endTime2) {
+            const start2 = parseTime(s.startTime2)
+            let end2 = parseTime(s.endTime2)
+            if (end2 <= start2) end2 += 24 * 60
+
+            if (start2 < minStart) {
+                minStart = start2
+                minStartStr = s.startTime2
+            }
+            if (end2 > maxEnd) {
+                maxEnd = end2
+                maxEndStr = s.endTime2
+            }
+        }
+    })
+
+    if (minStartStr && maxEndStr) {
+        return `${minStartStr}–${maxEndStr}`
+    }
+    return ''
+}
+
+const getCombinedBackground = (shifts: ShiftType[]) => {
+    if (shifts.length === 0) return ''
+    if (shifts.length === 1) return shifts[0].color + '15'
+    if (shifts.length === 2) {
+        return `linear-gradient(135deg, ${shifts[0].color}15 50%, ${shifts[1].color}15 50%)`
+    }
+    return `linear-gradient(135deg, ${shifts[0].color}15 33%, ${shifts[1].color}15 33% 66%, ${shifts[2].color}15 66%)`
+}
+
+function getRosterDiffText(
+    prevSnapshot: Record<string, string> | null, 
+    currSnapshot: Record<string, string>, 
+    shifts: ShiftType[],
+    staff: any[],
+    lang: 'en' | 'vi'
+): { staffName: string; dateStr: string; changeType: 'add' | 'remove' | 'modify'; text: string }[] {
+    if (!prevSnapshot) {
+        const additions: any[] = []
+        Object.entries(currSnapshot).forEach(([key, currVal]) => {
+            if (!currVal) return
+            const parsed = parseRosterKey(key)
+            if (!parsed) return
+            
+            const staffMember = staff.find(s => s.id === parsed.staffId)
+            const staffName = staffMember ? staffMember.name : `Staff (${parsed.staffId})`
+            
+            const shiftNames = currVal.split(',').map(id => {
+                const sType = shifts.find(s => s.id === id)
+                return sType ? getTranslatedShiftName(sType.code, sType.name, lang) : id
+            }).join(', ')
+
+            additions.push({
+                staffName,
+                dateStr: parsed.date,
+                changeType: 'add',
+                text: lang === 'vi' 
+                    ? `Thêm phân công ca: ${shiftNames}`
+                    : `Added assignment: ${shiftNames}`
+            })
+        })
+        return additions.sort((a, b) => a.staffName.localeCompare(b.staffName) || a.dateStr.localeCompare(b.dateStr))
+    }
+
+    const diffs: any[] = []
+    const allKeys = Array.from(new Set([
+        ...Object.keys(prevSnapshot),
+        ...Object.keys(currSnapshot)
+    ]))
+
+    allKeys.forEach(key => {
+        const prevVal = prevSnapshot[key] || ''
+        const currVal = currSnapshot[key] || ''
+
+        if (prevVal === currVal) return
+
+        const parsed = parseRosterKey(key)
+        if (!parsed) return
+
+        const staffMember = staff.find(s => s.id === parsed.staffId)
+        const staffName = staffMember ? staffMember.name : `Staff (${parsed.staffId})`
+
+        const getShiftsText = (val: string) => {
+            if (!val) return ''
+            return val.split(',').map(id => {
+                const sType = shifts.find(s => s.id === id)
+                return sType ? getTranslatedShiftName(sType.code, sType.name, lang) : id
+            }).join(', ')
+        }
+
+        const prevShiftsText = getShiftsText(prevVal)
+        const currShiftsText = getShiftsText(currVal)
+
+        if (!prevVal && currVal) {
+            diffs.push({
+                staffName,
+                dateStr: parsed.date,
+                changeType: 'add',
+                text: lang === 'vi'
+                    ? `Thêm phân công ca: ${currShiftsText}`
+                    : `Added assignment: ${currShiftsText}`
+            })
+        } else if (prevVal && !currVal) {
+            diffs.push({
+                staffName,
+                dateStr: parsed.date,
+                changeType: 'remove',
+                text: lang === 'vi'
+                    ? `Xóa phân công ca: ${prevShiftsText}`
+                    : `Removed assignment: ${prevShiftsText}`
+            })
+        } else {
+            diffs.push({
+                staffName,
+                dateStr: parsed.date,
+                changeType: 'modify',
+                text: lang === 'vi'
+                    ? `Thay đổi từ [${prevShiftsText}] thành [${currShiftsText}]`
+                    : `Changed from [${prevShiftsText}] to [${currShiftsText}]`
+            })
+        }
+    })
+
+    return diffs.sort((a, b) => a.staffName.localeCompare(b.staffName) || a.dateStr.localeCompare(b.dateStr))
+}
 
 export default function RosterPage() {
     const { language } = useSettings()
     const [loading, setLoading] = useState(true)
-    const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
+    const [isLoadingOperationalData, setIsLoadingOperationalData] = useState(true)
+    const [branches, setBranches] = useState<{ id: string; name: string; city?: string | null }[]>([])
     const [selectedBranch, setSelectedBranch] = useState('')
     const [weekStart, setWeekStart] = useState(getMonday(new Date()))
     const [activeView, setActiveView] = useState<'weekly' | 'daily'>('weekly')
@@ -34,13 +303,672 @@ export default function RosterPage() {
     const [dayDetailDate, setDayDetailDate] = useState<string | null>(null)
     const [borrowTab, setBorrowTab] = useState<'internal' | 'outsourced'>('internal')
     const [isAutoMenuOpen, setIsAutoMenuOpen] = useState(false)
+    const [draggingShift, setDraggingShift] = useState<{
+        staffId: string;
+        date: string;
+        shiftId: string;
+        handle: 'left' | 'right' | 'move';
+        startX: number;
+        origStartHour: number;
+        origEndHour: number;
+        containerWidth: number;
+    } | null>(null)
+    const [dragTempHours, setDragTempHours] = useState<{ start: number; end: number } | null>(null)
     const autoMenuRef = useRef<HTMLDivElement>(null)
     const modalRef = useRef<HTMLDivElement>(null)
 
-    // Load branches and staff
+    // Note and holiday states
+    const [holidays, setHolidays] = useState<Record<string, string>>({})
+    const [dayNotes, setDayNotes] = useState<Record<string, string>>({})
+    const [editingDayConfig, setEditingDayConfig] = useState<{ date: string; holidayName: string; isHoliday: boolean; notes: string } | null>(null)
+    const unpublishMenuRef = useRef<HTMLDivElement>(null)
+    const exportMenuRef = useRef<HTMLDivElement>(null)
+
+    const [publishedRecord, setPublishedRecord] = useState<{ roster_snapshot: Record<string, string>; shifts_snapshot: ShiftType[] } | null>(null)
+    const [isRosterPublished, setIsRosterPublished] = useState(false)
+    const [isPublishingLoading, setIsPublishingLoading] = useState(false)
+    const [isUnpublishMenuOpen, setIsUnpublishMenuOpen] = useState(false)
+    const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
+
+    // Publish History states
+    const [publishLogs, setPublishLogs] = useState<any[]>([])
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false)
+    const [selectedLogId, setSelectedLogId] = useState<string | null>(null)
+
+    const effectiveRoster = useMemo(() => {
+        if (isRosterPublished && publishedRecord) {
+            return publishedRecord.roster_snapshot
+        }
+        return roster
+    }, [isRosterPublished, publishedRecord, roster])
+
+    const effectiveShiftTypes = useMemo(() => {
+        if (isRosterPublished && publishedRecord) {
+            return publishedRecord.shifts_snapshot
+        }
+        return shiftTypes
+    }, [isRosterPublished, publishedRecord, shiftTypes])
+
+    const loadPublicationStatus = useCallback(async () => {
+        if (!selectedBranch) return
+        const weekStartStr = formatDate(weekStart)
+        try {
+            const { data, error } = await supabase
+                .from('hr_published_rosters')
+                .select('roster_snapshot, shifts_snapshot')
+                .eq('branch_id', selectedBranch)
+                .eq('week_start', weekStartStr)
+                .maybeSingle()
+
+            if (error) {
+                console.error('Error loading publication status:', error)
+                return
+            }
+
+            if (data) {
+                setPublishedRecord(data as any)
+                setIsRosterPublished(true)
+            } else {
+                setPublishedRecord(null)
+                setIsRosterPublished(false)
+            }
+        } catch (err) {
+            console.error('Error in loadPublicationStatus:', err)
+        }
+    }, [selectedBranch, weekStart])
+
+    const loadPublishLogs = useCallback(async () => {
+        if (!selectedBranch) return
+        const weekStartStr = formatDate(weekStart)
+        try {
+            const { data, error } = await supabase
+                .from('hr_roster_publish_logs')
+                .select('*')
+                .eq('branch_id', selectedBranch)
+                .eq('week_start', weekStartStr)
+                .order('published_at', { ascending: false })
+
+            if (error) {
+                console.error('Error loading logs:', error)
+                return
+            }
+
+            if (data && data.length > 0) {
+                const userIds = Array.from(new Set(data.map(d => d.published_by).filter(Boolean)))
+                if (userIds.length > 0) {
+                    const { data: accounts } = await supabase
+                        .from('app_accounts')
+                        .select('user_id, name, email')
+                        .in('user_id', userIds)
+                    
+                    const accountsMap = new Map(accounts?.map(a => [a.user_id, a]) || [])
+                    const enriched = data.map(log => ({
+                        ...log,
+                        user: log.published_by ? accountsMap.get(log.published_by) : null
+                    }))
+                    setPublishLogs(enriched)
+                } else {
+                    setPublishLogs(data.map(log => ({ ...log, user: null })))
+                }
+            } else {
+                setPublishLogs([])
+            }
+        } catch (err) {
+            console.error('Error in loadPublishLogs:', err)
+        }
+    }, [selectedBranch, weekStart])
+
+    useEffect(() => {
+        loadPublicationStatus()
+        loadPublishLogs()
+    }, [loadPublicationStatus, loadPublishLogs])
+
+    const handleSaveDayConfig = async () => {
+        if (!editingDayConfig) return
+        const { date, holidayName, isHoliday, notes } = editingDayConfig
+
+        // 1. Save or delete Public Holiday (global)
+        if (isHoliday && holidayName.trim()) {
+            await supabase.from('hr_public_holidays').upsert({ date, name: holidayName })
+            setHolidays(prev => ({ ...prev, [date]: holidayName }))
+        } else {
+            await supabase.from('hr_public_holidays').delete().eq('date', date)
+            setHolidays(prev => {
+                const next = { ...prev }
+                delete next[date]
+                return next
+            })
+        }
+
+        // 2. Save or delete Daily Note (branch-specific)
+        if (notes.trim()) {
+            await supabase.from('hr_roster_day_notes').upsert({ branch_id: selectedBranch, date, notes })
+            setDayNotes(prev => ({ ...prev, [date]: notes }))
+        } else {
+            await supabase.from('hr_roster_day_notes').delete().eq('branch_id', selectedBranch).eq('date', date)
+            setDayNotes(prev => {
+                const next = { ...prev }
+                delete next[date]
+                return next
+            })
+        }
+
+        setEditingDayConfig(null)
+    }
+
+    const handlePublishRoster = async () => {
+        if (!selectedBranch) return
+        setIsPublishingLoading(true)
+        const weekStartStr = formatDate(weekStart)
+        try {
+            // 1. Publish active roster record
+            const { error } = await supabase
+                .from('hr_published_rosters')
+                .insert({
+                    branch_id: selectedBranch,
+                    week_start: weekStartStr,
+                    roster_snapshot: roster,
+                    shifts_snapshot: shiftTypes,
+                    published_at: new Date().toISOString()
+                })
+
+            if (error) {
+                console.error('Error publishing roster:', error)
+                alert('Failed to publish roster: ' + error.message)
+                return
+            }
+
+            // 2. Insert publish log
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                await supabase.from('hr_roster_publish_logs').insert({
+                    branch_id: selectedBranch,
+                    week_start: weekStartStr,
+                    published_at: new Date().toISOString(),
+                    published_by: user?.id || null,
+                    action: 'publish',
+                    roster_snapshot: roster,
+                    shifts_snapshot: shiftTypes
+                })
+            } catch (logErr) {
+                console.error('Error writing publish log:', logErr)
+            }
+
+            await loadPublicationStatus()
+            await loadPublishLogs()
+        } catch (err) {
+            console.error('Error in handlePublishRoster:', err)
+        } finally {
+            setIsPublishingLoading(false)
+        }
+    }
+
+    const handleUnpublishRoster = async () => {
+        if (!selectedBranch) return
+        setIsPublishingLoading(true)
+        const weekStartStr = formatDate(weekStart)
+        try {
+            // 1. Insert unlock log using current snapshot before deletion
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                const currentRosterSnapshot = publishedRecord?.roster_snapshot || roster
+                const currentShiftsSnapshot = publishedRecord?.shifts_snapshot || shiftTypes
+                
+                await supabase.from('hr_roster_publish_logs').insert({
+                    branch_id: selectedBranch,
+                    week_start: weekStartStr,
+                    published_at: new Date().toISOString(),
+                    published_by: user?.id || null,
+                    action: 'unlock',
+                    roster_snapshot: currentRosterSnapshot,
+                    shifts_snapshot: currentShiftsSnapshot
+                })
+            } catch (logErr) {
+                console.error('Error writing unlock log:', logErr)
+            }
+
+            // 2. Delete published active record to unlock
+            const { error } = await supabase
+                .from('hr_published_rosters')
+                .delete()
+                .eq('branch_id', selectedBranch)
+                .eq('week_start', weekStartStr)
+
+            if (error) {
+                console.error('Error unpublishing roster:', error)
+                alert('Failed to unlock roster: ' + error.message)
+                return
+            }
+
+            await loadPublicationStatus()
+            await loadPublishLogs()
+        } catch (err) {
+            console.error('Error in handleUnpublishRoster:', err)
+        } finally {
+            setIsPublishingLoading(false)
+        }
+    }
+
+    const handleExportPng = async () => {
+        const table = document.getElementById(activeView === 'weekly' ? 'weekly-roster-table' : 'daily-roster-timeline')
+        if (!table) return
+
+        // 1. Create a premium header for export
+        const header = document.createElement('div')
+        header.className = 'p-6 bg-slate-900 border-b border-slate-800 text-left'
+        header.id = 'temp-export-header'
+        
+        const branchName = branches.find(b => b.id === selectedBranch)?.name || 'Roster'
+        const weekRange = formatWeekRange(weekStart, language)
+        header.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-xl font-bold text-white tracking-tight">${language === 'vi' ? 'BẢNG PHÂN CA LÀM VIỆC' : 'STAFF WORK ROSTER'}</h1>
+                    <p class="text-sm text-slate-400 mt-1">${branchName} • ${weekRange}</p>
+                </div>
+                <div class="text-right text-xs text-slate-500">
+                    ${language === 'vi' ? 'Ngày xuất' : 'Exported on'}: ${new Date().toLocaleDateString()}
+                </div>
+            </div>
+        `
+        table.insertBefore(header, table.firstChild)
+
+        // 2. Temporarily set widths/overflows to make sure html2canvas captures everything
+        const originalStyle = table.getAttribute('style') || ''
+        table.setAttribute('style', originalStyle + '; width: 1400px !important; overflow: visible !important; height: auto !important;')
+
+        // 3. Inject styling for clean backgrounds (zebra striping and border separator)
+        const styleEl = document.createElement('style')
+        styleEl.id = 'temp-export-styles'
+        styleEl.innerHTML = `
+            #weekly-roster-table {
+                background-color: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 12px !important;
+            }
+            #weekly-roster-table th {
+                background-color: #f8fafc !important;
+                color: #475569 !important;
+                border-bottom: 2px solid #cbd5e1 !important;
+                font-weight: 700 !important;
+            }
+            #weekly-roster-table td {
+                border-bottom: 1px solid #e2e8f0 !important;
+            }
+            #weekly-roster-table tr[data-row-odd="false"] td {
+                background-color: #ffffff !important;
+            }
+            #weekly-roster-table tr[data-row-odd="true"] td {
+                background-color: #f0f9ff !important;
+            }
+            /* Bold vertical borders for days column separation */
+            #weekly-roster-table td:nth-child(even), 
+            #weekly-roster-table th:nth-child(even) {
+                border-right: 1.5px dashed #cbd5e1 !important;
+            }
+            #weekly-roster-table td:nth-child(odd), 
+            #weekly-roster-table th:nth-child(odd) {
+                border-right: 1.5px solid #e2e8f0 !important;
+            }
+            /* Preserve specific double border for column 1 */
+            #weekly-roster-table td:first-child, 
+            #weekly-roster-table th:first-child {
+                border-right: 3px double #94a3b8 !important;
+            }
+            #weekly-roster-table tr:hover td {
+                background-color: transparent !important;
+            }
+        `
+        document.head.appendChild(styleEl)
+
+        // 4. Solidify transparent background colors of shifts for printing
+        const shiftDivs: { el: HTMLElement; origBg: string; origBorder: string }[] = []
+        table.querySelectorAll('div').forEach((el: any) => {
+            const bg = el.style.backgroundColor
+            const border = el.style.borderColor
+            if (bg && (bg.includes('rgba') || bg.includes('rgb') || bg.includes('15'))) {
+                // Determine underlying cell background color to calculate correct solid blending
+                let isOddRow = false
+                let parent = el.parentElement
+                while (parent) {
+                    if (parent.tagName === 'TR') {
+                        isOddRow = parent.className.includes('bg-[#e0f2fe]/40')
+                        break
+                    }
+                    parent = parent.parentElement
+                }
+                const bgR = isOddRow ? 240 : 255
+                const bgG = isOddRow ? 249 : 255
+                const bgB = isOddRow ? 255 : 255
+
+                let baseColor = '#3b82f6'
+                const spanWithColor = el.querySelector('span')
+                if (spanWithColor && spanWithColor.style.color) {
+                    baseColor = spanWithColor.style.color
+                }
+                
+                const hexToRgb = (hex: string) => {
+                    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i
+                    const fullHex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b)
+                    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex)
+                    return result ? {
+                        r: parseInt(result[1], 16),
+                        g: parseInt(result[2], 16),
+                        b: parseInt(result[3], 16)
+                    } : { r: 59, g: 130, b: 246 }
+                }
+                
+                const c = hexToRgb(baseColor)
+                const alpha = 0.08235
+                const r = Math.round((1 - alpha) * bgR + alpha * c.r)
+                const g = Math.round((1 - alpha) * bgG + alpha * c.g)
+                const b = Math.round((1 - alpha) * bgB + alpha * c.b)
+                
+                shiftDivs.push({ el, origBg: bg, origBorder: border })
+                el.style.backgroundColor = `rgb(${r}, ${g}, ${b})`
+                el.style.borderColor = baseColor + '60'
+            }
+        })
+
+        // Capture canvas
+        try {
+            const canvas = await html2canvas(table, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                windowWidth: 1400
+            })
+
+            // Restore original styles
+            table.setAttribute('style', originalStyle)
+            header.remove()
+            styleEl.remove()
+            shiftDivs.forEach(item => {
+                item.el.style.backgroundColor = item.origBg
+                item.el.style.borderColor = item.origBorder
+            })
+
+            const imgData = canvas.toDataURL('image/png')
+            const link = document.createElement('a')
+            link.href = imgData
+            link.download = `roster-${branchName}-${formatWeekRange(weekStart, language).replace(/\s+/g, '_')}.png`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+        } catch (err) {
+            console.error('Error generating image:', err)
+            table.setAttribute('style', originalStyle)
+            header.remove()
+            styleEl.remove()
+            shiftDivs.forEach(item => {
+                item.el.style.backgroundColor = item.origBg
+                item.el.style.borderColor = item.origBorder
+            })
+        }
+    }
+
+    const handleExportPdf = async () => {
+        const table = document.getElementById(activeView === 'weekly' ? 'weekly-roster-table' : 'daily-roster-timeline')
+        if (!table) return
+
+        // 1. Create a premium header for export
+        const header = document.createElement('div')
+        header.className = 'p-6 bg-slate-900 border-b border-slate-800 text-left'
+        header.id = 'temp-export-header'
+        
+        const branchName = branches.find(b => b.id === selectedBranch)?.name || 'Roster'
+        const weekRange = formatWeekRange(weekStart, language)
+        header.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-xl font-bold text-white tracking-tight">${language === 'vi' ? 'BẢNG PHÂN CA LÀM VIỆC' : 'STAFF WORK ROSTER'}</h1>
+                    <p class="text-sm text-slate-400 mt-1">${branchName} • ${weekRange}</p>
+                </div>
+                <div class="text-right text-xs text-slate-500">
+                    ${language === 'vi' ? 'Ngày xuất' : 'Exported on'}: ${new Date().toLocaleDateString()}
+                </div>
+            </div>
+        `
+        table.insertBefore(header, table.firstChild)
+
+        // 2. Temporarily set widths/overflows to make sure html2canvas captures everything
+        const originalStyle = table.getAttribute('style') || ''
+        table.setAttribute('style', originalStyle + '; width: 1400px !important; overflow: visible !important; height: auto !important;')
+
+        // 3. Inject styling for clean backgrounds (zebra striping and border separator)
+        const styleEl = document.createElement('style')
+        styleEl.id = 'temp-export-styles'
+        styleEl.innerHTML = `
+            #weekly-roster-table {
+                background-color: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 12px !important;
+            }
+            #weekly-roster-table th {
+                background-color: #f8fafc !important;
+                color: #475569 !important;
+                border-bottom: 2px solid #cbd5e1 !important;
+                font-weight: 700 !important;
+            }
+            #weekly-roster-table td {
+                border-bottom: 1px solid #e2e8f0 !important;
+            }
+            #weekly-roster-table tr[data-row-odd="false"] td {
+                background-color: #ffffff !important;
+            }
+            #weekly-roster-table tr[data-row-odd="true"] td {
+                background-color: #f0f9ff !important;
+            }
+            /* Bold vertical borders for days column separation */
+            #weekly-roster-table td:nth-child(even), 
+            #weekly-roster-table th:nth-child(even) {
+                border-right: 1.5px dashed #cbd5e1 !important;
+            }
+            #weekly-roster-table td:nth-child(odd), 
+            #weekly-roster-table th:nth-child(odd) {
+                border-right: 1.5px solid #e2e8f0 !important;
+            }
+            /* Preserve specific double border for column 1 */
+            #weekly-roster-table td:first-child, 
+            #weekly-roster-table th:first-child {
+                border-right: 3px double #94a3b8 !important;
+            }
+            #weekly-roster-table tr:hover td {
+                background-color: transparent !important;
+            }
+        `
+        document.head.appendChild(styleEl)
+
+        // 4. Solidify transparent background colors of shifts for printing
+        const shiftDivs: { el: HTMLElement; origBg: string; origBorder: string }[] = []
+        table.querySelectorAll('div').forEach((el: any) => {
+            const bg = el.style.backgroundColor
+            const border = el.style.borderColor
+            if (bg && (bg.includes('rgba') || bg.includes('rgb') || bg.includes('15'))) {
+                // Determine underlying cell background color to calculate correct solid blending
+                let isOddRow = false
+                let parent = el.parentElement
+                while (parent) {
+                    if (parent.tagName === 'TR') {
+                        isOddRow = parent.className.includes('bg-[#e0f2fe]/40')
+                        break
+                    }
+                    parent = parent.parentElement
+                }
+                const bgR = isOddRow ? 240 : 255
+                const bgG = isOddRow ? 249 : 255
+                const bgB = isOddRow ? 255 : 255
+
+                let baseColor = '#3b82f6'
+                const spanWithColor = el.querySelector('span')
+                if (spanWithColor && spanWithColor.style.color) {
+                    baseColor = spanWithColor.style.color
+                }
+                
+                const hexToRgb = (hex: string) => {
+                    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i
+                    const fullHex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b)
+                    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex)
+                    return result ? {
+                        r: parseInt(result[1], 16),
+                        g: parseInt(result[2], 16),
+                        b: parseInt(result[3], 16)
+                    } : { r: 59, g: 130, b: 246 }
+                }
+                
+                const c = hexToRgb(baseColor)
+                const alpha = 0.08235
+                const r = Math.round((1 - alpha) * bgR + alpha * c.r)
+                const g = Math.round((1 - alpha) * bgG + alpha * c.g)
+                const b = Math.round((1 - alpha) * bgB + alpha * c.b)
+                
+                shiftDivs.push({ el, origBg: bg, origBorder: border })
+                el.style.backgroundColor = `rgb(${r}, ${g}, ${b})`
+                el.style.borderColor = baseColor + '60'
+            }
+        })
+
+        try {
+            const canvas = await html2canvas(table, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                windowWidth: 1400
+            })
+
+            // Restore original styles
+            table.setAttribute('style', originalStyle)
+            header.remove()
+            styleEl.remove()
+            shiftDivs.forEach(item => {
+                item.el.style.backgroundColor = item.origBg
+                item.el.style.borderColor = item.origBorder
+            })
+
+            const imgData = canvas.toDataURL('image/png')
+            const pdf = new jsPDF('l', 'mm', 'a4')
+            const imgWidth = 297
+            const pageHeight = 210
+            const imgHeight = (canvas.height * imgWidth) / canvas.width
+            const yPos = imgHeight < pageHeight ? (pageHeight - imgHeight) / 2 : 0
+            
+            pdf.addImage(imgData, 'PNG', 0, yPos, imgWidth, imgHeight)
+            pdf.save(`roster-${branchName}-${formatWeekRange(weekStart, language).replace(/\s+/g, '_')}.pdf`)
+        } catch (err) {
+            console.error('Error generating PDF:', err)
+            table.setAttribute('style', originalStyle)
+            header.remove()
+            styleEl.remove()
+            shiftDivs.forEach(item => {
+                item.el.style.backgroundColor = item.origBg
+                item.el.style.borderColor = item.origBorder
+            })
+        }
+    }
+
+    const handleExportExcel = async () => {
+        const branchName = branches.find(b => b.id === selectedBranch)?.name || 'Roster'
+        const workbook = new ExcelJS.Workbook()
+        const worksheet = workbook.addWorksheet('Roster')
+
+        worksheet.addRow([`${language === 'vi' ? 'BẢNG PHÂN CA' : 'WORK ROSTER'} - ${branchName}`])
+        worksheet.addRow([formatWeekRange(weekStart, language)])
+        worksheet.addRow([])
+
+        worksheet.getCell('A1').font = { size: 16, bold: true, color: { argb: 'FF1E293B' } }
+        worksheet.getCell('A2').font = { size: 11, italic: true, color: { argb: 'FF64748B' } }
+
+        const headers = [
+            language === 'vi' ? 'Bộ phận' : 'Department',
+            language === 'vi' ? 'Nhân viên' : 'Staff Member',
+            language === 'vi' ? 'Vai trò' : 'Role',
+            ...weekDays.map(d => formatDate(d)),
+            language === 'vi' ? 'Tổng giờ' : 'Total Hours'
+        ]
+        
+        const headerRow = worksheet.addRow(headers)
+        headerRow.eachCell(cell => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF1E3A8A' }
+            }
+            cell.font = {
+                bold: true,
+                color: { argb: 'FFFFFFFF' },
+                size: 11
+            }
+            cell.alignment = { horizontal: 'center', vertical: 'middle' }
+            cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'medium' },
+                right: { style: 'thin' }
+            }
+        })
+
+        displayedStaff.forEach(staff => {
+            const rowData = [
+                staff.department,
+                staff.name,
+                staff.role,
+                ...weekDays.map(day => {
+                    const sh = getCellShift(staff.id, formatDate(day))
+                    if (!sh) return ''
+                    return sh.type === 'work'
+                        ? `${sh.code} (${sh.startTime}-${sh.endTime}${sh.startTime2 ? `, ${sh.startTime2}-${sh.endTime2}` : ''})`
+                        : sh.name
+                }),
+                getWeeklyHours(staff.id)
+            ]
+            const addedRow = worksheet.addRow(rowData)
+            
+            weekDays.forEach((day, dayIdx) => {
+                const colIndex = 4 + dayIdx
+                const sh = getCellShift(staff.id, formatDate(day))
+                const cell = addedRow.getCell(colIndex)
+                
+                if (sh) {
+                    const cleanColor = sh.color.replace('#', '')
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF' + cleanColor }
+                    }
+                    cell.font = {
+                        bold: true,
+                        color: { argb: 'FFFFFFFF' }
+                    }
+                    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+                }
+            })
+
+            addedRow.getCell(1).font = { italic: true }
+            addedRow.getCell(headers.length).font = { bold: true }
+            addedRow.getCell(headers.length).alignment = { horizontal: 'right' }
+        })
+
+        worksheet.columns.forEach((col, idx) => {
+            if (idx === 0) col.width = 15
+            else if (idx === 1) col.width = 25
+            else if (idx === 2) col.width = 20
+            else if (idx >= 3 && idx <= 9) col.width = 18
+            else col.width = 12
+        })
+
+        const buffer = await workbook.xlsx.writeBuffer()
+        saveAs(new Blob([buffer]), `roster-${branchName}-${formatWeekRange(weekStart, language).replace(/\s+/g, '_')}.xlsx`)
+    }
+
+    // Load branches, staff and Supabase operational data on mount
     useEffect(() => {
         ;(async () => {
-            const { data: bData } = await supabase.from('provider_branches').select('id, name').order('name')
+            setIsLoadingOperationalData(true)
+            await initOperationalDataFromDb()
+
+            const { data: bData } = await supabase.from('provider_branches').select('id, name, city').order('name')
             if (bData && bData.length > 0) {
                 setBranches(bData)
                 setSelectedBranch(bData[0].id)
@@ -73,18 +1001,50 @@ export default function RosterPage() {
                 setStaffList(formatted)
             }
             
+            const { data: hData } = await supabase.from('hr_public_holidays').select('*')
+            if (hData) {
+                const mapping: Record<string, string> = {}
+                hData.forEach((h: any) => {
+                    mapping[h.date] = h.name
+                })
+                setHolidays(mapping)
+            }
+            
+            setIsLoadingOperationalData(false)
             setLoading(false)
         })()
     }, [])
 
-    // Load shift types & roster whenever branch or week changes
+    // Load shift types & roster whenever branch, week or DB data loading state changes
     useEffect(() => {
+        if (isLoadingOperationalData) return
         if (!selectedBranch || branches.length === 0) return
         const types = getShiftTypes()
-        setShiftTypes(types)
+        
+        let xsCount = 0
+        let xCount = 0
+        const normalizedTypes = types.map(st => {
+            if (st.isCustom) {
+                const isSplit = !!(st.startTime2 && st.endTime2)
+                if (isSplit) {
+                    xsCount++
+                    return { ...st, code: `XS${xsCount}` }
+                } else {
+                    xCount++
+                    return { ...st, code: `X${xCount}` }
+                }
+            }
+            return st
+        })
+
+        const hasChanges = JSON.stringify(types) !== JSON.stringify(normalizedTypes)
+        if (hasChanges) {
+            saveShiftTypes(normalizedTypes)
+        }
+        setShiftTypes(normalizedTypes)
 
         // Clear stale mock data when generator version changes
-        const MOCK_VERSION = 'v8-empty'
+        const MOCK_VERSION = 'v9-pt'
         const versionKey = 'hr_operational_roster_version'
         if (typeof window !== 'undefined' && localStorage.getItem(versionKey) !== MOCK_VERSION) {
             localStorage.removeItem('hr_operational_roster')
@@ -96,13 +1056,36 @@ export default function RosterPage() {
         setRoster(saved)
         setBorrowedStaffIds([])
         setAutoScheduleTimeSlots(getAutoScheduleTimeSlots())
-    }, [selectedBranch, weekStart, branches])
 
-    // Click outside listener for the auto-scheduling dropdown menu
+        ;(async () => {
+            if (!selectedBranch) return
+            const { data: nData } = await supabase
+                .from('hr_roster_day_notes')
+                .select('*')
+                .eq('branch_id', selectedBranch)
+            if (nData) {
+                const mapping: Record<string, string> = {}
+                nData.forEach((row: any) => {
+                    mapping[row.date] = row.notes
+                })
+                setDayNotes(mapping)
+            } else {
+                setDayNotes({})
+            }
+        })()
+    }, [selectedBranch, weekStart, branches, isLoadingOperationalData])
+
+    // Click outside listener for all dropdown menus
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (autoMenuRef.current && !autoMenuRef.current.contains(event.target as Node)) {
                 setIsAutoMenuOpen(false)
+            }
+            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+                setIsExportMenuOpen(false)
+            }
+            if (unpublishMenuRef.current && !unpublishMenuRef.current.contains(event.target as Node)) {
+                setIsUnpublishMenuOpen(false)
             }
         }
         document.addEventListener('mousedown', handleClickOutside)
@@ -116,12 +1099,146 @@ export default function RosterPage() {
         if (view === 'weekly') {
             setSelectedDayIndex(7)
         } else {
-            setSelectedDayIndex(0)
+            const today = new Date()
+            const todayStr = formatDate(today)
+            const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+            const todayIdx = days.findIndex(day => formatDate(day) === todayStr)
+            setSelectedDayIndex(todayIdx !== -1 ? (7 + todayIdx) : 7)
         }
     }
 
     const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
     const todayStr = formatDate(new Date())
+
+    const weekStartStr = formatDate(weekStart)
+    const weekOpeningHours = useMemo(() => {
+        if (!selectedBranch) return null
+        return getWeekOpeningHours(selectedBranch, weekStartStr, roster)
+    }, [selectedBranch, weekStartStr, roster])
+
+    const getDayHoursText = useCallback((dayIdx: number) => {
+        if (!weekOpeningHours) return ''
+        const hours = weekOpeningHours[dayIdx]
+        if (!hours) return ''
+        if (!hours.isOpen) return language === 'vi' ? 'Đóng cửa' : 'Closed'
+        if (hours.slots.length === 0) return ''
+        return hours.slots.map(s => `${s.startTime}-${s.endTime}`).join(' / ')
+    }, [weekOpeningHours, language])
+
+    const saveRosterAndFreeze = useCallback((updatedRoster: Record<string, string>) => {
+        let finalRoster = updatedRoster;
+        if (selectedBranch && weekStart) {
+            finalRoster = freezeWeekOpeningHours(selectedBranch, formatDate(weekStart), finalRoster);
+        }
+        setRoster(finalRoster);
+        saveRosterData(finalRoster);
+    }, [selectedBranch, weekStart])
+
+    const findClosestShiftType = useCallback((startHour: number, endHour: number): ShiftType | null => {
+        let bestShift: ShiftType | null = null
+        let minDiff = Infinity
+        shiftTypes.filter(s => s.type === 'work').forEach(st => {
+            const stStart = parseTimeToMinutes(st.startTime) / 60
+            const stEnd = parseTimeToMinutes(st.endTime) / 60
+            const diff = Math.abs(stStart - startHour) + Math.abs(stEnd - endHour)
+            if (diff < minDiff) {
+                minDiff = diff
+                bestShift = st
+            }
+        })
+        return bestShift
+    }, [shiftTypes])
+
+    const replaceShift = useCallback((staffId: string, date: string, oldShiftId: string, newShiftId: string) => {
+        const key = rosterKey(selectedBranch, staffId, date)
+        const val = roster[key]
+        if (!val) return
+        const newRoster = { ...roster }
+        const updatedShifts = val.split(',').map(id => id === oldShiftId ? newShiftId : id)
+        const uniqueShifts = Array.from(new Set(updatedShifts)).join(',')
+        newRoster[key] = uniqueShifts
+        saveRosterAndFreeze(newRoster)
+    }, [selectedBranch, roster, saveRosterAndFreeze])
+
+    useEffect(() => {
+        if (!draggingShift) return
+
+        const TIMELINE_START = 6
+        const TIMELINE_END = 26
+        const TIMELINE_HOURS = TIMELINE_END - TIMELINE_START
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const deltaX = e.clientX - draggingShift.startX
+            const pixelsPerHour = draggingShift.containerWidth / TIMELINE_HOURS
+            const deltaHours = deltaX / pixelsPerHour
+
+            let newStart = draggingShift.origStartHour
+            let newEnd = draggingShift.origEndHour
+
+            if (draggingShift.handle === 'left') {
+                newStart = Math.max(TIMELINE_START, Math.min(draggingShift.origEndHour - 0.5, draggingShift.origStartHour + deltaHours))
+                newStart = Math.round(newStart * 2) / 2
+            } else if (draggingShift.handle === 'right') {
+                newEnd = Math.max(draggingShift.origStartHour + 0.5, Math.min(TIMELINE_END, draggingShift.origEndHour + deltaHours))
+                newEnd = Math.round(newEnd * 2) / 2
+            } else if (draggingShift.handle === 'move') {
+                const duration = draggingShift.origEndHour - draggingShift.origStartHour
+                newStart = Math.max(TIMELINE_START, Math.min(TIMELINE_END - duration, draggingShift.origStartHour + deltaHours))
+                newStart = Math.round(newStart * 2) / 2
+                newEnd = newStart + duration
+            }
+
+            setDragTempHours({ start: newStart, end: newEnd })
+        }
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (e.touches.length === 0) return
+            const touch = e.touches[0]
+            const deltaX = touch.clientX - draggingShift.startX
+            const pixelsPerHour = draggingShift.containerWidth / TIMELINE_HOURS
+            const deltaHours = deltaX / pixelsPerHour
+
+            let newStart = draggingShift.origStartHour
+            let newEnd = draggingShift.origEndHour
+
+            if (draggingShift.handle === 'left') {
+                newStart = Math.max(TIMELINE_START, Math.min(draggingShift.origEndHour - 0.5, draggingShift.origStartHour + deltaHours))
+                newStart = Math.round(newStart * 2) / 2
+            } else if (draggingShift.handle === 'right') {
+                newEnd = Math.max(draggingShift.origStartHour + 0.5, Math.min(TIMELINE_END, draggingShift.origEndHour + deltaHours))
+                newEnd = Math.round(newEnd * 2) / 2
+            } else if (draggingShift.handle === 'move') {
+                const duration = draggingShift.origEndHour - draggingShift.origStartHour
+                newStart = Math.max(TIMELINE_START, Math.min(TIMELINE_END - duration, draggingShift.origStartHour + deltaHours))
+                newStart = Math.round(newStart * 2) / 2
+                newEnd = newStart + duration
+            }
+
+            setDragTempHours({ start: newStart, end: newEnd })
+        }
+
+        const handleMouseUp = () => {
+            if (dragTempHours) {
+                const closest = findClosestShiftType(dragTempHours.start, dragTempHours.end)
+                if (closest) {
+                    replaceShift(draggingShift.staffId, draggingShift.date, draggingShift.shiftId, closest.id)
+                }
+            }
+            setDraggingShift(null)
+            setDragTempHours(null)
+        }
+
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', handleMouseUp)
+        window.addEventListener('touchmove', handleTouchMove, { passive: false })
+        window.addEventListener('touchend', handleMouseUp)
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+            window.removeEventListener('touchmove', handleTouchMove)
+            window.removeEventListener('touchend', handleMouseUp)
+        }
+    }, [draggingShift, dragTempHours, findClosestShiftType, replaceShift])
 
     const hasShiftInCurrentBranchThisWeek = useCallback((staffId: string) => {
         return weekDays.some(day => {
@@ -136,6 +1253,26 @@ export default function RosterPage() {
         if (s.employment_type === 'outsourced') return false; // Hide outsourced staff from main view by default
         return s.branchIds.includes(selectedBranch);
     })
+
+    const activeShiftIds = useMemo(() => {
+        const ids = new Set<string>()
+        displayedStaff.forEach(staff => {
+            weekDays.forEach(day => {
+                const key = rosterKey(selectedBranch, staff.id, formatDate(day))
+                const val = roster[key]
+                if (val) {
+                    val.split(',').forEach(id => {
+                        if (id) ids.add(id)
+                    })
+                }
+            })
+        })
+        return ids
+    }, [displayedStaff, selectedBranch, weekDays, roster])
+
+    const activeShiftTypes = useMemo(() => {
+        return shiftTypes.filter(st => activeShiftIds.has(st.id))
+    }, [shiftTypes, activeShiftIds])
 
     const groupedStaff = useMemo(() => {
         const groups: Record<string, typeof displayedStaff> = {}
@@ -157,12 +1294,19 @@ export default function RosterPage() {
     const nextWeek = () => setWeekStart(addDays(weekStart, 7))
     const goToday = () => setWeekStart(getMonday(new Date()))
 
-    const getCellShift = useCallback((staffId: string, date: string): ShiftType | null => {
+    const getCellShifts = useCallback((staffId: string, date: string): ShiftType[] => {
         const key = rosterKey(selectedBranch, staffId, date)
-        const stId = roster[key]
-        if (!stId) return null
-        return shiftTypes.find(s => s.id === stId) || null
-    }, [selectedBranch, roster, shiftTypes])
+        const val = effectiveRoster[key]
+        if (!val) return []
+        return val.split(',')
+            .map(id => effectiveShiftTypes.find(s => s.id === id))
+            .filter((s): s is ShiftType => !!s)
+    }, [selectedBranch, effectiveRoster, effectiveShiftTypes])
+
+    const getCellShift = useCallback((staffId: string, date: string): ShiftType | null => {
+        const shifts = getCellShifts(staffId, date)
+        return shifts.length > 0 ? shifts[0] : null
+    }, [getCellShifts])
 
     // Strip common prefix from branch names (e.g. "Pasta Fresca Thanh My Loi" → "Thanh My Loi")
     const commonPrefix = (() => {
@@ -192,8 +1336,8 @@ export default function RosterPage() {
     }, [branches, shortBranchName])
 
     const getCrossBranchShifts = useCallback((staffId: string, date: string) => {
-        return getStaffCrossBranchShifts(roster, staffId, date, selectedBranch)
-    }, [roster, selectedBranch])
+        return getStaffCrossBranchShifts(roster, staffId, date, selectedBranch, shiftTypes)
+    }, [roster, selectedBranch, shiftTypes])
 
     const hasConflict = useCallback((candidate: ShiftType, staffId: string, date: string): { conflict: boolean; branchName: string; shiftName: string } => {
         const crossShifts = getCrossBranchShifts(staffId, date)
@@ -206,277 +1350,1240 @@ export default function RosterPage() {
         return { conflict: false, branchName: '', shiftName: '' }
     }, [getCrossBranchShifts, shiftTypes, getBranchName])
 
+    const hasLocalConflict = useCallback((candidate: ShiftType, currentShifts: ShiftType[]): boolean => {
+        return currentShifts.some(existing => shiftsOverlap(candidate, existing))
+    }, [])
+
     const assignShift = (staffId: string, date: string, shiftTypeId: string) => {
         const shiftType = shiftTypes.find(s => s.id === shiftTypeId)
-        if (shiftType) {
-            const check = hasConflict(shiftType, staffId, date)
-            if (check.conflict) return // blocked by conflict
-        }
+        if (!shiftType) return
+
+        const currentShifts = getCellShifts(staffId, date)
+        const isAlreadyAssigned = currentShifts.some(s => s.id === shiftTypeId)
         const newRoster = { ...roster }
 
-        // If the shift is global (Day Off, Leave, etc.), apply to ALL branches
-        if (shiftType?.globalAcrossBranches) {
-            branches.forEach(b => {
-                const key = rosterKey(b.id, staffId, date)
-                newRoster[key] = shiftTypeId
-            })
-        } else {
-            const key = rosterKey(selectedBranch, staffId, date)
-            if (newRoster[key] === shiftTypeId) {
-                delete newRoster[key]
+        if (isAlreadyAssigned) {
+            // Remove the shift
+            if (shiftType.globalAcrossBranches) {
+                branches.forEach(b => {
+                    const key = rosterKey(b.id, staffId, date)
+                    const val = newRoster[key]
+                    if (val) {
+                        const updated = val.split(',').filter(id => id !== shiftTypeId).join(',')
+                        if (updated) {
+                            newRoster[key] = updated
+                        } else {
+                            delete newRoster[key]
+                        }
+                    }
+                })
             } else {
-                newRoster[key] = shiftTypeId
+                const key = rosterKey(selectedBranch, staffId, date)
+                const val = newRoster[key]
+                if (val) {
+                    const updated = val.split(',').filter(id => id !== shiftTypeId).join(',')
+                    if (updated) {
+                        newRoster[key] = updated
+                    } else {
+                        delete newRoster[key]
+                    }
+                }
+            }
+        } else {
+            // {language === 'vi' ? 'Thêm' : 'Add'} the shift
+            // Check cross-branch conflict
+            const check = hasConflict(shiftType, staffId, date)
+            if (check.conflict) {
+                alert(language === 'vi' 
+                    ? `Không thể xếp ca do trùng lịch với chi nhánh ${check.branchName} (${check.shiftName})` 
+                    : `Cannot assign shift due to conflict with ${check.branchName} (${check.shiftName})`)
+                return
+            }
+
+            // Check local conflict (within same day/cell)
+            if (hasLocalConflict(shiftType, currentShifts)) {
+                alert(language === 'vi' 
+                    ? `Không thể xếp ca do trùng lịch với các ca đã chọn trong ngày` 
+                    : `Cannot assign shift due to conflict with already assigned shifts on this day`)
+                return
+            }
+
+            if (shiftType.globalAcrossBranches) {
+                branches.forEach(b => {
+                    const key = rosterKey(b.id, staffId, date)
+                    const val = newRoster[key]
+                    newRoster[key] = val ? `${val},${shiftTypeId}` : shiftTypeId
+                })
+            } else {
+                const key = rosterKey(selectedBranch, staffId, date)
+                const val = newRoster[key]
+                newRoster[key] = val ? `${val},${shiftTypeId}` : shiftTypeId
             }
         }
 
-        setRoster(newRoster)
-        saveRosterData(newRoster)
+        saveRosterAndFreeze(newRoster)
         setEditingCell(null)
     }
 
     const clearShift = (staffId: string, date: string) => {
         const key = rosterKey(selectedBranch, staffId, date)
-        const currentShiftId = roster[key]
-        const currentShift = currentShiftId ? shiftTypes.find(s => s.id === currentShiftId) : null
+        const currentShifts = getCellShifts(staffId, date)
         const newRoster = { ...roster }
 
-        // If the shift was global, clear from ALL branches
-        if (currentShift?.globalAcrossBranches) {
-            branches.forEach(b => {
-                delete newRoster[rosterKey(b.id, staffId, date)]
-            })
-        } else {
-            delete newRoster[key]
-        }
+        currentShifts.forEach(shift => {
+            if (shift.globalAcrossBranches) {
+                branches.forEach(b => {
+                    const k = rosterKey(b.id, staffId, date)
+                    const val = newRoster[k]
+                    if (val) {
+                        const updated = val.split(',').filter(id => id !== shift.id).join(',')
+                        if (updated) {
+                            newRoster[k] = updated
+                        } else {
+                            delete newRoster[k]
+                        }
+                    }
+                })
+            }
+        })
 
-        setRoster(newRoster)
-        saveRosterData(newRoster)
+        delete newRoster[key]
+
+        saveRosterAndFreeze(newRoster)
         setEditingCell(null)
     }
 
     const handleAutoSchedule = (overwrite: boolean) => {
         if (overwrite && !confirm('This will overwrite existing shifts for this week. Are you sure?')) return;
-        
+
         const rotationSettings = getRosterRotationSettings();
         let newRoster = { ...roster };
+
+        // ── RILEVAMENTO BRANCH FRATELLI ─────────────────────────────────────────
+        // Branch "fratelli" = stessa città.
+        // Criteri: city identica in provider_branches (senza richiedere staff condivisi).
+        // Tutti i branch della stessa città vengono schedulati INSIEME in un unico passaggio,
+        // distribuendo i FT equamente e prevenendo sovrapposizioni cross-branch.
+        const currentBranchCity = branches.find(b => b.id === selectedBranch)?.city;
+        const siblingBranchIds: string[] = currentBranchCity
+            ? branches
+                .filter(b => b.id !== selectedBranch && b.city === currentBranchCity)
+                .map(b => b.id)
+            : [];
+        const allScheduledBranchIds = [selectedBranch, ...siblingBranchIds];
+
+        // Rimuove gli orari congelati in precedenza per ricalcolarli da zero con le impostazioni attuali
+        allScheduledBranchIds.forEach(bid => {
+            const frozenKey = `opening_hours::v1::${bid}::${weekStartStr}`;
+            delete newRoster[frozenKey];
+        });
+
+        // Pool di staff per ciascun branch (inclusi i fratelli ed eventuale staff in prestito per il branch principale)
+        const branchStaffMap = new Map<string, typeof staffList>();
+        allScheduledBranchIds.forEach(bid => {
+            let list = staffList.filter(s => s.branchIds.includes(bid) && s.employment_type !== 'outsourced');
+            if (bid === selectedBranch) {
+                const borrowed = staffList.filter(s => borrowedStaffIds.includes(s.id) && s.employment_type !== 'outsourced');
+                borrowed.forEach(bStaff => {
+                    if (!list.some(s => s.id === bStaff.id)) {
+                        list.push(bStaff);
+                    }
+                });
+            }
+            branchStaffMap.set(bid, list);
+        });
+
+        const hasGlobalLeaveOnDate = (staffId: string, dateStr: string) => {
+            return allScheduledBranchIds.some(bid => {
+                const key = rosterKey(bid, staffId, dateStr);
+                const val = newRoster[key];
+                if (!val) return false;
+                return val.split(',').some(id => {
+                    const st = shiftTypes.find(s => s.id === id);
+                    return st?.type === 'leave';
+                });
+            });
+        };
+
+        // Compatibilità con codice preesistente (selectedBranch)
+        const branchStaff = branchStaffMap.get(selectedBranch)!;
         const branchSlots = autoScheduleTimeSlots.filter(s => s.branchId === selectedBranch);
-        const branchStaff = staffList.filter(s => s.branchIds.includes(selectedBranch) && s.employment_type !== 'outsourced');
-        const workShifts = shiftTypes.filter(s => s.type === 'work');
-        
-        // Helper to check if a shift covers a time slot
-        const parseTime = (t: string) => { const [h,m] = t.split(':').map(Number); return h * 60 + m; }
-        const coversSlot = (shift: ShiftType, slotStart: string, slotEnd: string) => {
-            if (!shift.startTime || !shift.endTime) return false;
-            const sStart = parseTime(shift.startTime);
-            const sEnd = parseTime(shift.endTime) < sStart ? parseTime(shift.endTime) + 24*60 : parseTime(shift.endTime);
+        const ftStaff = branchStaff.filter(s => s.employment_type === 'full_time');
+
+        // Staff globale deduplicato (unione di tutti i branch fratelli)
+        const globalStaffMap = new Map<string, typeof staffList[0]>();
+        allScheduledBranchIds.forEach(bid => {
+            branchStaffMap.get(bid)!.forEach(s => globalStaffMap.set(s.id, s));
+        });
+        const globalStaff = [...globalStaffMap.values()];
+
+        // ── ESTRAZIONE STORICO ORE SETTIMANA PRECEDENTE CROSS-BRANCH ───────────
+        const previousWeekHoursByBranch: Record<string, Record<string, number>> = {};
+        const prevWeekStart = new Date(weekStart);
+        prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+        const prevWeekDays = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(prevWeekStart);
+            d.setDate(d.getDate() + i);
+            return d;
+        });
+
+        globalStaff.forEach(staff => {
+            previousWeekHoursByBranch[staff.id] = {};
+            allScheduledBranchIds.forEach(bid => {
+                previousWeekHoursByBranch[staff.id][bid] = 0;
+            });
+            prevWeekDays.forEach(day => {
+                const dateStr = formatDate(day);
+                allScheduledBranchIds.forEach(bid => {
+                    const key = rosterKey(bid, staff.id, dateStr);
+                    const val = newRoster[key];
+                    if (val) {
+                        val.split(',').forEach(id => {
+                            const sh = shiftTypes.find(s => s.id === id);
+                            if (sh && sh.type === 'work') {
+                                previousWeekHoursByBranch[staff.id][bid] = (previousWeekHoursByBranch[staff.id][bid] || 0) + sh.hours;
+                            }
+                        });
+                    }
+                });
+            });
+        });
+
+        // ─── HELPERS ───────────────────────────────────────────────────────────
+        const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+
+        // 1. HELPER: Calcolo dell'intersezione reale in minuti tra due intervalli temporali
+        const getOverlapMinutes = (start1: number, end1: number, start2: number, end2: number): number => {
+            const s1 = start1;
+            let e1 = end1 < start1 ? end1 + 24 * 60 : end1;
+            const s2 = start2;
+            let e2 = end2 < start2 ? end2 + 24 * 60 : end2;
+
+            const overlapStart = Math.max(s1, s2);
+            const overlapEnd = Math.min(e1, e2);
+
+            return Math.max(0, overlapEnd - overlapStart);
+        };
+
+        // 2. HELPER: Verifica della copertura reale dello slot (minimo 70% di copertura)
+        const calculateRealSlotCoverage = (
+            shift: ShiftType,
+            slotStart: string,
+            slotEnd: string
+        ): number => {
+            if (shift.type !== 'work') return 0;
+            
+            const sStart = parseTime(shift.startTime!);
+            const sEnd = parseTime(shift.endTime!);
             const lStart = parseTime(slotStart);
-            const lEnd = parseTime(slotEnd) < lStart ? parseTime(slotEnd) + 24*60 : parseTime(slotEnd);
-            return sStart <= lStart && sEnd >= lEnd;
-        }
+            const lEnd = parseTime(slotEnd);
 
-        // Helper to check consecutive working days up to a given date
-        const getConsecutiveDays = (staffId: string, checkDate: Date, tempRoster: Record<string,string>) => {
-            let consecutive = 0;
-            // check backwards up to 6 days
-            for(let i=1; i<=6; i++) {
-                const d = new Date(checkDate);
-                d.setDate(d.getDate() - i);
-                const key = rosterKey(selectedBranch, staffId, formatDate(d));
-                const shiftId = tempRoster[key];
-                if(shiftId) {
-                    const shift = shiftTypes.find(s => s.id === shiftId);
-                    if (shift && shift.type === 'work') consecutive++;
-                    else break;
-                } else {
-                    break;
-                }
+            let overlap = getOverlapMinutes(sStart, sEnd, lStart, lEnd);
+
+            if (shift.startTime2 && shift.endTime2) {
+                const sStart2 = parseTime(shift.startTime2);
+                const sEnd2 = parseTime(shift.endTime2);
+                overlap += getOverlapMinutes(sStart2, sEnd2, lStart, lEnd);
             }
-            return consecutive;
-        }
 
-        // Helper to check consecutive working days on the same shift
-        const getConsecutiveSameShift = (staffId: string, shiftId: string, checkDate: Date, tempRoster: Record<string, string>) => {
-            let consecutive = 0;
-            for (let i = 1; i <= 6; i++) {
-                const d = new Date(checkDate);
-                d.setDate(d.getDate() - i);
-                const key = rosterKey(selectedBranch, staffId, formatDate(d));
-                if (tempRoster[key] === shiftId) {
-                    consecutive++;
-                } else {
-                    break;
-                }
-            }
-            return consecutive;
-        }
+            const slotDuration = getOverlapMinutes(lStart, lEnd, lStart, lEnd);
+            if (slotDuration === 0) return 0;
 
-        // Helper to count hours assigned to a staff member in the current week
-        const getStaffWeekHours = (staffId: string, tempRoster: Record<string, string>) => {
-            let hours = 0;
-            weekDays.forEach(d => {
-                const key = rosterKey(selectedBranch, staffId, formatDate(d));
-                const shiftId = tempRoster[key];
-                if (shiftId) {
-                    const shift = shiftTypes.find(s => s.id === shiftId);
-                    if (shift && shift.type === 'work') {
-                        hours += shift.hours;
+            return (overlap / slotDuration) >= 0.70 ? overlap : 0;
+        };
+
+        // 3. HELPER: Controllo del Riposo Minimo di 11 ore consecutive (Anti-Clopening)
+        const checkRestPeriodViolation = (
+            shiftCandidate: ShiftType,
+            dateStr: string,
+            staffId: string,
+            tempRoster: Record<string, string>,
+            scheduledBranchIds: string[],
+            shiftTypesList: ShiftType[]
+        ): boolean => {
+            if (shiftCandidate.type !== 'work') return false;
+
+            const currentStart = parseTime(shiftCandidate.startTime!);
+            let currentEnd = parseTime(shiftCandidate.endTime!);
+            if (currentEnd < currentStart) currentEnd += 24 * 60; // turno che passa la mezzanotte
+
+            const yesterday = new Date(dateStr);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = formatDate(yesterday);
+
+            const tomorrow = new Date(dateStr);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = formatDate(tomorrow);
+
+            for (const bid of scheduledBranchIds) {
+                // Controllo rispetto a ieri
+                const keyYesterday = rosterKey(bid, staffId, yesterdayStr);
+                const valYesterday = tempRoster[keyYesterday];
+                if (valYesterday) {
+                    const yesterdayShifts = valYesterday.split(',').map(id => shiftTypesList.find(st => st.id === id)).filter((s): s is ShiftType => !!s);
+                    for (const ysh of yesterdayShifts) {
+                        if (ysh.type !== 'work') continue;
+                        const yStart = parseTime(ysh.startTime!);
+                        let yEnd = parseTime(ysh.endTime!);
+                        if (yEnd < yStart) yEnd += 24 * 60;
+                        
+                        const yEndRelative = yEnd - 24 * 60;
+                        if (currentStart - yEndRelative < 11 * 60) {
+                            return true; // Violazione
+                        }
                     }
                 }
-            });
-            return hours;
-        }
 
-        // Helper to rotate array
+                // Controllo rispetto a domani
+                const keyTomorrow = rosterKey(bid, staffId, tomorrowStr);
+                const valTomorrow = tempRoster[keyTomorrow];
+                if (valTomorrow) {
+                    const tomorrowShifts = valTomorrow.split(',').map(id => shiftTypesList.find(st => st.id === id)).filter((s): s is ShiftType => !!s);
+                    for (const tsh of tomorrowShifts) {
+                        if (tsh.type !== 'work') continue;
+                        const tStart = parseTime(tsh.startTime!) + 24 * 60;
+                        if (tStart - currentEnd < 11 * 60) {
+                            return true; // Violazione
+                        }
+                    }
+                }
+            }
+
+            return false;
+        };
+
+        // 4. HELPER: Limiti giornalieri cross-branch (max 10 ore e gap 2 ore di viaggio)
+        const checkCrossBranchDailyViolation = (
+            shiftCandidate: ShiftType,
+            dateStr: string,
+            staffId: string,
+            currentBranchId: string,
+            tempRoster: Record<string, string>,
+            scheduledBranchIds: string[],
+            shiftTypesList: ShiftType[]
+        ): boolean => {
+            if (shiftCandidate.type !== 'work') return false;
+
+            const currentStart = parseTime(shiftCandidate.startTime!);
+            let currentEnd = parseTime(shiftCandidate.endTime!);
+            if (currentEnd < currentStart) currentEnd += 24 * 60;
+
+            let totalDailyHours = shiftCandidate.hours || 0;
+
+            for (const bid of scheduledBranchIds) {
+                if (bid === currentBranchId) continue;
+                const key = rosterKey(bid, staffId, dateStr);
+                const val = tempRoster[key];
+                if (val) {
+                    const otherShifts = val.split(',').map(id => shiftTypesList.find(st => st.id === id)).filter((s): s is ShiftType => !!s && s.type === 'work');
+                    
+                    for (const osh of otherShifts) {
+                        totalDailyHours += osh.hours || 0;
+                        
+                        // 1. Limite ore giornaliere (max 10 ore)
+                        if (totalDailyHours > 10) {
+                            return true;
+                        }
+
+                        // 2. Gap di trasferimento minimo di 2 ore (120 minuti)
+                        const otherStart = parseTime(osh.startTime!);
+                        let otherEnd = parseTime(osh.endTime!);
+                        if (otherEnd < otherStart) otherEnd += 24 * 60;
+
+                        const gap1 = otherStart - currentEnd;
+                        const gap2 = currentStart - otherEnd;
+
+                        if (shiftsOverlap(shiftCandidate, osh)) {
+                            return true;
+                        }
+                        
+                        if (otherStart > currentStart && gap1 < 120) {
+                            return true;
+                        }
+                        if (currentStart > otherStart && gap2 < 120) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        };
+
+        // All work shifts sorted: non-split first, then split shifts (con fix mezzanotte per gap split shift)
+        const workShifts = shiftTypes
+            .filter(s => {
+                if (s.type !== 'work') return false;
+                if (s.startTime2 && s.endTime) {
+                    const end1 = parseTime(s.endTime);
+                    const start2 = parseTime(s.startTime2);
+                    let diff = start2 - end1;
+                    if (diff < 0) diff += 24 * 60;
+                    if (diff < 4 * 60) return false;
+                }
+                return true;
+            })
+            .sort((a, b) => {
+                const aSplit = a.startTime2 && a.endTime2 ? 1 : 0;
+                const bSplit = b.startTime2 && b.endTime2 ? 1 : 0;
+                return aSplit - bSplit;
+            });
+
+        const ftWorkShifts = workShifts.filter(s => s.hours >= 8);
+        const ptWorkShifts = workShifts.filter(s => s.hours < 8);
+        
+        // getConsecutiveDays: conta i giorni consecutivi lavorati su QUALSIASI branch fratello,
+        // per evitare che uno staff lavori >6 giorni di fila distribuiti tra più branch.
+        const getConsecutiveDays = (staffId: string, checkDate: Date, tempRoster: Record<string, string>) => {
+            let consecutive = 0;
+            for (let i = 1; i <= 9; i++) {
+                const d = new Date(checkDate);
+                d.setDate(d.getDate() - i);
+                const dStr = formatDate(d);
+                const workedAnyBranch = allScheduledBranchIds.some(bid => {
+                    const key = rosterKey(bid, staffId, dStr);
+                    const shiftIdStr = tempRoster[key];
+                    if (!shiftIdStr) return false;
+                    return shiftIdStr.split(',').some(id => shiftTypes.find(s => s.id === id)?.type === 'work');
+                });
+                if (workedAnyBranch) consecutive++;
+                else break;
+            }
+            return consecutive;
+        };
+
         function rotateArray<T>(arr: T[], offset: number): T[] {
             if (arr.length === 0) return arr;
             const shift = offset % arr.length;
             return [...arr.slice(shift), ...arr.slice(0, shift)];
         }
 
-        if (overwrite) {
-            // clear the week for branch staff
+        // Conta i giorni lavorati nel solo selectedBranch (usato per check interni FASE 0)
+        const getWorkingDaysCount = (staffId: string, tempRoster: Record<string, string>) => {
+            let count = 0;
+            weekDays.forEach(d => {
+                const k = rosterKey(selectedBranch, staffId, formatDate(d));
+                const val = tempRoster[k];
+                if (val && val.split(',').some(id => shiftTypes.find(s => s.id === id)?.type === 'work')) {
+                    count++;
+                }
+            });
+            return count;
+        };
+
+        // Conta i giorni lavorati su TUTTI i branch fratelli (Giorni Solari Univoci)
+        const getGlobalWorkingDaysCount = (staffId: string, tempRoster: Record<string, string>) => {
+            let uniqueWorkedDays = 0;
             weekDays.forEach(day => {
                 const dateStr = formatDate(day);
-                branchStaff.forEach(staff => {
-                    const key = rosterKey(selectedBranch, staff.id, dateStr);
-                    delete newRoster[key];
+                const workedAnywhere = allScheduledBranchIds.some(bid => {
+                    const key = rosterKey(bid, staffId, dateStr);
+                    const val = tempRoster[key];
+                    return val && val.split(',').some(id => shiftTypes.find(s => s.id === id)?.type === 'work');
+                });
+                if (workedAnywhere) {
+                    uniqueWorkedDays++;
+                }
+            });
+            return uniqueWorkedDays;
+        };
+
+        // getWeekShiftCounts: conta le occorrenze di ogni turno su tutti i branch fratelli
+        // (usato per altPenalty — penalizza la monotonia del tipo di turno)
+        const getWeekShiftCounts = (staffId: string, tempRoster: Record<string, string>) => {
+            const counts: Record<string, number> = {};
+            allScheduledBranchIds.forEach(bid => {
+                weekDays.forEach(d => {
+                    const key = rosterKey(bid, staffId, formatDate(d));
+                    const val = tempRoster[key];
+                    if (val) {
+                        val.split(',').forEach(id => { counts[id] = (counts[id] || 0) + 1; });
+                    }
+                });
+            });
+            return counts;
+        };
+
+        // Calcola la copertura attuale di un dept su uno slot in una data, per un branch specifico.
+        // Il parametro branchId è opzionale: usa selectedBranch per compatibilità con codice preesistente.
+        const getSlotCoverage = (slot: AutoScheduleTimeSlot, dept: string, dateStr: string, tempRoster: Record<string, string>, branchId: string = selectedBranch) => {
+            let current = 0;
+            const bStaff = branchStaffMap.get(branchId) ?? branchStaff;
+            const dIdx = weekDays.findIndex(d => formatDate(d) === dateStr);
+            const branchWeekHours = getWeekOpeningHours(branchId, weekStartStr, tempRoster);
+            const dayHours = dIdx !== -1 ? branchWeekHours[dIdx] : undefined;
+
+            const bSlots = autoScheduleTimeSlots.filter(s => s.branchId === branchId);
+            const sortedBSlots = [...bSlots].sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime));
+            const firstSlotId = sortedBSlots[0]?.id;
+            const lastSlotId = sortedBSlots[sortedBSlots.length - 1]?.id;
+
+            let slotStart = slot.startTime;
+            let slotEnd = slot.endTime;
+
+            if (dayHours && dayHours.isOpen && dayHours.slots && dayHours.slots.length > 0) {
+                const dayOpeningTime = dayHours.slots[0].startTime;
+                const dayClosingTime = dayHours.slots[dayHours.slots.length - 1].endTime;
+                if (slot.id === firstSlotId) {
+                    slotStart = dayOpeningTime;
+                }
+                if (slot.id === lastSlotId) {
+                    slotEnd = dayClosingTime;
+                }
+            }
+
+            bStaff.forEach(s => {
+                if ((s.department || 'Unknown') !== dept) return;
+                const key = rosterKey(branchId, s.id, dateStr);
+                const val = tempRoster[key];
+                if (val) {
+                    val.split(',').forEach(id => {
+                        const sh = shiftTypes.find(st => st.id === id);
+                        if (sh && sh.type === 'work' && calculateRealSlotCoverage(sh, slotStart, slotEnd) > 0) {
+                            current += s.skill_level || 1;
+                        }
+                    });
+                }
+            });
+            return current;
+        };
+
+        // Helper locale per i conflitti cross-branch.
+        // NOTA CRITICA: usa `newRoster` (non lo state React `roster`) per vedere le assegnazioni
+        // appena create, evitando che lo stesso staff venga schedulato in due branch nello stesso momento.
+        // currentBranchId: il branch da escludere (quello che si sta schedulando ora).
+        const getLocalCrossBranchShifts = (staffId: string, dateStr: string, currentBranchId: string = selectedBranch) => {
+            const result: { branchId: string; shiftTypeId: string }[] = [];
+            branches.forEach(b => {
+                if (b.id === currentBranchId) return;
+                const key = rosterKey(b.id, staffId, dateStr);
+                const val = newRoster[key];
+                if (val) {
+                    val.split(',').forEach(id => {
+                        result.push({ branchId: b.id, shiftTypeId: id });
+                    });
+                }
+            });
+            return result;
+        };
+
+
+        if (overwrite) {
+            // Sovrascrive il roster di TUTTI i branch fratelli schedulati insieme
+            weekDays.forEach(day => {
+                const dateStr = formatDate(day);
+                allScheduledBranchIds.forEach(bid => {
+                    (branchStaffMap.get(bid) ?? []).forEach(staff => {
+                        const key = rosterKey(bid, staff.id, dateStr);
+                        delete newRoster[key];
+                    });
                 });
             });
         }
 
-        // Determine weekly rotation offset if strategy is weekly
-        const refMonday = new Date('2026-01-05T00:00:00'); // Stable reference Monday
+        // Rotation offset
+        const refMonday = new Date('2026-01-05T00:00:00');
         const diffMs = weekStart.getTime() - refMonday.getTime();
         const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
         const weekIndex = Math.floor(diffDays / 7);
-        let weeklyStaff = [...branchStaff];
-        if (rotationSettings.strategy === 'weekly') {
+        // Usa lo staff GLOBALE (tutti i branch fratelli deduplicati) per la rotazione
+        let weeklyStaff = [...globalStaff];
+        if (rotationSettings.ftStrategy === 'weekly' || rotationSettings.ftStrategy === 'balanced') {
             weeklyStaff = rotateArray(weeklyStaff, weekIndex);
         }
 
-        weekDays.forEach((day, dayIndex) => {
-            const dateStr = formatDate(day);
-            
-            // Current points calculation: slotId -> department -> points
-            const currentPoints: Record<string, Record<string, number>> = {};
-            branchSlots.forEach(slot => { currentPoints[slot.id] = {}; });
+        const departments = Array.from(new Set(globalStaff.map(s => s.department || 'Unknown')));
+        const autoLeaveShift = shiftTypes.find(s => s.type === 'leave' && s.isAutoSchedulable);
+        const defaultWorkShift = workShifts.find(s => s.hours >= 8) || workShifts[0];
 
-            branchStaff.forEach(staff => {
-                const key = rosterKey(selectedBranch, staff.id, dateStr);
-                const assignedShiftId = newRoster[key];
-                if (assignedShiftId) {
-                    const assignedShift = shiftTypes.find(s => s.id === assignedShiftId);
-                    if (assignedShift && assignedShift.type === 'work') {
-                        branchSlots.forEach(slot => {
-                            if (coversSlot(assignedShift, slot.startTime, slot.endTime)) {
-                                const dept = staff.department || 'Unknown';
-                                currentPoints[slot.id][dept] = (currentPoints[slot.id][dept] || 0) + (staff.skill_level || 1);
-                            }
+        // ─────────────────────────────────────────────────────────────────────
+        // FASE 0: ASSEGNAZIONE BILANCIATA DEI GIORNI OFF (DO) per i Full-Time
+        // Si assegnano PRIMA i DO, così il greedy sa già i giorni disponibili.
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Calcola target combinato (somma di TUTTI i branch fratelli) per un dept in un giorno
+        const getCombinedDeptDayTarget = (dept: string, dayIdx: number) => {
+            let total = 0;
+            allScheduledBranchIds.forEach(bid => {
+                autoScheduleTimeSlots.filter(s => s.branchId === bid).forEach(slot => {
+                    total += slot.targets?.[dept]?.[dayIdx] || 0;
+                });
+            });
+            return total;
+        };
+
+        // FT deduplicati da tutti i branch fratelli
+        const globalFTStaff = globalStaff.filter(s => s.employment_type === 'full_time');
+
+        departments.forEach(dept => {
+            const deptFTStaff = globalFTStaff.filter(s => (s.department || 'Unknown') === dept);
+
+            let staffToAssignDO = deptFTStaff
+                .filter(s => {
+                    return !weekDays.some(d => {
+                        return allScheduledBranchIds.some(bid => {
+                            const key = rosterKey(bid, s.id, formatDate(d));
+                            const val = newRoster[key];
+                            return val && val.split(',').some(id => shiftTypes.find(st => st.id === id)?.type === 'leave');
                         });
+                    });
+                })
+                .sort((a, b) => (b.skill_level || 1) - (a.skill_level || 1));
+
+            if (rotationSettings.ftStrategy !== 'none') {
+                staffToAssignDO = rotateArray(staffToAssignDO, weekIndex);
+            }
+
+            staffToAssignDO.forEach(staff => {
+                let bestDay: Date | null = null;
+                let bestScore = Infinity;
+
+                // Il DO viene scritto sul primo branch del staff tra i branch fratelli schedulati
+                const staffBranch = allScheduledBranchIds.find(bid => staff.branchIds.includes(bid)) || selectedBranch;
+
+                // Calcola consecutivi all'inizio della settimana
+                let consecutiveAtStart = 0;
+                const checkDate = new Date(weekDays[0]);
+                while (true) {
+                    checkDate.setDate(checkDate.getDate() - 1);
+                    const checkDateStr = formatDate(checkDate);
+                    const hasShift = allScheduledBranchIds.some(bid => {
+                        const key = rosterKey(bid, staff.id, checkDateStr);
+                        const val = newRoster[key];
+                        if (!val) return false;
+                        const shifts = val.split(',').map(id => shiftTypes.find(st => st.id === id)).filter((st): st is ShiftType => !!st);
+                        return shifts.some(st => st.type === 'work');
+                    });
+                    if (hasShift) {
+                        consecutiveAtStart++;
+                    } else {
+                        break;
+                    }
+                }
+
+                // Per non superare i 9 giorni consecutivi di lavoro, il DO deve cadere entro i primi (9 - consecutiveAtStart) giorni.
+                // Se consecutiveAtStart >= 9, il DO deve essere assegnato subito il Lunedì (giornoIndex 0).
+                const maxDayIndexForDO = Math.max(0, 9 - consecutiveAtStart - 1);
+                const allowedDays = weekDays.slice(0, Math.min(7, maxDayIndexForDO + 1));
+                const daysToEvaluate = allowedDays.length > 0 ? allowedDays : [weekDays[0]];
+
+                daysToEvaluate.forEach((day, dayIdx) => {
+                    const dateS = formatDate(day);
+
+                    // Conta quanti FT dello stesso dept hanno già DO in questo giorno (su qualsiasi branch)
+                    let deptDOCount = 0;
+                    let highSkillDOCount = 0;
+                    deptFTStaff.forEach(other => {
+                        if (other.id === staff.id) return;
+                        const hasLeaveToday = allScheduledBranchIds.some(bid => {
+                            const key = rosterKey(bid, other.id, dateS);
+                            const val = newRoster[key];
+                            return val && val.split(',').some(id => shiftTypes.find(st => st.id === id)?.type === 'leave');
+                        });
+                        if (hasLeaveToday) {
+                            deptDOCount++;
+                            if ((other.skill_level || 1) >= 2) highSkillDOCount++;
+                        }
+                    });
+
+                    const deptTarget = getCombinedDeptDayTarget(dept, dayIdx);
+                    const isHighSkill = (staff.skill_level || 1) >= 2;
+
+                    let score = deptDOCount * 10000;
+                    if (isHighSkill) score += highSkillDOCount * 1000;
+                    score += deptTarget * 10;
+
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestDay = day;
+                    }
+                });
+
+                if (bestDay) {
+                    const dateS = formatDate(bestDay as Date);
+                    const key = rosterKey(staffBranch, staff.id, dateS);
+                    if (!newRoster[key]) {
+                        newRoster[key] = autoLeaveShift ? autoLeaveShift.id : 'st-6';
                     }
                 }
             });
+        });
 
-            // Rotate staff list daily if strategy is daily
-            let dailyStaff = [...weeklyStaff];
-            if (rotationSettings.strategy === 'daily') {
-                const dayMs = day.getTime();
-                const dayIndexGlobal = Math.floor(dayMs / (24 * 60 * 60 * 1000));
-                dailyStaff = rotateArray(dailyStaff, dayIndexGlobal);
-            }
 
-            // Try to meet targets for each slot and department
-            branchSlots.forEach(slot => {
-                const targets = slot.targets || {};
-                const departments = Object.keys(targets);
-                
-                departments.forEach(dept => {
-                    const target = targets[dept][dayIndex] || 0;
-                    
-                    while ((currentPoints[slot.id][dept] || 0) < target) {
-                        const viableShift = workShifts.find(s => coversSlot(s, slot.startTime, slot.endTime));
-                        if (!viableShift) break; 
+        // ─────────────────────────────────────────────────────────────────────
+        // FASE 1: SCHEDULING COVERAGE-FIRST
+        // Per ogni giorno (in ordine di domanda decrescente), per ogni slot e
+        // dipartimento, assegna staff fino a coprire il target senza spreco.
+        // ─────────────────────────────────────────────────────────────────────
 
-                        // Determine the candidate staff array for this assignment step
-                        let candidateStaff = [...dailyStaff];
-                        if (rotationSettings.strategy === 'balanced') {
-                            // Sort by week hours ascending
-                            candidateStaff.sort((a, b) => {
-                                const hoursA = getStaffWeekHours(a.id, newRoster);
-                                const hoursB = getStaffWeekHours(b.id, newRoster);
-                                return hoursA - hoursB;
-                            });
+        type SchedulingTask = {
+            branchId: string;
+            day: Date;
+            dayIndex: number;
+            dateStr: string;
+            slot: AutoScheduleTimeSlot;
+            dept: string;
+            target: number;
+        };
+
+        // Costruisce il task list da TUTTI i branch fratelli schedulati insieme.
+        // Ogni task porta il suo branchId per sapere dove assegnare i turni.
+        const allTasks: SchedulingTask[] = [];
+        const weekIndexForBranchRotation = Math.floor(weekStart.getTime() / (7 * 24 * 60 * 60 * 1000));
+        const orderedBranchIds = [...allScheduledBranchIds];
+        if (weekIndexForBranchRotation % 2 !== 0) {
+            orderedBranchIds.reverse();
+        }
+
+        orderedBranchIds.forEach(bid => {
+            const bSlots = autoScheduleTimeSlots.filter(s => s.branchId === bid);
+            const sortedBSlots = [...bSlots].sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime));
+            const firstSlotId = sortedBSlots[0]?.id;
+            const lastSlotId = sortedBSlots[sortedBSlots.length - 1]?.id;
+
+            weekDays.forEach((day, dayIndex) => {
+                const dateStr = formatDate(day);
+                const branchWeekHours = getWeekOpeningHours(bid, weekStartStr, newRoster);
+                const dayHours = branchWeekHours[dayIndex];
+
+                bSlots.forEach(slot => {
+                    let adjustedSlot = { ...slot };
+
+                    if (dayHours && dayHours.isOpen && dayHours.slots && dayHours.slots.length > 0) {
+                        const dayOpeningTime = dayHours.slots[0].startTime;
+                        const dayClosingTime = dayHours.slots[dayHours.slots.length - 1].endTime;
+
+                        if (slot.id === firstSlotId) {
+                            adjustedSlot.startTime = dayOpeningTime;
+                        }
+                        if (slot.id === lastSlotId) {
+                            adjustedSlot.endTime = dayClosingTime;
+                        }
+                    }
+
+                    const targets = adjustedSlot.targets || {};
+                    Object.keys(targets).forEach(dept => {
+                        const target = targets[dept]?.[dayIndex] || 0;
+                        if (target > 0) {
+                            allTasks.push({ branchId: bid, day, dayIndex, dateStr, slot: adjustedSlot, dept, target });
+                        }
+                    });
+                });
+            });
+        });
+
+        // Ordina prima per giorno (dayIndex) per distribuire lo staff condiviso equamente ed evitare l'effetto hoarding, poi per target decrescente
+        allTasks.sort((a, b) => {
+            if (a.dayIndex !== b.dayIndex) return a.dayIndex - b.dayIndex;
+            return b.target - a.target;
+        });
+
+        let orderedStaff = [...weeklyStaff];
+
+        // ─── FASE 1: ROUND-ROBIN MULTI-BRANCH ───────────────────────────────────
+        // Ogni passata assegna UNA persona per task, poi ricomincia da capo.
+        // Questo garantisce che i branch fratelli si alternino equamente nell'uso dello staff FT condiviso.
+        // ─────────────────────────────────────────────────────────────────────────
+        let globalChange = true;
+        const maxGlobalPasses = Math.max(20, allTasks.length);
+        let passCount = 0;
+
+        while (globalChange && passCount < maxGlobalPasses) {
+            globalChange = false;
+            passCount++;
+
+            for (const task of allTasks) {
+                const { branchId: taskBranchId, day, dayIndex, dateStr, slot, target } = task;
+                const dept = task.dept;
+                const taskBranchSlots = autoScheduleTimeSlots.filter(s => s.branchId === taskBranchId);
+                const branchWeekHours = getWeekOpeningHours(taskBranchId, weekStartStr, newRoster);
+                const dayHours = branchWeekHours[dayIndex];
+
+                let currentCoverage = getSlotCoverage(slot, dept, dateStr, newRoster, taskBranchId);
+                if (currentCoverage >= target) continue;
+
+                if (rotationSettings.ftStrategy === 'daily') {
+                    const dayMs = day.getTime();
+                    const dayIndexGlobal = Math.floor(dayMs / (24 * 60 * 60 * 1000));
+                    orderedStaff = rotateArray([...weeklyStaff], dayIndexGlobal);
+                } else if (rotationSettings.ftStrategy === 'balanced') {
+                    orderedStaff = rotateArray([...weeklyStaff], dayIndex);
+                }
+
+                const candidates = orderedStaff.filter(s => {
+                    if (s.employment_type !== 'full_time') return false; // Solo Full-Time nella prima fase
+                    if (!s.branchIds.includes(taskBranchId)) return false;
+                    if ((s.department || 'Unknown') !== dept) return false;
+                    if (hasGlobalLeaveOnDate(s.id, dateStr)) return false;
+                    const key = rosterKey(taskBranchId, s.id, dateStr);
+                    const val = newRoster[key];
+                    if (!val) return true;
+                    const shifts = val.split(',').map(id => shiftTypes.find(st => st.id === id)).filter((st): st is ShiftType => !!st);
+                    if (shifts.some(st => st.type === 'work')) return false;
+                    return true;
+                });
+
+                let bestGlobalScore = -Infinity;
+                let bestGlobalStaff: typeof candidates[0] | null = null;
+                let bestGlobalShift: ShiftType | null = null;
+
+                for (const staff of candidates) {
+                    const currentKey = rosterKey(taskBranchId, staff.id, dateStr);
+                    const currentVal = newRoster[currentKey];
+                    if (currentVal) {
+                        const existingShifts = currentVal.split(',').map(id => shiftTypes.find(s => s.id === id)).filter((s): s is ShiftType => !!s);
+                        if (existingShifts.some(s => s.type === 'work')) continue;
+                    }
+
+                    const staffSkill = staff.skill_level || 1;
+                    const workingDays = getGlobalWorkingDaysCount(staff.id, newRoster);
+
+                    if (workingDays >= 6) continue; // FT max 6 giorni
+                    if (getConsecutiveDays(staff.id, day, newRoster) >= 9) continue;
+
+                    const crossShifts = getLocalCrossBranchShifts(staff.id, dateStr, taskBranchId);
+                    const weekShiftCounts = getWeekShiftCounts(staff.id, newRoster);
+                    const eligibleShifts = ftWorkShifts; // Solo turni Full-Time >= 8 ore
+                    const shiftsForSlot = eligibleShifts.filter(sh => 
+                        calculateRealSlotCoverage(sh, slot.startTime, slot.endTime) > 0 &&
+                        isShiftCompatibleWithDayHours(sh, dayHours)
+                    );
+
+                    if (shiftsForSlot.length === 0) continue;
+
+                    for (const sh of shiftsForSlot) {
+                        const isSplit = !!(sh.startTime2 && sh.endTime2);
+                        if (isSplit && staff.employment_type !== 'full_time') continue;
+
+                        // Riposo minimo di 11 ore (Anti-Clopening)
+                        if (checkRestPeriodViolation(sh, dateStr, staff.id, newRoster, allScheduledBranchIds, shiftTypes)) continue;
+
+                        // Limiti giornalieri cross-branch (max 10 ore e gap 2 ore di viaggio)
+                        if (checkCrossBranchDailyViolation(sh, dateStr, staff.id, taskBranchId, newRoster, allScheduledBranchIds, shiftTypes)) continue;
+
+                        if (currentVal) {
+                            const hasLeaveConflict = currentVal.split(',')
+                                .map(id => shiftTypes.find(st => st.id === id))
+                                .filter((st): st is ShiftType => !!st && st.type === 'leave')
+                                .some(leave => shiftsOverlap(sh, leave));
+                            if (hasLeaveConflict) continue;
                         }
 
-                        const availableStaff = candidateStaff.find(staff => {
-                            if ((staff.department || 'Unknown') !== dept) return false;
-                            const key = rosterKey(selectedBranch, staff.id, dateStr);
-                            if (newRoster[key]) return false; // already working
-                            if (getConsecutiveDays(staff.id, day, newRoster) >= 6) return false; // 6 days max
-                            // Ensure they don't have a conflict in another branch
-                            const conflict = getCrossBranchShifts(staff.id, dateStr).length > 0;
-                            if (conflict) return false;
-
-                            // Daily rotation constraint: Max consecutive days on same shift
-                            if (rotationSettings.strategy === 'daily') {
-                                const consecutiveSame = getConsecutiveSameShift(staff.id, viableShift.id, day, newRoster);
-                                if (consecutiveSame >= rotationSettings.max_consecutive_same_shift) return false;
+                        if (rotationSettings.ftStrategy === 'daily') {
+                            let consec = 0;
+                            for (let i = 1; i <= 6; i++) {
+                                const d = new Date(day);
+                                d.setDate(d.getDate() - i);
+                                const k = rosterKey(taskBranchId, staff.id, formatDate(d));
+                                const v = newRoster[k];
+                                if (v && v.split(',').includes(sh.id)) consec++;
+                                else break;
                             }
-                            return true;
+                            if (consec >= rotationSettings.max_consecutive_same_shift) continue;
+                        }
+
+                        let totalContribution = 0;
+                        let totalWaste = 0;
+                        let coveragePenalty = 0;
+                        taskBranchSlots.forEach(s => {
+                            let slotStart = s.startTime;
+                            let slotEnd = s.endTime;
+                            const sortedSlots = [...taskBranchSlots].sort((a, b) => parseTime(a.startTime) - parseTime(b.startTime));
+                            const firstSlotId = sortedSlots[0]?.id;
+                            const lastSlotId = sortedSlots[sortedSlots.length - 1]?.id;
+
+                            if (dayHours && dayHours.isOpen && dayHours.slots && dayHours.slots.length > 0) {
+                                const dayOpeningTime = dayHours.slots[0].startTime;
+                                const dayClosingTime = dayHours.slots[dayHours.slots.length - 1].endTime;
+                                if (s.id === firstSlotId) slotStart = dayOpeningTime;
+                                if (s.id === lastSlotId) slotEnd = dayClosingTime;
+                            }
+
+                            const overlap = calculateRealSlotCoverage(sh, slotStart, slotEnd);
+                            if (overlap <= 0) return;
+
+                            const lStart = parseTime(slotStart);
+                            const lEnd = parseTime(slotEnd) < lStart ? parseTime(slotEnd) + 24 * 60 : parseTime(slotEnd);
+                            
+                            let sStart = parseTime(sh.startTime!);
+                            let sEnd = parseTime(sh.endTime!) < sStart ? parseTime(sh.endTime!) + 24 * 60 : parseTime(sh.endTime!);
+                            if (sh.startTime2 && sh.endTime2) {
+                                const sStart2 = parseTime(sh.startTime2);
+                                const sEnd2 = parseTime(sh.endTime2) < sStart2 ? parseTime(sh.endTime2) + 24 * 60 : parseTime(sh.endTime2);
+                                if (sStart2 <= lStart + 120 && sEnd2 >= lEnd - 120) {
+                                    sStart = sStart2;
+                                    sEnd = sEnd2;
+                                }
+                            }
+                            
+                            if (sStart > lStart) coveragePenalty += (sStart - lStart) * 2;
+                            if (sEnd < lEnd) coveragePenalty += (lEnd - sEnd) * 2;
+
+                            const slotTarget = s.targets?.[dept]?.[dayIndex] || 0;
+                            const slotCurrent = getSlotCoverage(s, dept, dateStr, newRoster, taskBranchId);
+                            const slotRemaining = Math.max(0, slotTarget - slotCurrent);
+                            if (slotRemaining > 0) {
+                                totalContribution += Math.min(slotRemaining, staffSkill);
+                                totalWaste += Math.max(0, staffSkill - slotRemaining);
+                            } else {
+                                totalWaste += staffSkill;
+                            }
                         });
 
-                        if (!availableStaff) break;
+                        // EMERGENCY COVERAGE: se il task corrente ha copertura zero e lo shift
+                        // copre effettivamente quello slot, non scartare il candidato anche se
+                        // totalContribution = 0 (tutti gli altri slot sono già saturi).
+                        // In questo caso forzare una contribuzione minima con forte penalizzazione
+                        // nello score per deprioritizzarlo rispetto a candidati "puliti".
+                        let emergencyPenalty = 0;
+                        if (totalContribution <= 0 && currentCoverage === 0) {
+                            const taskSlot = taskBranchSlots.find(s => s.id === slot.id);
+                            if (taskSlot && calculateRealSlotCoverage(sh, slot.startTime, slot.endTime) > 0) {
+                                totalContribution = 0.01; // contribuzione simbolica per non essere scartato
+                                emergencyPenalty = 5000;  // penalizzazione forte per usarlo solo come ultima risorsa
+                            }
+                        }
 
-                        const newKey = rosterKey(selectedBranch, availableStaff.id, dateStr);
-                        newRoster[newKey] = viableShift.id;
-                        
-                        // Update points for all slots this shift might cover
-                        branchSlots.forEach(otherSlot => {
-                            if (coversSlot(viableShift, otherSlot.startTime, otherSlot.endTime)) {
-                                currentPoints[otherSlot.id][dept] = (currentPoints[otherSlot.id][dept] || 0) + (availableStaff.skill_level || 1);
+                        if (totalContribution <= 0) continue;
+
+                        const altPenalty = (weekShiftCounts[sh.id] || 0) * 50;
+                        const fairnessPenalty = workingDays * 150;
+                        const ftBonus = staff.employment_type === 'full_time' ? 50 : 0;
+                        const ptDeptCandidates = candidates.filter(
+                            c => c.employment_type === 'part_time' && (c.department || 'Unknown') === dept
+                        );
+                        const anyPtHas0Days = ptDeptCandidates.some(c => getGlobalWorkingDaysCount(c.id, newRoster) === 0);
+                        const ptUrgencyBonus = (anyPtHas0Days && staff.employment_type === 'part_time') ? 2000 : 0;
+
+                        // Branch balance penalty: penalizza chi ha già lavorato più giorni
+                        // nel branch CORRENTE (taskBranchId) rispetto agli altri branch fratelli.
+                        // Questo incoraggia l'alternanza naturale: se John ha già lavorato
+                        // 3 giorni a TammīLoi, riceverà un forte malus per i task TammīLoi
+                        // successivi, favorendo la sua assegnazione a Taudien.
+                        const branchDaysHere = siblingBranchIds.length > 0
+                            ? weekDays.filter(d => {
+                                const k = rosterKey(taskBranchId, staff.id, formatDate(d));
+                                const v = newRoster[k];
+                                return v && v.split(',').some(id => shiftTypes.find(s => s.id === id)?.type === 'work');
+                            }).length
+                            : 0;
+                        const branchBalancePenalty = branchDaysHere * 300;
+
+                        // Historical branch penalty per bilanciamento bisettimanale cross-branch
+                        let historicalBranchPenalty = 0;
+                        if (staff.branchIds.length > 1 && (rotationSettings.ftStrategy === 'weekly' || rotationSettings.ftStrategy === 'balanced')) {
+                            const prevHoursInBranch = previousWeekHoursByBranch[staff.id]?.[taskBranchId] || 0;
+                            historicalBranchPenalty = prevHoursInBranch * 100;
+                        }
+
+                        const score = totalContribution * 1500 - totalWaste * 500 - sh.hours * 5 - altPenalty - fairnessPenalty - branchBalancePenalty - historicalBranchPenalty + ftBonus + ptUrgencyBonus - emergencyPenalty - coveragePenalty;
+
+
+                        if (score > bestGlobalScore) {
+                            bestGlobalScore = score;
+                            bestGlobalStaff = staff;
+                            bestGlobalShift = sh;
+                        }
+                    }
+                }
+
+                if (bestGlobalStaff && bestGlobalShift && bestGlobalScore > -Infinity) {
+                    const key = rosterKey(taskBranchId, bestGlobalStaff.id, dateStr);
+                    const currentVal = newRoster[key];
+                    newRoster[key] = currentVal ? `${currentVal},${bestGlobalShift.id}` : bestGlobalShift.id;
+                    globalChange = true;
+                }
+            }
+        }
+
+        // (FASE 1.5 rimossa da qui per eseguirla a valle dei Full-Time)
+
+        // ─────────────────────────────────────────────────────────────────────
+        // FASE 2: GAP FILLING INTELLIGENTE per i Full-Time
+        // I FT devono lavorare almeno 6 giorni (contratto). Per ogni FT che non
+        // ha ancora 6 giorni, si scelgono i giorni con PIÙ DOMANDA RESIDUA
+        // (non tutti i giorni vuoti) per minimizzare l'over-coverage.
+        // ─────────────────────────────────────────────────────────────────────
+
+        // FASE 2: gap filling per tutti i branch fratelli schedulati insieme.
+        // Per ogni FT, calcola i giorni mancanti su base GLOBALE (tutti i branch)
+        // e li assegna al branch con più domanda residua.
+        allScheduledBranchIds.forEach(schedulingBranchId => {
+            const schedulingBranchSlots = autoScheduleTimeSlots.filter(s => s.branchId === schedulingBranchId);
+            const schedulingFTStaff = (branchStaffMap.get(schedulingBranchId) ?? []).filter(s => s.employment_type === 'full_time');
+
+            schedulingFTStaff.forEach(staff => {
+                const currentWorkDays = getGlobalWorkingDaysCount(staff.id, newRoster);
+                const daysNeeded = Math.max(0, 6 - currentWorkDays);
+                if (daysNeeded === 0 || ftWorkShifts.length === 0) return;
+
+                const dept = staff.department || 'Unknown';
+
+                // Costruisce la lista dei giorni disponibili con il loro livello di domanda residua ed efficienza
+                type DayCandidate = { dateS: string; dayIndex: number; demand: number; bestShift: ShiftType };
+                const emptyCandidates: DayCandidate[] = [];
+
+                weekDays.forEach((day, dayIndex) => {
+                    const dateS = formatDate(day);
+                    if (hasGlobalLeaveOnDate(staff.id, dateS)) return;
+                    const key = rosterKey(schedulingBranchId, staff.id, dateS);
+                    if (newRoster[key]) return; // Già assegnato in questo branch
+
+                    // Vincolo: massimo 6 giorni consecutivi di lavoro
+                    if (getConsecutiveDays(staff.id, day, newRoster) >= 9) return;
+
+                    const branchHours = getWeekOpeningHours(schedulingBranchId, weekStartStr, newRoster);
+                    const dayHours = branchHours[dayIndex];
+                    
+                    let bestShiftForDay: ShiftType | null = null;
+                    let bestScoreForDay = -Infinity;
+
+                    ftWorkShifts.forEach(sh => {
+                        if (!isShiftCompatibleWithDayHours(sh, dayHours)) return;
+
+                        // Controlla riposo minimo di 11 ore
+                        if (checkRestPeriodViolation(sh, dateS, staff.id, newRoster, allScheduledBranchIds, shiftTypes)) return;
+
+                        // Limiti giornalieri cross-branch (max 10 ore e gap 2 ore di viaggio)
+                        if (checkCrossBranchDailyViolation(sh, dateS, staff.id, schedulingBranchId, newRoster, allScheduledBranchIds, shiftTypes)) return;
+
+                        // Calcola il contributo e lo spreco reale per questo giorno e branch
+                        let demandCovered = 0;
+                        let wasteGenerated = 0;
+                        const sortedSlots = [...schedulingBranchSlots].sort((a, b) => parseTime(a.startTime) - parseTime(b.startTime));
+                        const firstSlotId = sortedSlots[0]?.id;
+                        const lastSlotId = sortedSlots[sortedSlots.length - 1]?.id;
+
+                        schedulingBranchSlots.forEach(slot => {
+                            let slotStart = slot.startTime;
+                            let slotEnd = slot.endTime;
+                            if (dayHours && dayHours.isOpen && dayHours.slots && dayHours.slots.length > 0) {
+                                const dayOpeningTime = dayHours.slots[0].startTime;
+                                const dayClosingTime = dayHours.slots[dayHours.slots.length - 1].endTime;
+                                if (slot.id === firstSlotId) slotStart = dayOpeningTime;
+                                if (slot.id === lastSlotId) slotEnd = dayClosingTime;
+                            }
+
+                            const overlap = calculateRealSlotCoverage(sh, slotStart, slotEnd);
+                            if (overlap <= 0) return;
+
+                            const target = slot.targets?.[dept]?.[dayIndex] || 0;
+                            const current = getSlotCoverage(slot, dept, dateS, newRoster, schedulingBranchId);
+                            const remaining = Math.max(0, target - current);
+
+                            if (remaining > 0) {
+                                demandCovered += Math.min(remaining, staff.skill_level || 1);
+                                wasteGenerated += Math.max(0, (staff.skill_level || 1) - remaining);
+                            } else {
+                                wasteGenerated += (staff.skill_level || 1);
                             }
                         });
+
+                        // Calcolo punteggio efficienza: massimizza la copertura, minimizza lo spreco e le ore in eccesso
+                        const efficiencyScore = (demandCovered * 1000) - (wasteGenerated * 500) - (sh.hours * 20);
+
+                        if (efficiencyScore > bestScoreForDay) {
+                            bestScoreForDay = efficiencyScore;
+                            bestShiftForDay = sh;
+                        }
+                    });
+
+                    if (bestShiftForDay && bestScoreForDay > -Infinity) {
+                        emptyCandidates.push({ dateS, dayIndex, demand: bestScoreForDay, bestShift: bestShiftForDay });
+                    }
+                });
+
+                // Ordina per efficienza decrescente ed assegna i turni necessari
+                emptyCandidates.sort((a, b) => b.demand - a.demand);
+                emptyCandidates.slice(0, daysNeeded).forEach(({ dateS, bestShift }) => {
+                    const key = rosterKey(schedulingBranchId, staff.id, dateS);
+                    newRoster[key] = bestShift.id;
+                });
+            });
+        });
+
+        // ─────────────────────────────────────────────────────────────────────
+        // FASE 3: BILANCIAMENTO E COPERTURA DEI PART-TIME (PT)
+        // Loop finché tutti i PT del branch hanno un numero di giorni lavorati
+        // simile. Massimo 6 giorni lavorativi a settimana.
+        // ─────────────────────────────────────────────────────────────────────
+
+        let ptInBranch = globalStaff.filter(s => s.employment_type === 'part_time');
+        if (rotationSettings.ptStrategy !== 'none') {
+            ptInBranch = rotateArray(ptInBranch, weekIndex);
+        }
+
+        if (ptInBranch.length > 0) {
+            let balancingDone = false;
+            let maxPasses = Math.max(80, ptInBranch.length * 7);
+            const blacklistedStaffIds = new Set<string>();
+
+            while (!balancingDone && maxPasses > 0) {
+                maxPasses--;
+
+                // Filtra solo i part-time non bloccati in questo turno per evitare deadlock
+                const activePT = ptInBranch.filter(s => !blacklistedStaffIds.has(s.id));
+                if (activePT.length === 0) {
+                    balancingDone = true;
+                    break;
+                }
+
+                // Calcola i giorni lavorati per ogni PT su tutti i branch (fairness globale)
+                const ptWithDays = activePT
+                    .map(s => ({ staff: s, days: getGlobalWorkingDaysCount(s.id, newRoster) }))
+                    .sort((a, b) => a.days - b.days);
+
+                const minDays = ptWithDays[0].days;
+
+                // Ferma se tutti i PT liberi hanno raggiunto il massimo di 6 giorni lavorativi
+                if (minDays >= 6) {
+                    balancingDone = true;
+                    break;
+                }
+
+                let anyAssigned = false;
+
+                // Prova ad assegnare un giorno ai PT con meno giorni (quelli con minDays)
+                for (const { staff } of ptWithDays.filter(p => p.days === minDays)) {
+                    const dept = staff.department || 'Unknown';
+                    let bestDay: Date | null = null;
+                    let bestShiftId: string | null = null;
+                    let bestBranchId: string = selectedBranch;
+                    let bestScore = -Infinity;
+
+                    // Il PT può lavorare in qualsiasi branch fratello a cui appartiene
+                    const staffBranchIds = allScheduledBranchIds.filter(bid => staff.branchIds.includes(bid));
+
+                    weekDays.forEach((day, dayIndex) => {
+                        const dateStr = formatDate(day);
+                        if (hasGlobalLeaveOnDate(staff.id, dateStr)) return;
+                        if (getConsecutiveDays(staff.id, day, newRoster) >= 9) return;
+
+                        staffBranchIds.forEach(bid => {
+                            const key = rosterKey(bid, staff.id, dateStr);
+                            if (newRoster[key]) return; // Già assegnato in questo branch
+
+                            const crossShifts = getLocalCrossBranchShifts(staff.id, dateStr, bid);
+                            const bSlots = autoScheduleTimeSlots.filter(s => s.branchId === bid);
+
+                            for (const sh of ptWorkShifts) {
+                                // Limiti giornalieri cross-branch (max 10 ore e gap 2 ore di viaggio)
+                                if (checkCrossBranchDailyViolation(sh, dateStr, staff.id, bid, newRoster, allScheduledBranchIds, shiftTypes)) continue;
+
+                                // Controlla riposo minimo di 11 ore
+                                if (checkRestPeriodViolation(sh, dateStr, staff.id, newRoster, allScheduledBranchIds, shiftTypes)) continue;
+
+                                const hasCrossConflict = crossShifts.some(cs => {
+                                    const otherShift = shiftTypes.find(s => s.id === cs.shiftTypeId);
+                                    return otherShift && shiftsOverlap(sh, otherShift);
+                                });
+                                if (hasCrossConflict) continue;
+
+                                const branchHours = getWeekOpeningHours(bid, weekStartStr, newRoster);
+                                const dayHours = branchHours[dayIndex];
+                                if (!isShiftCompatibleWithDayHours(sh, dayHours)) continue;
+
+                                const sortedBSlots = [...bSlots].sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime));
+                                const firstSlotId = sortedBSlots[0]?.id;
+                                const lastSlotId = sortedBSlots[sortedBSlots.length - 1]?.id;
+
+                                // Modalità "urgenza" (PT a 0 giorni): accetta lieve over-coverage (120%).
+                                // Modalità "bilanciamento": solo vera domanda residua.
+                                let contribution = 0;
+                                const isEmergencyMode = minDays === 0;
+                                bSlots.forEach(slot => {
+                                    let slotStart = slot.startTime;
+                                    let slotEnd = slot.endTime;
+                                    if (dayHours && dayHours.isOpen && dayHours.slots && dayHours.slots.length > 0) {
+                                        const dayOpeningTime = dayHours.slots[0].startTime;
+                                        const dayClosingTime = dayHours.slots[dayHours.slots.length - 1].endTime;
+                                        if (slot.id === firstSlotId) slotStart = dayOpeningTime;
+                                        if (slot.id === lastSlotId) slotEnd = dayClosingTime;
+                                    }
+
+                                    const overlap = calculateRealSlotCoverage(sh, slotStart, slotEnd);
+                                    if (overlap <= 0) return;
+
+                                    const slotTarget = slot.targets?.[dept]?.[dayIndex] || 0;
+                                    const slotCurrent = getSlotCoverage(slot, dept, dateStr, newRoster, bid);
+                                    if (slotTarget > 0) {
+                                        const coverageLimit = isEmergencyMode ? slotTarget * 1.2 : slotTarget;
+                                        if (slotCurrent < coverageLimit) {
+                                            contribution += Math.min(coverageLimit - slotCurrent, staff.skill_level || 1);
+                                        }
+                                    }
+                                });
+
+                                if (contribution <= 0) continue;
+
+                                const weekShiftCounts = getWeekShiftCounts(staff.id, newRoster);
+                                const altPenalty = (weekShiftCounts[sh.id] || 0) * 30;
+
+                                // Historical branch penalty per i Part-Time cross-branch
+                                let historicalBranchPenalty = 0;
+                                if (staff.branchIds.length > 1 && (rotationSettings.ptStrategy === 'weekly' || rotationSettings.ptStrategy === 'balanced')) {
+                                    const prevHoursInBranch = previousWeekHoursByBranch[staff.id]?.[bid] || 0;
+                                    historicalBranchPenalty = prevHoursInBranch * 10;
+                                }
+
+                                const score = contribution * 100 - sh.hours * 2 - altPenalty - historicalBranchPenalty;
+
+                                if (score > bestScore) {
+                                    bestScore = score;
+                                    bestDay = day;
+                                    bestShiftId = sh.id;
+                                    bestBranchId = bid;
+                                }
+                            }
+                        });
+                    });
+
+                    if (bestDay && bestShiftId) {
+                        const dateStr = formatDate(bestDay as Date);
+                        const key = rosterKey(bestBranchId, staff.id, dateStr);
+                        newRoster[key] = bestShiftId;
+                        anyAssigned = true;
+                        break; // Assegna una alla volta per passata di bilanciamento
+                    } else {
+                        // Se questo part-time non ha trovato nessun turno idoneo,
+                        // lo inseriamo in blacklist temporanea per evitare deadlock
+                        blacklistedStaffIds.add(staff.id);
+                    }
+                }
+
+                if (!anyAssigned && blacklistedStaffIds.size === 0) {
+                    balancingDone = true;
+                } else if (!anyAssigned) {
+                    blacklistedStaffIds.clear();
+                    balancingDone = true;
+                } else {
+                    blacklistedStaffIds.clear();
+                }
+            }
+
+            // FASE 3.5: Assegnazione automatica del Day Off (st-6) per TUTTO lo staff (Full-Time e Part-Time) nei giorni non lavorati
+            globalStaff.forEach(staff => {
+                const targetBranch = allScheduledBranchIds.find(bid => staff.branchIds.includes(bid)) || selectedBranch;
+                weekDays.forEach(day => {
+                    const dateStr = formatDate(day);
+                    const hasAnyShift = allScheduledBranchIds.some(bid => {
+                        const key = rosterKey(bid, staff.id, dateStr);
+                        return !!newRoster[key];
+                    });
+                    if (!hasAnyShift) {
+                        const key = rosterKey(targetBranch, staff.id, dateStr);
+                        newRoster[key] = 'st-6'; // Day Off
                     }
                 });
             });
-            
-            // Gap filling: for anyone with < 40 hours and no days off, give them off days using auto schedulable leave types
-            const autoLeaveShift = shiftTypes.find(s => s.type === 'leave' && s.isAutoSchedulable);
-            if (autoLeaveShift) {
-                branchStaff.forEach(staff => {
-                    // check total hours assigned so far
-                    let totalHours = 0;
-                    let hasLeave = false;
-                    weekDays.forEach(d => {
-                        const shiftId = newRoster[rosterKey(selectedBranch, staff.id, formatDate(d))];
-                        if(shiftId) {
-                            const shift = shiftTypes.find(s => s.id === shiftId);
-                            if(shift) {
-                                if(shift.type === 'work') totalHours += shift.hours;
-                                else if(shift.type === 'leave') hasLeave = true;
-                            }
-                        }
-                    });
-                    
-                    if (totalHours < 40 && !hasLeave) {
-                        // find a day with no shift
-                        const unassignedDays = weekDays.filter(d => !newRoster[rosterKey(selectedBranch, staff.id, formatDate(d))]);
-                        if (unassignedDays.length > 0) {
-                            // give up to 2 days off
-                            const daysOffToGive = Math.min(2, unassignedDays.length);
-                            for(let i=0; i<daysOffToGive; i++) {
-                                const newKey = rosterKey(selectedBranch, staff.id, formatDate(unassignedDays[i]));
-                                newRoster[newKey] = autoLeaveShift.id;
-                            }
-                        }
-                    }
-                });
-            }
-        });
+        }
 
+        allScheduledBranchIds.forEach(bid => {
+            newRoster = freezeWeekOpeningHours(bid, weekStartStr, newRoster);
+        });
         setRoster(newRoster);
         saveRosterData(newRoster);
     }
+
 
     const handleClearWeek = () => {
         if (!confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa tất cả phân công trong tuần này?' : 'Are you sure you want to clear all assignments for this week?')) return;
@@ -489,28 +2596,30 @@ export default function RosterPage() {
                 delete newRoster[key];
             });
         });
+        const frozenKey = `opening_hours::v1::${selectedBranch}::${weekStartStr}`;
+        delete newRoster[frozenKey];
         setRoster(newRoster);
         saveRosterData(newRoster);
     }
 
     const getWeeklyHours = (staffId: string): number => {
         return weekDays.reduce((t, day) => {
-            const s = getCellShift(staffId, formatDate(day))
-            return t + (s?.hours || 0)
+            const shifts = getCellShifts(staffId, formatDate(day))
+            return t + shifts.reduce((sum, s) => sum + (s.type === 'work' ? (s.hours || 0) : 0), 0)
         }, 0)
     }
 
     const getStaffWorkingCount = (date: string): number => {
         return displayedStaff.filter(s => {
-            const sh = getCellShift(s.id, date)
-            return sh && sh.type === 'work'
+            const shifts = getCellShifts(s.id, date)
+            return shifts.some(sh => sh.type === 'work')
         }).length
     }
 
     const getDayTotalHours = (date: string): number => {
         return displayedStaff.reduce((t, s) => {
-            const sh = getCellShift(s.id, date)
-            return t + (sh?.hours || 0)
+            const shifts = getCellShifts(s.id, date)
+            return t + shifts.reduce((sum, sh) => sum + (sh.type === 'work' ? (sh.hours || 0) : 0), 0)
         }, 0)
     }
 
@@ -518,38 +2627,133 @@ export default function RosterPage() {
         const branchSlots = autoScheduleTimeSlots.filter(s => s.branchId === selectedBranch);
         if (branchSlots.length === 0) return { met: true, errors: [], totalTargets: 0 }; // no targets to miss
 
+        const dayHours = weekOpeningHours ? weekOpeningHours[dayIndex] : null;
+        const isOpen = dayHours ? dayHours.isOpen : true;
+        const slots = dayHours && dayHours.slots.length > 0 ? dayHours.slots : [];
+
+        const dayOpeningTime = slots[0]?.startTime;
+        const dayClosingTime = slots[slots.length - 1]?.endTime;
+
+        const adjustedBSlots = branchSlots.map(slot => {
+            let adj = { ...slot };
+            if (isOpen && slots.length > 0) {
+                const sMin = parseTimeToMinutes(slot.startTime);
+                const sMax = parseTimeToMinutes(slot.endTime);
+                
+                if (dayOpeningTime) {
+                    const openMin = parseTimeToMinutes(dayOpeningTime);
+                    if (sMin < openMin) {
+                        adj.startTime = dayOpeningTime;
+                    }
+                }
+                if (dayClosingTime) {
+                    const closeMax = parseTimeToMinutes(dayClosingTime);
+                    if (sMax > closeMax) {
+                        adj.endTime = dayClosingTime;
+                    }
+                }
+            }
+            return adj;
+        });
+
         let totalTargets = 0;
         const currentPoints: Record<string, Record<string, number>> = {};
-        branchSlots.forEach(slot => { currentPoints[slot.id] = {}; });
+        adjustedBSlots.forEach(slot => { currentPoints[slot.id] = {}; });
 
-        const parseTime = (t: string) => { const [h,m] = t.split(':').map(Number); return h * 60 + m; }
-        const coversSlot = (shift: ShiftType, slotStart: string, slotEnd: string) => {
-            if (!shift.startTime || !shift.endTime) return false;
-            const sStart = parseTime(shift.startTime);
-            const sEnd = parseTime(shift.endTime) < sStart ? parseTime(shift.endTime) + 24*60 : parseTime(shift.endTime);
-            const lStart = parseTime(slotStart);
-            const lEnd = parseTime(slotEnd) < lStart ? parseTime(slotEnd) + 24*60 : parseTime(slotEnd);
-            return sStart <= lStart && sEnd >= lEnd;
-        }
+        const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+        const getOverlapMinutes = (start1: number, end1: number, start2: number, end2: number): number => {
+            const s1 = start1;
+            let e1 = end1 < start1 ? end1 + 24 * 60 : end1;
+            const s2 = start2;
+            let e2 = end2 < start2 ? end2 + 24 * 60 : end2;
+
+            const overlapStart = Math.max(s1, s2);
+            const overlapEnd = Math.min(e1, e2);
+
+            return Math.max(0, overlapEnd - overlapStart);
+        };
+
+        const calculateRealSlotCoverage = (
+            shift: ShiftType,
+            slotStart: string,
+            slotEnd: string
+        ): number => {
+            if (shift.type !== 'work') return 0;
+            
+            const sStart = parseTimeToMinutes(shift.startTime!);
+            const sEnd = parseTimeToMinutes(shift.endTime!);
+            const lStart = parseTimeToMinutes(slotStart);
+            const lEnd = parseTimeToMinutes(slotEnd);
+
+            let overlap = getOverlapMinutes(sStart, sEnd, lStart, lEnd);
+
+            if (shift.startTime2 && shift.endTime2) {
+                const sStart2 = parseTimeToMinutes(shift.startTime2);
+                const sEnd2 = parseTimeToMinutes(shift.endTime2);
+                overlap += getOverlapMinutes(sStart2, sEnd2, lStart, lEnd);
+            }
+
+            const slotDuration = getOverlapMinutes(lStart, lEnd, lStart, lEnd);
+            if (slotDuration === 0) return 0;
+
+            return (overlap / slotDuration) >= 0.70 ? overlap : 0;
+        };
+
+        const TIMELINE_START = 6;
+        const TIMELINE_END = 26;
+        const SLOTS = (TIMELINE_END - TIMELINE_START) * 2;
+        const coverage = Array(SLOTS).fill(0);
 
         displayedStaff.forEach(staff => {
             const key = rosterKey(selectedBranch, staff.id, dateStr);
-            const assignedShiftId = roster[key];
-            if (assignedShiftId) {
-                const assignedShift = shiftTypes.find(s => s.id === assignedShiftId);
-                if (assignedShift && assignedShift.type === 'work') {
-                    branchSlots.forEach(slot => {
-                        if (coversSlot(assignedShift, slot.startTime, slot.endTime)) {
-                            const dept = staff.department || 'Unknown';
-                            currentPoints[slot.id][dept] = (currentPoints[slot.id][dept] || 0) + (staff.skill_level || 1);
-                        }
-                    });
-                }
+            const assignedShiftIdStr = roster[key];
+            if (assignedShiftIdStr) {
+                assignedShiftIdStr.split(',').forEach(id => {
+                    const assignedShift = shiftTypes.find(s => s.id === id);
+                    if (assignedShift && assignedShift.type === 'work') {
+                        // 1. Target points coverage
+                        adjustedBSlots.forEach(slot => {
+                            if (calculateRealSlotCoverage(assignedShift, slot.startTime, slot.endTime) > 0) {
+                                const dept = staff.department || 'Unknown';
+                                currentPoints[slot.id][dept] = (currentPoints[slot.id][dept] || 0) + (staff.skill_level || 1);
+                            }
+                        });
+
+                        // 2. Physical timeline coverage
+                        const getPeriods = (shift: ShiftType) => {
+                            const periods = [];
+                            if (shift.startTime && shift.endTime) {
+                                const s = parseTimeToMinutes(shift.startTime) / 60;
+                                let e = parseTimeToMinutes(shift.endTime) / 60;
+                                if (e <= s) e += 24;
+                                periods.push({ start: s, end: e });
+                            }
+                            if (shift.startTime2 && shift.endTime2) {
+                                const s = parseTimeToMinutes(shift.startTime2) / 60;
+                                let e = parseTimeToMinutes(shift.endTime2) / 60;
+                                if (e <= s) e += 24;
+                                periods.push({ start: s, end: e });
+                            }
+                            return periods;
+                        };
+                        const periods = getPeriods(assignedShift);
+                        periods.forEach(p => {
+                            for (let i = 0; i < SLOTS; i++) {
+                                const slotTime = TIMELINE_START + i * 0.5;
+                                if (slotTime >= p.start && slotTime < p.end) {
+                                    coverage[i]++;
+                                }
+                            }
+                        });
+                    }
+                });
             }
         });
 
         const errors: string[] = [];
-        branchSlots.forEach(slot => {
+
+        // Check for target errors
+        adjustedBSlots.forEach(slot => {
             const targets = slot.targets || {};
             const departments = Object.keys(targets);
             
@@ -561,6 +2765,41 @@ export default function RosterPage() {
                 }
             });
         });
+
+        // Check for physical gaps in operational hours
+        if (isOpen && slots.length > 0) {
+            let minStart = TIMELINE_END * 60;
+            let maxEnd = TIMELINE_START * 60;
+            slots.forEach(slot => {
+                const start = parseTime(slot.startTime);
+                let end = parseTime(slot.endTime);
+                if (end <= start) end += 24 * 60;
+                if (start < minStart) minStart = start;
+                if (end > maxEnd) maxEnd = end;
+            });
+
+            const OP_START_SLOT = Math.max(0, Math.min(SLOTS, Math.round((minStart / 60 - TIMELINE_START) * 2)));
+            const OP_END_SLOT = Math.max(0, Math.min(SLOTS, Math.round((maxEnd / 60 - TIMELINE_START) * 2)));
+
+            let gapStart = -1;
+            const foundGaps: { start: number; end: number }[] = [];
+            for (let i = OP_START_SLOT; i < Math.min(OP_END_SLOT, SLOTS); i++) {
+                if (coverage[i] === 0 && gapStart === -1) gapStart = i;
+                if ((coverage[i] > 0 || i === OP_END_SLOT - 1) && gapStart !== -1) {
+                    foundGaps.push({ start: gapStart, end: coverage[i] === 0 ? i + 1 : i });
+                    gapStart = -1;
+                }
+            }
+
+            foundGaps.forEach(g => {
+                const startH = TIMELINE_START + g.start * 0.5;
+                const endH = TIMELINE_START + g.end * 0.5;
+                const fmtH = (h: number) => `${String(Math.floor(h % 24)).padStart(2, '0')}:${h % 1 === 0 ? '00' : '30'}`;
+                errors.push(language === 'vi' 
+                    ? `⚠️ Thiếu nhân sự: ${fmtH(startH)} – ${fmtH(endH)}` 
+                    : `⚠️ No coverage: ${fmtH(startH)} – ${fmtH(endH)}`);
+            });
+        }
 
         return { met: errors.length === 0, errors, totalTargets };
     }
@@ -577,7 +2816,7 @@ export default function RosterPage() {
         <div className="min-h-screen bg-\[#0b1530\] max-w-none mx-auto p-4 text-gray-100 animate-in fade-in duration-300">
             {/* Riga Superiore: Titolo e Branch Selector */}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-                <h1 className="text-2xl font-bold text-white tracking-tight">Roster Management</h1>
+                <h1 className="text-2xl font-bold text-white tracking-tight">{language === 'vi' ? 'Quản lý Lịch ca' : 'Roster Management'}</h1>
                 
                 <div className="flex items-center gap-2 bg-[#1a2c56] border border-blue-500/20 px-3 py-1.5 rounded-lg text-blue-200">
                     <MapPin className="w-4 h-4 shrink-0" />
@@ -629,13 +2868,13 @@ export default function RosterPage() {
                             <ChevronLeft className="w-5 h-5" />
                         </button>
                         <div className="text-sm font-semibold text-white min-w-[180px] text-center">
-                            {formatWeekRange(weekStart)}
+                            {formatWeekRange(weekStart, language)}
                         </div>
                         <button onClick={nextWeek} className="p-1.5 rounded-lg hover:bg-white/10 text-blue-200 hover:text-white transition">
                             <ChevronRight className="w-5 h-5" />
                         </button>
                         <button onClick={goToday} className="ml-2 px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition">
-                            Today
+                            {language === 'vi' ? 'Hôm nay' : 'Today'}
                         </button>
                     </div>
                 ) : (
@@ -644,87 +2883,211 @@ export default function RosterPage() {
                             <ChevronLeft className="w-5 h-5" />
                         </button>
                         <div className="text-sm font-semibold min-w-[180px] text-center">
-                            {formatWeekRange(weekStart)}
+                            {formatWeekRange(weekStart, language)}
                         </div>
                         <button className="p-1.5">
                             <ChevronRight className="w-5 h-5" />
                         </button>
                         <button className="ml-2 px-3 py-1.5 text-xs">
-                            Today
+                            {language === 'vi' ? 'Hôm nay' : 'Today'}
                         </button>
                     </div>
                 )}
             </div>
 
+            {/* Premium Lock Banner */}
+            {isRosterPublished && (
+                <div 
+                    data-html2canvas-ignore="true" 
+                    className="mb-4 p-4 rounded-xl border border-amber-500/20 bg-amber-500/10 flex items-center justify-between text-amber-200 text-sm animate-in slide-in-from-top duration-300"
+                >
+                    <div className="flex items-center gap-3">
+                        <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                        <div>
+                            <span className="font-semibold font-medium">
+                                {language === 'vi' ? 'Roster đã công bố' : 'Roster Published'}
+                            </span>
+                            <span className="opacity-80 ml-2">
+                                {language === 'vi' 
+                                    ? 'Tuần này đã được khóa. Để thực hiện thay đổi, vui lòng mở khóa roster.' 
+                                    : 'This week is locked. To make changes, please unlock the roster.'}
+                            </span>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setIsHistoryModalOpen(true)}
+                        className="px-3 py-1.5 rounded-lg border border-amber-500/35 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-xs font-semibold transition flex items-center gap-1.5 whitespace-nowrap ml-4"
+                    >
+                        <History className="w-3.5 h-3.5 text-amber-400" />
+                        {language === 'vi' ? 'Lịch sử thay đổi' : 'Log Changes'}
+                    </button>
+                </div>
+            )}
+
             {/* Divider / Toolbar - Only in weekly view */}
             {activeView === 'weekly' && (
                 <div className="mb-4 flex justify-between items-center py-2 animate-in fade-in duration-150">
                     <div className="text-sm font-semibold text-blue-200">
-                        {displayedStaff.length} Staff in roster
+                        {language === 'vi' ? `${displayedStaff.length} nhân viên trong lịch` : `${displayedStaff.length} Staff in roster`}
                     </div>
-                    <div className="flex gap-2">
-                        <div className="relative mr-2" ref={autoMenuRef}>
+                    <div className="flex items-center gap-3">
+                        {/* Modify buttons, only visible if not published */}
+                        {!isRosterPublished && (
+                            <>
+                                <div className="relative" ref={autoMenuRef}>
+                                    <button
+                                        onClick={() => setIsAutoMenuOpen(!isAutoMenuOpen)}
+                                        className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/50 bg-blue-600/10 hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
+                                    >
+                                        <Wand2 className="w-3.5 h-3.5" />
+                                        {language === 'vi' ? 'Tự động phân ca' : 'Auto-Schedule'}
+                                        <ChevronDown className="w-3 h-3 ml-0.5" />
+                                    </button>
+                                    
+                                    {isAutoMenuOpen && (
+                                        <div className="absolute right-0 mt-1 z-30 w-64 rounded-xl bg-white border border-gray-200 shadow-xl py-1 text-left animate-in fade-in slide-in-from-top-2 duration-150">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsAutoMenuOpen(false);
+                                                    handleAutoSchedule(false);
+                                                }}
+                                                className="w-full px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition flex flex-col items-start text-left gap-0.5"
+                                            >
+                                                <span className="font-semibold text-gray-800">
+                                                    {language === 'vi' ? 'Tự động điền ca trống' : 'Auto-Fill Gaps'}
+                                                </span>
+                                                <span className="text-[10px] text-gray-400 font-normal">
+                                                    {language === 'vi' ? 'Không ghi đè ca đã phân' : 'Fills empty shifts, preserves existing'}
+                                                </span>
+                                            </button>
+                                            <div className="border-t border-gray-150 my-1"></div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsAutoMenuOpen(false);
+                                                    handleAutoSchedule(true);
+                                                }}
+                                                className="w-full px-4 py-2 text-xs text-red-600 hover:bg-red-50 transition flex flex-col items-start text-left gap-0.5"
+                                            >
+                                                <span className="font-semibold text-red-600">
+                                                    {language === 'vi' ? 'Xóa & Tạo lại mới' : 'Clear & Regenerate'}
+                                                </span>
+                                                <span className="text-[10px] text-red-400 font-normal">
+                                                    {language === 'vi' ? 'Xóa sạch tuần này và tự động phân lại' : 'Clear week and auto-generate new shifts'}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <button
+                                    onClick={handleClearWeek}
+                                    className="px-3 py-1.5 text-xs rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-medium transition flex items-center gap-1.5"
+                                    title={language === 'vi' ? 'Xóa tất cả các ca phân công trong tuần này' : 'Clear all shift assignments for this week'}
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    {language === 'vi' ? 'Xóa tuần này' : 'Clear Week'}
+                                </button>
+                                <button
+                                    onClick={() => setIsBorrowModalOpen(true)}
+                                    className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/50 hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
+                                >
+                                    <User className="w-3.5 h-3.5" />
+                                    {language === 'vi' ? 'Nhân viên mượn' : 'Assign External Staff'}
+                                </button>
+                            </>
+                        )}
+
+                        {/* Divider, only visible if not published to separate groups, otherwise hidden */}
+                        {!isRosterPublished && <div className="w-px h-5 bg-slate-700/40 align-middle self-center mx-1"></div>}
+
+                        {/* Export Menu (Always visible) */}
+                        <div className="relative" ref={exportMenuRef}>
                             <button
-                                onClick={() => setIsAutoMenuOpen(!isAutoMenuOpen)}
-                                className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/50 bg-blue-600/10 hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
+                                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                                className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/30 bg-blue-600/5 hover:bg-blue-600/15 text-blue-300 font-medium transition flex items-center gap-1.5"
                             >
-                                <Wand2 className="w-3.5 h-3.5" />
-                                {language === 'vi' ? 'Tự động phân ca' : 'Auto-Schedule'}
+                                <Download className="w-3.5 h-3.5" />
+                                {language === 'vi' ? 'Xuất Roster' : 'Export Roster'}
                                 <ChevronDown className="w-3 h-3 ml-0.5" />
                             </button>
-                            
-                            {isAutoMenuOpen && (
-                                <div className="absolute right-0 mt-1 z-30 w-64 rounded-xl bg-white border border-gray-200 shadow-xl py-1 text-left animate-in fade-in slide-in-from-top-2 duration-150">
+                            {isExportMenuOpen && (
+                                <div className="absolute right-0 mt-1 z-30 w-48 rounded-xl bg-white border border-gray-200 shadow-xl py-1 text-left animate-in fade-in slide-in-from-top-2 duration-150">
                                     <button
-                                        type="button"
                                         onClick={() => {
-                                            setIsAutoMenuOpen(false);
-                                            handleAutoSchedule(false);
+                                            setIsExportMenuOpen(false);
+                                            handleExportPng();
                                         }}
-                                        className="w-full px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition flex flex-col items-start text-left gap-0.5"
+                                        className="w-full px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition flex items-center gap-2"
                                     >
-                                        <span className="font-semibold text-gray-800">
-                                            {language === 'vi' ? 'Tự động điền ca trống' : 'Auto-Fill Gaps'}
-                                        </span>
-                                        <span className="text-[10px] text-gray-400 font-normal">
-                                            {language === 'vi' ? 'Không ghi đè ca đã phân' : 'Fills empty shifts, preserves existing'}
-                                        </span>
+                                        <FileImage className="w-4 h-4 text-emerald-500" />
+                                        <span>Export as Image (PNG)</span>
                                     </button>
-                                    <div className="border-t border-gray-150 my-1"></div>
                                     <button
-                                        type="button"
                                         onClick={() => {
-                                            setIsAutoMenuOpen(false);
-                                            handleAutoSchedule(true);
+                                            setIsExportMenuOpen(false);
+                                            handleExportPdf();
                                         }}
-                                        className="w-full px-4 py-2 text-xs text-red-600 hover:bg-red-50 transition flex flex-col items-start text-left gap-0.5"
+                                        className="w-full px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition flex items-center gap-2"
                                     >
-                                        <span className="font-semibold text-red-600">
-                                            {language === 'vi' ? 'Xóa & Tạo lại mới' : 'Clear & Regenerate'}
-                                        </span>
-                                        <span className="text-[10px] text-red-400 font-normal">
-                                            {language === 'vi' ? 'Xóa sạch tuần này và tự động phân lại' : 'Clear week and auto-generate new shifts'}
-                                        </span>
+                                        <FileText className="w-4 h-4 text-red-500" />
+                                        <span>Export as PDF</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsExportMenuOpen(false);
+                                            handleExportExcel();
+                                        }}
+                                        className="w-full px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition flex items-center gap-2"
+                                    >
+                                        <FileSpreadsheet className="w-4 h-4 text-blue-500" />
+                                        <span>Export as Excel (XLSX)</span>
                                     </button>
                                 </div>
                             )}
                         </div>
 
-                        <button
-                            onClick={handleClearWeek}
-                            className="px-3 py-1.5 text-xs rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-medium transition flex items-center gap-1.5 mr-2"
-                            title={language === 'vi' ? 'Xóa tất cả các ca phân công trong tuần này' : 'Clear all shift assignments for this week'}
-                        >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            {language === 'vi' ? 'Xóa tuần này' : 'Clear Week'}
-                        </button>
-                        <button
-                            onClick={() => setIsBorrowModalOpen(true)}
-                            className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/50 hover:bg-blue-600/20 text-blue-300 font-medium transition flex items-center gap-1.5"
-                        >
-                            <User className="w-3.5 h-3.5" />
-                            Assign External Staff
-                        </button>
+                        {/* Publish / Unlock Button */}
+                        {!isRosterPublished ? (
+                            <button
+                                onClick={handlePublishRoster}
+                                disabled={isPublishingLoading}
+                                className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-700/50 text-white font-medium transition flex items-center gap-1.5"
+                            >
+                                <Send className="w-3.5 h-3.5" />
+                                {isPublishingLoading
+                                    ? (language === 'vi' ? 'Đang công bố...' : 'Publishing...')
+                                    : (language === 'vi' ? 'Publish Roster' : 'Publish Roster')
+                                }
+                            </button>
+                        ) : (
+                            <div className="relative" ref={unpublishMenuRef}>
+                                <button
+                                    onClick={() => setIsUnpublishMenuOpen(!isUnpublishMenuOpen)}
+                                    className="px-3 py-1.5 text-xs rounded-lg border border-emerald-500/50 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 font-medium transition flex items-center gap-1.5"
+                                >
+                                    <Lock className="w-3.5 h-3.5" />
+                                    {language === 'vi' ? 'Đã công bố' : 'Published'}
+                                    <ChevronDown className="w-3 h-3 ml-0.5" />
+                                </button>
+                                {isUnpublishMenuOpen && (
+                                    <div className="absolute right-0 mt-1 z-30 w-48 rounded-xl bg-white border border-gray-200 shadow-xl py-1 text-left animate-in fade-in slide-in-from-top-2 duration-150">
+                                        <button
+                                            onClick={() => {
+                                                setIsUnpublishMenuOpen(false);
+                                                handleUnpublishRoster();
+                                            }}
+                                            disabled={isPublishingLoading}
+                                            className="w-full px-4 py-2 text-xs text-red-600 hover:bg-red-50 transition flex items-center gap-2"
+                                        >
+                                            <Unlock className="w-4 h-4" />
+                                            <span>{language === 'vi' ? 'Mở khóa / Chỉnh sửa' : 'Unlock / Edit Roster'}</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -732,12 +3095,12 @@ export default function RosterPage() {
             {activeView === 'weekly' ? (
                 <>
                     {/* Grid in white card */}
-                    <div className="bg-white rounded-2xl shadow overflow-x-auto">
+                    <div id="weekly-roster-table" className="bg-white rounded-2xl shadow overflow-x-auto">
                 <table className="w-full border-collapse min-w-[800px]">
                     <thead>
                         <tr>
                             <th className="sticky left-0 z-10 bg-gray-50 text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 border-b border-gray-200 min-w-[180px] rounded-tl-2xl">
-                                Staff
+                                {language === 'vi' ? 'Nhân viên' : 'Staff'}
                             </th>
                             {weekDays.map((day, dayIndex) => {
                                 const ds = formatDate(day)
@@ -752,6 +3115,7 @@ export default function RosterPage() {
                                     >
                                         {!coverage.met && (
                                             <div 
+                                                data-html2canvas-ignore="true"
                                                 className="absolute top-2 right-2 text-red-500 cursor-help group/tooltip"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
@@ -771,11 +3135,58 @@ export default function RosterPage() {
                                                 </div>
                                             </div>
                                         )}
-                                        <div className={`text-xs uppercase tracking-wider ${isToday ? 'text-blue-600' : 'text-gray-500'} group-hover/day:text-blue-600 transition-colors`}>
-                                            {dayName(day)}
+                                        <div className="flex items-center justify-center gap-1.5">
+                                            <span className={`text-xs uppercase tracking-wider ${isToday ? 'text-blue-600' : 'text-gray-500'} group-hover/day:text-blue-600 transition-colors`}>
+                                                {dayName(day, language)}
+                                            </span>
+                                            <span className={`text-sm font-bold ${isToday ? 'text-blue-700' : 'text-gray-800'} group-hover/day:text-blue-700 transition-colors`}>
+                                                {day.getDate()}
+                                            </span>
                                         </div>
-                                        <div className={`text-lg font-bold mt-0.5 ${isToday ? 'text-blue-700' : 'text-gray-800'} group-hover/day:text-blue-700 transition-colors`}>
-                                            {day.getDate()}
+                                        <div className={`text-[10px] font-semibold mt-0.5 truncate max-w-[90px] mx-auto ${
+                                            isToday ? 'text-blue-500/90' : 'text-slate-400/80'
+                                        }`} title={getDayHoursText(dayIndex)}>
+                                            {getDayHoursText(dayIndex)}
+                                        </div>
+                                        
+                                        {/* Holiday & Note text area */}
+                                        <div 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingDayConfig({
+                                                    date: ds,
+                                                    isHoliday: !!holidays[ds],
+                                                    holidayName: holidays[ds] || '',
+                                                    notes: dayNotes[ds] || ''
+                                                });
+                                            }}
+                                            className="mt-1.5 pt-1.5 border-t border-dashed border-slate-200/60 min-h-[48px] flex flex-col gap-1 items-stretch cursor-pointer hover:bg-slate-100/50 rounded-lg p-1 transition-colors"
+                                        >
+                                            {holidays[ds] && (
+                                                <span 
+                                                    className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-600 border border-rose-100/50 truncate w-full text-center"
+                                                    title={holidays[ds]}
+                                                >
+                                                    PH: {holidays[ds]}
+                                                </span>
+                                            )}
+
+                                            {dayNotes[ds] && (
+                                                <span 
+                                                    className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-100/50 truncate w-full text-center"
+                                                    title={dayNotes[ds]}
+                                                >
+                                                    Note: {dayNotes[ds]}
+                                                </span>
+                                            )}
+
+                                            {!holidays[ds] && !dayNotes[ds] && (
+                                                <div className="flex-1 flex items-center justify-center">
+                                                    <span className="opacity-0 group-hover/day:opacity-100 text-[9px] font-bold text-blue-600 hover:underline transition-opacity">
+                                                        + Note/PH
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="text-[9px] text-gray-400 opacity-0 group-hover/day:opacity-100 transition-opacity mt-0.5 flex items-center justify-center gap-0.5">
                                             <Clock className="w-2.5 h-2.5" /> Timeline
@@ -784,7 +3195,7 @@ export default function RosterPage() {
                                 )
                             })}
                             <th className="bg-gray-50 px-3 py-3 text-center border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500 rounded-tr-2xl min-w-[60px]">
-                                Hours
+                                {language === 'vi' ? 'Giờ' : 'Hours'}
                             </th>
                         </tr>
                     </thead>
@@ -803,9 +3214,9 @@ export default function RosterPage() {
                                 {staffInDept.map((staff, idx) => {
                                     const weekHours = getWeeklyHours(staff.id)
                                     return (
-                                        <tr key={staff.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                                        <tr key={staff.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#e0f2fe]/40'}>
                                             {/* Staff name cell */}
-                                            <td className="sticky left-0 z-10 px-4 py-2 border-b border-gray-100" style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fcfdfd' }}>
+                                            <td className="sticky left-0 z-10 px-4 py-2 border-b border-gray-100" style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f0f9ff' }}>
                                                 <div
                                                     className="flex items-center gap-3 cursor-pointer group"
                                                     onClick={(e) => { e.stopPropagation(); setStaffDetailId(staff.id) }}
@@ -815,7 +3226,30 @@ export default function RosterPage() {
                                                     </div>
                                                     <div>
                                                         <div className="text-sm font-medium text-gray-900 leading-tight group-hover:text-blue-600 group-hover:underline transition-colors">{staff.name}</div>
-                                                        <div className="text-xs text-gray-400">{staff.role}</div>
+                                                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                            <span className="text-xs text-gray-400">{staff.role}</span>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className={`text-[8px] px-1 py-0.5 rounded font-bold uppercase tracking-wider leading-none border ${
+                                                                    staff.employment_type === 'part_time'
+                                                                        ? 'bg-amber-50 text-amber-700 border-amber-200/55'
+                                                                        : staff.employment_type === 'full_time'
+                                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200/55'
+                                                                            : 'bg-purple-50 text-purple-700 border-purple-200/55'
+                                                                }`}>
+                                                                    {staff.employment_type === 'part_time'
+                                                                        ? (language === 'vi' ? 'PT' : 'Part-time')
+                                                                        : staff.employment_type === 'full_time'
+                                                                            ? (language === 'vi' ? 'FT' : 'Full-time')
+                                                                            : staff.employment_type
+                                                                    }
+                                                                </span>
+                                                                <div className="flex items-center gap-0.5" data-html2canvas-ignore="true">
+                                                                    {Array.from({ length: staff.skill_level || 1 }, (_, i) => (
+                                                                        <Star key={i} className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </td>
@@ -823,7 +3257,7 @@ export default function RosterPage() {
                                             {/* Day cells */}
                                             {weekDays.map(day => {
                                                 const ds = formatDate(day)
-                                                const shift = getCellShift(staff.id, ds)
+                                                const shifts = getCellShifts(staff.id, ds)
                                                 const isToday = ds === todayStr
                                                 // Always fetch cross-branch shifts to show availability
                                                 const crossShifts = getCrossBranchShifts(staff.id, ds)
@@ -832,62 +3266,95 @@ export default function RosterPage() {
                                                     const s = shiftTypes.find(t => t.id === cs.shiftTypeId)
                                                     return s && (s.globalAcrossBranches || s.allowParallel === false)
                                                 })
-                                                const isBusyElsewhere = !shift && crossShifts.length > 0 && !isFullyBlocked
-
+                                                const isBusyElsewhere = shifts.length === 0 && crossShifts.length > 0 && !isFullyBlocked
+ 
                                                 const bgClass = isToday 
                                                     ? 'bg-blue-50/50' 
-                                                    : isFullyBlocked && !shift 
+                                                    : isFullyBlocked && shifts.length === 0 
                                                         ? 'bg-slate-100/60' 
                                                         : isBusyElsewhere 
                                                             ? 'bg-amber-50/40' 
                                                             : ''
-
+ 
                                                 const plusStyle = isFullyBlocked 
                                                     ? 'border-gray-200 text-gray-300 opacity-40' // Disabled look
                                                     : isBusyElsewhere 
                                                         ? 'border-amber-200 text-amber-300 hover:border-amber-300 hover:text-amber-400' 
                                                         : 'border-gray-200 text-gray-300 hover:border-gray-300 hover:text-gray-400'
-
+ 
                                                 const indicatorStyle = isFullyBlocked ? 'text-slate-500' : 'text-amber-600/80'
                                                 const iconColor = isFullyBlocked ? 'text-slate-400' : 'text-amber-500'
-
+ 
                                                 return (
                                                     <td
                                                         key={ds}
-                                                        className={`px-1 py-1.5 border-b border-gray-100 text-center cursor-pointer transition-colors
+                                                        className={`px-1 py-1.5 border-b border-gray-100 text-center transition-colors
                                                             ${bgClass}
-                                                            hover:bg-blue-50`}
-                                                        onClick={() => setEditingCell({ staffId: staff.id, date: ds, staffName: staff.name })}
+                                                            ${isRosterPublished ? 'cursor-default' : 'cursor-pointer hover:bg-blue-50'}`}
+                                                        onClick={() => !isRosterPublished && setEditingCell({ staffId: staff.id, date: ds, staffName: staff.name })}
                                                     >
-                                                        {shift ? (
-                                                            <div
-                                                                className="inline-flex flex-col items-center rounded-lg px-2.5 py-1.5 min-w-[64px]"
-                                                                style={{
-                                                                    backgroundColor: shift.color + '15',
-                                                                    border: `1px solid ${shift.color}30`,
-                                                                }}
-                                                            >
-                                                                <span className="text-xs font-bold" style={{ color: shift.color }}>
-                                                                    {shift.code}
-                                                                </span>
-                                                                {shift.type === 'work' && shift.startTime && (
-                                                                    <span className="text-[10px] text-gray-400 mt-0.5 leading-none">
-                                                                        {shift.startTime}–{shift.endTime}
+                                                        {shifts.length > 0 ? (
+                                                            shifts.length === 1 ? (
+                                                                <div
+                                                                    className="inline-flex flex-col items-center justify-center rounded-lg px-2 py-1 w-[84px] h-[42px]"
+                                                                    style={{
+                                                                        backgroundColor: getBlendedColor(shifts[0].color),
+                                                                        border: `1px solid ${getBlendedBorderColor(shifts[0].color, 0.1875)}`,
+                                                                    }}
+                                                                >
+                                                                    <span className="text-xs font-bold leading-none" style={{ color: shifts[0].color }}>
+                                                                        {shifts[0].code}
                                                                     </span>
-                                                                )}
-                                                                {shift.type === 'work' && shift.startTime2 && shift.endTime2 && (
-                                                                    <span className="text-[10px] text-gray-400 mt-0.5 leading-none">
-                                                                        {shift.startTime2}–{shift.endTime2}
-                                                                    </span>
-                                                                )}
-                                                                {shift.type === 'leave' && (
-                                                                    <span className="text-[10px] mt-0.5" style={{ color: shift.color + 'BB' }}>
-                                                                        {shift.name}
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                                    {shifts[0].type === 'work' && shifts[0].startTime && (
+                                                                        <span className="text-[9px] text-gray-400 mt-0.5 leading-none whitespace-nowrap">
+                                                                            {shifts[0].startTime.split(':')[0]}–{shifts[0].endTime.split(':')[0]}
+                                                                            {shifts[0].startTime2 && shifts[0].endTime2 && ` & ${shifts[0].startTime2.split(':')[0]}–${shifts[0].endTime2.split(':')[0]}`}
+                                                                        </span>
+                                                                    )}
+                                                                    {shifts[0].type === 'leave' && (
+                                                                        <span className="text-[10px] mt-0.5 leading-none" style={{ color: shifts[0].color + 'BB' }}>
+                                                                            {shifts[0].name}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="inline-flex flex-col gap-0.5 w-[84px] h-[42px]">
+                                                                    {/* Top Shift */}
+                                                                    <div
+                                                                        className="flex items-center justify-center gap-1 px-1 h-[20px] rounded-md text-[9px] font-extrabold leading-none w-full"
+                                                                        style={{
+                                                                            backgroundColor: getBlendedColor(shifts[0].color),
+                                                                            border: `1px solid ${getBlendedBorderColor(shifts[0].color, 0.25)}`,
+                                                                        }}
+                                                                    >
+                                                                        <span style={{ color: shifts[0].color }}>{shifts[0].code}</span>
+                                                                        {shifts[0].type === 'work' && shifts[0].startTime && (
+                                                                            <span className="text-[7px] font-semibold text-gray-500 whitespace-nowrap">
+                                                                                {shifts[0].startTime.split(':')[0]}–{shifts[0].endTime.split(':')[0]}
+                                                                                {shifts[0].startTime2 && shifts[0].endTime2 && ` & ${shifts[0].startTime2.split(':')[0]}–${shifts[0].endTime2.split(':')[0]}`}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    {/* Bottom Shift */}
+                                                                    <div
+                                                                        className="flex items-center justify-center gap-1 px-1 h-[20px] rounded-md text-[9px] font-extrabold leading-none w-full"
+                                                                        style={{
+                                                                            backgroundColor: getBlendedColor(shifts[1].color),
+                                                                            border: `1px solid ${getBlendedBorderColor(shifts[1].color, 0.25)}`,
+                                                                        }}
+                                                                    >
+                                                                        <span style={{ color: shifts[1].color }}>{shifts[1].code}</span>
+                                                                        {shifts[1].type === 'work' && shifts[1].startTime && (
+                                                                            <span className="text-[7px] font-semibold text-gray-500 whitespace-nowrap">
+                                                                                {shifts[1].startTime.split(':')[0]}–{shifts[1].endTime.split(':')[0]}
+                                                                                {shifts[1].startTime2 && shifts[1].endTime2 && ` & ${shifts[1].startTime2.split(':')[0]}–${shifts[1].endTime2.split(':')[0]}`}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            )
                                                         ) : (
-                                                            <div className={`inline-flex items-center justify-center rounded-lg border border-dashed transition min-w-[64px] py-3 text-lg ${plusStyle}`}>
+                                                            <div className={`inline-flex items-center justify-center rounded-lg border border-dashed transition w-[84px] h-[42px] text-lg ${plusStyle}`}>
                                                                 +
                                                             </div>
                                                         )}
@@ -912,7 +3379,7 @@ export default function RosterPage() {
                                             {/* Weekly hours */}
                                             <td className="px-3 py-2 border-b border-gray-100 text-center">
                                                 <span className={`text-sm font-semibold ${weekHours > 44 ? 'text-red-500' : weekHours >= 40 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                                                    {weekHours}h
+                                                    {weekHours}{language === 'vi' ? 'g' : 'h'}
                                                 </span>
                                             </td>
                                         </tr>
@@ -923,10 +3390,10 @@ export default function RosterPage() {
                     </tbody>
 
                     {/* Summary row */}
-                    <tfoot>
+                    <tfoot data-html2canvas-ignore="true">
                         <tr className="bg-gray-50">
                             <td className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold rounded-bl-2xl">
-                                Totals
+                                {language === 'vi' ? 'Tổng cộng' : 'Totals'}
                             </td>
                             {weekDays.map(day => {
                                 const ds = formatDate(day)
@@ -934,14 +3401,14 @@ export default function RosterPage() {
                                 const hours = getDayTotalHours(ds)
                                 return (
                                     <td key={ds} className={`px-2 py-3 text-center ${ds === todayStr ? 'bg-blue-50/50' : ''}`}>
-                                        <div className="text-sm font-semibold text-gray-800">{count} staff</div>
-                                        <div className="text-xs text-gray-400">{hours}h</div>
+                                        <div className="text-sm font-semibold text-gray-800">{count} {language === 'vi' ? 'nhân viên' : 'staff'}</div>
+                                        <div className="text-xs text-gray-400">{hours}{language === 'vi' ? 'g' : 'h'}</div>
                                     </td>
                                 )
                             })}
                             <td className="px-3 py-3 text-center rounded-br-2xl">
                                 <div className="text-sm font-bold text-gray-800">
-                                    {displayedStaff.reduce((t, s) => t + getWeeklyHours(s.id), 0)}h
+                                    {displayedStaff.reduce((t, s) => t + getWeeklyHours(s.id), 0)}{language === 'vi' ? 'g' : 'h'}
                                 </div>
                             </td>
                         </tr>
@@ -952,10 +3419,12 @@ export default function RosterPage() {
             {/* Shift legend */}
             <div className="mt-4">
                 <div className="flex flex-wrap gap-3">
-                    {shiftTypes.map(st => (
+                    {activeShiftTypes.map(st => (
                         <div key={st.id} className="flex items-center gap-1.5">
-                            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: st.color }} />
-                            <span className="text-xs text-blue-200">{st.code} – {st.name}</span>
+                            <div className="w-3.5 h-3.5 rounded-sm border border-slate-700/50" style={{ backgroundColor: st.color }} />
+                            <span className="text-xs text-blue-200">
+                                {st.code} {st.startTime && st.endTime ? `(${st.startTime}–${st.endTime}${st.startTime2 && st.endTime2 ? ` & ${st.startTime2}–${st.endTime2}` : ''})` : `– ${st.name}`}
+                            </span>
                         </div>
                     ))}
                 </div>
@@ -967,12 +3436,13 @@ export default function RosterPage() {
                     selectedBranch={selectedBranch}
                     weekStart={weekStart}
                     weekDays={weekDays}
-                    roster={roster}
+                    roster={effectiveRoster}
                     setRoster={setRoster}
-                    shiftTypes={shiftTypes}
+                    shiftTypes={effectiveShiftTypes}
                     setShiftTypes={setShiftTypes}
                     displayedStaff={displayedStaff}
                     language={language}
+                    isPublished={isRosterPublished}
                     getBranchName={(id) => branches.find(b => b.id === id)?.name || id}
                     prevWeek={prevWeek}
                     nextWeek={nextWeek}
@@ -988,20 +3458,36 @@ export default function RosterPage() {
 
             {/* Assignment Modal */}
             {editingCell && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setEditingCell(null)}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-md" onClick={() => setEditingCell(null)}>
                     <div
                         ref={modalRef}
-                        className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md p-6"
+                        className="bg-white rounded-2xl border border-gray-100 shadow-[0_20px_50px_rgba(0,0,0,0.15)] w-full max-w-4xl p-6 max-h-[95vh] flex flex-col"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 className="text-lg font-semibold text-gray-900">Assign Shift</h3>
-                                <p className="text-sm text-gray-500 mt-0.5">
-                                    {editingCell.staffName} — {new Date(editingCell.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}
-                                </p>
+                        <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-100 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm shrink-0">
+                                    {editingCell.staffName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-base font-bold text-gray-900 leading-none">
+                                            {language === 'vi' ? 'Phân công ca' : 'Assign Shift'}
+                                        </h3>
+                                        <span className="text-xs text-gray-400 font-normal">for</span>
+                                        <span className="text-sm font-semibold text-slate-700 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                                            {editingCell.staffName}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
+                                        <CalendarDays className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                        <span>
+                                            {new Date(editingCell.date + 'T00:00:00').toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-                            <button onClick={() => setEditingCell(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                            <button onClick={() => setEditingCell(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
@@ -1011,11 +3497,11 @@ export default function RosterPage() {
                             const cross = getCrossBranchShifts(editingCell.staffId, editingCell.date)
                             if (cross.length === 0) return null
                             return (
-                                <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                                <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 shrink-0">
                                     <div className="flex items-start gap-2">
                                         <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                                         <div>
-                                            <p className="text-xs font-medium text-amber-700">Working in another branch</p>
+                                            <p className="text-xs font-medium text-amber-700">{language === 'vi' ? 'Đang làm việc tại chi nhánh khác' : 'Working in another branch'}</p>
                                             {cross.map((cs, i) => {
                                                 const otherShift = shiftTypes.find(s => s.id === cs.shiftTypeId)
                                                 return (
@@ -1023,94 +3509,147 @@ export default function RosterPage() {
                                                         {getBranchName(cs.branchId)}: {otherShift?.name}
                                                         {otherShift?.type === 'work' && otherShift?.startTime 
                                                             ? ` (${otherShift.startTime}–${otherShift.endTime}${otherShift.startTime2 ? ` & ${otherShift.startTime2}–${otherShift.endTime2}` : ''})` 
-                                                            : ''}
+                                                                : ''}
                                                     </p>
                                                 )
                                             })}
-                                            <p className="text-[10px] text-amber-500 mt-1">Overlapping shifts will be disabled</p>
+                                            <p className="text-[10px] text-amber-500 mt-1">{language === 'vi' ? 'Các ca trùng lặp sẽ bị vô hiệu hóa' : 'Overlapping shifts will be disabled'}</p>
                                         </div>
                                     </div>
                                 </div>
                             )
                         })()}
 
-                        {/* Work shifts */}
-                        <div className="mb-3">
-                            <p className="text-xs uppercase tracking-wider text-gray-400 mb-2">Work Shifts</p>
-                            <div className="grid grid-cols-2 gap-2">
-                                {shiftTypes.filter(s => s.type === 'work').map(st => {
-                                    const current = getCellShift(editingCell.staffId, editingCell.date)
-                                    const isSelected = current?.id === st.id
-                                    const conflictInfo = hasConflict(st, editingCell.staffId, editingCell.date)
-                                    const isConflicted = conflictInfo.conflict
-                                    return (
-                                        <button
-                                            key={st.id}
-                                            onClick={() => !isConflicted && assignShift(editingCell.staffId, editingCell.date, st.id)}
-                                            disabled={isConflicted}
-                                            className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left
-                                                ${isConflicted
-                                                    ? 'border-red-200 bg-red-50 opacity-50 cursor-not-allowed'
-                                                    : isSelected
-                                                        ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-500/50'
-                                                        : 'border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300'}`}
-                                        >
-                                            <div className="w-4 h-4 rounded-md shrink-0 mt-0.5" style={{ backgroundColor: isConflicted ? '#9CA3AF' : st.color }} />
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex justify-between items-start">
-                                                    <div className={`text-sm font-medium leading-tight ${isConflicted ? 'text-gray-400' : 'text-gray-900'}`}>{st.name}</div>
-                                                    {st.hours > 0 && <div className="text-[10px] font-semibold text-gray-400 bg-gray-100/80 px-1.5 py-0.5 rounded leading-none">{st.hours}h</div>}
-                                                </div>
-                                                <div className="text-xs text-gray-500 mt-1 flex flex-col gap-0.5">
-                                                    <span>{st.startTime} – {st.endTime}</span>
-                                                    {st.startTime2 && st.endTime2 && <span>{st.startTime2} – {st.endTime2}</span>}
-                                                </div>
-                                                {isConflicted && (
-                                                    <div className="text-[10px] text-red-500 mt-1.5 flex items-center gap-1 leading-tight bg-red-100/50 p-1 rounded">
-                                                        <AlertTriangle className="w-3 h-3 shrink-0" />
-                                                        Conflicts with {conflictInfo.branchName}
+                        {/* Scrollable content containing shifts and leave types */}
+                        <div className="flex-1 overflow-y-auto pr-1 -mr-1 min-h-0 space-y-5">
+                            {/* Work shifts */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-3 pb-1 border-b border-gray-50">
+                                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{language === 'vi' ? 'Ca làm việc' : 'Work Shifts'}</p>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                                    {[...shiftTypes]
+                                        .filter(s => s.type === 'work')
+                                        .sort((a, b) => {
+                                            const timeA = a.startTime ? parseTimeToMinutes(a.startTime) : Infinity
+                                            const timeB = b.startTime ? parseTimeToMinutes(b.startTime) : Infinity
+                                            if (timeA !== timeB) return timeA - timeB
+                                            const timeAEnd = a.endTime ? parseTimeToMinutes(a.endTime) : Infinity
+                                            const timeBEnd = b.endTime ? parseTimeToMinutes(b.endTime) : Infinity
+                                            if (timeAEnd !== timeBEnd) return timeAEnd - timeBEnd
+                                            return (a.code || '').localeCompare(b.code || '')
+                                        })
+                                        .map(st => {
+                                            const currentShifts = getCellShifts(editingCell.staffId, editingCell.date)
+                                            const isSelected = currentShifts.some(s => s.id === st.id)
+                                            const conflictInfo = hasConflict(st, editingCell.staffId, editingCell.date)
+                                            const isConflicted = !isSelected && (conflictInfo.conflict || hasLocalConflict(st, currentShifts))
+                                            const cleanName = cleanShiftName(st.name)
+                                            return (
+                                                <button
+                                                    key={st.id}
+                                                    onClick={() => !isConflicted && assignShift(editingCell.staffId, editingCell.date, st.id)}
+                                                    disabled={isConflicted}
+                                                    className={`flex flex-col justify-between p-3 rounded-xl border-l-4 transition-all text-left min-h-[92px] h-auto pb-1.5 shadow-sm relative group
+                                                        ${isConflicted
+                                                            ? 'border-y border-r border-red-100 bg-red-50/30 opacity-50 cursor-not-allowed'
+                                                            : isSelected
+                                                                ? 'border-y border-r border-blue-200 bg-blue-50/80 shadow-md ring-1 ring-blue-500/20'
+                                                                : 'border-y border-r border-gray-100 bg-white hover:bg-slate-50 hover:border-gray-300 hover:shadow'}`}
+                                                    style={{ borderLeftColor: isConflicted ? '#D1D5DB' : st.color }}
+                                                >
+                                                    <div className="min-w-0 w-full flex flex-col justify-between h-full">
+                                                        <div>
+                                                            <div className="flex justify-between items-center gap-1.5">
+                                                                <div className={`text-[12px] font-bold leading-none truncate ${isConflicted ? 'text-gray-400' : 'text-slate-900'}`}>{st.code}</div>
+                                                                {st.hours > 0 && <div className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 py-0.5 rounded leading-none shrink-0">{st.hours}h</div>}
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-500 mt-1.5 truncate max-w-full font-medium" title={cleanName}>{cleanName}</div>
+                                                        </div>
+                                                        <div className="mt-1.5">
+                                                            {st.startTime && st.endTime ? (
+                                                                <div className="text-[9px] font-semibold text-slate-600 bg-slate-100/50 px-1.5 py-0.5 rounded-md w-full flex flex-col gap-0.5">
+                                                                    <div className="flex items-center gap-1">
+                                                                        <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                                                        <span className="truncate">{st.startTime}–{st.endTime}</span>
+                                                                    </div>
+                                                                    {st.startTime2 && st.endTime2 && (
+                                                                        <div className="flex items-center gap-1 border-t border-slate-200/40 pt-0.5 mt-0.5">
+                                                                            <Clock className="w-2.5 h-2.5 text-transparent shrink-0" />
+                                                                            <span className="truncate">{st.startTime2}–{st.endTime2}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="h-[14px]" />
+                                                            )}
+                                                            <div className="h-3.5 mt-1 shrink-0">
+                                                                {isConflicted ? (
+                                                                    <div className="text-[9px] text-red-600 flex items-center gap-0.5 font-bold leading-none truncate max-w-full">
+                                                                        <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-red-500" />
+                                                                        <span className="truncate">
+                                                                            {conflictInfo.conflict 
+                                                                                ? (language === 'vi' ? `Trùng ca ${conflictInfo.branchName}` : `Conflicts ${conflictInfo.branchName}`) 
+                                                                                : (language === 'vi' ? 'Trùng giờ' : 'Time overlap')}
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="h-full" />
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                        </button>
-                                    )
-                                })}
+                                                </button>
+                                            )
+                                        })}
+                                </div>
+                            </div>
+
+                            {/* Leave types */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-3 pb-1 border-b border-gray-50">
+                                    <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{language === 'vi' ? 'Loại nghỉ phép' : 'Leave Types'}</p>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                                    {shiftTypes.filter(s => s.type === 'leave').map(st => {
+                                        const currentShifts = getCellShifts(editingCell.staffId, editingCell.date)
+                                        const isSelected = currentShifts.some(s => s.id === st.id)
+                                        const conflictInfo = hasConflict(st, editingCell.staffId, editingCell.date)
+                                        const isConflicted = !isSelected && (conflictInfo.conflict || hasLocalConflict(st, currentShifts))
+                                        return (
+                                            <button
+                                                key={st.id}
+                                                onClick={() => !isConflicted && assignShift(editingCell.staffId, editingCell.date, st.id)}
+                                                disabled={isConflicted}
+                                                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all text-left h-10 min-w-0 shadow-sm
+                                                    ${isConflicted
+                                                        ? 'border-red-100 bg-red-50/30 opacity-50 cursor-not-allowed'
+                                                        : isSelected
+                                                            ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-500/30'
+                                                            : 'border-gray-100 bg-white hover:bg-slate-50 hover:border-gray-300 hover:shadow'}`}
+                                            >
+                                                <div className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: isConflicted ? '#D1D5DB' : st.color }} />
+                                                <span className={`text-[11px] font-semibold truncate ${isConflicted ? 'text-gray-400' : 'text-slate-700'}`}>{st.name}</span>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
                             </div>
                         </div>
 
-                        {/* Leave types */}
-                        <div className="mb-4">
-                            <p className="text-xs uppercase tracking-wider text-gray-400 mb-2">Leave Types</p>
-                            <div className="grid grid-cols-3 gap-2">
-                                {shiftTypes.filter(s => s.type === 'leave').map(st => {
-                                    const current = getCellShift(editingCell.staffId, editingCell.date)
-                                    const isSelected = current?.id === st.id
-                                    return (
-                                        <button
-                                            key={st.id}
-                                            onClick={() => assignShift(editingCell.staffId, editingCell.date, st.id)}
-                                            className={`flex flex-col items-center p-3 rounded-xl border transition-all
-                                                ${isSelected
-                                                    ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-500/50'
-                                                    : 'border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300'}`}
-                                        >
-                                            <div className="w-3 h-3 rounded-full mb-1" style={{ backgroundColor: st.color }} />
-                                            <span className="text-xs font-medium text-gray-700">{st.name}</span>
-                                        </button>
-                                    )
-                                })}
+                        {/* Footer / Clear Action */}
+                        {getCellShifts(editingCell.staffId, editingCell.date).length > 0 && (
+                            <div className="mt-5 pt-4 border-t border-gray-100 flex justify-end shrink-0">
+                                <button
+                                    onClick={() => clearShift(editingCell.staffId, editingCell.date)}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold transition text-xs shadow-sm hover:shadow"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    {language === 'vi' ? 'Xóa phân công' : 'Clear Assignment'}
+                                </button>
                             </div>
-                        </div>
-
-                        {/* Clear button */}
-                        {getCellShift(editingCell.staffId, editingCell.date) && (
-                            <button
-                                onClick={() => clearShift(editingCell.staffId, editingCell.date)}
-                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition text-sm"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                                Clear Assignment
-                            </button>
                         )}
                     </div>
                 </div>
@@ -1125,9 +3664,9 @@ export default function RosterPage() {
                     >
                         <div className="flex items-center justify-between mb-4">
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900">Assign External Staff</h3>
+                                <h3 className="text-lg font-semibold text-gray-900">{language === 'vi' ? 'Phân công nhân sự ngoài chi nhánh' : 'Assign External Staff'}</h3>
                                 <p className="text-sm text-gray-500 mt-0.5">
-                                    Add a staff member from another branch to this week's roster.
+                                    {language === 'vi' ? 'Thêm một nhân viên từ chi nhánh khác vào danh sách phân công tuần này.' : "{language === 'vi' ? 'Thêm' : 'Add'} a staff member from another branch to this week's roster."}
                                 </p>
                             </div>
                             <button onClick={() => setIsBorrowModalOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
@@ -1140,20 +3679,20 @@ export default function RosterPage() {
                                 onClick={() => setBorrowTab('internal')}
                                 className={`pb-2 text-sm font-medium transition-colors border-b-2 ${borrowTab === 'internal' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                             >
-                                Internal Staff ({availableInternal.length})
+                                {language === 'vi' ? 'Nhân viên nội bộ' : 'Internal Staff'} ({availableInternal.length})
                             </button>
                             <button 
                                 onClick={() => setBorrowTab('outsourced')}
                                 className={`pb-2 text-sm font-medium transition-colors border-b-2 ${borrowTab === 'outsourced' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                             >
-                                Outsourced ({availableOutsourced.length})
+                                {language === 'vi' ? 'Nhân viên ngoài' : 'Outsourced'} ({availableOutsourced.length})
                             </button>
                         </div>
 
                         <div className="mb-4">
                             <input 
                                 type="text" 
-                                placeholder="Search by name or role..." 
+                                placeholder={language === 'vi' ? 'Tìm theo tên hoặc vai trò...' : 'Search by name or role...'} 
                                 onChange={e => {
                                     const val = e.target.value.toLowerCase()
                                     const rows = document.querySelectorAll('.borrow-staff-row')
@@ -1174,7 +3713,7 @@ export default function RosterPage() {
                             {(borrowTab === 'internal' ? availableInternal : availableOutsourced).length === 0 ? (
                                 <div className="p-8 text-center text-sm text-gray-500 h-full flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl">
                                     <User className="w-8 h-8 text-gray-300 mb-2" />
-                                    No {borrowTab === 'internal' ? 'internal' : 'outsourced'} staff available.
+                                    {language === 'vi' ? `Không có nhân viên ${borrowTab === 'internal' ? 'nội bộ' : 'ngoài'} khả dụng.` : `No ${borrowTab === 'internal' ? 'internal' : 'outsourced'} staff available.`}
                                 </div>
                             ) : (
                                 <div className="divide-y border border-gray-100 rounded-xl">
@@ -1195,12 +3734,197 @@ export default function RosterPage() {
                                                 <div className={`text-xs ${borrowTab === 'internal' ? 'text-gray-500' : 'text-indigo-500'}`}>{staff.role}</div>
                                             </div>
                                             <div className={`ml-auto text-xs font-semibold px-2 py-1 rounded-md ${borrowTab === 'internal' ? 'text-blue-600 bg-blue-100' : 'text-indigo-600 bg-indigo-100'}`}>
-                                                Add
+                                                {language === 'vi' ? 'Thêm' : 'Add'}
                                             </div>
                                         </button>
                                     ))}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Roster Change Log History Modal */}
+            {isHistoryModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => {
+                    setIsHistoryModalOpen(false)
+                    setSelectedLogId(null)
+                }}>
+                    <div
+                        className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-4xl p-6 max-h-[85vh] flex flex-col animate-in scale-in duration-200"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100 shrink-0">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                    {language === 'vi' ? 'Lịch sử Thay đổi Roster' : 'Roster Change Log'}
+                                </h3>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    {language === 'vi' 
+                                        ? 'Xem chi tiết các phiên bản phân ca đã công bố hoặc mở khóa.'
+                                        : 'View detailed log of roster publications and unlocks.'}
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setIsHistoryModalOpen(false)
+                                    setSelectedLogId(null)
+                                }} 
+                                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Content Split: Left (Timeline logs), Right (Changes text detail) */}
+                        <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden min-h-[350px]">
+                            {/* Left Panel: Logs List */}
+                            <div className="w-full md:w-5/12 overflow-y-auto border-r border-gray-100 pr-4 flex flex-col gap-2 shrink-0">
+                                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                                    {language === 'vi' ? 'Các phiên bản' : 'Versions'}
+                                </h4>
+                                {publishLogs.length === 0 ? (
+                                    <div className="text-center py-8 text-sm text-gray-500">
+                                        {language === 'vi' ? 'Chưa có hoạt động nào.' : 'No activity logged yet.'}
+                                    </div>
+                                ) : (
+                                    publishLogs.map((log, index) => {
+                                        const isSelected = selectedLogId === log.id
+                                        const dateStr = new Date(log.published_at).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', {
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })
+                                        const actionText = log.action === 'publish'
+                                            ? (language === 'vi' ? 'Đã công bố' : 'Published')
+                                            : (language === 'vi' ? 'Mở khóa' : 'Unlocked')
+                                        const actionColor = log.action === 'publish' 
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                            : 'bg-amber-50 text-amber-700 border-amber-100'
+
+                                        return (
+                                            <button
+                                                key={log.id}
+                                                onClick={() => setSelectedLogId(log.id)}
+                                                className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col gap-1.5 ${
+                                                    isSelected 
+                                                        ? 'bg-blue-50 border-blue-200 text-blue-950 shadow-sm'
+                                                        : 'bg-white hover:bg-gray-50 border-gray-150 text-gray-700'
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between gap-2 w-full">
+                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${actionColor}`}>
+                                                        {actionText}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-400">
+                                                        {dateStr}
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs font-semibold truncate">
+                                                    {log.user?.name || log.user?.email || (language === 'vi' ? 'Hệ thống' : 'System')}
+                                                </div>
+                                            </button>
+                                        )
+                                    })
+                                )}
+                            </div>
+
+                            {/* Right Panel: Selected Log Changes Detail */}
+                            <div className="flex-1 flex flex-col overflow-y-auto pl-2">
+                                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                                    {language === 'vi' ? 'Chi tiết thay đổi' : 'Change Details'}
+                                </h4>
+                                {selectedLogId ? (() => {
+                                    const logIndex = publishLogs.findIndex(l => l.id === selectedLogId)
+                                    if (logIndex === -1) return null
+
+                                    const currentLog = publishLogs[logIndex]
+                                    const prevLog = logIndex < publishLogs.length - 1 ? publishLogs[logIndex + 1] : null
+
+                                    const diffs = getRosterDiffText(
+                                        prevLog ? prevLog.roster_snapshot : null,
+                                        currentLog.roster_snapshot,
+                                        currentLog.shifts_snapshot || shiftTypes,
+                                        staffList,
+                                        language
+                                    )
+
+                                    if (diffs.length === 0) {
+                                        return (
+                                            <div className="text-center py-12 text-sm text-gray-500 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col items-center justify-center">
+                                                <Clock className="w-8 h-8 text-gray-300 mb-2 animate-pulse" />
+                                                {language === 'vi' 
+                                                    ? 'Không phát hiện thay đổi nào so với phiên bản trước.'
+                                                    : 'No changes detected compared to the previous version.'}
+                                            </div>
+                                        )
+                                    }
+
+                                    return (
+                                        <div className="flex flex-col gap-4">
+                                            {(() => {
+                                                const grouped: Record<string, typeof diffs> = {}
+                                                diffs.forEach(d => {
+                                                    if (!grouped[d.staffName]) grouped[d.staffName] = []
+                                                    grouped[d.staffName].push(d)
+                                                })
+
+                                                return Object.entries(grouped).map(([staffName, items]) => (
+                                                    <div key={staffName} className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                                                        <div className="text-xs font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1 flex items-center gap-1.5">
+                                                            <User className="w-3.5 h-3.5 text-blue-500" />
+                                                            <span>{staffName}</span>
+                                                        </div>
+                                                        <ul className="space-y-1.5">
+                                                            {items.map((item, idx) => {
+                                                                let dotColor = 'bg-blue-500'
+                                                                if (item.changeType === 'add') dotColor = 'bg-emerald-500'
+                                                                if (item.changeType === 'remove') dotColor = 'bg-red-500'
+                                                                if (item.changeType === 'modify') dotColor = 'bg-amber-500'
+
+                                                                const dayOfWeekStr = dayName(new Date(item.dateStr), language)
+
+                                                                return (
+                                                                    <li key={idx} className="text-xs text-gray-600 flex items-start gap-2 pl-1">
+                                                                        <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
+                                                                        <div>
+                                                                            <span className="font-semibold text-gray-700 mr-1.5">{dayOfWeekStr} ({item.dateStr}):</span>
+                                                                            <span>{item.text}</span>
+                                                                        </div>
+                                                                    </li>
+                                                                )
+                                                            })}
+                                                        </ul>
+                                                    </div>
+                                                ))
+                                            })()}
+                                        </div>
+                                    )
+                                })() : (
+                                    <div className="text-center py-12 text-sm text-gray-500 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col items-center justify-center h-full">
+                                        <History className="w-8 h-8 text-gray-300 mb-2" />
+                                        {language === 'vi' 
+                                            ? 'Chọn một phiên bản bên trái để xem các thay đổi.'
+                                            : 'Select a version on the left to inspect the changes.'}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end shrink-0">
+                            <button
+                                onClick={() => {
+                                    setIsHistoryModalOpen(false)
+                                    setSelectedLogId(null)
+                                }}
+                                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold transition text-xs"
+                            >
+                                {language === 'vi' ? 'Đóng' : 'Close'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1216,12 +3940,14 @@ export default function RosterPage() {
                     const days = weekDays.map(day => {
                         const ds = formatDate(day)
                         const key = rosterKey(branch.id, staff.id, ds)
-                        const shiftId = roster[key]
-                        const shift = shiftId ? shiftTypes.find(s => s.id === shiftId) : null
-                        return { date: ds, day, shift }
+                        const val = roster[key]
+                        const shifts = val 
+                            ? val.split(',').map(id => shiftTypes.find(s => s.id === id)).filter((s): s is ShiftType => !!s)
+                            : []
+                        return { date: ds, day, shifts }
                     })
-                    const totalHours = days.reduce((t, d) => t + (d.shift?.hours || 0), 0)
-                    const hasAnyShift = days.some(d => d.shift !== null && d.shift !== undefined)
+                    const totalHours = days.reduce((t, d) => t + d.shifts.reduce((sum, s) => sum + (s.type === 'work' ? (s.hours || 0) : 0), 0), 0)
+                    const hasAnyShift = days.some(d => d.shifts.length > 0)
                     return { branch, days, totalHours, hasAnyShift }
                 })
 
@@ -1232,18 +3958,22 @@ export default function RosterPage() {
                     const ds = formatDate(day)
                     return branches.some(b => {
                         const key = rosterKey(b.id, staff.id, ds)
-                        const shiftId = roster[key]
-                        const shift = shiftId ? shiftTypes.find(s => s.id === shiftId) : null
-                        return shift?.type === 'work'
+                        const val = roster[key]
+                        const shifts = val 
+                            ? val.split(',').map(id => shiftTypes.find(s => s.id === id)).filter((s): s is ShiftType => !!s)
+                            : []
+                        return shifts.some(s => s.type === 'work')
                     })
                 }).length
                 const leaveDaysCount = weekDays.filter(day => {
                     const ds = formatDate(day)
                     return branches.some(b => {
                         const key = rosterKey(b.id, staff.id, ds)
-                        const shiftId = roster[key]
-                        const shift = shiftId ? shiftTypes.find(s => s.id === shiftId) : null
-                        return shift?.type === 'leave'
+                        const val = roster[key]
+                        const shifts = val 
+                            ? val.split(',').map(id => shiftTypes.find(s => s.id === id)).filter((s): s is ShiftType => !!s)
+                            : []
+                        return shifts.some(s => s.type === 'leave')
                     })
                 }).length
 
@@ -1261,8 +3991,15 @@ export default function RosterPage() {
                                             {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold text-gray-900">{staff.name}</h3>
-                                            <p className="text-sm text-gray-500">{staff.role} · {formatWeekRange(weekStart)}</p>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-lg font-semibold text-gray-900">{staff.name}</h3>
+                                                <div className="flex items-center gap-0.5">
+                                                    {Array.from({ length: staff.skill_level || 1 }, (_, i) => (
+                                                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-gray-500">{staff.role} · {formatWeekRange(weekStart, language)}</p>
                                         </div>
                                     </div>
                                     <button onClick={() => setStaffDetailId(null)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
@@ -1277,7 +4014,7 @@ export default function RosterPage() {
                                             <CalendarDays className="w-4 h-4 text-blue-600" />
                                         </div>
                                         <div>
-                                            <div className="text-xs text-gray-500 font-medium">Work Days</div>
+                                            <div className="text-xs text-gray-500 font-medium">{language === 'vi' ? 'Ngày làm việc' : 'Work Days'}</div>
                                             <div className="text-sm font-bold text-gray-900">{workDaysCount}</div>
                                         </div>
                                     </div>
@@ -1286,7 +4023,7 @@ export default function RosterPage() {
                                             <span className="text-emerald-600 text-sm font-bold">h</span>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-gray-500 font-medium">Total Hours</div>
+                                            <div className="text-xs text-gray-500 font-medium">{language === 'vi' ? 'Tổng số giờ' : 'Total Hours'}</div>
                                             <div className={`text-sm font-bold ${totalWeekHours > 44 ? 'text-red-600' : totalWeekHours >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
                                                 {totalWeekHours}h
                                             </div>
@@ -1298,8 +4035,8 @@ export default function RosterPage() {
                                                 <Globe className="w-4 h-4 text-amber-600" />
                                             </div>
                                             <div>
-                                                <div className="text-xs text-gray-500 font-medium">Leave</div>
-                                                <div className="text-sm font-bold text-amber-600">{leaveDaysCount} day{leaveDaysCount !== 1 ? 's' : ''}</div>
+                                                <div className="text-xs text-gray-500 font-medium">{language === 'vi' ? 'Nghỉ phép' : 'Leave'}</div>
+                                                <div className="text-sm font-bold text-amber-600">{leaveDaysCount} {language === 'vi' ? 'ngày' : (leaveDaysCount !== 1 ? 'days' : 'day')}</div>
                                             </div>
                                         </div>
                                     )}
@@ -1308,7 +4045,7 @@ export default function RosterPage() {
                                             <MapPin className="w-4 h-4 text-purple-600" />
                                         </div>
                                         <div>
-                                            <div className="text-xs text-gray-500 font-medium">Branches</div>
+                                            <div className="text-xs text-gray-500 font-medium">{language === 'vi' ? 'Chi nhánh' : 'Branches'}</div>
                                             <div className="text-sm font-bold text-purple-600">{activeBranches.length}</div>
                                         </div>
                                     </div>
@@ -1320,18 +4057,18 @@ export default function RosterPage() {
                                 <table className="w-full border-collapse">
                                     <thead>
                                         <tr>
-                                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-200/60 min-w-[140px]">Branch</th>
+                                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-200/60 min-w-[140px]">{language === 'vi' ? 'Chi nhánh' : 'Branch'}</th>
                                             {weekDays.map(day => {
                                                 const ds = formatDate(day)
                                                 const isToday = ds === todayStr
                                                 return (
                                                     <th key={ds} className={`px-2 py-3 text-center border-b border-gray-200/60 min-w-[90px] ${isToday ? 'bg-blue-50/70' : 'bg-gray-50'}`}>
-                                                        <div className={`text-[10px] uppercase tracking-wider font-semibold ${isToday ? 'text-blue-600' : 'text-gray-400'}`}>{dayName(day)}</div>
+                                                        <div className={`text-[10px] uppercase tracking-wider font-semibold ${isToday ? 'text-blue-600' : 'text-gray-400'}`}>{dayName(day, language)}</div>
                                                         <div className={`text-sm font-bold mt-0.5 ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>{day.getDate()}</div>
                                                     </th>
                                                 )
                                             })}
-                                            <th className="px-3 py-3 text-center border-b border-gray-200/60 bg-gray-50 text-xs uppercase tracking-wider text-gray-500 min-w-[60px]">Hours</th>
+                                            <th className="px-3 py-3 text-center border-b border-gray-200/60 bg-gray-50 text-xs uppercase tracking-wider text-gray-500 min-w-[60px]">{language === 'vi' ? 'Giờ' : 'Hours'}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1339,7 +4076,7 @@ export default function RosterPage() {
                                             <tr>
                                                 <td colSpan={9} className="px-4 py-12 text-center text-gray-400 bg-white">
                                                     <User className="w-8 h-8 mx-auto mb-2 opacity-30 text-gray-500" />
-                                                    <p className="text-sm font-medium">No shifts assigned this week</p>
+                                                    <p className="text-sm font-medium">{language === 'vi' ? 'Không có ca làm việc nào được phân công tuần này' : 'No shifts assigned this week'}</p>
                                                 </td>
                                             </tr>
                                         ) : (
@@ -1357,28 +4094,63 @@ export default function RosterPage() {
                                                         const isToday = d.date === todayStr
                                                         return (
                                                             <td key={d.date} className={`px-1 py-2 border-b border-gray-100 text-center ${isToday ? 'bg-blue-50/20' : ''}`}>
-                                                                {d.shift ? (
-                                                                    <div
-                                                                        className="inline-flex flex-col items-center rounded-lg px-2 py-1.5 min-w-[56px]"
-                                                                        style={{
-                                                                            backgroundColor: d.shift.color + '20',
-                                                                            border: `1px solid ${d.shift.color}40`,
-                                                                        }}
-                                                                    >
-                                                                        <span className="text-xs font-bold" style={{ color: d.shift.color }}>
-                                                                            {d.shift.code}
-                                                                        </span>
-                                                                        {d.shift.type === 'work' && d.shift.startTime && (
-                                                                            <span className="text-[9px] text-gray-500 mt-0.5 font-medium">
-                                                                                {d.shift.startTime}–{d.shift.endTime}
+                                                                {d.shifts.length > 0 ? (
+                                                                    d.shifts.length === 1 ? (
+                                                                        <div
+                                                                            className="inline-flex flex-col items-center justify-center rounded-lg px-2 py-1 w-[72px] h-[38px]"
+                                                                            style={{
+                                                                                backgroundColor: d.shifts[0].color + '20',
+                                                                                border: `1px solid ${d.shifts[0].color}40`,
+                                                                            }}
+                                                                        >
+                                                                            <span className="text-xs font-bold leading-none" style={{ color: d.shifts[0].color }}>
+                                                                                {d.shifts[0].code}
                                                                             </span>
-                                                                        )}
-                                                                        {d.shift.type === 'leave' && (
-                                                                            <span className="text-[9px] mt-0.5 font-semibold" style={{ color: d.shift.color + 'CC' }}>
-                                                                                {d.shift.name}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
+                                                                            {d.shifts[0].type === 'work' && d.shifts[0].startTime && (
+                                                                                <span className="text-[9px] text-gray-500 mt-0.5 leading-none font-medium">
+                                                                                    {d.shifts[0].startTime}–{d.shifts[0].endTime}
+                                                                                </span>
+                                                                            )}
+                                                                            {d.shifts[0].type === 'leave' && (
+                                                                                <span className="text-[9px] mt-0.5 leading-none font-semibold" style={{ color: d.shifts[0].color + 'CC' }}>
+                                                                                    {d.shifts[0].name}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="inline-flex flex-col gap-0.5 w-[72px] h-[38px]">
+                                                                            {/* Top Shift */}
+                                                                            <div
+                                                                                className="flex items-center justify-center gap-1 px-1 h-[18px] rounded-md text-[8.5px] font-extrabold leading-none w-full"
+                                                                                style={{
+                                                                                    backgroundColor: d.shifts[0].color + '15',
+                                                                                    border: `1px solid ${d.shifts[0].color}40`,
+                                                                                }}
+                                                                            >
+                                                                                <span style={{ color: d.shifts[0].color }}>{d.shifts[0].code}</span>
+                                                                                {d.shifts[0].type === 'work' && d.shifts[0].startTime && (
+                                                                                    <span className="text-[7px] font-semibold text-gray-500">
+                                                                                        {d.shifts[0].startTime.split(':')[0]}–{d.shifts[0].endTime.split(':')[0]}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            {/* Bottom Shift */}
+                                                                            <div
+                                                                                className="flex items-center justify-center gap-1 px-1 h-[18px] rounded-md text-[8.5px] font-extrabold leading-none w-full"
+                                                                                style={{
+                                                                                    backgroundColor: d.shifts[1].color + '15',
+                                                                                    border: `1px solid ${d.shifts[1].color}40`,
+                                                                                }}
+                                                                            >
+                                                                                <span style={{ color: d.shifts[1].color }}>{d.shifts[1].code}</span>
+                                                                                {d.shifts[1].type === 'work' && d.shifts[1].startTime && (
+                                                                                    <span className="text-[7px] font-semibold text-gray-500">
+                                                                                        {d.shifts[1].startTime.split(':')[0]}–{d.shifts[1].endTime.split(':')[0]}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    )
                                                                 ) : (
                                                                     <span className="text-gray-300">—</span>
                                                                 )}
@@ -1387,7 +4159,7 @@ export default function RosterPage() {
                                                     })}
                                                     <td className="px-3 py-2 border-b border-gray-100 text-center">
                                                         <span className={`text-sm font-bold ${bd.totalHours > 0 ? 'text-gray-800' : 'text-gray-300'}`}>
-                                                            {bd.totalHours > 0 ? `${bd.totalHours}h` : '—'}
+                                                            {bd.totalHours > 0 ? `${bd.totalHours}${language === 'vi' ? 'g' : 'h'}` : '—'}
                                                         </span>
                                                     </td>
                                                 </tr>
@@ -1397,24 +4169,24 @@ export default function RosterPage() {
                                     {activeBranches.length > 1 && (
                                         <tfoot>
                                             <tr className="bg-gray-100/50 border-t border-gray-200">
-                                                <td className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-bold">Total</td>
+                                                <td className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-bold">{language === 'vi' ? 'Tổng' : 'Total'}</td>
                                                 {weekDays.map(day => {
                                                     const ds = formatDate(day)
                                                     const dayHours = activeBranches.reduce((t, b) => {
                                                         const dData = b.days.find(d => d.date === ds)
-                                                        return t + (dData?.shift?.hours || 0)
+                                                        return t + (dData?.shifts.reduce((sum, s) => sum + (s.hours || 0), 0) || 0)
                                                     }, 0)
                                                     return (
                                                         <td key={ds} className="px-2 py-3 text-center">
                                                             <span className={`text-xs font-bold ${dayHours > 0 ? 'text-gray-700' : 'text-gray-400'}`}>
-                                                                {dayHours > 0 ? `${dayHours}h` : '—'}
+                                                                {dayHours > 0 ? `${dayHours}${language === 'vi' ? 'g' : 'h'}` : '—'}
                                                             </span>
                                                         </td>
                                                     )
                                                 })}
                                                 <td className="px-3 py-3 text-center">
                                                     <span className={`text-sm font-black ${totalWeekHours > 44 ? 'text-red-600' : totalWeekHours >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                                        {totalWeekHours}h
+                                                        {totalWeekHours}{language === 'vi' ? 'g' : 'h'}
                                                     </span>
                                                 </td>
                                             </tr>
@@ -1430,7 +4202,7 @@ export default function RosterPage() {
             {dayDetailDate && (() => {
                 // Find the actual Date object from weekDays to avoid timezone mismatch
                 const dateObj = weekDays.find(d => formatDate(d) === dayDetailDate) || new Date(dayDetailDate + 'T12:00:00')
-                const dateLabel = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                const dateLabel = dateObj.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
                 const dayIndex = weekDays.findIndex(d => formatDate(d) === dayDetailDate)
                 const coverageStatus = getDayCoverageStatus(dayDetailDate, dayIndex !== -1 ? dayIndex : 0)
 
@@ -1457,12 +4229,13 @@ export default function RosterPage() {
                 }
 
                 // Build staff rows with their shifts for this day across the selected branch
-                const staffRows = displayedStaff.map(staff => {
+                const staffRows = displayedStaff.flatMap(staff => {
                     const key = rosterKey(selectedBranch, staff.id, dayDetailDate)
-                    const shiftId = roster[key]
-                    const shift = shiftId ? shiftTypes.find(s => s.id === shiftId) : null
-                    return { staff, shift }
-                }).filter((r): r is { staff: typeof r.staff; shift: NonNullable<typeof r.shift> } => r.shift !== null && r.shift !== undefined && r.shift.type === 'work') // only show staff with work shifts
+                    const val = roster[key]
+                    if (!val) return []
+                    const shifts = val.split(',').map(id => shiftTypes.find(s => s.id === id)).filter((s): s is ShiftType => !!s && s.type === 'work')
+                    return shifts.map(shift => ({ staff, shift }))
+                })
 
                 // Group staff rows by department for rendering
                 const groupedStaffRows = (() => {
@@ -1500,9 +4273,31 @@ export default function RosterPage() {
                 let overlapStart = -1
                 let overlapCount = 0
 
-                // Only check coverage during operating hours (roughly 07:00-23:00 = slots 2..34)
-                const OP_START_SLOT = 2 // 07:00
-                const OP_END_SLOT = 34  // 23:00
+                // Determine actual operational hours limits for this day
+                const dayHours = weekOpeningHours ? weekOpeningHours[dayIndex !== -1 ? dayIndex : 0] : null
+                const isOpen = dayHours ? dayHours.isOpen : true
+                const slots = dayHours && dayHours.slots.length > 0 ? dayHours.slots : [{ startTime: '09:00', endTime: '22:00' }]
+
+                const getOperationalLimits = () => {
+                    if (!isOpen) return { startHour: TIMELINE_START, endHour: TIMELINE_START }
+                    let minStart = TIMELINE_END
+                    let maxEnd = TIMELINE_START
+                    slots.forEach(slot => {
+                        const start = parseTime(slot.startTime)
+                        const end = parseTime(slot.endTime)
+                        if (start < minStart) minStart = start
+                        if (end > maxEnd) maxEnd = end
+                    })
+                    if (minStart >= maxEnd) {
+                        return { startHour: 9, endHour: 22 }
+                    }
+                    return { startHour: minStart, endHour: maxEnd }
+                }
+
+                const { startHour: OP_START_HOUR, endHour: OP_END_HOUR } = getOperationalLimits()
+
+                const OP_START_SLOT = Math.max(0, Math.min(SLOTS, Math.round((OP_START_HOUR - TIMELINE_START) * 2)))
+                const OP_END_SLOT = Math.max(0, Math.min(SLOTS, Math.round((OP_END_HOUR - TIMELINE_START) * 2)))
 
                 for (let i = OP_START_SLOT; i < Math.min(OP_END_SLOT, SLOTS); i++) {
                     // Gaps
@@ -1526,7 +4321,7 @@ export default function RosterPage() {
                 return (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDayDetailDate(null)}>
                         <div
-                            className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col overflow-hidden"
+                            className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-7xl mx-4 max-h-[90vh] flex flex-col overflow-hidden"
                             onClick={e => e.stopPropagation()}
                         >
                             {/* Header */}
@@ -1537,8 +4332,10 @@ export default function RosterPage() {
                                             <Clock className="w-5 h-5 text-blue-600" />
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold text-gray-900">Daily Timeline</h3>
-                                            <p className="text-sm text-gray-500">{dateLabel} · {getBranchName(selectedBranch)}</p>
+                                            <h3 className="text-lg font-semibold text-gray-900">{language === 'vi' ? 'Dòng thời gian hàng ngày' : 'Daily Timeline'}</h3>
+                                            <p className="text-sm text-gray-500">
+                                                {dateLabel} · {getBranchName(selectedBranch)} · <span className={`font-semibold ${isOpen ? 'text-blue-600' : 'text-red-500'}`}>{isOpen ? (language === 'vi' ? `Giờ nhân viên: ${slots.map(s => `${s.startTime}–${s.endTime}`).join(', ')}` : `Staff Hours: ${slots.map(s => `${s.startTime}–${s.endTime}`).join(', ')}`) : (language === 'vi' ? 'Đóng cửa' : 'Closed')}</span>
+                                            </p>
                                         </div>
                                     </div>
                                     <button onClick={() => setDayDetailDate(null)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
@@ -1553,7 +4350,7 @@ export default function RosterPage() {
                                             <User className="w-4 h-4 text-blue-600" />
                                         </div>
                                         <div>
-                                            <div className="text-xs text-gray-500 font-medium">Staff On</div>
+                                            <div className="text-xs text-gray-500 font-medium">{language === 'vi' ? 'Nhân viên trực' : 'Staff On'}</div>
                                             <div className="text-sm font-bold text-gray-900">{staffRows.length}</div>
                                         </div>
                                     </div>
@@ -1563,7 +4360,7 @@ export default function RosterPage() {
                                                 <AlertTriangle className="w-4 h-4 text-red-600" />
                                             </div>
                                             <div>
-                                                <div className="text-xs text-gray-500 font-medium">Coverage Gaps</div>
+                                                <div className="text-xs text-gray-500 font-medium">{language === 'vi' ? 'Khoảng trống bao phủ' : 'Coverage Gaps'}</div>
                                                 <div className="text-sm font-bold text-red-600">{gaps.length}</div>
                                             </div>
                                         </div>
@@ -1576,8 +4373,8 @@ export default function RosterPage() {
                                                         <span className="text-emerald-600 text-sm font-bold">✓</span>
                                                     </div>
                                                     <div>
-                                                        <div className="text-xs text-gray-500 font-medium">Coverage</div>
-                                                        <div className="text-sm font-bold text-emerald-600">Full</div>
+                                                        <div className="text-xs text-gray-500 font-medium">{language === 'vi' ? 'Độ bao phủ' : 'Coverage'}</div>
+                                                        <div className="text-sm font-bold text-emerald-600">{language === 'vi' ? 'Đầy đủ' : 'Full'}</div>
                                                     </div>
                                                 </>
                                             ) : (
@@ -1586,8 +4383,8 @@ export default function RosterPage() {
                                                         <AlertTriangle className="w-4 h-4 text-amber-600" />
                                                     </div>
                                                     <div>
-                                                        <div className="text-xs text-gray-500 font-medium">Target Coverage</div>
-                                                        <div className="text-sm font-bold text-amber-700">Deficits ({coverageStatus.errors.length})</div>
+                                                        <div className="text-xs text-gray-500 font-medium">{language === 'vi' ? 'Mục tiêu bao phủ' : 'Target Coverage'}</div>
+                                                        <div className="text-sm font-bold text-amber-700">{language === 'vi' ? 'Thiếu hụt' : 'Deficits'} ({coverageStatus.errors.length})</div>
                                                     </div>
                                                 </>
                                             )}
@@ -1618,7 +4415,7 @@ export default function RosterPage() {
                             {/* Timeline area */}
                             <div className="px-6 py-4 overflow-y-auto overflow-x-auto flex-1">
                                 {/* Hour labels */}
-                                <div className="flex ml-[160px] mb-1">
+                                <div className="flex ml-[220px] mb-1">
                                     {Array.from({ length: TIMELINE_HOURS + 1 }, (_, i) => {
                                         const h = (TIMELINE_START + i) % 24
                                         return (
@@ -1634,7 +4431,7 @@ export default function RosterPage() {
                                 </div>
 
                                 {/* Coverage heatmap bar */}
-                                <div className="flex ml-[160px] mb-3 h-3 rounded-full overflow-hidden bg-gray-100">
+                                <div className="flex ml-[220px] mb-3 h-3 rounded-full overflow-hidden bg-gray-100">
                                     {coverage.map((count, i) => {
                                         let bg = 'bg-transparent'
                                         if (i >= OP_START_SLOT && i < OP_END_SLOT) {
@@ -1655,11 +4452,11 @@ export default function RosterPage() {
                                 </div>
 
                                 {/* Coverage legend */}
-                                <div className="flex items-center gap-3 ml-[160px] mb-4">
-                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-red-200" /><span className="text-[10px] text-gray-500 font-medium">No cover</span></div>
-                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-amber-200" /><span className="text-[10px] text-gray-500 font-medium">1 staff</span></div>
-                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-emerald-200" /><span className="text-[10px] text-gray-500 font-medium">2 staff</span></div>
-                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-blue-200" /><span className="text-[10px] text-gray-500 font-medium">3+ staff</span></div>
+                                <div className="flex items-center gap-3 ml-[220px] mb-4">
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-red-200" /><span className="text-[10px] text-gray-500 font-medium">{language === 'vi' ? 'Không bao phủ' : 'No cover'}</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-amber-200" /><span className="text-[10px] text-gray-500 font-medium">{language === 'vi' ? '1 nhân viên' : '1 staff'}</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-emerald-200" /><span className="text-[10px] text-gray-500 font-medium">{language === 'vi' ? '2 nhân viên' : '2 staff'}</span></div>
+                                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-blue-200" /><span className="text-[10px] text-gray-500 font-medium">{language === 'vi' ? '3+ nhân viên' : '3+ staff'}</span></div>
                                 </div>
 
                                 {/* Staff timeline rows */}
@@ -1675,21 +4472,92 @@ export default function RosterPage() {
                                                 const barStyle = shift ? getBarStyle(shift) : null
                                                 const isEven = idx % 2 === 0
 
+                                                const isThisDragging = draggingShift && draggingShift.staffId === staff.id && draggingShift.shiftId === shift.id
+                                                let displayStart = shift ? parseTime(shift.startTime) : 0
+                                                let displayEnd = shift ? parseTime(shift.endTime) : 0
+                                                if (isThisDragging && dragTempHours) {
+                                                    displayStart = dragTempHours.start
+                                                    displayEnd = dragTempHours.end
+                                                }
+
+                                                const leftPct = ((displayStart - TIMELINE_START) / TIMELINE_HOURS) * 100
+                                                const widthPct = ((displayEnd - displayStart) / TIMELINE_HOURS) * 100
+
+                                                const activeStyle = shift ? {
+                                                    left: `${Math.max(0, leftPct)}%`,
+                                                    width: `${Math.min(100 - Math.max(0, leftPct), widthPct)}%`,
+                                                    backgroundColor: shift.color + 'D9',
+                                                } : {}
+
+                                                const formatHourStr = (h: number) => {
+                                                    const hh = Math.floor(h % 24)
+                                                    const mm = (h % 1) * 60 === 30 ? '30' : '00'
+                                                    return `${String(hh).padStart(2, '0')}:${mm}`
+                                                }
+
+                                                const startDrag = (e: React.MouseEvent | React.TouchEvent, handle: 'left' | 'right' | 'move') => {
+                                                    e.stopPropagation()
+                                                    e.preventDefault()
+                                                    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX
+                                                    const parent = (e.currentTarget as HTMLElement).closest('.flex-1.relative.h-8')
+                                                    if (!parent) return
+                                                    const rect = parent.getBoundingClientRect()
+                                                    setDraggingShift({
+                                                        staffId: staff.id,
+                                                        date: dayDetailDate,
+                                                        shiftId: shift.id,
+                                                        handle,
+                                                        startX: clientX,
+                                                        origStartHour: shift ? parseTime(shift.startTime) : 0,
+                                                        origEndHour: shift ? parseTime(shift.endTime) : 0,
+                                                        containerWidth: rect.width
+                                                    })
+                                                }
+
                                                 return (
-                                                    <div key={staff.id} className={`flex items-center gap-0 h-10 px-2 rounded-lg ${isEven ? 'bg-transparent' : 'bg-gray-50/30'}`}>
+                                                    <div key={`${staff.id}-${shift.id}`} className={`flex items-center gap-0 h-10 px-2 rounded-lg ${isEven ? 'bg-transparent' : 'bg-gray-50/30'}`}>
                                                         {/* Staff label */}
-                                                        <div className="w-[160px] shrink-0 flex items-center gap-2 pr-3">
+                                                        <div className="w-[220px] shrink-0 flex items-center gap-2 pr-3">
                                                             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
                                                                 {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                                             </div>
-                                                            <div className="min-w-0">
-                                                                <div className="text-xs font-semibold text-gray-900 truncate">{staff.name}</div>
-                                                                <div className="text-[10px] text-gray-500 truncate">{staff.role}</div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="flex items-center gap-1.5 flex-nowrap overflow-visible">
+                                                                    <span className="text-xs font-semibold text-gray-900 flex-1">{staff.name}</span>
+                                                                    <div className="flex items-center gap-0.5 shrink-0" data-html2canvas-ignore="true">
+                                                                        {Array.from({ length: staff.skill_level || 1 }).map((_, i) => (
+                                                                            <Star key={i} className="w-2 h-2 fill-amber-400 text-amber-400 shrink-0" />
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-[10px] text-gray-500">{staff.role}</div>
                                                             </div>
                                                         </div>
 
                                                         {/* Timeline bar area */}
                                                         <div className="flex-1 relative h-8 bg-gray-100 rounded-lg overflow-hidden border border-gray-200/40">
+                                                            {/* Non-operational hours shaded overlays */}
+                                                            {OP_START_HOUR > TIMELINE_START && (
+                                                                <div
+                                                                    className="absolute top-0 bottom-0 bg-gray-200/40"
+                                                                    style={{
+                                                                        left: 0,
+                                                                        width: `${((OP_START_HOUR - TIMELINE_START) / TIMELINE_HOURS) * 100}%`
+                                                                    }}
+                                                                    title={language === 'vi' ? 'Ngoài giờ hoạt động của nhân viên' : 'Outside staff operational hours'}
+                                                                />
+                                                            )}
+                                                            {OP_END_HOUR < TIMELINE_END && (
+                                                                <div
+                                                                    className="absolute top-0 bottom-0 bg-gray-200/40"
+                                                                    style={{
+                                                                        left: `${((OP_END_HOUR - TIMELINE_START) / TIMELINE_HOURS) * 100}%`,
+                                                                        width: `${((TIMELINE_END - OP_END_HOUR) / TIMELINE_HOURS) * 100}%`
+                                                                    }}
+                                                                    title={language === 'vi' ? 'Ngoài giờ hoạt động của nhân viên' : 'Outside staff operational hours'}
+                                                                />
+                                                            )}
+
                                                             {/* Hour grid lines */}
                                                             {Array.from({ length: TIMELINE_HOURS }, (_, i) => (
                                                                 <div
@@ -1702,16 +4570,34 @@ export default function RosterPage() {
                                                             {/* Shift bar */}
                                                             {barStyle && (
                                                                 <div
-                                                                    className="absolute top-1 bottom-1 rounded-md flex items-center justify-center shadow-sm transition-all"
-                                                                    style={{
-                                                                        left: barStyle.left,
-                                                                        width: barStyle.width,
-                                                                        backgroundColor: shift.color + 'D9',
-                                                                    }}
+                                                                    onMouseDown={(e) => startDrag(e, 'move')}
+                                                                    onTouchStart={(e) => startDrag(e, 'move')}
+                                                                    className={`absolute top-1 bottom-1 rounded-md flex items-center justify-center shadow-sm select-none cursor-grab active:cursor-grabbing ${
+                                                                        isThisDragging ? 'ring-2 ring-blue-500 z-30 scale-102 opacity-95 shadow-md border border-white/20' : 'z-20'
+                                                                    }`}
+                                                                    style={activeStyle}
                                                                 >
-                                                                    <span className="text-[11px] font-bold text-white drop-shadow-sm">
-                                                                        {shift.code} {shift.startTime}–{shift.endTime}
+                                                                    {/* Left resize handle */}
+                                                                    <div
+                                                                        onMouseDown={(e) => startDrag(e, 'left')}
+                                                                        onTouchStart={(e) => startDrag(e, 'left')}
+                                                                        className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/10 rounded-l-md flex items-center justify-center group"
+                                                                    >
+                                                                        <div className="w-[2px] h-3 bg-white/60 group-hover:bg-white rounded-full transition-colors pointer-events-none" />
+                                                                    </div>
+
+                                                                    <span className="text-[10px] font-bold text-white drop-shadow-sm px-4 text-center truncate pointer-events-none">
+                                                                        {shift.code} {formatHourStr(displayStart)}–{formatHourStr(displayEnd)}
                                                                     </span>
+
+                                                                    {/* Right resize handle */}
+                                                                    <div
+                                                                        onMouseDown={(e) => startDrag(e, 'right')}
+                                                                        onTouchStart={(e) => startDrag(e, 'right')}
+                                                                        className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/10 rounded-r-md flex items-center justify-center group"
+                                                                    >
+                                                                        <div className="w-[2px] h-3 bg-white/60 group-hover:bg-white rounded-full transition-colors pointer-events-none" />
+                                                                    </div>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1724,7 +4610,7 @@ export default function RosterPage() {
                                     {staffRows.length === 0 && (
                                         <div className="py-12 text-center text-gray-500">
                                             <Clock className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                                            <p className="text-sm font-medium">No shifts assigned for this day</p>
+                                            <p className="text-sm font-medium">{language === 'vi' ? 'Không có ca làm việc nào được phân công cho ngày này' : 'No shifts assigned for this day'}</p>
                                         </div>
                                     )}
                                 </div>
@@ -1735,14 +4621,14 @@ export default function RosterPage() {
                                         <div className="flex items-start gap-2">
                                             <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
                                             <div>
-                                                <p className="text-xs font-bold text-red-800">Coverage gaps detected</p>
+                                                <p className="text-xs font-bold text-red-800">{language === 'vi' ? 'Phát hiện khoảng trống bao phủ' : 'Coverage gaps detected'}</p>
                                                 {gaps.map((g, i) => {
                                                     const startH = TIMELINE_START + g.start * 0.5
                                                     const endH = TIMELINE_START + g.end * 0.5
                                                     const fmtH = (h: number) => `${String(Math.floor(h % 24)).padStart(2, '0')}:${h % 1 === 0 ? '00' : '30'}`
                                                     return (
                                                         <p key={i} className="text-xs text-red-700 mt-0.5 font-medium">
-                                                            No coverage: {fmtH(startH)} – {fmtH(endH)}
+                                                            {language === 'vi' ? 'Không bao phủ' : 'No coverage'}: {fmtH(startH)} – {fmtH(endH)}
                                                         </p>
                                                     )
                                                 })}
@@ -1755,6 +4641,84 @@ export default function RosterPage() {
                     </div>
                 )
             })()}
+
+            {/* Day Notes & Holiday Config Modal */}
+            {editingDayConfig && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setEditingDayConfig(null)}>
+                    <div 
+                        className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md p-6"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                                {language === 'vi' ? 'Cấu hình ngày' : 'Day Configuration'}
+                            </h3>
+                            <button onClick={() => setEditingDayConfig(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-500 mb-4 bg-slate-100/60 p-2 rounded-lg inline-block">
+                            {language === 'vi' ? 'Ngày' : 'Date'}: {editingDayConfig.date}
+                        </p>
+
+                        <div className="space-y-4">
+                            {/* Public Holiday toggle & name input */}
+                            <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100/50">
+                                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                                    <input 
+                                        type="checkbox"
+                                        checked={editingDayConfig.isHoliday}
+                                        onChange={e => setEditingDayConfig(prev => prev ? { ...prev, isHoliday: e.target.checked } : null)}
+                                        className="rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                                    />
+                                    <span className="text-sm font-semibold text-rose-800">
+                                        {language === 'vi' ? 'Ngày lễ công cộng' : 'Public Holiday'}
+                                    </span>
+                                </label>
+                                {editingDayConfig.isHoliday && (
+                                    <input 
+                                        type="text"
+                                        value={editingDayConfig.holidayName}
+                                        onChange={e => setEditingDayConfig(prev => prev ? { ...prev, holidayName: e.target.value } : null)}
+                                        placeholder={language === 'vi' ? 'Tên ngày lễ...' : 'Holiday name...'}
+                                        className="w-full px-3 py-2 border border-rose-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 text-rose-900 font-medium"
+                                    />
+                                )}
+                            </div>
+
+                            {/* Daily Note notes area */}
+                            <div className="p-3 bg-amber-50/30 rounded-xl border border-amber-100/50">
+                                <label className="block text-sm font-semibold text-amber-800 mb-1.5">
+                                    {language === 'vi' ? 'Ghi chú ngày / Sự kiện đặc biệt' : 'Daily Note / Special Event'}
+                                </label>
+                                <textarea 
+                                    rows={3}
+                                    value={editingDayConfig.notes}
+                                    onChange={e => setEditingDayConfig(prev => prev ? { ...prev, notes: e.target.value } : null)}
+                                    placeholder={language === 'vi' ? 'Nhập ghi chú hoặc sự kiện đặc biệt cho ngày này...' : 'Enter note or special event for this day...'}
+                                    className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-amber-900 font-medium"
+                                />
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
+                                <button 
+                                    onClick={() => setEditingDayConfig(null)}
+                                    className="px-4 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-500 hover:bg-gray-50 transition"
+                                >
+                                    {language === 'vi' ? 'Hủy' : 'Cancel'}
+                                </button>
+                                <button 
+                                    onClick={handleSaveDayConfig}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition"
+                                >
+                                    {language === 'vi' ? 'Lưu cấu hình' : 'Save Config'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

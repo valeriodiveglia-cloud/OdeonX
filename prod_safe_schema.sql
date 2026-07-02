@@ -80,6 +80,9 @@ ALTER TABLE IF EXISTS ONLY public.prep_recipe_tags DROP CONSTRAINT IF EXISTS pre
 ALTER TABLE IF EXISTS ONLY public.prep_recipe_tags DROP CONSTRAINT IF EXISTS prep_recipe_tags_recipe_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.prep_recipe_items DROP CONSTRAINT IF EXISTS prep_recipe_items_prep_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.material_price_history DROP CONSTRAINT IF EXISTS material_price_history_material_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.materials DROP CONSTRAINT IF EXISTS fk_materials_supplier_id;
+ALTER TABLE IF EXISTS ONLY public.materials DROP CONSTRAINT IF EXISTS fk_materials_category_id;
+ALTER TABLE IF EXISTS ONLY public.materials DROP CONSTRAINT IF EXISTS fk_materials_uom_id;
 ALTER TABLE IF EXISTS ONLY public.final_recipes DROP CONSTRAINT IF EXISTS final_recipes_category_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.final_recipes DROP CONSTRAINT IF EXISTS final_recipes_category_fk;
 ALTER TABLE IF EXISTS ONLY public.final_recipe_tags DROP CONSTRAINT IF EXISTS final_recipe_tags_tag_id_fkey;

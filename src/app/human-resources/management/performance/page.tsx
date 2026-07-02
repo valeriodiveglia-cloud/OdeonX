@@ -31,6 +31,92 @@ import {
 
 import PerformanceModal, { OVERALL_LABELS, RatingStars, computePeriodLabel, computeAverage } from '@/components/human-resources/PerformanceModal'
 
+const getOverallLabelTranslated = (rating: number, lang: string) => {
+    const label = OVERALL_LABELS[rating]?.label || '';
+    if (lang === 'vi') {
+        switch (rating) {
+            case 1: return 'Kém';
+            case 2: return 'Dưới trung bình';
+            case 3: return 'Trung bình';
+            case 4: return 'Tốt';
+            case 5: return 'Xuất sắc';
+            default: return label;
+        }
+    }
+    return label;
+}
+
+function localizePeriodLabel(label: string, lang: string): string {
+    if (lang !== 'vi' || !label) return label;
+    
+    const monthsEn = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    for (let i = 0; i < monthsEn.length; i++) {
+        if (label.startsWith(monthsEn[i])) {
+            const yearPart = label.slice(monthsEn[i].length).trim();
+            return `Tháng ${i + 1}${yearPart ? ' năm ' + yearPart : ''}`;
+        }
+    }
+    
+    const qMatch = label.match(/^Q([1-4])\s+(\d{4})$/);
+    if (qMatch) {
+        return `Quý ${qMatch[1]} năm ${qMatch[2]}`;
+    }
+    
+    const hMatch = label.match(/^H([1-2])\s+(\d{4})$/);
+    if (hMatch) {
+        return `Nửa năm ${hMatch[1]} năm ${hMatch[2]}`;
+    }
+    
+    const monthAbbrs = {
+        'Jan': 'thg 1', 'Feb': 'thg 2', 'Mar': 'thg 3', 'Apr': 'thg 4',
+        'May': 'thg 5', 'Jun': 'thg 6', 'Jul': 'thg 7', 'Aug': 'thg 8',
+        'Sep': 'thg 9', 'Oct': 'thg 10', 'Nov': 'thg 11', 'Dec': 'thg 12'
+    };
+    
+    let localized = label;
+    Object.entries(monthAbbrs).forEach(([en, vi]) => {
+        const regex = new RegExp(`\\b${en}\\b`, 'g');
+        localized = localized.replace(regex, vi);
+    });
+    
+    if (localized !== label && / \d{4}$/.test(localized)) {
+        localized = localized.replace(/ (\d{4})$/, ' năm $1');
+    }
+    
+    return localized;
+}
+
+const translateCategoryKey = (key: string, lang: string) => {
+    if (lang !== 'vi') {
+        return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+    switch (key) {
+        case 'job_knowledge':
+            return 'Kiến thức công việc';
+        case 'quality_of_work':
+            return 'Chất lượng công việc';
+        case 'productivity':
+            return 'Năng suất làm việc';
+        case 'dependability':
+            return 'Độ tin cậy';
+        case 'attendance_punctuality':
+        case 'attendance_and_punctuality':
+            return 'Chuyên cần & Đúng giờ';
+        case 'communication_skills':
+            return 'Kỹ năng giao tiếp';
+        case 'initiative':
+            return 'Sự chủ động';
+        case 'cooperation_teamwork':
+        case 'cooperation_and_teamwork':
+            return 'Hợp tác & Làm việc nhóm';
+        default:
+            return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+}
+
 interface SelectStaffModalProps {
     open: boolean;
     onClose: () => void;
@@ -40,10 +126,14 @@ interface SelectStaffModalProps {
     subtitle?: string;
 }
 
-function SelectStaffModal({ open, onClose, onSelect, staffList, title = "Select Staff", subtitle = "Search and select an active staff member to review." }: SelectStaffModalProps) {
+function SelectStaffModal({ open, onClose, onSelect, staffList, title, subtitle }: SelectStaffModalProps) {
+    const { language } = useSettings()
     const [search, setSearch] = useState('')
     
     if (!open) return null
+
+    const displayTitle = title || (language === 'vi' ? 'Chọn nhân viên' : 'Select Staff')
+    const displaySubtitle = subtitle || (language === 'vi' ? 'Tìm kiếm và chọn một nhân viên đang hoạt động để đánh giá.' : 'Search and select an active staff member to review.')
 
     const filtered = staffList.filter(s => {
         const q = search.toLowerCase()
@@ -59,8 +149,8 @@ function SelectStaffModal({ open, onClose, onSelect, staffList, title = "Select 
             <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full flex flex-col max-h-[80vh]">
                 <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
                     <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-                        <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+                        <h3 className="text-lg font-semibold text-gray-900">{displayTitle}</h3>
+                        <p className="text-sm text-gray-500 mt-1">{displaySubtitle}</p>
                     </div>
                     <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition self-start">
                         <X className="w-5 h-5" />
@@ -70,7 +160,7 @@ function SelectStaffModal({ open, onClose, onSelect, staffList, title = "Select 
                 <div className="p-4 border-b border-gray-100 bg-slate-50 shrink-0">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input type="text" placeholder="Search by name, position or department..." 
+                        <input type="text" placeholder={language === 'vi' ? 'Tìm kiếm theo tên, chức vụ hoặc bộ phận...' : 'Search by name, position or department...'} 
                             value={search} onChange={e => setSearch(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
                         />
@@ -79,7 +169,9 @@ function SelectStaffModal({ open, onClose, onSelect, staffList, title = "Select 
 
                 <div className="overflow-y-auto p-2 flex-1 space-y-1">
                     {filtered.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500 text-sm">No staff found matching your search.</div>
+                        <div className="text-center py-8 text-gray-500 text-sm">
+                            {language === 'vi' ? 'Không tìm thấy nhân viên nào khớp với tìm kiếm của bạn.' : 'No staff found matching your search.'}
+                        </div>
                     ) : (
                         filtered.map(s => (
                             <button key={s.id} type="button" onClick={() => onSelect(s.id)}
@@ -118,10 +210,14 @@ interface SelectAccountModalProps {
     subtitle?: string;
 }
 
-function SelectAccountModal({ open, onClose, onSelect, accountList, title = "Select Account", subtitle = "Search and select an active account." }: SelectAccountModalProps) {
+function SelectAccountModal({ open, onClose, onSelect, accountList, title, subtitle }: SelectAccountModalProps) {
+    const { language } = useSettings()
     const [search, setSearch] = useState('')
     
     if (!open) return null
+
+    const displayTitle = title || (language === 'vi' ? 'Chọn tài khoản' : 'Select Account')
+    const displaySubtitle = subtitle || (language === 'vi' ? 'Tìm kiếm và chọn một tài khoản đang hoạt động.' : 'Search and select an active account.')
 
     const filtered = accountList.filter(a => {
         if (!a.is_active) return false
@@ -138,8 +234,8 @@ function SelectAccountModal({ open, onClose, onSelect, accountList, title = "Sel
             <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl max-w-lg w-full flex flex-col max-h-[85vh] border border-white/50 overflow-hidden ring-1 ring-black/5">
                 <div className="flex items-start justify-between p-6 border-b border-gray-200/50 shrink-0 bg-white/50">
                     <div>
-                        <h3 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h3>
-                        <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">{subtitle}</p>
+                        <h3 className="text-xl font-bold text-gray-900 tracking-tight">{displayTitle}</h3>
+                        <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">{displaySubtitle}</p>
                     </div>
                     <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100/80 rounded-full transition-all self-start">
                         <X className="w-5 h-5" />
@@ -151,7 +247,7 @@ function SelectAccountModal({ open, onClose, onSelect, accountList, title = "Sel
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                             <Search className="w-5 h-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                         </div>
-                        <input type="text" placeholder="Search by name, email or role..." 
+                        <input type="text" placeholder={language === 'vi' ? 'Tìm kiếm theo tên, email hoặc vai trò...' : 'Search by name, email or role...'} 
                             value={search} onChange={e => setSearch(e.target.value)}
                             className="w-full pl-11 pr-4 py-3.5 bg-white border border-gray-200/80 rounded-2xl text-sm text-gray-900 placeholder-gray-400 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm" 
                             autoFocus
@@ -165,8 +261,12 @@ function SelectAccountModal({ open, onClose, onSelect, accountList, title = "Sel
                             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
                                 <User className="w-8 h-8 text-gray-300" />
                             </div>
-                            <h4 className="text-gray-900 text-base font-semibold mb-1">No accounts found</h4>
-                            <p className="text-gray-500 text-sm">We couldn't find anyone matching "{search}".</p>
+                            <h4 className="text-gray-900 text-base font-semibold mb-1">
+                                {language === 'vi' ? 'Không tìm thấy tài khoản nào' : 'No accounts found'}
+                            </h4>
+                            <p className="text-gray-500 text-sm">
+                                {language === 'vi' ? `Không tìm thấy ai khớp với "${search}".` : `We couldn't find anyone matching "${search}".`}
+                            </p>
                         </div>
                     ) : (
                         <div className="space-y-1.5">
@@ -195,9 +295,9 @@ function SelectAccountModal({ open, onClose, onSelect, accountList, title = "Sel
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <span className="font-semibold text-gray-900 truncate">{acc.name || acc.email}</span>
-                                                {isOwner && <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold uppercase tracking-wider border border-purple-100/50 shrink-0">Owner</span>}
-                                                {isAdmin && <span className="px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-wider border border-blue-100/50 shrink-0">Admin</span>}
-                                                {isStaff && <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold uppercase tracking-wider border border-gray-200/50 shrink-0">Staff</span>}
+                                                {isOwner && <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold uppercase tracking-wider border border-purple-100/50 shrink-0">{language === 'vi' ? 'Chủ sở hữu' : 'Owner'}</span>}
+                                                {isAdmin && <span className="px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-wider border border-blue-100/50 shrink-0">{language === 'vi' ? 'Quản trị viên' : 'Admin'}</span>}
+                                                {isStaff && <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold uppercase tracking-wider border border-gray-200/50 shrink-0">{language === 'vi' ? 'Nhân viên' : 'Staff'}</span>}
                                             </div>
                                             <div className="text-sm text-gray-500 mt-0.5 truncate flex items-center gap-2">
                                                 <span className="truncate">{acc.email}</span>
@@ -225,7 +325,6 @@ function SelectAccountModal({ open, onClose, onSelect, accountList, title = "Sel
         </div>
     )
 }
-
  
 
 /* ═══════════════════════════════════════════════════════
@@ -234,19 +333,28 @@ function SelectAccountModal({ open, onClose, onSelect, accountList, title = "Sel
 function DeleteConfirm({ label, onConfirm, onCancel, deleting }: {
     label: string; onConfirm: () => void; onCancel: () => void; deleting: boolean
 }) {
+    const { language } = useSettings()
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Review</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {language === 'vi' ? 'Xóa đánh giá' : 'Delete Review'}
+                </h3>
                 <p className="text-sm text-gray-600 mb-6">
-                    Are you sure you want to delete the review for <strong>{label}</strong>? This cannot be undone.
+                    {language === 'vi' ? (
+                        <>Bạn có chắc chắn muốn xóa đánh giá cho <strong>{label}</strong> không? Không thể hoàn tác hành động này.</>
+                    ) : (
+                        <>Are you sure you want to delete the review for <strong>{label}</strong>? This cannot be undone.</>
+                    )}
                 </p>
                 <div className="flex justify-end gap-3">
-                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                        {language === 'vi' ? 'Hủy' : 'Cancel'}
+                    </button>
                     <button onClick={onConfirm} disabled={deleting}
                         className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2">
                         {deleting && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                        Delete
+                        {language === 'vi' ? 'Xóa' : 'Delete'}
                     </button>
                 </div>
             </div>
@@ -258,15 +366,14 @@ function DeleteConfirm({ label, onConfirm, onCancel, deleting }: {
    Expandable Row Detail – shows category breakdown
    ═══════════════════════════════════════════════════════ */
 function CategoryBreakdown({ ratings }: { ratings: Record<string, number> }) {
-    // Convert keys back to labels for display
-    const keyToLabel = (key: string) => key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    const { language } = useSettings()
     return (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2 px-4 py-3 bg-gray-50/50">
             {Object.entries(ratings).map(([key, val]) => {
                 if (val === 0) return null
                 return (
                     <div key={key} className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-gray-500 truncate">{keyToLabel(key)}</span>
+                        <span className="text-xs text-gray-500 truncate">{translateCategoryKey(key, language)}</span>
                         <div className="flex items-center gap-1 shrink-0">
                             <RatingStars rating={val} />
                             <span className="text-xs font-semibold text-gray-600 w-3 text-right">{val}</span>
@@ -467,10 +574,10 @@ export default function PerformancePage() {
     const pendingCount = filteredStaff.length - completedCount
 
     const summaryCards = [
-        { label: 'Completed Reviews',  value: completedCount,          icon: Star,         color: 'text-blue-600',    bg: 'bg-blue-50' },
-        { label: 'Pending Reviews',    value: pendingCount,            icon: User,         color: 'text-orange-600',  bg: 'bg-orange-50' },
-        { label: 'Avg Rating',         value: avgRating,               icon: TrendingUp,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { label: 'Eligible Staff',     value: filteredStaff.length,    icon: User,         color: 'text-slate-600',   bg: 'bg-slate-50' },
+        { label: language === 'vi' ? 'Đánh giá hoàn thành' : 'Completed Reviews',  value: completedCount,          icon: Star,         color: 'text-blue-600',    bg: 'bg-blue-50' },
+        { label: language === 'vi' ? 'Đánh giá chưa hoàn thành' : 'Pending Reviews',    value: pendingCount,            icon: User,         color: 'text-orange-600',  bg: 'bg-orange-50' },
+        { label: language === 'vi' ? 'Điểm trung bình' : 'Avg Rating',         value: avgRating,               icon: TrendingUp,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { label: language === 'vi' ? 'Nhân viên đủ điều kiện' : 'Eligible Staff',     value: filteredStaff.length,    icon: User,         color: 'text-slate-600',   bg: 'bg-slate-50' },
     ]
 
     const handleSave = async (data: any) => {
@@ -485,7 +592,7 @@ export default function PerformancePage() {
             }
             setModalOpen(false); setEditingReview(null)
             await fetchAll()
-        } catch (err) { console.error(err); alert('Failed to save review') }
+        } catch (err) { console.error(err); alert(language === 'vi' ? 'Lưu đánh giá thất bại' : 'Failed to save review') }
         setSaving(false)
     }
 
@@ -496,7 +603,7 @@ export default function PerformancePage() {
             const { error } = await supabase.from('hr_staff_performance').delete().eq('id', deletingId)
             if (error) throw error
             setDeletingId(null); await fetchAll()
-        } catch (err) { console.error(err); alert('Failed to delete') }
+        } catch (err) { console.error(err); alert(language === 'vi' ? 'Xóa thất bại' : 'Failed to delete') }
         setDeleteLoading(false)
     }
 
@@ -509,7 +616,7 @@ export default function PerformancePage() {
             const zip = new JSZip()
             
             if (reviewsInTab.length === 0) {
-                alert(`No reviews found for ${activePeriodLabel}`)
+                alert(language === 'vi' ? `Không tìm thấy đánh giá nào cho ${localizePeriodLabel(activePeriodLabel, language)}` : `No reviews found for ${activePeriodLabel}`)
                 setExportLoading(false)
                 return
             }
@@ -530,7 +637,7 @@ export default function PerformancePage() {
                 sheet.getColumn(2).width = 70
 
                 // Title Row
-                const titleRow = sheet.addRow(['PERFORMANCE REVIEW', ''])
+                const titleRow = sheet.addRow([language === 'vi' ? 'ĐÁNH GIÁ HIỆU QUẢ CÔNG VIỆC' : 'PERFORMANCE REVIEW', ''])
                 sheet.mergeCells('A1:B1')
                 titleRow.height = 30
                 titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } }
@@ -554,28 +661,28 @@ export default function PerformancePage() {
                 }
 
                 // General Info Section
-                const headerGeneralRow = sheet.addRow(['General Information', ''])
+                const headerGeneralRow = sheet.addRow([language === 'vi' ? 'Thông tin chung' : 'General Information', ''])
                 sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`)
                 headerGeneralRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }
                 headerGeneralRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } } // blue-500
                 headerGeneralRow.getCell(1).alignment = { vertical: 'middle', indent: 1 }
                 
-                addDataRow('Staff Member', staffName)
-                addDataRow('Period', review.period || '-')
-                addDataRow('Date', new Date(review.review_date).toLocaleDateString('en-GB'))
+                addDataRow(language === 'vi' ? 'Nhân viên' : 'Staff Member', staffName)
+                addDataRow(language === 'vi' ? 'Kỳ đánh giá' : 'Period', review.period ? localizePeriodLabel(review.period, language) : '-')
+                addDataRow(language === 'vi' ? 'Ngày' : 'Date', new Date(review.review_date).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-GB'))
                 
                 const reviewer = accountList.find(a => a.id === review.reviewer_id)
-                addDataRow('Reviewer', review.reviewer_name || (reviewer ? (reviewer.name || reviewer.email) : 'System'))
+                addDataRow(language === 'vi' ? 'Người đánh giá' : 'Reviewer', review.reviewer_name || (reviewer ? (reviewer.name || reviewer.email) : (language === 'vi' ? 'Hệ thống' : 'System')))
                 
                 const avg = computeAverage(review.category_ratings || {})
                 const overallRounded = Math.round(avg) || review.rating || 0
-                const ratingLabel = OVERALL_LABELS[overallRounded]?.label || ''
-                addDataRow('Overall Rating', `${avg.toFixed(1)} / 5 - ${ratingLabel}`, true)
+                const ratingLabel = getOverallLabelTranslated(overallRounded, language)
+                addDataRow(language === 'vi' ? 'Đánh giá chung' : 'Overall Rating', `${avg.toFixed(1)} / 5 - ${ratingLabel}`, true)
                 
                 sheet.addRow([])
 
                 // Categories Section
-                const headerCatsRow = sheet.addRow(['Category Ratings', ''])
+                const headerCatsRow = sheet.addRow([language === 'vi' ? 'Đánh giá theo danh mục' : 'Category Ratings', ''])
                 sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`)
                 headerCatsRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }
                 headerCatsRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } } // emerald-500
@@ -584,21 +691,21 @@ export default function PerformancePage() {
                 const cats = review.category_ratings || {}
                 for (const [key, val] of Object.entries(cats)) {
                     if (val === 0) continue
-                    const keyLabel = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+                    const keyLabel = translateCategoryKey(key, language)
                     addDataRow(keyLabel, `${val} / 5`)
                 }
 
                 sheet.addRow([])
 
                 // Text fields Section
-                const headerTextRow = sheet.addRow(['Comments & Goals', ''])
+                const headerTextRow = sheet.addRow([language === 'vi' ? 'Nhận xét & Mục tiêu' : 'Comments & Goals', ''])
                 sheet.mergeCells(`A${sheet.lastRow!.number}:B${sheet.lastRow!.number}`)
                 headerTextRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }
                 headerTextRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } } // violet-500
                 headerTextRow.getCell(1).alignment = { vertical: 'middle', indent: 1 }
 
-                addDataRow('Comments', review.notes || 'No comments provided.')
-                addDataRow('Goals', review.goals || 'No goals set.')
+                addDataRow(language === 'vi' ? 'Nhận xét' : 'Comments', review.notes || (language === 'vi' ? 'Không có nhận xét.' : 'No comments provided.'))
+                addDataRow(language === 'vi' ? 'Mục tiêu' : 'Goals', review.goals || (language === 'vi' ? 'Chưa đặt mục tiêu.' : 'No goals set.'))
                 
                 const buffer = await workbook.xlsx.writeBuffer()
                 folder.file(`Review_${safeName}_${safePeriod}.xlsx`, buffer)
@@ -608,7 +715,7 @@ export default function PerformancePage() {
             saveAs(zipBlob, `Performance_Reviews_${safePeriodFolder}.zip`)
         } catch (e) {
             console.error('Export failed', e)
-            alert('Failed to generate export')
+            alert(language === 'vi' ? 'Không thể tạo tệp xuất khẩu' : 'Failed to generate export')
         }
         setExportLoading(false)
     }
@@ -621,8 +728,12 @@ export default function PerformancePage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Performance Reviews</h1>
-                        <p className="text-sm text-slate-400 mt-1">Multi-category evaluations with overall average rating.</p>
+                        <h1 className="text-2xl font-bold text-white">
+                            {language === 'vi' ? 'Đánh giá hiệu quả công việc' : 'Performance Reviews'}
+                        </h1>
+                        <p className="text-sm text-slate-400 mt-1">
+                            {language === 'vi' ? 'Đánh giá đa danh mục với điểm trung bình chung.' : 'Multi-category evaluations with overall average rating.'}
+                        </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <button 
@@ -631,12 +742,12 @@ export default function PerformancePage() {
                             className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shadow hover:shadow-lg disabled:opacity-50"
                         >
                             {exportLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FileDown className="w-4 h-4" />} 
-                            Export ZIP
+                            {language === 'vi' ? 'Xuất ZIP' : 'Export ZIP'}
                         </button>
                         <button onClick={() => { setEditingReview(null); setPreselectedStaffForNew(null); setStaffSelectOpen(true) }}
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg whitespace-nowrap">
                             <Plus className="w-4 h-4" />
-                            New Review
+                            {language === 'vi' ? 'Đánh giá mới' : 'New Review'}
                         </button>
                     </div>
                 </div>
@@ -658,31 +769,33 @@ export default function PerformancePage() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
                     <div className="relative flex-1 max-w-xs">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input type="text" placeholder="Search name, position…" value={search} onChange={e => setSearch(e.target.value)}
+                        <input type="text" placeholder={language === 'vi' ? 'Tìm kiếm tên, chức vụ…' : 'Search name, position…'} value={search} onChange={e => setSearch(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none" />
                         {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"><X className="w-3 h-3 text-slate-400" /></button>}
                     </div>
                     <select value={filterRating} onChange={e => setFilterRating(e.target.value)}
                         className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                        <option value="all">All Ratings</option>
-                        {[5, 4, 3, 2, 1].map(r => <option key={r} value={String(r)}>{r} — {OVERALL_LABELS[r].label}</option>)}
+                        <option value="all">{language === 'vi' ? 'Tất cả điểm số' : 'All Ratings'}</option>
+                        {[5, 4, 3, 2, 1].map(r => <option key={r} value={String(r)}>{r} — {getOverallLabelTranslated(r, language)}</option>)}
                     </select>
-                    <span className="text-xs text-slate-500 ml-auto">{filteredStaff.length} shown</span>
+                    <span className="text-xs text-slate-500 ml-auto">
+                        {language === 'vi' ? `Hiển thị ${filteredStaff.length}` : `${filteredStaff.length} shown`}
+                    </span>
                 </div>
 
                 {/* Header Nav */}
                 <div className="mt-3 mb-4 flex items-center justify-between text-sm text-blue-100">
                     <button type="button" onClick={() => setPeriodOffset(prev => prev - 1)} className="flex items-center gap-1 hover:text-white">
                         <ChevronLeft className="w-4 h-4" />
-                        <span>Previous</span>
+                        <span>{language === 'vi' ? 'Trước' : 'Previous'}</span>
                     </button>
 
                     <div className="flex items-center gap-2 text-white">
-                        <span className="text-base font-semibold">{activePeriodLabel}</span>
+                        <span className="text-base font-semibold">{localizePeriodLabel(activePeriodLabel, language)}</span>
                     </div>
 
                     <button type="button" onClick={() => setPeriodOffset(prev => prev + 1)} className="flex items-center gap-1 hover:text-white">
-                        <span>Next</span>
+                        <span>{language === 'vi' ? 'Tiếp' : 'Next'}</span>
                         <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
@@ -693,11 +806,21 @@ export default function PerformancePage() {
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-200">
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Staff Member</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Review Date</th>
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Status & Overall</th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Reviewer</th>
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Actions</th>
+                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                        {language === 'vi' ? 'Nhân viên' : 'Staff Member'}
+                                    </th>
+                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                        {language === 'vi' ? 'Ngày đánh giá' : 'Review Date'}
+                                    </th>
+                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                        {language === 'vi' ? 'Trạng thái & Đánh giá chung' : 'Status & Overall'}
+                                    </th>
+                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                        {language === 'vi' ? 'Người đánh giá' : 'Reviewer'}
+                                    </th>
+                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                        {language === 'vi' ? 'Hành động' : 'Actions'}
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -706,7 +829,6 @@ export default function PerformancePage() {
                                     const avg = r ? computeAverage(r.category_ratings || {}) : 0
                                     const overallRounded = r ? (Math.round(avg) || r.rating) : 0
                                     const rl = overallRounded ? (OVERALL_LABELS[overallRounded] || OVERALL_LABELS[3]) : null
-                                    const isExpanded = r && expandedId === r.id
 
                                     return (
                                         <Fragment key={staff.id}>
@@ -740,11 +862,13 @@ export default function PerformancePage() {
                                                         <div className="flex flex-col items-center gap-1">
                                                             <RatingStars rating={avg > 0 ? avg : r.rating} />
                                                             <span className={`text-xs font-bold ${rl?.color}`}>
-                                                                {avg > 0 ? avg.toFixed(1) : r.rating} — {rl?.label}
+                                                                {avg > 0 ? avg.toFixed(1) : r.rating} — {rl ? getOverallLabelTranslated(overallRounded, language) : ''}
                                                             </span>
                                                         </div>
                                                     ) : (
-                                                        <span className="px-2 py-1 bg-amber-50 text-amber-600 font-semibold text-[10px] uppercase rounded-full tracking-wider border border-amber-100">Pending</span>
+                                                        <span className="px-2 py-1 bg-amber-50 text-amber-600 font-semibold text-[10px] uppercase rounded-full tracking-wider border border-amber-100">
+                                                            {language === 'vi' ? 'Chưa đánh giá' : 'Pending'}
+                                                        </span>
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-600">{r?.reviewer_name || '—'}</td>
@@ -757,7 +881,7 @@ export default function PerformancePage() {
                                                                 setAssignSelectOpen(true)
                                                             }}
                                                             className="px-3 py-1 text-xs font-medium bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 rounded-lg transition whitespace-nowrap">
-                                                            Assign Review
+                                                            {language === 'vi' ? 'Giao việc đánh giá' : 'Assign Review'}
                                                         </button>
                                                     )}
                                                 </td>
@@ -770,7 +894,7 @@ export default function PerformancePage() {
                                         <td colSpan={5} className="px-4 py-16 text-center">
                                             <User className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                                             <p className="text-gray-500 text-sm font-medium">
-                                                No results match your filters
+                                                {language === 'vi' ? 'Không có kết quả nào khớp với bộ lọc của bạn' : 'No results match your filters'}
                                             </p>
                                         </td>
                                     </tr>
@@ -795,11 +919,11 @@ export default function PerformancePage() {
             <SelectAccountModal 
                 open={isAssignSelectOpen} 
                 onClose={() => setAssignSelectOpen(false)}
-                title="Assign Review To"
-                subtitle={`Select an app user to handle the review for ${staffList.find(s => s.id === assigningForId)?.full_name}.`}
+                title={language === 'vi' ? 'Giao việc đánh giá cho' : 'Assign Review To'}
+                subtitle={language === 'vi' ? `Chọn một người dùng ứng dụng để xử lý việc đánh giá cho ${staffList.find(s => s.id === assigningForId)?.full_name}.` : `Select an app user to handle the review for ${staffList.find(s => s.id === assigningForId)?.full_name}.`}
                 accountList={accountList}
                 onSelect={(id, name) => {
-                    alert(`Review assigned to ${name}!\nThis visual action works. Data-saving will be fully unlocked when Application Access Control is integrated later.`);
+                    alert(language === 'vi' ? `Đã giao việc đánh giá cho ${name}!\nHành động trực quan này hoạt động. Lưu dữ liệu sẽ được mở khóa hoàn toàn khi Kiểm soát truy cập ứng dụng được tích hợp sau.` : `Review assigned to ${name}!\nThis visual action works. Data-saving will be fully unlocked when Application Access Control is integrated later.`);
                     setAssignSelectOpen(false);
                 }}
             />

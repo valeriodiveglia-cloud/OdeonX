@@ -562,7 +562,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     setAccLoading(true)
     const [accRes, pbRes] = await Promise.all([
       supabase.from(TBL_ACCOUNTS).select('*').order('created_at', { ascending: true }),
-      supabase.from('provider_branches').select('id, name, city').order('name')
+      supabase.from('provider_branches').select('id, name, city').eq('is_active', true).order('name')
     ])
     if (accRes.error) {
       showAccErr(`Accounts load error: ${accRes.error.message}`);
@@ -634,10 +634,53 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [accountToDelete, setAccountToDelete] = useState<AccountRow | null>(null)
+  const [checkingHistory, setCheckingHistory] = useState(false)
+  const [hasHistory, setHasHistory] = useState(false)
+  const [deactivatingAccount, setDeactivatingAccount] = useState(false)
 
-  function requestDelete(u: AccountRow) {
+  async function requestDelete(u: AccountRow) {
     setAccountToDelete(u)
     setDeleteConfirmOpen(true)
+    if (!u.user_id) {
+      setHasHistory(false)
+      return
+    }
+    try {
+      setCheckingHistory(true)
+      const [
+        payOrders,
+        crmPartners,
+        crmTasks,
+        invoices,
+        bankTrans,
+        cashierClosings,
+        dailyClosings
+      ] = await Promise.all([
+        supabase.from('fin_payment_orders').select('id', { count: 'exact', head: true }).eq('created_by', u.user_id),
+        supabase.from('crm_partners').select('id', { count: 'exact', head: true }).or(`owner_id.eq.${u.user_id},created_by.eq.${u.user_id}`),
+        supabase.from('crm_tasks').select('id', { count: 'exact', head: true }).eq('created_by', u.user_id),
+        supabase.from('fin_invoices').select('id', { count: 'exact', head: true }).eq('created_by', u.user_id),
+        supabase.from('fin_bank_transactions').select('id', { count: 'exact', head: true }).eq('created_by', u.user_id),
+        supabase.from('cashier_closings').select('id', { count: 'exact', head: true }).eq('created_by', u.user_id),
+        supabase.from('daily_closings').select('id', { count: 'exact', head: true }).eq('created_by', u.user_id),
+      ])
+
+      const count =
+        (payOrders.count || 0) +
+        (crmPartners.count || 0) +
+        (crmTasks.count || 0) +
+        (invoices.count || 0) +
+        (bankTrans.count || 0) +
+        (cashierClosings.count || 0) +
+        (dailyClosings.count || 0)
+
+      setHasHistory(count > 0)
+    } catch (err) {
+      console.error('Error checking user history:', err)
+      setHasHistory(false)
+    } finally {
+      setCheckingHistory(false)
+    }
   }
 
   async function confirmDelete() {
@@ -646,6 +689,37 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
     setDeleteConfirmOpen(false)
     setAccountToDelete(null)
     await deleteAccount(id)
+  }
+
+  async function handleDeactivateFromModal() {
+    if (!accountToDelete) return
+    const u = accountToDelete
+    try {
+      setDeactivatingAccount(true)
+      const res = await authFetch('/api/users/admin-upsert', {
+        method: 'POST',
+        body: JSON.stringify({
+          accountId: u.id,
+          email: u.email.trim().toLowerCase(),
+          phone: u.phone || null,
+          name: u.name || null,
+          position: u.position || null,
+          role: u.role,
+          is_active: false,
+          branches: u.branches || [],
+        }),
+      })
+      const ct = res.headers.get('content-type') || ''
+      const data = ct.includes('application/json') ? await res.json() : { error: await res.text() }
+      if (!res.ok) throw new Error(data?.error || 'Deactivation failed')
+      setAcc(list => list.map(x => (x.id === u.id ? { ...x, is_active: false } : x)))
+      setDeleteConfirmOpen(false)
+      setAccountToDelete(null)
+    } catch (e: any) {
+      showAccErr(`${t('SavedErr', lang) || 'Error'}: ${e?.message || String(e)}`)
+    } finally {
+      setDeactivatingAccount(false)
+    }
   }
 
   async function deleteAccount(id: string) {
@@ -1741,17 +1815,40 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
 
       {/* Accounts: Delete Confirm */}
-      <Modal open={deleteConfirmOpen} title={t('ConfirmDelete', lang) || 'Confirm delete'} onClose={() => setDeleteConfirmOpen(false)} width="max-w-md">
+      <Modal open={deleteConfirmOpen} title={checkingHistory ? (t('Checking', lang) || 'Checking…') : hasHistory ? (t('UserAccAlertCannotDeleteTitle', lang) || 'Cannot Delete Account') : (t('ConfirmDelete', lang) || 'Confirm delete')} onClose={() => setDeleteConfirmOpen(false)} width="max-w-md">
         <div className="space-y-3 text-gray-800">
-          <p>{t('ConfirmDeleteAccountBody', lang) || 'Are you sure you want to delete this account? This action cannot be undone.'}</p>
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setDeleteConfirmOpen(false)} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
-              {t('Cancel', lang) || 'Cancel'}
-            </button>
-            <button type="button" onClick={confirmDelete} className="px-3 h-9 rounded-lg bg-red-600 text-white hover:opacity-90">
-              {t('Delete', lang) || 'Delete'}
-            </button>
-          </div>
+          {checkingHistory ? (
+            <div className="flex items-center justify-center py-4">
+              <svg className="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+          ) : hasHistory ? (
+            <>
+              <p>{t('UserAccAlertCannotDeleteHasRecords', lang) || 'This user has historical operational records (such as payment orders, CRM tasks/partners, invoices, or daily reports) and cannot be permanently deleted. You can deactivate the account instead to disable access while preserving data history.'}</p>
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button type="button" onClick={() => setDeleteConfirmOpen(false)} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
+                  {t('Close', lang) || 'Close'}
+                </button>
+                <button type="button" onClick={handleDeactivateFromModal} disabled={deactivatingAccount} className="px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-90 disabled:opacity-50">
+                  {deactivatingAccount ? (t('Saving', lang) || 'Saving…') : (t('UserAccDeactivateButton', lang) || 'Deactivate Account')}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p>{t('ConfirmDeleteAccountBody', lang) || 'Are you sure you want to delete this account? This action cannot be undone.'}</p>
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button type="button" onClick={() => setDeleteConfirmOpen(false)} className="px-3 h-9 rounded-lg border hover:bg-gray-50">
+                  {t('Cancel', lang) || 'Cancel'}
+                </button>
+                <button type="button" onClick={confirmDelete} className="px-3 h-9 rounded-lg bg-red-600 text-white hover:opacity-90">
+                  {t('Delete', lang) || 'Delete'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 

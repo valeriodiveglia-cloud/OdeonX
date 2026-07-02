@@ -1,0 +1,1 @@
+I will write a script `scratch/extract_diffs.js` to extract all diff blocks/changes made to `i18n.ts` from `CODE_ACTION` steps in the logs. This will allow us to see the exact translations that were added.

@@ -9,6 +9,7 @@ import {
   ArrowUturnLeftIcon
 } from '@heroicons/react/24/outline'
 import { supabase } from '@/lib/supabase_shim'
+import { useSettings } from '@/contexts/SettingsContext'
 
 type Kind = 'materials' | 'dish' | 'prep' | 'equipment'
 type Category = {
@@ -30,6 +31,7 @@ async function api<T>(kind: Exclude<Kind,'materials'>, path: 'list'|'upsert'|'de
 
 export default function CategoryManager({ kind }: { kind: Kind }) {
   const router = useRouter()
+  const { language: lang } = useSettings()
   const [rows, setRows] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -130,7 +132,95 @@ export default function CategoryManager({ kind }: { kind: Kind }) {
   }
 
   async function remove(row: Category) {
-    if (!confirm('Delete this category?')) return
+    try {
+      setBusy(true)
+      let inUseNames: string[] = []
+      let blockMessagePattern = ''
+
+      if (kind === 'materials') {
+        const { data, error } = await supabase
+          .from('materials')
+          .select('name')
+          .eq('category_id', row.id)
+          .is('deleted_at', null)
+          .limit(5)
+        if (error) throw error
+        inUseNames = data?.map(m => m.name) || []
+        blockMessagePattern = 'materials'
+      } else if (kind === 'dish') {
+        const { data, error } = await supabase
+          .from('final_recipes')
+          .select('name')
+          .eq('category_id', row.id)
+          .is('deleted_at', null)
+          .limit(5)
+        if (error) throw error
+        inUseNames = data?.map(m => m.name) || []
+        blockMessagePattern = 'dishes'
+      } else if (kind === 'prep') {
+        const { data, error } = await supabase
+          .from('prep_recipes')
+          .select('name')
+          .eq('category_id', row.id)
+          .is('deleted_at', null)
+          .limit(5)
+        if (error) throw error
+        inUseNames = data?.map(m => m.name) || []
+        blockMessagePattern = 'preps'
+      } else if (kind === 'equipment') {
+        const { data, error } = await supabase
+          .from('rental_equipment')
+          .select('name')
+          .eq('category_id', row.id)
+          .is('deleted_at', null)
+          .limit(5)
+        if (error) throw error
+        inUseNames = data?.map(m => m.name) || []
+        blockMessagePattern = 'equipment'
+      }
+
+      if (inUseNames.length > 0) {
+        const names = inUseNames.join(', ')
+        let warningMsg = ''
+        const currentLang = lang as string
+
+        if (blockMessagePattern === 'materials') {
+          if (currentLang === 'vi') {
+            warningMsg = `Danh mục này hiện đang được sử dụng bởi các nguyên liệu sau: ${names}. Vui lòng chuyển đổi hoặc xóa các nguyên liệu đó trước.`
+          } else {
+            warningMsg = `This category is currently in use by the following materials: ${names}. Please reassign or delete those materials first.`
+          }
+        } else if (blockMessagePattern === 'dishes') {
+          if (currentLang === 'vi') {
+            warningMsg = `Danh mục này hiện đang được sử dụng bởi các món ăn sau: ${names}. Vui lòng chuyển đổi hoặc xóa các món ăn đó trước.`
+          } else {
+            warningMsg = `This category is currently in use by the following dishes: ${names}. Please reassign or delete those dishes first.`
+          }
+        } else if (blockMessagePattern === 'preps') {
+          if (currentLang === 'vi') {
+            warningMsg = `Danh mục này hiện đang được sử dụng bởi các công thức chuẩn bị sau: ${names}. Vui lòng chuyển đổi oặc xóa các công thức đó trước.`
+          } else {
+            warningMsg = `This category is currently in use by the following prep recipes: ${names}. Please reassign or delete those prep recipes first.`
+          }
+        } else if (blockMessagePattern === 'equipment') {
+          if (currentLang === 'vi') {
+            warningMsg = `Danh mục này hiện đang được sử dụng bởi các thiết bị sau: ${names}. Vui lòng chuyển đổi hoặc xóa các thiết bị đó trước.`
+          } else {
+            warningMsg = `This category is currently in use by the following equipment: ${names}. Please reassign or delete those equipment first.`
+          }
+        }
+
+        alert(warningMsg)
+        return
+      }
+    } catch (e: any) {
+      setMsg(e.message || 'Error checking constraints')
+      return
+    } finally {
+      setBusy(false)
+    }
+
+    if (!confirm(lang === 'vi' ? 'Xóa danh mục này?' : 'Delete this category?')) return
     const snapshot = rows
     setRows(prev => prev.filter(r => r.id !== row.id))
     try {

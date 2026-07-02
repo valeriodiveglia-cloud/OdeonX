@@ -1,0 +1,54 @@
+Parsed 1547 keys from i18n.ts (en block)
+
+Candidates for missing keys in i18n.ts:
+- 0: used in src/app/finance/accounts/page.tsx, src/app/finance/cashflow/page.tsx, src/app/finance/closing-stock/page.tsx, src/app/finance/invoices/page.tsx, src/app/finance/monthly-adjustments/page.tsx, src/app/finance/payments/page.tsx, src/app/finance/pnl/page.tsx, src/components/human-resources/SalaryModal.tsx
+- 100: used in src/components/human-resources/StaffModal.tsx
+- AlreadyExists: used in src/components/modals/TagManagerModal.tsx
+- Enter: used in src/components/modals/TagManagerModal.tsx
+- Error: used in src/components/modals/TagManagerModal.tsx
+- Escape: used in src/components/modals/TagManagerModal.tsx
+- FinDsbPaymentOrder: used in src/app/finance/page.tsx
+- Found: used in src/components/modals/TagManagerModal.tsx
+- ManageTags: used in src/components/modals/TagManagerModal.tsx
+- NewTag: used in src/components/modals/TagManagerModal.tsx
+- NoPaymentsAwaitingInvoice: used in src/app/finance/page.tsx
+- PaymentsAwaitingInvoice: used in src/app/finance/page.tsx
+- Quarterly: used in src/components/human-resources/PerformanceModal.tsx
+- ThisCannotBeUndone: used in src/components/modals/TagManagerModal.tsx
+- Usages: used in src/components/modals/TagManagerModal.tsx
+- _: used in src/lib/creditsSync.ts
+- a: used in src/app/finance/closing-stock/page.tsx, src/lib/exportUtils.ts
+- active: used in src/components/human-resources/AddPostingModal.tsx, src/components/human-resources/StaffModal.tsx
+- authorization: used in src/lib/server/auth.ts
+- branchName: used in src/components/LeftNavAssetInventory.tsx
+- candidate_added: used in src/components/human-resources/AddCandidateModal.tsx
+- change: used in src/components/LeftNav.tsx, src/components/LeftNavDailyReports.tsx, src/components/LeftNavEvent.tsx, src/components/LeftNavLoyaltyManager.tsx, src/components/LeftNavMonthlyReports.tsx
+- confirm: used in src/components/human-resources/PerformanceModal.tsx
+- cookies: used in src/lib/requireSession.ts
+- created: used in src/components/human-resources/HiringRequestForm.tsx
+- fixed: used in src/components/human-resources/SalaryModal.tsx, src/components/human-resources/StaffModal.tsx
+- full_time: used in src/components/human-resources/StaffModal.tsx
+- keydown: used in src/components/modals/TagManagerModal.tsx
+- keypress: used in src/components/AutoLogout.tsx
+- mousedown: used in src/components/AutoLogout.tsx
+- mousemove: used in src/components/AutoLogout.tsx
+- new: used in src/components/human-resources/AddCandidateModal.tsx
+- none: used in src/components/human-resources/SalaryModal.tsx
+- percentage: used in src/components/human-resources/SalaryModal.tsx
+- posting_added: used in src/components/human-resources/AddPostingModal.tsx
+- posting_status_changed: used in src/components/human-resources/RecruitmentPostings.tsx
+- preferences: used in src/components/RecentVisitsTracker.tsx
+- recent_visits_updated: used in src/components/RecentVisitsTracker.tsx
+- recruitment_platforms: used in src/components/human-resources/AddPostingModal.tsx
+- reject: used in src/components/human-resources/PerformanceModal.tsx
+- rejection: used in src/components/human-resources/SalaryModal.tsx
+- resignation: used in src/components/human-resources/SalaryModal.tsx
+- scroll: used in src/components/AutoLogout.tsx
+- setAll: used in src/lib/auth-check.ts
+- staff: used in src/components/LeftNavAssetInventory.tsx, src/components/LeftNavCRM.tsx, src/components/LeftNavMonthlyReports.tsx
+- title: used in src/components/LeftNavDailyReports.tsx, src/components/LeftNavMonthlyReports.tsx
+- touchstart: used in src/components/AutoLogout.tsx
+- undefined: used in src/components/LeftNav.tsx, src/components/LeftNavDailyReports.tsx, src/components/LeftNavEvent.tsx, src/components/LeftNavLoyaltyManager.tsx, src/components/LeftNavMonthlyReports.tsx
+- update_user_preferences: used in src/components/RecentVisitsTracker.tsx
+- updated: used in src/components/human-resources/HiringRequestForm.tsx
+- user_id: used in src/components/LeftNavAssetInventory.tsx, src/components/LeftNavCRM.tsx, src/components/LeftNavMonthlyReports.tsx, src/components/RecentVisitsTracker.tsx

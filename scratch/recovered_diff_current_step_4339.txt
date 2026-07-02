@@ -1,0 +1,1 @@
+I will write a script `scratch/extract_diffs_both.js` that scans the transcripts of BOTH the current and the previous conversations. It will search for any edits to `i18n.ts` and save them, which should give us the complete history of translation additions.

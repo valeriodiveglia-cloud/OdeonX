@@ -1,0 +1,29 @@
+Created At: 2026-05-23T14:14:21Z
+Completed At: 2026-05-23T14:14:21Z
+The following changes were made by the replace_file_content tool to: /Users/valerio/.gemini/antigravity/brain/8c8b7827-f1fb-420a-b004-91d9a22c3062/task.md. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -1,13 +1,13 @@
+ # Task Checklist: Internazionalizzazione Modulo Finance
+ 
+-- `[ ]` Fase 1: Estensione del Dizionario Centrale (`src/lib/i18n.ts`)
+-  - `[ ]` Aggiungere traduzioni per la barra di navigazione e i titoli generali
+-  - `[ ]` Aggiungere traduzioni per la pagina Settings
+-  - `[ ]` Aggiungere traduzioni per la dashboard (FinanceDashboard)
+-  - `[ ]` Aggiungere traduzioni per la pagina Chart of Accounts
+-- `[ ]` Fase 2: Barra di Navigazione Laterale (`src/components/LeftNavFinance.tsx`)
+-  - `[ ]` Importare `t` e utilizzare `language` per mappare l'array `NAV`
+-  - `[ ]` Tradurre i testi fissi dell'header e del footer
++- `[x]` Fase 1: Estensione del Dizionario Centrale (`src/lib/i18n.ts`)
++  - `[x]` Aggiungere traduzioni per la barra di navigazione e i titoli generali
++  - `[x]` Aggiungere traduzioni per la pagina Settings
++  - `[x]` Aggiungere traduzioni per la dashboard (FinanceDashboard)
++  - `[x]` Aggiungere traduzioni per la pagina Chart of Accounts
++- `[x]` Fase 2: Barra di Navigazione Laterale (`src/components/LeftNavFinance.tsx`)
++  - `[x]` Importare `t` e utilizzare `language` per mappare l'array `NAV`
++  - `[x]` Tradurre i testi fissi dell'header e del footer
+ - `[ ]` Fase 3: Pagina delle Impostazioni Finance (`src/app/finance/settings/page.tsx`)
+   - `[ ]` Importare `t` e `useSettings`
+   - `[ ]` Tradurre titoli, sottotitoli e descrizioni delle schede di configurazione
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

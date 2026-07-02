@@ -35,6 +35,7 @@ export default function TransferAssetModal({ open, onClose, onConfirm, asset, cu
                 const { data, error } = await supabase
                     .from('provider_branches')
                     .select('id, name')
+                    .eq('is_active', true)
                     .order('name')
 
                 if (error) throw error

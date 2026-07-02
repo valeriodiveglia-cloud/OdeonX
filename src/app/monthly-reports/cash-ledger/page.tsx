@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
 import { useCashLedger, CashLedgerRow } from './_data/useCashLedger'
+import { useSettings } from '@/contexts/SettingsContext'
+import MonthPicker from '@/components/MonthPicker'
 import {
     CalendarDaysIcon,
     CheckCircleIcon,
@@ -35,6 +37,7 @@ const columnMenuDict = {
 }
 
 export default function CashLedgerPage() {
+    const { language } = useSettings()
     const now = new Date()
     const [year, setYear] = useState(now.getFullYear())
     const [month, setMonth] = useState(now.getMonth()) // 0-11
@@ -98,25 +101,8 @@ export default function CashLedgerPage() {
         setSelectedRowKeys(new Set())
     }, [rows])
 
-    const handlePrevMonth = () => {
-        if (month === 0) {
-            setMonth(11)
-            setYear(y => y - 1)
-        } else {
-            setMonth(m => m - 1)
-        }
-    }
 
-    const handleNextMonth = () => {
-        if (month === 11) {
-            setMonth(0)
-            setYear(y => y + 1)
-        } else {
-            setMonth(m => m + 1)
-        }
-    }
 
-    const monthLabel = new Date(year, month, 1).toLocaleString('default', { month: 'long', year: 'numeric' })
     const monthInputValue = `${year}-${String(month + 1).padStart(2, '0')}`
 
     function onPickMonth(val: string) {
@@ -349,39 +335,15 @@ export default function CashLedgerPage() {
             {/* Divider */}
             <div className="border-t border-blue-400/20 my-3"></div>
 
-            {/* Month Nav */}
-            <div className="mb-3 grid grid-cols-3 items-center">
-                <div className="justify-self-start">
-                    <button
-                        type="button"
-                        onClick={handlePrevMonth}
-                        className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
-                    >
-                        Previous
-                    </button>
-                </div>
-                <div className="justify-self-center flex items-center gap-2">
-                    <span className="text-white font-semibold">{monthLabel}</span>
-                    <div className="relative w-6 h-6">
-                        <CalendarDaysIcon className="w-6 h-6 text-blue-200" />
-                        <input
-                            type="month"
-                            value={monthInputValue}
-                            onChange={e => onPickMonth(e.target.value)}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                    </div>
-                </div>
-                <div className="justify-self-end">
-                    <button
-                        type="button"
-                        onClick={handleNextMonth}
-                        className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
-                    >
-                        Next
-                    </button>
-                </div>
-            </div>
+            <MonthPicker
+                value={monthInputValue}
+                onChange={onPickMonth}
+                language={language}
+                colorClass="text-blue-100 hover:text-white"
+                labelColorClass="text-white"
+                iconColorClass="text-blue-200 hover:text-white"
+                className="mb-3"
+            />
 
             {/* KPI */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">

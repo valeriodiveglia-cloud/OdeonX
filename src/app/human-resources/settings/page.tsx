@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
-import { GlobeAltIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import { GlobeAltIcon } from '@heroicons/react/24/outline'
 
 const SETTINGS_SECTIONS = [
     {
@@ -33,8 +33,7 @@ export default function HRSettingsPage() {
                             <ArrowLeftIcon className="h-5 w-5 text-gray-300" />
                         </Link>
                         <div>
-                            <h1 className="text-2xl font-bold text-white sm:text-3xl sm:tracking-tight flex items-center gap-3">
-                                <Cog6ToothIcon className="h-7 w-7 text-gray-400" />
+                            <h1 className="text-2xl font-bold text-white sm:text-3xl sm:tracking-tight">
                                 HR Settings
                             </h1>
                             <p className="mt-1 text-sm text-gray-400">

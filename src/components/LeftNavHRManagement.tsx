@@ -8,17 +8,11 @@ import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
 const BASE = '/human-resources/management'
-const NAV = [
-    { href: `${BASE}/staff`, label: 'Staff List', icon: Users },
-    { href: `${BASE}/performance`, label: 'Performance', icon: Star },
-    { href: `${BASE}/salary-history`, label: 'Status Change', icon: TrendingUp },
-    { href: `${BASE}/disciplinary`, label: 'Disciplinary', icon: NotebookPen },
-    { href: `${BASE}/bonus`, label: 'Bonus', icon: Gift },
-    { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
-]
 
 const EXP_W_REM = 16
 const COLL_W_REM = 3.5
+
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v0.0'
 
 export default function LeftNavHRManagement() {
     const pathname = usePathname()
@@ -38,7 +32,16 @@ export default function LeftNavHRManagement() {
     const isEN = language === 'en'
     const toggleLang = () => setLanguage(isEN ? 'vi' : 'en')
 
-    const norm = (s: string) => s.replace(/\/+$/, '')
+    const headerTitle = language === 'vi' ? 'Quản lý HR' : 'HR Management'
+
+    const NAV = [
+        { href: `${BASE}/staff`, label: language === 'vi' ? 'Danh sách NV' : 'Staff List', icon: Users },
+        { href: `${BASE}/performance`, label: language === 'vi' ? 'Hiệu suất' : 'Performance', icon: Star },
+        { href: `${BASE}/salary-history`, label: language === 'vi' ? 'Thay đổi Trạng thái' : 'Status Change', icon: TrendingUp },
+        { href: `${BASE}/disciplinary`, label: language === 'vi' ? 'Kỷ luật' : 'Disciplinary', icon: NotebookPen },
+        { href: `${BASE}/bonus`, label: language === 'vi' ? 'Thưởng' : 'Bonus', icon: Gift },
+        { href: `${BASE}/settings`, label: language === 'vi' ? 'Cài đặt' : 'Settings', icon: Settings },
+    ]
 
     return (
         <div
@@ -53,7 +56,7 @@ export default function LeftNavHRManagement() {
                     <Home className="w-5 h-5 text-white" />
                 </Link>
                 <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
-                    {open ? 'HR Management' : ''}
+                    {open ? headerTitle : ''}
                 </div>
             </div>
 
@@ -87,8 +90,20 @@ export default function LeftNavHRManagement() {
                     onClick={toggleLang}
                     className="w-8 h-8 rounded-full overflow-hidden border border-white/20 hover:bg-white/10 flex items-center justify-center p-0"
                 >
-                    <ReactCountryFlag countryCode={isEN ? 'GB' : 'VN'} svg style={{ width: '1.2em', height: '1.2em' }} />
+                    <ReactCountryFlag
+                        countryCode={isEN ? 'GB' : 'VN'}
+                        svg
+                        style={{
+                            width: '110%',
+                            height: '110%',
+                            objectFit: 'cover',
+                            display: 'block',
+                        }}
+                    />
                 </button>
+                {open && (
+                    <div className="text-xs text-slate-300 px-2">{appVersion}</div>
+                )}
             </div>
         </div>
     )

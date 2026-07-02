@@ -1,0 +1,8 @@
+    FromCashierClosings: 'From cashier closings',
+    InvoicesThisMonth: 'Invoices this month',
+    ViewAll: 'View All',
+    Review: 'Review',
+    Flat: 'Flat',
+    Traditional: 'Traditional',
+    NoDataAvailable: 'No data available yet',
+  },

@@ -7,6 +7,10 @@ import { CRMPayout } from '@/types/crm'
 import { useSettings } from '@/contexts/SettingsContext'
 import { t } from '@/lib/i18n'
 import { useRouter } from 'next/navigation'
+import MonthPicker from '@/components/MonthPicker'
+
+function toMonthInputValue(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+function fromMonthInputValue(val: string) { const [y, m] = val.split('-').map(Number); return new Date(y, m - 1, 1) }
 
 interface ExtendedPayout extends CRMPayout {
     payout_type?: string
@@ -45,8 +49,8 @@ export default function CRMPayoutsPage() {
     /* month cursor */
     const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()))
 
-    function prevMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), -1)) }
-    function nextMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), 1)) }
+
+
 
     /* Modals State */
     const [selectedPayout, setSelectedPayout] = useState<ExtendedPayout | null>(null)
@@ -1204,22 +1208,13 @@ export default function CRMPayoutsPage() {
             </div>
 
             {/* Month Nav */}
-            <div className="mb-4 grid grid-cols-3 items-center">
-                <div className="justify-self-start">
-                    <button onClick={prevMonth} className="text-blue-600 hover:text-blue-800 underline underline-offset-4 decoration-blue-300/40 text-sm font-medium">
-                        {t(language, 'Previous')}
-                    </button>
-                </div>
-                <div className="justify-self-center flex items-center gap-2">
-                    <span className="text-slate-700 font-semibold">{formatMonthLabel(monthCursor, language)}</span>
-                    <Calendar className="w-5 h-5 text-slate-400" />
-                </div>
-                <div className="justify-self-end">
-                    <button onClick={nextMonth} className="text-blue-600 hover:text-blue-800 underline underline-offset-4 decoration-blue-300/40 text-sm font-medium">
-                        {t(language, 'Next')}
-                    </button>
-                </div>
-            </div>
+            <MonthPicker
+                value={toMonthInputValue(monthCursor)}
+                onChange={(val) => setMonthCursor(fromMonthInputValue(val))}
+                language={language}
+                colorClass="text-blue-600 hover:text-blue-800"
+                className="mb-4"
+            />
 
             {/* Payouts Table */}
             <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">

@@ -68,6 +68,7 @@ export default function NewAssetModal({ open, onClose, onSave, initialData, defa
             const { data } = await supabase
                 .from('provider_branches')
                 .select('id, name')
+                .eq('is_active', true)
                 .order('sort_order', { ascending: true })
                 .order('name', { ascending: true })
 

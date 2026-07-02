@@ -276,6 +276,7 @@ export default function EventInfoCard({ title, value, onChange }: Props) {
           const { data, error } = await supabase
             .from('provider_branches')
             .select('id, name, company_name')
+            .eq('is_active', true)
             .order('name', { ascending: true })
           if (!active) return
           if (error) throw error

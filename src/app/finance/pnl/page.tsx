@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Filter, Maximize2, Minimize2, X, BarChart3 } from 'lucide-react'
+import { ChevronDown, Download, Filter, Maximize2, Minimize2, X, BarChart3 } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
 import { t } from '@/lib/i18n'
+import MonthPicker from '@/components/MonthPicker'
 import CircularLoader from '@/components/CircularLoader'
 import type { FinChartOfAccount } from '@/types/finance'
 
@@ -329,7 +330,7 @@ export default function PnLReportPage() {
                     details[key].push({ 
                         source: 'Invoice', 
                         reference: inv.invoice_number || '—',
-                        supplier: inv.is_personal_deduction ? (inv.custom_supplier_name || 'Personal') : ((inv as any).suppliers?.name || undefined),
+                        supplier: inv.is_personal_deduction ? (inv.custom_supplier_name || 'Personal') : ((inv as any).suppliers?.name || inv.custom_supplier_name || undefined),
                         description: inv.description || '',
                         amount, 
                         date: inv.invoice_date,
@@ -574,7 +575,6 @@ export default function PnLReportPage() {
         }
         return opts
     }, [])
-    const fmtMonth = (m: string) => new Date(Number(m.split('-')[0]), Number(m.split('-')[1]) - 1, 1).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' })
 
     const toggleGroup = (code: string) => {
         setExpandedGroups(prev => {
@@ -694,26 +694,12 @@ export default function PnLReportPage() {
                     </div>
 
 
-                    {/* Month Navigation */}
-                    <div className="grid grid-cols-3 items-center mb-4">
-                        <button onClick={() => {
-                            const [y, m] = month.split('-').map(Number);
-                            const d = new Date(y, m - 2, 1);
-                            setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                        }} className="justify-self-start text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                            <ChevronLeft className="w-4 h-4" /> {t(language, 'FinCFPrevious')}
-                        </button>
-                        <div className="justify-self-center text-lg font-bold text-slate-900">
-                            {fmtMonth(month)}
-                        </div>
-                        <button onClick={() => {
-                            const [y, m] = month.split('-').map(Number);
-                            const d = new Date(y, m, 1);
-                            setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                        }} className="justify-self-end text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                            {t(language, 'FinCFNext')} <ChevronRight className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <MonthPicker
+                        value={month}
+                        onChange={setMonth}
+                        language={language}
+                        colorClass="text-blue-600 hover:text-blue-800"
+                    />
 
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-16">
                         <table className="w-full text-sm">

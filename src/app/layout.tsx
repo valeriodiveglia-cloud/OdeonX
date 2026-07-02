@@ -9,17 +9,26 @@ import ClientErrorGuard from '@/app/dev-error-guard'
 import AutoLogout from '@/components/AutoLogout'
 import RecentVisitsTracker from '@/components/RecentVisitsTracker'
 
+import { cookies } from 'next/headers'
+
 const beVietnam = Be_Vietnam_Pro({ subsets: ['vietnamese', 'latin'], weight: ['400', '500', '600', '700', '800'], display: 'swap', variable: '--font-be-vietnam' })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
-export const metadata: Metadata = { title: 'OddsOff', description: 'OddsOff — Food costing & operations' }
+export const metadata: Metadata = { 
+  title: 'OddsOff', 
+  description: 'OddsOff — Food costing & operations',
+  manifest: '/manifest.json'
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV
   const showEnvBadge = vercelEnv !== 'production'
+  
+  const cookieStore = await cookies()
+  const lang = cookieStore.get('app_lang')?.value === 'vi' ? 'vi' : 'en'
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={lang} suppressHydrationWarning>
       <body className={`${beVietnam.variable} ${geistMono.variable} antialiased font-sans`} suppressHydrationWarning>
         <RecentVisitsTracker />
         <AutoLogout />

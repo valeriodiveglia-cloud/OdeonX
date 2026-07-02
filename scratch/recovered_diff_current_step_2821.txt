@@ -1,0 +1,72 @@
+Created At: 2026-05-23T14:18:06Z
+Completed At: 2026-05-23T14:18:06Z
+The following changes were made by the multi_replace_file_content tool to: /Users/valerio/Documents/Developement Apps/foodcost-webapp/src/lib/i18n.ts. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -934,7 +934,6 @@
+     PaymentChannels: 'Payment Channels',
+     PaymentChannelsDesc: 'Configure Third-Party and Card channels routing to Wallets.',
+     BackToSettings: 'Back to Settings',
+-    Accounts: 'Accounts',
+     MapPnLCategories: 'Map P&L Categories',
+     MapInventoryCategories: 'Map Inventory Categories',
+     AddAccount: 'Add Account',
+@@ -948,11 +948,8 @@
+     AccountNameEn: 'Account Name (English)',
+     LocalNameVi: 'Local Name (Vietnamese)',
+     AccountIsActive: 'Account is Active (available for selection)',
+-    Code: 'Code',
+     AccountName: 'Account Name',
+     CFSection: 'CF Section',
+-    Status: 'Status',
+-    Active: 'Active',
+     Inactive: 'Inactive',
+     FinanceSubtitle: "Overview of your restaurant's financial health",
+     TreasuryPosition: 'Treasury Position',
+@@ -983,7 +983,6 @@
+     VerdictTraditionalCheaper: 'Traditional Method is Cheaper',
+     NoFinancialActivity: 'No Financial Activity Recorded',
+     QuarterlyAnnualBreakdown: 'Quarterly & Annual Breakdown',
+-    Period: 'Period',
+     cheaper: 'cheaper',
+     NoInvoicesRecorded: 'No invoices recorded yet',
+     NoUpcomingDeadlines: 'No upcoming deadlines',
+@@ -1706,7 +1706,7 @@
+     TotalTitle: 'Tổng',
+     PayoutID: 'ID thanh toán',
+     AdvisorTitle: 'Cố vấn',
+-    Period: 'Kỳ hạn',
++    Period: 'Kỳ',
+     Amount: 'Số tiền',
+     NoPayoutsFound: 'Không tìm thấy khoản thanh toán nào cho kỳ này.',
+     NoAdvisor: 'Không có cố vấn',
+@@ -1916,7 +1916,6 @@
+     PaymentChannels: 'Kênh thanh toán',
+     PaymentChannelsDesc: 'Cấu hình các kênh bên thứ ba và thẻ để định tuyến về ví.',
+     BackToSettings: 'Quay lại Cài đặt',
+-    Accounts: 'Tài khoản',
+     MapPnLCategories: 'Ánh xạ danh mục P&L',
+     MapInventoryCategories: 'Ánh xạ danh mục Tồn kho',
+     AddAccount: 'Thêm tài khoản',
+@@ -1930,11 +1930,8 @@
+     AccountNameEn: 'Tên tài khoản (Tiếng Anh)',
+     LocalNameVi: 'Tên địa phương (Tiếng Việt)',
+     AccountIsActive: 'Tài khoản đang hoạt động (có sẵn để chọn)',
+-    Code: 'Mã',
+     AccountName: 'Tên tài khoản',
+     CFSection: 'Mục Dòng tiền',
+-    Status: 'Trạng thái',
+-    Active: 'Hoạt động',
+     Inactive: 'Không hoạt động',
+     FinanceSubtitle: 'Tổng quan về sức khỏe tài chính của nhà hàng',
+     TreasuryPosition: 'Vị thế ngân quỹ',
+@@ -1965,7 +1965,6 @@
+     VerdictTraditionalCheaper: 'Phương pháp Truyền thống rẻ hơn',
+     NoFinancialActivity: 'Chưa ghi nhận hoạt động tài chính nào',
+     QuarterlyAnnualBreakdown: 'Phân tích theo Quý & Năm',
+-    Period: 'Kỳ',
+     cheaper: 'rẻ hơn',
+     NoInvoicesRecorded: 'Chưa ghi nhận hóa đơn nào',
+     NoUpcomingDeadlines: 'Không có hạn chót sắp tới',
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

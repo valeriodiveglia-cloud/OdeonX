@@ -45,6 +45,7 @@ export default function MapOperationalCategoriesModal({ accounts, onClose }: Map
       const { data: branchRows, error: branchError } = await supabase
         .from('provider_branches')
         .select('name')
+        .eq('is_active', true)
         .order('name')
         
       if (branchError) throw branchError

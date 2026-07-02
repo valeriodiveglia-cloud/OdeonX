@@ -1,0 +1,7 @@
+    ClosingList: 'Danh sách Chốt',
+    CashLedger: 'Sổ quỹ Tiền mặt',
+    ActivityLog: 'Nhật ký Hoạt động',
+    PaymentsAwaitingInvoice: 'Thanh toán chờ hóa đơn',
+    NoPaymentsAwaitingInvoice: 'Không có thanh toán nào chờ hóa đơn',
+    FinDsbPaymentOrder: 'Lệnh chi',
+  },

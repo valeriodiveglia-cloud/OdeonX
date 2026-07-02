@@ -48,7 +48,10 @@ import {
   BookOpen,
   ScrollText,
   Briefcase,
-  Folders
+  Folders,
+  Clock,
+  Timer,
+  Coins
 } from 'lucide-react'
 
 export type AppPage = {
@@ -79,13 +82,13 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   { id: 'catering-settings', href: '/catering/eventsettings', title: 'Event Settings', module: 'Catering', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   
   // Daily Reports
-  { id: 'daily-reports-closing', href: '/daily-reports/closinglist', title: 'Cashier Closing', module: 'Daily Reports', icon: Banknote, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'daily-reports-cashout', href: '/daily-reports/cashout', title: 'Cash Out', module: 'Daily Reports', icon: Receipt, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'daily-reports-bank', href: '/daily-reports/banktransfers', title: 'Bank Transfers', module: 'Daily Reports', icon: ArrowLeftRight, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'daily-reports-wastage', href: '/daily-reports/wastage-report', title: 'Wastage Report', module: 'Daily Reports', icon: Trash2, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'daily-reports-credits', href: '/daily-reports/credits', title: 'Credits', module: 'Daily Reports', icon: Wallet, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'daily-reports-deposits', href: '/daily-reports/deposits', title: 'Deposits', module: 'Daily Reports', icon: Landmark, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'daily-reports-settings', href: '/daily-reports/dailyreportsettings', title: 'Daily Reports Settings', module: 'Daily Reports', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'daily-reports-closing', href: '/daily-reports/closinglist', title: 'Cashier Closing', module: 'Daily Reports', icon: Banknote, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
+  { id: 'daily-reports-cashout', href: '/daily-reports/cashout', title: 'Cash Out', module: 'Daily Reports', icon: Receipt, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
+  { id: 'daily-reports-bank', href: '/daily-reports/banktransfers', title: 'Bank Transfers', module: 'Daily Reports', icon: ArrowLeftRight, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
+  { id: 'daily-reports-wastage', href: '/daily-reports/wastage-report', title: 'Wastage Report', module: 'Daily Reports', icon: Trash2, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
+  { id: 'daily-reports-credits', href: '/daily-reports/credits', title: 'Credits', module: 'Daily Reports', icon: Wallet, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
+  { id: 'daily-reports-deposits', href: '/daily-reports/deposits', title: 'Deposits', module: 'Daily Reports', icon: Landmark, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
+  { id: 'daily-reports-settings', href: '/daily-reports/dailyreportsettings', title: 'Daily Reports Settings', module: 'Daily Reports', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
   
   // Asset Inventory
   { id: 'asset-inventory-dash', href: '/asset-inventory', title: 'Asset Dashboard', module: 'Asset Inventory', icon: LayoutDashboard },
@@ -116,6 +119,12 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   { id: 'hro-roster', href: '/human-resources/operational/roster', title: 'Roster', module: 'HR Operational', icon: CalendarDays, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   { id: 'hro-reports', href: '/human-resources/operational/reports', title: 'HR Reports', module: 'HR Operational', icon: BarChart3, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   { id: 'hro-settings', href: '/human-resources/operational/settings', title: 'Operational Settings', module: 'HR Operational', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+
+  // HR Time Keeping
+  { id: 'hr-time-keeping', href: '/human-resources/time-keeping', title: 'Time Keeping Dashboard', module: 'HR Time Keeping', icon: Clock, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hr-time-keeping-attendance', href: '/human-resources/time-keeping/attendance', title: 'Attendance', module: 'HR Time Keeping', icon: Clock, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hr-time-keeping-overtime', href: '/human-resources/time-keeping/overtime', title: 'Overtime', module: 'HR Time Keeping', icon: Timer, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hr-time-keeping-service-charge', href: '/human-resources/time-keeping/service-charge', title: 'Service Charge', module: 'HR Time Keeping', icon: Coins, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
   
   // CRM
   { id: 'crm-dash', href: '/crm', title: 'CRM Dashboard', module: 'CRM', icon: Home, requiresRole: ['owner', 'admin', 'manager', 'accountant'] },

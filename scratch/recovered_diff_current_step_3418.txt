@@ -1,0 +1,55 @@
+Created At: 2026-05-23T15:59:40Z
+Completed At: 2026-05-23T15:59:40Z
+The following changes were made by the multi_replace_file_content tool to: /Users/valerio/Documents/Developement Apps/foodcost-webapp/src/lib/i18n.ts. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -1239,6 +1239,353 @@
+     FinCFDefaultDigitalPayments: 'Digital Payments / Thanh toán điện tử',
+     FinCFDefaultCollections: 'Collections / Thu hồi nợ',
+     FinCFDefaultCustomerDepositsInflow: 'Customer Deposits / Tiền đặt cọc',
++
++    // Go-Live Settings (FinGL)
++    FinGLBackToSettings: 'Back to Settings',
++    FinGLTitle: 'Financial Go-Live Settings',
++    FinGLSubtitle: 'Configure the official start date for the Finance module.',
++    FinGLSectionTitle: 'Financial Go-Live Date',
++    FinGLDescription: 'Set the date from which the system will start tracking Accounts Payable and Cash on Hand automatically. Any cash operations (Cashouts, Cashier Closings, Cash Deposits) before this date will not affect your treasury balances. Also, past records (like old Cashouts) before this date will be hidden from the Invoice Linking screen to keep your Accounts Payable clean.',
++    FinGLStartDateLabel: 'Start Date',
++    FinGLExampleDate: 'Example: 01/06/2026',
++    FinGLConfirmInitialize: 'Settings saved!\n\nDo you want to automatically calculate and initialize the Opening Balances for all "Cash on Hand" accounts based on the date {date}?\n\nThis will look at your past Cashier Closings and Deposits.',
++    FinGLSavedNoInit: 'Settings saved without initializing balances.',
++    FinGLSavedSuccess: 'Settings saved successfully!',
++    FinGLSaveFailed: 'Failed to save settings: ',
++    FinGLNoCashAccounts: 'No "Cash on Hand" accounts found. Please visit the Treasury page first to auto-sync branches.',
++    FinGLInitSuccess: 'Successfully initialized opening balances for {count} "Cash on Hand" accounts!',
++    FinGLInitError: 'Error initializing bal
+<truncated 38422 bytes>
+ khoản này khi ghi nhận chi phí thẻ doanh nghiệp.',
++    FinAccModalDefaultCorpCard: 'Đặt làm thẻ mặc định',
++    FinAccModalDefaultCorpCardDesc: 'Tự động chọn tài khoản này khi tạo khoản thanh toán chi tiêu thẻ mới.',
++    FinAccModalSectionFinancials: 'Số dư & Biểu phí',
++    FinAccModalCurrency: 'Đơn vị tiền tệ',
++    FinAccModalOpeningBalance: 'Số dư đầu kỳ',
++    FinAccModalOnlinePaymentFee: 'Phí thanh toán online',
++    FinAccModalBankTransferFee: 'Phí chuyển khoản ngân hàng',
++    FinAccModalFeeCoaCategory: 'Tài khoản hạch toán phí (COA)',
++    FinAccModalSelectCoaFeesPlaceholder: '— Chọn danh mục COA để hạch toán phí —',
++    FinAccModalCreateButton: 'Tạo tài khoản',
++    FinAccModalTxTitle: 'Ghi nhận giao dịch',
++    FinAccModalTxInflow: '↓ Nhập quỹ (Inflow)',
++    FinAccModalTxOutflow: '↑ Xuất quỹ (Outflow)',
++    FinAccModalTxAmount: 'Số tiền *',
++    FinAccModalTxDate: 'Ngày giao dịch',
++    FinAccModalTxCategory: 'Danh mục hạch toán (COA)',
++    FinAccModalTxSelectCategoryPlaceholder: '— Chọn danh mục hạch toán —',
++    FinAccModalTxDescription: 'Nội dung mô tả',
++    FinAccModalTxRecordButton: 'Ghi sổ',
++    FinAccAlertBranchMissingDetails: 'Chi nhánh {name} chưa có thông tin ngân hàng chi tiết. Đã đồng bộ tự động với thông tin trống.',
++    FinAccAlertNameRequired: 'Vui lòng nhập tên tài khoản',
++    FinAccAlertDeleteAccountConfirm: 'Bạn có chắc chắn muốn xóa tài khoản này? Toàn bộ lịch sử giao dịch liên quan sẽ bị xóa sạch và không thể khôi phục.',
++    FinAccAlertFailed: 'Thao tác thất bại: ',
+   },
+ } as const
+ 
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

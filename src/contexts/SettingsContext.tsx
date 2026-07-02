@@ -265,7 +265,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     'app_materials_exclusive_default',
     'app_equipment_review_months',
     'app_equipment_csv_require_confirm_refs',
-    'app_lang',
   ] as const
 
   function clearLocalSettings() {
@@ -376,19 +375,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     const dbLang = data?.language_code === 'vi' ? 'vi' : 'en'
     
-    // Respect user's local language selection if present in localStorage
+    // Respect user's local language selection if present in localStorage or cookies
     let activeLang: Lang = dbLang
     try {
+      const match = document.cookie.match(/(?:^|; )app_lang=([^;]*)/)
+      const cookieLang = match ? match[1] as Lang : null
       const lsLang = localStorage.getItem('app_lang') as Lang | null
+      
       if (lsLang === 'en' || lsLang === 'vi') {
         activeLang = lsLang
+      } else if (cookieLang === 'en' || cookieLang === 'vi') {
+        activeLang = cookieLang
       }
     } catch {}
 
-    // Applica lingua subito a <html lang> e salva in LS
+    // Applica lingua subito a <html lang> e salva in LS e cookie
     try {
       document.documentElement.lang = activeLang
       localStorage.setItem('app_lang', activeLang)
+      document.cookie = `app_lang=${activeLang}; path=/; max-age=31536000; SameSite=Lax`
     } catch {}
 
     setLanguageState(activeLang)
@@ -568,8 +573,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     try {
       bc = new BroadcastChannel('app-events')
       bc.onmessage = (e) => {
-        if (e?.data === 'data-reset' || e?.data === 'settings-changed') {
-          void reloadSettings()
+        if (e?.data === 'data-reset') {
+          void reloadSettings(true)
+        } else if (e?.data === 'settings-changed') {
+          void reloadSettings(false)
         }
         if (e?.data?.type === 'lang' && (e.data.value === 'en' || e.data.value === 'vi')) {
           setLanguageState(e.data.value)
@@ -580,7 +587,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     } catch {}
 
     // Listener diretto su window (stesso tab)
-    const onSettingsChanged = () => { void reloadSettings() }
+    const onSettingsChanged = () => { void reloadSettings(false) }
     window.addEventListener('settings-changed' as any, onSettingsChanged)
 
     return () => {
@@ -591,10 +598,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // API pubblica per ricaricare tutto dopo un reset
-  const reloadSettings = async () => {
+  // API pubblica per ricaricare tutto dopo un reset o aggiornamento
+  const reloadSettings = async (isReset = false) => {
     setHydrated(false)
-    clearLocalSettings()
+    if (isReset) {
+      clearLocalSettings()
+    }
     await hydrateFromSources()
     setRevision((r) => r + 1)
     setHydrated(true)
@@ -608,9 +617,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     try {
       document.documentElement.lang = l
       localStorage.setItem('app_lang', l)
+      document.cookie = `app_lang=${l}; path=/; max-age=31536000; SameSite=Lax`
       new BroadcastChannel('app-events').postMessage({ type: 'lang', value: l })
     } catch {}
-    void saveToDb({ language: l })
   }
   function setCurrency(c: Currency) {
     setCurrencyState(c)

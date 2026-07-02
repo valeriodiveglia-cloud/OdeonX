@@ -1,0 +1,9 @@
+{
+  "Finance": "Finance",
+  "FinanceDashboardTitle": "Dashboard",
+  "FinanceInvoices": "Invoices",
+  "FinancePaymentOrders": "Payment Orders",
+  "PaymentsAwaitingInvoice": "Payments Awaiting Invoice",
+  "NoPaymentsAwaitingInvoice": "No payments awaiting invoice",
+  "FinDsbPaymentOrder": "Payment Order"
+}

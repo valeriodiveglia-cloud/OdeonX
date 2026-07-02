@@ -153,7 +153,7 @@ export default function PaymentsCalendarPage() {
             map[dateStr].push({
                 id: inv.id,
                 type: 'invoice',
-                label: inv.is_personal_deduction ? (inv.custom_supplier_name || 'Personal') : ((inv as any).suppliers?.name || 'Unknown Supplier'),
+                label: inv.is_personal_deduction ? (inv.custom_supplier_name || 'Personal') : ((inv as any).suppliers?.name || inv.custom_supplier_name || 'Unknown Supplier'),
                 amount: Number(inv.gross_amount),
                 currency: inv.currency || currency,
                 status: inv.status,

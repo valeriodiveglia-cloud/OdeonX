@@ -1,0 +1,7 @@
+    ClosingList: 'Closing List',
+    CashLedger: 'Cash Ledger',
+    ActivityLog: 'Activity Log',
+    PaymentsAwaitingInvoice: 'Payments Awaiting Invoice',
+    NoPaymentsAwaitingInvoice: 'No payments awaiting invoice',
+    FinDsbPaymentOrder: 'Payment Order',
+  },

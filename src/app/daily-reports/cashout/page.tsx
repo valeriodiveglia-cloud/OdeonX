@@ -26,6 +26,7 @@ import {
 
 import { useDailyReportSettings } from '@/app/daily-reports/_data/useDailyReportSettings'
 import { useSettings } from '@/contexts/SettingsContext'
+import MonthPicker from '@/components/MonthPicker'
 import { getDailyReportsDictionary } from '../_i18n'
 
 /* ---------- Const usate per util locali ---------- */
@@ -518,18 +519,6 @@ export default function CashoutPage() {
   const monthInputValue = useMemo(() => `${year}-${String(month + 1).padStart(2, '0')}`, [year, month])
   const monthStart = useMemo(() => new Date(year, month, 1), [year, month])
   const monthEnd = useMemo(() => new Date(year, month + 1, 1), [year, month])
-  function prevMonth() {
-    setMonth(m => {
-      if (m === 0) { setYear(y => y - 1); return 11 }
-      return m - 1
-    })
-  }
-  function nextMonth() {
-    setMonth(m => {
-      if (m === 11) { setYear(y => y + 1); return 0 }
-      return m + 1
-    })
-  }
   function onPickMonth(val: string) {
     const [y, m] = val.split('-').map(Number)
     if (Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12) {
@@ -911,39 +900,15 @@ export default function CashoutPage() {
 
       <div className="mt-3 border-t border-white/15" />
 
-      <div className="mt-3 mb-4 flex items-center justify-between text-sm text-blue-100">
-        <button
-          type="button"
-          onClick={prevMonth}
-          className="flex items-center gap-1 hover:text-white"
-        >
-          <ChevronLeftIcon className="w-4 h-4" />
-          <span>{t.monthNav.previous}</span>
-        </button>
-
-        <div className="flex items-center gap-2 text-white">
-          <span className="text-base font-semibold">{monthLabel}</span>
-          <div className="relative w-6 h-6">
-            <CalendarDaysIcon className="w-6 h-6 text-blue-200" />
-            <input
-              type="month"
-              value={monthInputValue}
-              onChange={e => onPickMonth(e.target.value)}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-              aria-label={t.monthNav.pick}
-            />
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={nextMonth}
-          className="flex items-center gap-1 hover:text-white"
-        >
-          <span>{t.monthNav.next}</span>
-          <ChevronRightIcon className="w-4 h-4" />
-        </button>
-      </div>
+      <MonthPicker
+        value={monthInputValue}
+        onChange={onPickMonth}
+        language={language}
+        colorClass="text-blue-100 hover:text-white"
+        labelColorClass="text-white"
+        iconColorClass="text-blue-200 hover:text-white"
+        className="mt-3 mb-4"
+      />
 
       <Card>
         <div className="p-3 overflow-x-auto">

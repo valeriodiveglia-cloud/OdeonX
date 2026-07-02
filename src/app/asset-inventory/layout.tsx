@@ -1,6 +1,9 @@
 import LeftNavAssetInventory from '@/components/LeftNavAssetInventory'
+import { requireAuth } from '@/lib/auth-check'
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default async function Layout({ children }: { children: React.ReactNode }) {
+    await requireAuth()
+
     return (
         <div className="flex bg-slate-900 min-h-screen">
             <LeftNavAssetInventory />

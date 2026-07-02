@@ -1,9 +1,10 @@
 // app/general-settings/dailyreports.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Fragment } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { PlusIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XCircleIcon, ArrowsUpDownIcon, Bars3Icon } from '@heroicons/react/24/outline'
+import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import { t } from '@/lib/i18n'
@@ -21,6 +22,8 @@ type ProviderBranch = {
   bank_account_name?: string
   account_number?: string
   sort_order?: number | null
+  is_active?: boolean
+  isNew?: boolean
 }
 
 const LS_KEY = 'generalsettings.providerBranches.v1'
@@ -28,15 +31,13 @@ const LS_ORDER_KEY = 'generalsettings.providerBranchesOrder.v1'
 
 /* -------- Small UI primitives (scoped to this file) -------- */
 function Card(props: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow">{props.children}</div>
+  return <div className="rounded-2xl border border-slate-100 bg-white text-slate-800 shadow-xl overflow-hidden">{props.children}</div>
 }
 function CardHeader(props: { title: string; right?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 gap-3 flex-wrap">
-      <div className="flex items-center gap-2">
-        <h2 className="text-base font-semibold">{props.title}</h2>
-      </div>
-      <div className="flex items-center gap-2">{props.right}</div>
+    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 gap-3 flex-wrap bg-slate-50/50 rounded-t-2xl">
+      <h2 className="text-lg font-bold text-slate-800 tracking-tight">{props.title}</h2>
+      <div className="flex items-center gap-3">{props.right}</div>
     </div>
   )
 }
@@ -55,9 +56,9 @@ function Field({
 }) {
   return (
     <label className="flex flex-col">
-      <span className="text-sm text-gray-800">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
       <input
-        className="mt-1 w-full border rounded-lg px-3 h-10 text-gray-900 bg-white"
+        className="mt-1.5 w-full border border-slate-200 rounded-xl px-3.5 h-11 text-slate-800 bg-white placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm outline-none shadow-sm"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         type={type}
@@ -77,8 +78,8 @@ function IconBtn({
   children: React.ReactNode
   variant?: 'default' | 'danger'
 }) {
-  const base = 'p-2 rounded-lg border text-gray-700 hover:bg-gray-100'
-  const danger = 'p-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-50'
+  const base = 'h-10 w-10 inline-flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-800 transition-all active:scale-95 shadow-sm'
+  const danger = 'h-10 w-10 inline-flex items-center justify-center rounded-xl border border-red-200 text-red-600 bg-white hover:bg-red-50 transition-all active:scale-95 shadow-sm'
   return (
     <button type="button" title={title} onClick={onClick} className={variant === 'danger' ? danger : base}>
       {children}
@@ -174,20 +175,20 @@ function CityAutocomplete({
 
   return (
     <div className="relative flex flex-col">
-      <span className="text-sm text-gray-800">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
       <input
-        className="mt-1 w-full border rounded-lg px-3 h-10 text-gray-900 bg-white"
+        className="mt-1.5 w-full border border-slate-200 rounded-xl px-3.5 h-11 text-slate-800 bg-white placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm outline-none shadow-sm"
         value={value}
         onChange={e => handleChange(e.target.value)}
         onFocus={() => { setFocus(true); setOpen(true) }}
         onBlur={() => setTimeout(() => { setFocus(false); setOpen(false) }, 200)}
       />
       {(focus || open) && value.length >= 1 && filtered.length > 0 && (
-        <ul className="absolute z-10 top-[100%] left-0 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
+        <ul className="absolute z-10 top-[100%] left-0 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto mt-1.5 py-1 text-slate-800">
           {filtered.map(s => (
             <li
               key={s}
-              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-gray-900"
+              className="px-3.5 py-2.5 hover:bg-slate-50 cursor-pointer text-sm font-medium transition-colors text-slate-700"
               onMouseDown={(e) => {
                 e.preventDefault()
                 onChange(s)
@@ -205,12 +206,95 @@ function CityAutocomplete({
 }
 
 /* ===========================================================
+   Helper: Controlla se la filiale ha record in una delle tabelle
+   =========================================================== */
+async function checkIfBranchHasRecords(id: string, name: string): Promise<boolean> {
+  if (!id) return false
+  const trimmedName = (name || '').trim()
+
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+
+  const queries = [
+    supabase.from('hr_staff_branches').select('id', { count: 'exact', head: true }).eq('branch_id', id).limit(1),
+    supabase.from('fin_bank_transactions').select('id', { count: 'exact', head: true }).eq('branch_id', id).limit(1),
+    supabase.from('fin_invoices').select('id', { count: 'exact', head: true }).contains('branch_ids', [id]).limit(1),
+    supabase.from('fin_corporate_card_expenses').select('id', { count: 'exact', head: true }).contains('branch_ids', [id]).limit(1),
+    supabase.from('event_headers').select('id', { count: 'exact', head: true }).eq('provider_branch_id', id).limit(1),
+    supabase.from('fin_inventory_records').select('id', { count: 'exact', head: true }).eq('branch_id', id).limit(1),
+  ]
+
+  if (trimmedName) {
+    queries.push(
+      supabase.from('cashout').select('id', { count: 'exact', head: true }).eq('branch', trimmedName).limit(1),
+      supabase.from('wastage_entries').select('id', { count: 'exact', head: true }).eq('branch_name', trimmedName).limit(1),
+      supabase.from('deposits').select('id', { count: 'exact', head: true }).eq('branch', trimmedName).limit(1),
+      supabase.from('cash_ledger_deposits').select('id', { count: 'exact', head: true }).eq('branch', trimmedName).limit(1)
+    )
+
+    if (isUUID) {
+      queries.push(
+        supabase.from('cashier_closings').select('id', { count: 'exact', head: true }).or(`branch_id.eq.${id},branch_name.eq.${trimmedName}`).limit(1)
+      )
+    } else {
+      queries.push(
+        supabase.from('cashier_closings').select('id', { count: 'exact', head: true }).eq('branch_name', trimmedName).limit(1)
+      )
+    }
+  } else if (isUUID) {
+    queries.push(
+      supabase.from('cashier_closings').select('id', { count: 'exact', head: true }).eq('branch_id', id).limit(1)
+    )
+  }
+
+  try {
+    const results = await Promise.all(queries)
+    return results.some(res => {
+      if (res.error) {
+        console.warn('Query error in checkIfBranchHasRecords:', res.error)
+        return false
+      }
+      return res.count !== null && res.count > 0
+    })
+  } catch (err) {
+    console.error('Failed checking branch records:', err)
+    return false
+  }
+}
+
+/* ===========================================================
    Reusable Card: usala dentro l'index /general-settings/page.tsx
    =========================================================== */
 export function DailyReportsCard() {
   const { language, currency } = useSettings()
   const [branches, setBranches] = useState<Record<string, ProviderBranch>>({})
   const [order, setOrder] = useState<string[]>([])
+  const [branchHasRecords, setBranchHasRecords] = useState(false)
+
+  const [isReorderOpen, setIsReorderOpen] = useState(false)
+  const [tempOrder, setTempOrder] = useState<string[]>([])
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null)
+
+  function handleDragStart(index: number) {
+    setDraggedIdx(index)
+  }
+
+  function handleDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault()
+    if (draggedIdx === null || draggedIdx === index) return
+
+    const nextOrder = [...tempOrder]
+    const draggedItem = nextOrder[draggedIdx]
+    nextOrder.splice(draggedIdx, 1)
+    nextOrder.splice(index, 0, draggedItem)
+
+    setDraggedIdx(index)
+    setTempOrder(nextOrder)
+  }
+
+  function handleDragEnd() {
+    setDraggedIdx(null)
+  }
+
   const branchOptions = useMemo(() => {
     const knownOrdered = order.filter(id => branches[id])
     const remaining = Object.keys(branches).filter(id => !knownOrdered.includes(id))
@@ -244,6 +328,35 @@ export function DailyReportsCard() {
     }
   }, [branchId, branchOptions, branches])
 
+  // Controlla se la filiale corrente ha record associati
+  useEffect(() => {
+    if (!branchId) {
+      setBranchHasRecords(false)
+      return
+    }
+    const current = branches[branchId]
+    if (!current) {
+      setBranchHasRecords(false)
+      return
+    }
+    if (current.isNew) {
+      setBranchHasRecords(false)
+      return
+    }
+
+    let ignore = false
+    async function check() {
+      const hasRecords = await checkIfBranchHasRecords(branchId, current.name)
+      if (!ignore) {
+        setBranchHasRecords(hasRecords)
+      }
+    }
+    check()
+    return () => {
+      ignore = true
+    }
+  }, [branchId, branches])
+
   // Load from DB with LS fallback
   useEffect(() => {
     let ignore = false
@@ -275,6 +388,7 @@ export function DailyReportsCard() {
             bank_account_name: row.bank_account_name ?? '',
             account_number: row.account_number ?? '',
             sort_order: row.sort_order ?? null,
+            is_active: row.is_active ?? true,
           }
         }
 
@@ -339,6 +453,8 @@ export function DailyReportsCard() {
       bank_account_name: '',
       account_number: '',
       sort_order: null,
+      is_active: true,
+      isNew: true,
     }
     setBranches(prev => ({ ...prev, [id]: b }))
     setOrder(prev => [...prev, id])
@@ -347,19 +463,113 @@ export function DailyReportsCard() {
 
   async function deleteBranch() {
     if (!branchId) return
-    const ok = window.confirm(t(language, 'GeneralSettingsConfirmDeleteBranch'))
-    if (!ok) return
-    try {
-      const { error } = await supabase.from('provider_branches').delete().eq('id', branchId)
-      if (error) throw error
-    } catch {
-      // fallback locale
-    } finally {
+    const current = branches[branchId]
+    if (!current) return
+
+    if (current.isNew) {
       setBranches(prev => {
         const { [branchId]: _, ...rest } = prev
         return rest
       })
       setOrder(prev => prev.filter(id => id !== branchId))
+      return
+    }
+
+    if (branchHasRecords) {
+      const ok = window.confirm(t(language, 'GeneralSettingsConfirmDeactivateBranch'))
+      if (!ok) return
+      try {
+        setSaving(true)
+        const { error } = await supabase
+          .from('provider_branches')
+          .update({ is_active: false })
+          .eq('id', branchId)
+
+        if (error) throw error
+
+        // Also deactivate the linked bank account(s)
+        await supabase
+          .from('fin_bank_accounts')
+          .update({ is_active: false })
+          .eq('branch_id', branchId)
+
+        setBranches(prev => ({
+          ...prev,
+          [branchId]: { ...prev[branchId], is_active: false }
+        }))
+        setSaveMsg(t(language, 'GeneralSettingsDeactivated') || 'Deactivated')
+      } catch (err: any) {
+        console.error('Failed to deactivate branch:', err)
+        alert(language === 'vi' ? 'Không thể ngừng hoạt động chi nhánh.' : 'Failed to deactivate branch.')
+      } finally {
+        setSaving(false)
+        setTimeout(() => setSaveMsg(null), 2200)
+      }
+    } else {
+      const ok = window.confirm(t(language, 'GeneralSettingsConfirmDeleteBranch'))
+      if (!ok) return
+      try {
+        setSaving(true)
+
+        // Delete the auto-created empty bank accounts associated with this branch first
+        await supabase
+          .from('fin_bank_accounts')
+          .delete()
+          .eq('branch_id', branchId)
+
+        // Then delete the branch
+        const { error } = await supabase
+          .from('provider_branches')
+          .delete()
+          .eq('id', branchId)
+
+        if (error) throw error
+
+        setBranches(prev => {
+          const { [branchId]: _, ...rest } = prev
+          return rest
+        })
+        setOrder(prev => prev.filter(id => id !== branchId))
+      } catch (err: any) {
+        console.error('Failed to delete branch:', err)
+        alert(language === 'vi' ? 'Không thể xóa chi nhánh.' : 'Failed to delete branch.')
+      } finally {
+        setSaving(false)
+      }
+    }
+  }
+
+  async function reactivateBranch() {
+    if (!branchId) return
+    const current = branches[branchId]
+    if (!current) return
+
+    try {
+      setSaving(true)
+      const { error } = await supabase
+        .from('provider_branches')
+        .update({ is_active: true })
+        .eq('id', branchId)
+
+      if (error) throw error
+
+      // Also reactivate the linked bank account(s)
+      await supabase
+        .from('fin_bank_accounts')
+        .update({ is_active: true })
+        .eq('branch_id', branchId)
+
+      setBranches(prev => ({
+        ...prev,
+        [branchId]: { ...prev[branchId], is_active: true }
+      }))
+      setSaveMsg(language === 'vi' ? 'Đã kích hoạt' : 'Reactivated')
+    } catch (err: any) {
+      console.error('Failed to reactivate branch:', err)
+      alert(language === 'vi' ? 'Không thể kích hoạt lại chi nhánh.' : 'Failed to reactivate branch.')
+    } finally {
+      setSaving(false)
+      setTimeout(() => setSaveMsg(null), 2200)
     }
   }
 
@@ -405,6 +615,7 @@ export function DailyReportsCard() {
         bank_account_name: (b.bank_account_name || '').trim(),
         account_number: (b.account_number || '').trim(),
         sort_order: sortMap[b.id] ?? null,
+        is_active: b.is_active ?? true,
       }))
 
       if (rows.length > 0) {
@@ -425,6 +636,7 @@ export function DailyReportsCard() {
                         account_name: r.bank_account_name || ext.account_name,
                         bank_name: r.bank || ext.bank_name,
                         account_number: r.account_number || ext.account_number,
+                        is_active: r.is_active ?? true,
                     }
                 } else {
                     return {
@@ -437,6 +649,7 @@ export function DailyReportsCard() {
                         opening_balance: 0,
                         current_balance: 0,
                         currency: currency || 'VND',
+                        is_active: r.is_active ?? true,
                     }
                 }
             });
@@ -446,7 +659,14 @@ export function DailyReportsCard() {
         } catch(e) { console.error('Failed to sync bank accounts', e) }
       }
 
-      saveLS(branches)
+      const updatedBranches = { ...branches }
+      Object.keys(updatedBranches).forEach(k => {
+        if (updatedBranches[k].isNew) {
+          updatedBranches[k] = { ...updatedBranches[k], isNew: false }
+        }
+      })
+      setBranches(updatedBranches)
+      saveLS(updatedBranches)
       saveOrderLS(order)
       setSaveMsg(t(language, 'SavedOk'))
     } catch {
@@ -465,66 +685,73 @@ export function DailyReportsCard() {
         title={t(language, 'GeneralSettingsDRTitle')}
         right={
           <div className="flex items-center gap-2">
-            {!loading && loadMsg && <span className="text-xs text-gray-600">{loadMsg}</span>}
+            {!loading && loadMsg && <span className="text-xs text-slate-500">{loadMsg}</span>}
             <button
               type="button"
               onClick={handleSaveAll}
               disabled={saving}
-              className="h-9 px-3 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50"
+              className="h-10 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all active:scale-95 shadow-sm shadow-blue-500/20 disabled:opacity-50"
             >
               {saving ? t(language, 'GeneralSettingsSaving') : t(language, 'Save')}
             </button>
-            {saveMsg && <span className="text-xs text-gray-600">{saveMsg}</span>}
+            {saveMsg && <span className="text-xs text-slate-600 font-semibold">{saveMsg}</span>}
           </div>
         }
       />
 
-      <div className="p-3 space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-4 flex-wrap bg-slate-50 p-4 rounded-2xl border border-slate-100">
           <select
-            className="h-10 px-3 rounded-lg bg-white text-gray-900 border border-gray-300 min-w-56"
+            className="h-10 px-4 rounded-xl bg-white text-slate-800 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-sm transition-all shadow-sm outline-none min-w-64 cursor-pointer"
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
           >
             {branchOptions.length === 0 && <option value="">{t(language, 'GeneralSettingsNoBranches')}</option>}
-            {branchOptions.map(id => (
-              <option key={id} value={id}>
-                {branches[id]?.name || t(language, 'GeneralSettingsUntitled')}
-              </option>
-            ))}
+            {branchOptions.map(id => {
+              const b = branches[id]
+              const suffix = b?.is_active === false ? ` (${language === 'vi' ? 'Ngừng hoạt động' : 'Shutdown'})` : ''
+              return (
+                <option key={id} value={id}>
+                  {(b?.name || t(language, 'GeneralSettingsUntitled')) + suffix}
+                </option>
+              )
+            })}
           </select>
 
-          <button
-            type="button"
-            onClick={createBranch}
-            className="h-10 w-10 inline-flex items-center justify-center rounded-lg bg-blue-600 text-white hover:opacity-80"
-            title={t(language, 'GeneralSettingsAddBranch')}
-            aria-label={t(language, 'GeneralSettingsAddBranch')}
-          >
-            <PlusIcon className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3 flex-wrap sm:ml-auto">
+            {branchOptions.length > 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTempOrder(branchOptions)
+                  setIsReorderOpen(true)
+                }}
+                className="h-10 px-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-800 transition-all active:scale-95 shadow-sm cursor-pointer"
+                title={language === 'vi' ? 'Sắp xếp chi nhánh' : 'Reorder branches'}
+              >
+                <ArrowsUpDownIcon className="w-4 h-4" />
+                <span>{language === 'vi' ? 'Sắp xếp' : 'Reorder'}</span>
+              </button>
+            )}
 
-          {branchId && (
-            <>
-              <IconBtn title={t(language, 'GeneralSettingsMoveUp')} onClick={() => moveCurrentBranch('up')}>
-                <ChevronUpIcon className="w-5 h-5" />
-              </IconBtn>
-              <IconBtn title={t(language, 'GeneralSettingsMoveDown')} onClick={() => moveCurrentBranch('down')}>
-                <ChevronDownIcon className="w-5 h-5" />
-              </IconBtn>
-              <IconBtn title={t(language, 'GeneralSettingsDeleteBranch')} onClick={deleteBranch} variant="danger">
-                <TrashIcon className="w-5 h-5" />
-              </IconBtn>
-            </>
-          )}
+            <button
+              type="button"
+              onClick={createBranch}
+              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all active:scale-95 shadow-sm shadow-blue-500/20 cursor-pointer"
+              title={t(language, 'GeneralSettingsAddBranch')}
+            >
+              <PlusIcon className="w-4 h-4" />
+              <span>{t(language, 'GeneralSettingsAddBranch')}</span>
+            </button>
+          </div>
         </div>
 
         {!current ? (
-          <div className="rounded-xl border p-4 text-sm text-gray-700">
+          <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 bg-slate-50/50">
             {t(language, 'GeneralSettingsEmpty')}
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 gap-3">
+          <div className="grid md:grid-cols-2 gap-5">
             <Field label={t(language, 'GeneralSettingsBranchName')} value={current.name || ''} onChange={v => updateBranch({ name: v })} />
             <Field label={t(language, 'GeneralSettingsCompanyName')} value={current.company_name || ''} onChange={v => updateBranch({ company_name: v })} />
             <Field label={t(language, 'GeneralSettingsAddress')} value={current.address || ''} onChange={v => updateBranch({ address: v })} />
@@ -545,9 +772,204 @@ export function DailyReportsCard() {
               onChange={v => updateBranch({ bank_account_name: v })}
             />
             <Field label={t(language, 'GeneralSettingsAccountNumber')} value={current.account_number || ''} onChange={v => updateBranch({ account_number: v })} />
+
+            {/* Status and Action row */}
+            <div className="md:col-span-2 bg-slate-50 rounded-2xl p-5 border border-slate-100 flex items-center justify-between flex-wrap gap-4 mt-6">
+              <div className="flex items-center gap-2.5">
+                <span className="text-sm font-bold text-slate-600">
+                  {language === 'vi' ? 'Trạng thái chi nhánh:' : 'Branch Status:'}
+                </span>
+                {current.is_active === false ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200 shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                    {language === 'vi' ? 'Đã ngừng hoạt động' : 'Shutdown'}
+                  </span>
+                ) : branchHasRecords ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    {language === 'vi' ? 'Đang hoạt động' : 'Active'}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200 shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    {language === 'vi' ? 'Mới' : 'New'}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                {current.is_active !== false ? (
+                  branchHasRecords ? (
+                    <button
+                      type="button"
+                      onClick={deleteBranch}
+                      className="h-11 px-5 inline-flex items-center gap-2 rounded-xl border border-red-200 text-red-600 bg-white hover:bg-red-50 text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                    >
+                      <XCircleIcon className="w-5 h-5" />
+                      {t(language, 'GeneralSettingsDeactivateBranch') || 'Shutdown'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={deleteBranch}
+                      className="h-11 px-5 inline-flex items-center gap-2 rounded-xl border border-red-200 text-red-600 bg-white hover:bg-red-50 text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                    >
+                      <TrashIcon className="w-5 h-5" />
+                      {t(language, 'GeneralSettingsDeleteBranch')}
+                    </button>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    onClick={reactivateBranch}
+                    className="h-11 px-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md shadow-emerald-600/10 transition active:scale-95 cursor-pointer"
+                  >
+                    <PlusIcon className="w-5 h-5" />
+                    {language === 'vi' ? 'Kích hoạt lại' : 'Reactivate'}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
+
+      {/* Reorder Modal */}
+      <Transition show={isReorderOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={() => setIsReorderOpen(false)}>
+          {/* Backdrop */}
+          <TransitionChild
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" />
+          </TransitionChild>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <TransitionChild
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-3xl bg-white p-6 text-left align-middle shadow-2xl transition-all border border-slate-100">
+                  <DialogTitle as="h3" className="text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <ArrowsUpDownIcon className="w-5 h-5 text-blue-600" />
+                    {language === 'vi' ? 'Sắp xếp chi nhánh' : 'Reorder Branches'}
+                  </DialogTitle>
+
+                  <p className="text-xs text-slate-500 mt-2 mb-4 leading-relaxed">
+                    {language === 'vi'
+                      ? 'Kéo thả các chi nhánh hoặc sử dụng phím mũi tên để thay đổi thứ tự hiển thị của chúng.'
+                      : 'Drag and drop the branches or use the arrows to change their display order.'}
+                  </p>
+
+                  <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                    {tempOrder.map((id, index) => {
+                      const b = branches[id]
+                      if (!b) return null
+                      const isDragged = index === draggedIdx
+
+                      return (
+                        <div
+                          key={id}
+                          draggable
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragEnd={handleDragEnd}
+                          className={`flex items-center gap-3 p-3 rounded-2xl border transition-all select-none ${
+                            isDragged
+                              ? 'opacity-40 border-dashed border-blue-300 bg-blue-50/20'
+                              : 'border-slate-100 bg-white hover:bg-slate-50 shadow-sm'
+                          }`}
+                        >
+                          {/* Drag Handle */}
+                          <div className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 p-1">
+                            <Bars3Icon className="w-5 h-5" />
+                          </div>
+
+                          {/* Branch Name */}
+                          <span className="text-sm font-semibold text-slate-700 truncate flex-1">
+                            {b.name || t(language, 'GeneralSettingsUntitled')}
+                            {b.is_active === false && (
+                              <span className="text-xs font-medium text-rose-500 ml-1.5 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                                {language === 'vi' ? 'Ngừng hoạt động' : 'Shutdown'}
+                              </span>
+                            )}
+                          </span>
+
+                          {/* Up/Down buttons for fallback */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => {
+                                const next = [...tempOrder]
+                                const tmp = next[index - 1]
+                                next[index - 1] = next[index]
+                                next[index] = tmp
+                                setTempOrder(next)
+                              }}
+                              className="p-1.5 rounded-lg border border-slate-100 text-slate-500 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                              title={t(language, 'GeneralSettingsMoveUp')}
+                            >
+                              <ChevronUpIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={index === tempOrder.length - 1}
+                              onClick={() => {
+                                const next = [...tempOrder]
+                                const tmp = next[index + 1]
+                                next[index + 1] = next[index]
+                                next[index] = tmp
+                                setTempOrder(next)
+                              }}
+                              className="p-1.5 rounded-lg border border-slate-100 text-slate-500 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                              title={t(language, 'GeneralSettingsMoveDown')}
+                            >
+                              <ChevronDownIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setIsReorderOpen(false)}
+                      className="h-10 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-sm font-semibold transition-all cursor-pointer"
+                    >
+                      {t(language, 'Cancel') || 'Cancel'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrder(tempOrder)
+                        setIsReorderOpen(false)
+                      }}
+                      className="h-10 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all active:scale-95 shadow-sm shadow-blue-500/20 cursor-pointer"
+                    >
+                      {t(language, 'Confirm') || 'Confirm'}
+                    </button>
+                  </div>
+                </DialogPanel>
+              </TransitionChild>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
     </Card>
   )
 }

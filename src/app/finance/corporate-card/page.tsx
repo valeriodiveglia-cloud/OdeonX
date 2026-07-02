@@ -162,10 +162,10 @@ export default function CorporateCardPage() {
             `).order('expense_date', { ascending: false }),
             supabase.from('fin_chart_of_accounts').select('*').eq('is_active', true).eq('is_group', false).order('sort_order'),
             supabase.from('fin_bank_accounts').select('*').eq('is_active', true).in('account_type', ['Checking', 'Saving']).order('account_name'),
-            supabase.from('provider_branches').select('id, name').order('name'),
+            supabase.from('provider_branches').select('id, name, is_active').order('name'),
             supabase.from('suppliers').select('id, name').order('name'),
             supabase.from('fin_invoices')
-                .select('id, invoice_number, supplier_id, suppliers(name), gross_amount, invoice_date, branch_ids, account_id, status, fin_payment_order_items(id, amount, corporate_card_expense_id, fin_payment_orders(status)), cashout(id, amount), fin_corporate_card_expenses(id, amount)')
+                .select('id, invoice_number, supplier_id, suppliers(name), custom_supplier_name, gross_amount, invoice_date, branch_ids, account_id, status, fin_payment_order_items(id, amount, corporate_card_expense_id, fin_payment_orders(status)), cashout(id, amount), fin_corporate_card_expenses(id, amount)')
                 .order('invoice_date', { ascending: false })
         ])
 
@@ -777,7 +777,7 @@ export default function CorporateCardPage() {
                                                             <div>
                                                                 <div className="font-bold text-slate-900 text-sm">{linkedInv.invoice_number}</div>
                                                                 <div className="text-xs text-slate-500 mt-0.5">
-                                                                    {linkedInv.invoice_date} • {linkedInv.suppliers?.name || 'No Supplier'}
+                                                                    {linkedInv.invoice_date} • {linkedInv.suppliers?.name || linkedInv.custom_supplier_name || 'No Supplier'}
                                                                 </div>
                                                                 <div className="text-xs font-semibold text-slate-700 mt-1">
                                                                     {language === 'vi' ? 'Tổng hóa đơn' : 'Invoice gross'}: <span className="tabular-nums">{fmt(Number(linkedInv.gross_amount))} {currency}</span>
@@ -844,7 +844,7 @@ export default function CorporateCardPage() {
                                     <div className="col-span-2">
                                         <label className="block text-sm font-semibold text-slate-700 mb-2">{t(language, 'FinCCModalAttributedBranches')} <span className="text-red-500">*</span></label>
                                         <div className="flex flex-wrap gap-2">
-                                            {branches.map(b => {
+                                            {branches.filter(b => (b as any).is_active !== false || form.branch_ids.includes(b.id)).map(b => {
                                                 const active = form.branch_ids.includes(b.id)
                                                 return (
                                                     <button key={b.id} type="button" onClick={() => toggleBranch(b.id)}
@@ -938,7 +938,7 @@ export default function CorporateCardPage() {
                                                     )}
                                                 </div>
                                                 <div className="text-xs text-slate-500 mt-1">
-                                                    {inv.invoice_date} • {inv.suppliers?.name || 'No Supplier'}
+                                                    {inv.invoice_date} • {inv.suppliers?.name || inv.custom_supplier_name || 'No Supplier'}
                                                 </div>
                                                 {inv.description && (
                                                     <div className="text-xs text-slate-400 mt-0.5">

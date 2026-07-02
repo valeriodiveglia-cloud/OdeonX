@@ -1,0 +1,27 @@
+Created At: 2026-05-23T22:34:11Z
+Completed At: 2026-05-23T22:34:11Z
+The following changes were made by the multi_replace_file_content tool to: /Users/valerio/Documents/Developement Apps/foodcost-webapp/src/lib/i18n.ts. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -956,6 +956,9 @@
+     NetProfit: 'Net Profit',
+     RevenueVsExpenses: 'Revenue vs Expenses',
+     RecentInvoices: 'Recent Invoices',
++    PendingVatInvoices: 'Invoices Awaiting VAT',
++    NoPendingVatInvoices: 'No invoices awaiting VAT',
++    FinDsbPaymentOrder: 'Payment Order',
+     FinanceActionCenter: 'Action Center',
+     FinanceItemsRequiringAttention: 'Items requiring attention',
+     VATSimulator: 'VAT Simulator',
+@@ -2528,6 +2528,9 @@
+     NetProfit: 'Lợi nhuận ròng',
+     RevenueVsExpenses: 'Doanh thu so với Chi phí',
+     RecentInvoices: 'Hóa đơn gần đây',
++    PendingVatInvoices: 'Hóa đơn VAT đang chờ',
++    NoPendingVatInvoices: 'Không có hóa đơn VAT đang chờ',
++    FinDsbPaymentOrder: 'Lệnh chi',
+     FinanceActionCenter: 'Trung tâm Hành động',
+     FinanceItemsRequiringAttention: 'Các hạng mục cần lưu ý',
+     VATSimulator: 'Trình mô phỏng VAT',
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

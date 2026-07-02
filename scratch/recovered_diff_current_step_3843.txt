@@ -1,0 +1,32 @@
+Created At: 2026-05-23T17:18:59Z
+Completed At: 2026-05-23T17:18:59Z
+The following changes were made by the replace_file_content tool to: /Users/valerio/.gemini/antigravity/brain/8c8b7827-f1fb-420a-b004-91d9a22c3062/walkthrough.md. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -81,10 +81,19 @@
+ - Eseguito lo script di scansione `find_duplicates.js` su `src/lib/i18n.ts`:
+   - **Risultato**: `0` chiavi duplicate trovate per entrambi i dizionari (`en` e `vi`).
+ 
+-### 2. Compilazione e Build di Produzione
+-- Eseguita con successo la build di produzione di Next.js:
+-  ```bash
+-  npm run build
+-  ```
+   - **Risultato**: `Compiled successfully`. TypeScript e Next.js compilano il progetto al 100% senza alcun errore di compilazione o warning bloccante.
++
++---
++
++## Modifiche Recenti (Invoices Table Update)
++
++Abbiamo apportato le seguenti modifiche alla pagina Invoices (`src/app/finance/invoices/page.tsx`):
++1. **Rimozione della colonna Due Date (Scadenza)**:
++   - Eliminata la colonna sia dall'header (`FinInvDue`) che dalle singole righe della tabella.
++   - Aggiornato l'attributo `colSpan` delle righe di caricamento e di nessun risultato da 12 a 11.
++2. **Localizzazione della colonna Category (Categoria)**:
++   - Modificato il rendering per visualizzare solo il nome vietnamita (`simplified_name`) se la lingua selezionata è il vietnamita (`vi`) (con fallback sul nome inglese `name` se mancante), oppure solo il nome inglese (`name`) se la lingua selezionata è l'inglese (`en`). Questo consente di risparmiare spazio evitando la doppia visualizzazione `English / Vietnamese`.
++3. **Verifica della Build**:
++   - Compilazione completata con successo al 100% senza alcun errore o warning.
++
+ 
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

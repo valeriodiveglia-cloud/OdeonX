@@ -1,0 +1,5 @@
+    RecentInvoices: 'Recent Invoices',
+    PendingVatInvoices: 'Invoices Awaiting VAT',
+    NoPendingVatInvoices: 'No invoices awaiting VAT',
+    FinDsbPaymentOrder: 'Payment Order',
+    FinanceActionCenter: 'Action Center',

@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ShiftType, rosterKey, formatDate, addDays, dayName, formatWeekRange, saveRosterData, saveShiftTypes, shiftsOverlap, getStaffCrossBranchShifts } from '@/lib/hr-operational-data'
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, User, AlertTriangle, MapPin } from 'lucide-react'
+import { ShiftType, rosterKey, formatDate, addDays, dayName, formatWeekRange, saveRosterData, saveShiftTypes, shiftsOverlap, getStaffCrossBranchShifts, getWeekOpeningHours } from '@/lib/hr-operational-data'
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, User, AlertTriangle, MapPin, Star } from 'lucide-react'
 
 // ── Types ──
 interface StaffMember {
@@ -38,6 +38,7 @@ interface RosterDepartmentViewProps {
     getDayCoverageStatus: (dateStr: string, dayIndex: number) => { met: boolean; errors: string[]; totalTargets: number }
     onViewCoverage: (dateStr: string) => void
     autoScheduleTimeSlots: any[]
+    isPublished?: boolean
 }
 
 // ── Constants ──
@@ -86,6 +87,7 @@ export default function RosterDepartmentView({
     getDayCoverageStatus,
     onViewCoverage,
     autoScheduleTimeSlots,
+    isPublished = false,
 }: RosterDepartmentViewProps) {
 
     const [collapsedDepts, setCollapsedDepts] = useState<Set<string>>(new Set())
@@ -149,44 +151,127 @@ export default function RosterDepartmentView({
     const selectedDateStr = formatDate(selectedDate)
     const todayStr = formatDate(new Date())
 
+    const weekOpeningHours = useMemo(() => {
+        if (!selectedBranch) return null
+        return getWeekOpeningHours(selectedBranch, formatDate(weekStart), roster)
+    }, [selectedBranch, weekStart, roster])
+
+    const activeShiftIds = useMemo(() => {
+        const ids = new Set<string>()
+        displayedStaff.forEach(staff => {
+            const key = rosterKey(selectedBranch, staff.id, selectedDateStr)
+            const val = roster[key]
+            if (val) {
+                val.split(',').forEach(id => {
+                    if (id) ids.add(id)
+                })
+            }
+        })
+        return ids
+    }, [displayedStaff, selectedBranch, selectedDateStr, roster])
+
+    const activeShiftTypes = useMemo(() => {
+        return shiftTypes.filter(st => activeShiftIds.has(st.id))
+    }, [shiftTypes, activeShiftIds])
+
     // ── Get department target coverage ──
     const getDeptCoverage = useCallback((dept: string) => {
         const dayIndexInWeek = (selectedDate.getDay() + 6) % 7
         const branchSlots = autoScheduleTimeSlots.filter(s => s.branchId === selectedBranch)
         
-        const currentPoints: Record<string, number> = {}
+        const dayHours = weekOpeningHours ? weekOpeningHours[dayIndexInWeek] : null
+        const isOpen = dayHours ? dayHours.isOpen : true
+        const slots = dayHours && dayHours.slots.length > 0 ? dayHours.slots : []
+        const dayOpeningTime = slots[0]?.startTime
+        const dayClosingTime = slots[slots.length - 1]?.endTime
+
         const parseTimeStr = (t: string) => {
             const [h, m] = t.split(':').map(Number)
             return h * 60 + m
         }
-        const coversSlot = (shift: ShiftType, slotStart: string, slotEnd: string) => {
-            if (!shift.startTime || !shift.endTime) return false
-            const sStart = parseTimeStr(shift.startTime)
-            const sEnd = parseTimeStr(shift.endTime) < sStart ? parseTimeStr(shift.endTime) + 24 * 60 : parseTimeStr(shift.endTime)
-            const lStart = parseTimeStr(slotStart)
-            const lEnd = parseTimeStr(slotEnd) < lStart ? parseTimeStr(slotEnd) + 24 * 60 : parseTimeStr(slotEnd)
-            return sStart <= lStart && sEnd >= lEnd
-        }
+
+        const adjustedBSlots = branchSlots.map(slot => {
+            let adj = { ...slot }
+            if (isOpen && slots.length > 0) {
+                const sMin = parseTimeStr(slot.startTime)
+                const sMax = parseTimeStr(slot.endTime)
+                
+                if (dayOpeningTime) {
+                    const openMin = parseTimeStr(dayOpeningTime)
+                    if (sMin < openMin) {
+                        adj.startTime = dayOpeningTime
+                    }
+                }
+                if (dayClosingTime) {
+                    const closeMax = parseTimeStr(dayClosingTime)
+                    if (sMax > closeMax) {
+                        adj.endTime = dayClosingTime
+                    }
+                }
+            }
+            return adj
+        })
+        
+        const currentPoints: Record<string, number> = {}
+        const getOverlapMinutes = (start1: number, end1: number, start2: number, end2: number): number => {
+            const s1 = start1;
+            let e1 = end1 < start1 ? end1 + 24 * 60 : end1;
+            const s2 = start2;
+            let e2 = end2 < start2 ? end2 + 24 * 60 : end2;
+
+            const overlapStart = Math.max(s1, s2);
+            const overlapEnd = Math.min(e1, e2);
+
+            return Math.max(0, overlapEnd - overlapStart);
+        };
+
+        const calculateRealSlotCoverage = (
+            shift: ShiftType,
+            slotStart: string,
+            slotEnd: string
+        ): number => {
+            if (shift.type !== 'work') return 0;
+            
+            const sStart = parseTimeStr(shift.startTime!);
+            const sEnd = parseTimeStr(shift.endTime!);
+            const lStart = parseTimeStr(slotStart);
+            const lEnd = parseTimeStr(slotEnd);
+
+            let overlap = getOverlapMinutes(sStart, sEnd, lStart, lEnd);
+
+            if (shift.startTime2 && shift.endTime2) {
+                const sStart2 = parseTimeStr(shift.startTime2);
+                const sEnd2 = parseTimeStr(shift.endTime2);
+                overlap += getOverlapMinutes(sStart2, sEnd2, lStart, lEnd);
+            }
+
+            const slotDuration = getOverlapMinutes(lStart, lEnd, lStart, lEnd);
+            if (slotDuration === 0) return 0;
+
+            return (overlap / slotDuration) >= 0.70 ? overlap : 0;
+        };
 
         displayedStaff.forEach(staff => {
             if ((staff.department || 'Unassigned') !== dept) return
             const key = rosterKey(selectedBranch, staff.id, selectedDateStr)
-            const assignedShiftId = roster[key]
-            if (assignedShiftId) {
-                const assignedShift = shiftTypes.find(s => s.id === assignedShiftId)
-                if (assignedShift && assignedShift.type === 'work') {
-                    branchSlots.forEach(slot => {
-                        if (coversSlot(assignedShift, slot.startTime, slot.endTime)) {
-                            currentPoints[slot.id] = (currentPoints[slot.id] || 0) + (staff.skill_level || 1)
-                        }
-                    })
-                }
+            const stIdsStr = roster[key] || ''
+            if (stIdsStr) {
+                stIdsStr.split(',').forEach(id => {
+                    const assignedShift = shiftTypes.find(s => s.id === id)
+                    if (assignedShift && assignedShift.type === 'work') {
+                        adjustedBSlots.forEach(slot => {
+                            if (calculateRealSlotCoverage(assignedShift, slot.startTime, slot.endTime) > 0) {
+                                currentPoints[slot.id] = (currentPoints[slot.id] || 0) + (staff.skill_level || 1)
+                            }
+                        })
+                    }
+                })
             }
         })
 
         const slotsStatus: { name: string; current: number; target: number; met: boolean }[] = []
 
-        branchSlots.forEach(slot => {
+        adjustedBSlots.forEach(slot => {
             const targets = slot.targets || {}
             if (targets[dept]) {
                 const target = targets[dept][dayIndexInWeek] || 0
@@ -203,7 +288,7 @@ export default function RosterDepartmentView({
         })
 
         return slotsStatus
-    }, [selectedBranch, selectedDate, selectedDateStr, autoScheduleTimeSlots, displayedStaff, roster, shiftTypes])
+    }, [selectedBranch, selectedDate, selectedDateStr, autoScheduleTimeSlots, displayedStaff, roster, shiftTypes, weekOpeningHours])
 
     // ── Render single day button helper ──
     const renderDayButton = useCallback((day: Date, idx: number) => {
@@ -231,7 +316,7 @@ export default function RosterDepartmentView({
             >
                 <span className={`text-[8px] uppercase tracking-wider font-semibold
                     ${isActive ? 'text-blue-100' : isToday ? 'text-blue-500' : 'text-gray-400'}`}>
-                    {dayName(day).slice(0, 3)}
+                    {dayName(day, language).slice(0, 3)}
                 </span>
                 <span className="text-xs font-bold mt-0.5">
                     {day.getDate()}
@@ -252,15 +337,33 @@ export default function RosterDepartmentView({
             if (!groups[dept]) groups[dept] = []
             groups[dept].push(s)
         })
+        for (const dep in groups) {
+            groups[dep].sort((a, b) => {
+                const isPartTimeA = a.employment_type === 'part_time';
+                const isPartTimeB = b.employment_type === 'part_time';
+                if (isPartTimeA !== isPartTimeB) {
+                    return isPartTimeA ? 1 : -1;
+                }
+                return a.name.localeCompare(b.name);
+            })
+        }
         return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
     }, [displayedStaff])
 
-    // ── Get shift data for a staff member on selected day ──
     const getStaffShift = useCallback((staffId: string): ShiftType | null => {
         const key = rosterKey(selectedBranch, staffId, selectedDateStr)
-        const shiftId = roster[key]
-        if (!shiftId) return null
-        return shiftTypes.find(s => s.id === shiftId) || null
+        const val = roster[key]
+        if (!val) return null
+        const ids = val.split(',')
+        for (const id of ids) {
+            const s = shiftTypes.find(x => x.id === id)
+            if (s && s.type === 'work') return s
+        }
+        for (const id of ids) {
+            const s = shiftTypes.find(x => x.id === id)
+            if (s) return s
+        }
+        return null
     }, [selectedBranch, selectedDateStr, roster, shiftTypes])
 
     // ── Staff with shifts for this day, grouped by dept ──
@@ -277,14 +380,33 @@ export default function RosterDepartmentView({
         return result
     }, [groupedByDept, getStaffShift])
 
-    // ── Available staff (not assigned) for a department ──
     const getAvailableStaff = useCallback((dept: string): StaffMember[] => {
         return displayedStaff.filter(s => {
             if ((s.department || 'Unassigned') !== dept) return false
+
+            // Se lo staff è OFF (ha un congedo/riposo) in qualsiasi branch per questo giorno, non mostrarlo affatto
+            const hasLeave = branches.some(b => {
+                const key = rosterKey(b.id, s.id, selectedDateStr)
+                const val = roster[key] || ''
+                if (!val) return false
+                return val.split(',').some(id => {
+                    const sh = shiftTypes.find(x => x.id === id)
+                    return sh && sh.type === 'leave'
+                })
+            })
+            if (hasLeave) return false
+
             const key = rosterKey(selectedBranch, s.id, selectedDateStr)
-            return !roster[key]
+            const stIdsStr = roster[key] || ''
+            if (!stIdsStr) return true
+            const ids = stIdsStr.split(',')
+            const hasExclusiveOrWork = ids.some(id => {
+                const shift = shiftTypes.find(x => x.id === id)
+                return shift && (shift.type === 'work' || (shift.allDay ?? true) || shift.allowParallel === false)
+            })
+            return !hasExclusiveOrWork
         })
-    }, [displayedStaff, selectedBranch, selectedDateStr, roster])
+    }, [displayedStaff, selectedBranch, selectedDateStr, roster, shiftTypes, branches])
 
     // ── Assign a shift to staff ──
     const assignShiftToStaff = useCallback((staffId: string) => {
@@ -301,16 +423,20 @@ export default function RosterDepartmentView({
             for (const b of branches) {
                 if (b.id === selectedBranch) continue
                 const key = rosterKey(b.id, staffId, selectedDateStr)
-                const otherShiftId = roster[key]
-                if (otherShiftId) {
-                    const otherShift = shiftTypes.find(s => s.id === otherShiftId)
-                    if (otherShift && shiftsOverlap(defaultShift, otherShift)) {
-                        hasBranchConflict = true
-                        conflictBranchName = getBranchName(b.id)
-                        conflictShiftName = otherShift.name
-                        break
+                const otherShiftIdsStr = roster[key] || ''
+                if (otherShiftIdsStr) {
+                    const otherShiftIds = otherShiftIdsStr.split(',')
+                    for (const otherId of otherShiftIds) {
+                        const otherShift = shiftTypes.find(s => s.id === otherId)
+                        if (otherShift && shiftsOverlap(defaultShift, otherShift)) {
+                            hasBranchConflict = true
+                            conflictBranchName = getBranchName(b.id)
+                            conflictShiftName = otherShift.name
+                            break
+                        }
                     }
                 }
+                if (hasBranchConflict) break
             }
         }
 
@@ -326,11 +452,24 @@ export default function RosterDepartmentView({
         const newRoster = { ...roster }
         if (defaultShift.globalAcrossBranches) {
             branches.forEach(b => {
-                newRoster[rosterKey(b.id, staffId, selectedDateStr)] = defaultShift.id
+                const k = rosterKey(b.id, staffId, selectedDateStr)
+                const existingStr = roster[k] || ''
+                const existing = existingStr ? existingStr.split(',') : []
+                const filtered = existing.filter(id => {
+                    const s = shiftTypes.find(x => x.id === id)
+                    return s && !shiftsOverlap(defaultShift, s)
+                })
+                newRoster[k] = [...filtered, defaultShift.id].join(',')
             })
         } else {
             const key = rosterKey(selectedBranch, staffId, selectedDateStr)
-            newRoster[key] = defaultShift.id
+            const existingStr = roster[key] || ''
+            const existing = existingStr ? existingStr.split(',') : []
+            const filtered = existing.filter(id => {
+                const s = shiftTypes.find(x => x.id === id)
+                return s && !shiftsOverlap(defaultShift, s)
+            })
+            newRoster[key] = [...filtered, defaultShift.id].join(',')
         }
 
         setRoster(newRoster)
@@ -352,16 +491,20 @@ export default function RosterDepartmentView({
             for (const b of branches) {
                 if (b.id === selectedBranch) continue
                 const key = rosterKey(b.id, staffId, selectedDateStr)
-                const otherShiftId = roster[key]
-                if (otherShiftId) {
-                    const otherShift = shiftTypes.find(s => s.id === otherShiftId)
-                    if (otherShift && shiftsOverlap(matchingShift, otherShift)) {
-                        hasBranchConflict = true
-                        conflictBranchName = getBranchName(b.id)
-                        conflictShiftName = otherShift.name
-                        break
+                const otherShiftIdsStr = roster[key] || ''
+                if (otherShiftIdsStr) {
+                    const otherShiftIds = otherShiftIdsStr.split(',')
+                    for (const otherId of otherShiftIds) {
+                        const otherShift = shiftTypes.find(s => s.id === otherId)
+                        if (otherShift && shiftsOverlap(matchingShift, otherShift)) {
+                            hasBranchConflict = true
+                            conflictBranchName = getBranchName(b.id)
+                            conflictShiftName = otherShift.name
+                            break
+                        }
                     }
                 }
+                if (hasBranchConflict) break
             }
         }
 
@@ -373,14 +516,40 @@ export default function RosterDepartmentView({
             return
         }
 
+        const currentWorkShift = (() => {
+            const key = rosterKey(selectedBranch, staffId, selectedDateStr)
+            const val = roster[key] || ''
+            const ids = val.split(',')
+            for (const id of ids) {
+                const s = shiftTypes.find(x => x.id === id)
+                if (s && s.type === 'work') return s
+            }
+            return null
+        })()
+
         const newRoster = { ...roster }
         if (matchingShift.globalAcrossBranches) {
             branches.forEach(b => {
-                newRoster[rosterKey(b.id, staffId, selectedDateStr)] = shiftId
+                const k = rosterKey(b.id, staffId, selectedDateStr)
+                const existingStr = roster[k] || ''
+                const existing = existingStr ? existingStr.split(',') : []
+                const filtered = existing.filter(id => {
+                    if (currentWorkShift && id === currentWorkShift.id) return false
+                    const s = shiftTypes.find(x => x.id === id)
+                    return s && !shiftsOverlap(matchingShift, s)
+                })
+                newRoster[k] = [...filtered, shiftId].join(',')
             })
         } else {
             const key = rosterKey(selectedBranch, staffId, selectedDateStr)
-            newRoster[key] = shiftId
+            const existingStr = roster[key] || ''
+            const existing = existingStr ? existingStr.split(',') : []
+            const filtered = existing.filter(id => {
+                if (currentWorkShift && id === currentWorkShift.id) return false
+                const s = shiftTypes.find(x => x.id === id)
+                return s && !shiftsOverlap(matchingShift, s)
+            })
+            newRoster[key] = [...filtered, shiftId].join(',')
         }
 
         setRoster(newRoster)
@@ -390,13 +559,32 @@ export default function RosterDepartmentView({
     // ── Remove a shift ──
     const removeShift = useCallback((staffId: string) => {
         const key = rosterKey(selectedBranch, staffId, selectedDateStr)
-        const currentShiftId = roster[key]
-        const currentShift = currentShiftId ? shiftTypes.find(s => s.id === currentShiftId) : null
+        const currentShiftIdsStr = roster[key] || ''
+        const currentShiftIds = currentShiftIdsStr ? currentShiftIdsStr.split(',') : []
         const newRoster = { ...roster }
 
-        if (currentShift?.globalAcrossBranches) {
+        const shifts = currentShiftIds.map(id => shiftTypes.find(s => s.id === id)).filter((s): s is ShiftType => !!s)
+        const globalIds = shifts.filter(s => s.globalAcrossBranches).map(s => s.id)
+
+        if (globalIds.length > 0) {
             branches.forEach(b => {
-                delete newRoster[rosterKey(b.id, staffId, selectedDateStr)]
+                const k = rosterKey(b.id, staffId, selectedDateStr)
+                const existingStr = roster[k] || ''
+                if (existingStr) {
+                    const ids = existingStr.split(',')
+                    const filtered = ids.filter(id => {
+                        if (b.id === selectedBranch) {
+                            return false
+                        } else {
+                            return !globalIds.includes(id)
+                        }
+                    })
+                    if (filtered.length === 0) {
+                        delete newRoster[k]
+                    } else {
+                        newRoster[k] = filtered.join(',')
+                    }
+                }
             })
         } else {
             delete newRoster[key]
@@ -405,6 +593,88 @@ export default function RosterDepartmentView({
         setRoster(newRoster)
         saveRosterData(newRoster)
     }, [selectedBranch, selectedDateStr, roster, shiftTypes, branches, setRoster])
+
+    // ── Remove a single part of a split shift ──
+    const removeShiftPart = useCallback((staffId: string, part: 1 | 2) => {
+        const key = rosterKey(selectedBranch, staffId, selectedDateStr)
+        const currentShiftIdsStr = roster[key] || ''
+        const currentShiftIds = currentShiftIdsStr ? currentShiftIdsStr.split(',') : []
+        if (currentShiftIds.length === 0) return
+
+        const splitShiftId = currentShiftIds.find(id => {
+            const s = shiftTypes.find(x => x.id === id)
+            return s && s.type === 'work' && s.startTime2 && s.endTime2
+        })
+        if (!splitShiftId) return
+
+        const shift = shiftTypes.find(x => x.id === splitShiftId)!
+        const remainingStart = part === 1 ? shift.startTime2! : shift.startTime!
+        const remainingEnd = part === 1 ? shift.endTime2! : shift.endTime!
+
+        let matchingShift = shiftTypes.find(s =>
+            s.type === 'work' &&
+            s.startTime === remainingStart &&
+            s.endTime === remainingEnd &&
+            !s.startTime2
+        )
+
+        let updatedShiftTypes = [...shiftTypes]
+        if (!matchingShift) {
+            const count = shiftTypes.filter(s => s.isCustom && s.code.startsWith('X') && !s.code.startsWith('XS')).length
+            const code = `X${count + 1}`
+            const parseToMinutes = (t: string) => {
+                const [h, m] = t.split(':').map(Number)
+                return h * 60 + m
+            }
+            const startMin = parseToMinutes(remainingStart)
+            const endMin = parseToMinutes(remainingEnd)
+            const diff = endMin < startMin ? (endMin + 24 * 60 - startMin) : (endMin - startMin)
+            const hours = diff / 60
+
+            matchingShift = {
+                id: `st-custom-${Date.now()}`,
+                name: `Custom ${remainingStart}–${remainingEnd}`,
+                code: code,
+                startTime: remainingStart,
+                endTime: remainingEnd,
+                color: shift.color || '#4B5563',
+                type: 'work',
+                hours: hours,
+                allowParallel: shift.allowParallel,
+                globalAcrossBranches: shift.globalAcrossBranches,
+                isCustom: true
+            }
+            updatedShiftTypes.push(matchingShift)
+            setShiftTypes(updatedShiftTypes)
+            saveShiftTypes(updatedShiftTypes)
+        }
+
+        const newRoster = { ...roster }
+        const globalIds = shift.globalAcrossBranches ? [shift.id] : []
+
+        if (globalIds.length > 0) {
+            branches.forEach(b => {
+                const k = rosterKey(b.id, staffId, selectedDateStr)
+                const existingStr = roster[k] || ''
+                if (existingStr) {
+                    const ids = existingStr.split(',')
+                    const mapped = ids.map(id => {
+                        if (id === shift.id) {
+                            return matchingShift!.id
+                        }
+                        return id
+                    })
+                    newRoster[k] = mapped.join(',')
+                }
+            })
+        } else {
+            const mapped = currentShiftIds.map(id => id === shift.id ? matchingShift!.id : id)
+            newRoster[key] = mapped.join(',')
+        }
+
+        setRoster(newRoster)
+        saveRosterData(newRoster)
+    }, [selectedBranch, selectedDateStr, roster, shiftTypes, branches, setRoster, setShiftTypes])
 
     // ── Toggle department collapse ──
     const toggleDept = (dept: string) => {
@@ -424,6 +694,7 @@ export default function RosterDepartmentView({
         shift: ShiftType,
         part: 1 | 2 = 1
     ) => {
+        if (isPublished) return
         e.preventDefault()
         e.stopPropagation()
         const start = part === 1 ? parseTime(shift.startTime) : parseTime(shift.startTime2 || '')
@@ -505,6 +776,16 @@ export default function RosterDepartmentView({
                         const finalStart2 = part === 2 ? startStr : currentShift.startTime2!
                         const finalEnd2 = part === 2 ? endStr : currentShift.endTime2!
 
+                        const parseToNumLocal = (t: string) => {
+                            const [h, m] = t.split(':').map(Number)
+                            let val = h + m / 60
+                            if (val < TIMELINE_START) val += 24
+                            return val
+                        }
+
+                        const end1Num = parseToNumLocal(finalEnd1)
+                        const start2Num = parseToNumLocal(finalStart2)
+                        
                         matchingShift = shiftTypes.find(s =>
                             s.type === 'work' &&
                             s.startTime === finalStart1 && s.endTime === finalEnd1 &&
@@ -512,16 +793,11 @@ export default function RosterDepartmentView({
                         )
 
                         if (!matchingShift) {
-                            const code = 'XS'
+                            const count = shiftTypes.filter(s => s.isCustom && s.code.startsWith('XS')).length;
+                            const code = `XS${count + 1}`;
                             
-                            const parseToNum = (t: string) => {
-                                const [h, m] = t.split(':').map(Number)
-                                let val = h + m / 60
-                                if (val < TIMELINE_START) val += 24
-                                return val
-                            }
-                            const h1 = parseToNum(finalEnd1) - parseToNum(finalStart1)
-                            const h2 = parseToNum(finalEnd2) - parseToNum(finalStart2)
+                            const h1 = end1Num - parseToNumLocal(finalStart1)
+                            const h2 = parseToNumLocal(finalEnd2) - start2Num
 
                             const newShift: ShiftType = {
                                 id: `st-custom-${Date.now()}`,
@@ -546,7 +822,8 @@ export default function RosterDepartmentView({
                         )
 
                         if (!matchingShift) {
-                            const code = 'X'
+                            const count = shiftTypes.filter(s => s.isCustom && s.code.startsWith('X') && !s.code.startsWith('XS')).length;
+                            const code = `X${count + 1}`;
                             const newShift: ShiftType = {
                                 id: `st-custom-${Date.now()}`,
                                 name: `Custom ${startStr}–${endStr}`,
@@ -573,16 +850,20 @@ export default function RosterDepartmentView({
                         for (const b of branches) {
                             if (b.id === selectedBranch) continue
                             const key = rosterKey(b.id, staffId, selectedDateStr)
-                            const otherShiftId = roster[key]
-                            if (otherShiftId) {
-                                const otherShift = shiftTypes.find(s => s.id === otherShiftId)
-                                if (otherShift && shiftsOverlap(matchingShift, otherShift)) {
-                                    hasBranchConflict = true
-                                    conflictBranchName = getBranchName(b.id)
-                                    conflictShiftName = otherShift.name
-                                    break
+                            const otherShiftIdsStr = roster[key] || ''
+                            if (otherShiftIdsStr) {
+                                const otherShiftIds = otherShiftIdsStr.split(',')
+                                for (const otherId of otherShiftIds) {
+                                    const otherShift = shiftTypes.find(s => s.id === otherId)
+                                    if (otherShift && shiftsOverlap(matchingShift, otherShift)) {
+                                        hasBranchConflict = true
+                                        conflictBranchName = getBranchName(b.id)
+                                        conflictShiftName = otherShift.name
+                                        break
+                                    }
                                 }
                             }
+                            if (hasBranchConflict) break
                         }
                     }
 
@@ -602,11 +883,26 @@ export default function RosterDepartmentView({
                         const newRoster = { ...roster }
                         if (matchingShift.globalAcrossBranches) {
                             branches.forEach(b => {
-                                newRoster[rosterKey(b.id, staffId, selectedDateStr)] = matchingShift!.id
+                                const k = rosterKey(b.id, staffId, selectedDateStr)
+                                const existingStr = roster[k] || ''
+                                const existing = existingStr ? existingStr.split(',') : []
+                                const filtered = existing.filter(id => {
+                                    if (id === currentShift.id) return false
+                                    const s = shiftTypes.find(x => x.id === id)
+                                    return s && !shiftsOverlap(matchingShift!, s)
+                                })
+                                newRoster[k] = [...filtered, matchingShift!.id].join(',')
                             })
                         } else {
                             const key = rosterKey(selectedBranch, staffId, selectedDateStr)
-                            newRoster[key] = matchingShift!.id
+                            const existingStr = roster[key] || ''
+                            const existing = existingStr ? existingStr.split(',') : []
+                            const filtered = existing.filter(id => {
+                                if (id === currentShift.id) return false
+                                const s = shiftTypes.find(x => x.id === id)
+                                return s && !shiftsOverlap(matchingShift!, s)
+                            })
+                            newRoster[key] = [...filtered, matchingShift!.id].join(',')
                         }
                         setRoster(newRoster)
                         saveRosterData(newRoster)
@@ -627,9 +923,9 @@ export default function RosterDepartmentView({
 
     // ── Render ──
     return (
-        <div>
+        <div id="daily-roster-timeline">
             {/* Day Selector — within white card-like container */}
-            <div className="bg-white rounded-2xl shadow overflow-hidden mb-3">
+            <div data-html2canvas-ignore="true" className="bg-white rounded-2xl shadow overflow-hidden mb-3">
                 {/* Continuous 28-Day Strip (4 Weeks) with Left/Right chevrons */}
                 <div className="border-b border-gray-200 px-4 py-1 flex items-center justify-between gap-2 bg-white">
                     {/* Left Scroll Button */}
@@ -839,23 +1135,33 @@ export default function RosterDepartmentView({
                                         const start2 = hasPart2 ? (isDraggingPart2 ? activeDrag.start : parseTime(shift.startTime2!)) : 0
                                         const end2 = hasPart2 ? (isDraggingPart2 ? activeDrag.end : parseTime(shift.endTime2!)) : 0
                                         const left2 = hasPart2 ? ((start2 - TIMELINE_START) / TIMELINE_HOURS) * 100 : 0
-                                        const width2 = hasPart2 ? ((end2 - start2) / TIMELINE_HOURS) * 100 : 0
+const width2 = hasPart2 ? ((end2 - start2) / TIMELINE_HOURS) * 100 : 0
 
                                         const displayedStartStr2 = hasPart2 ? (isDraggingPart2 ? formatHour(start2) : shift.startTime2!) : ''
                                         const displayedEndStr2 = hasPart2 ? (isDraggingPart2 ? formatHour(end2 % 24) : shift.endTime2!) : ''
 
+                                        const crossShifts = getStaffCrossBranchShifts(roster, staff.id, selectedDateStr, selectedBranch, shiftTypes)
+                                        const otherShifts = crossShifts
+                                            .map(cs => {
+                                                const st = shiftTypes.find(s => s.id === cs.shiftTypeId)
+                                                if (!st) return null
+                                                return { branchId: cs.branchId, shift: st }
+                                            })
+                                            .filter((x): x is { branchId: string; shift: ShiftType } => x !== null)
+
                                         return (
                                             <div key={staff.id} className="flex items-center py-1.5 hover:bg-blue-50/30 transition group/row border-b border-gray-50 last:border-b-0 min-w-[1200px]">
                                                 {/* Staff Name */}
-                                                <div className={`w-[200px] shrink-0 pr-3 sticky left-0 bg-white group-hover/row:bg-blue-50/30 transition-colors pl-4 relative ${editShiftStaffId === staff.id ? 'z-40' : 'z-10'}`}>
+                                                <div className={`w-[220px] shrink-0 pr-3 sticky left-0 bg-white group-hover/row:bg-blue-50/30 transition-colors pl-4 relative ${editShiftStaffId === staff.id ? 'z-40' : 'z-10'}`}>
                                                     <button
                                                         onClick={(e) => {
+                                                            if (isPublished) return
                                                             const rect = e.currentTarget.getBoundingClientRect()
                                                             setPopoverAnchorRect(rect)
                                                             setEditShiftStaffId(editShiftStaffId === staff.id ? null : staff.id)
                                                         }}
-                                                        className="w-full text-left flex items-center gap-2 hover:bg-gray-100/50 p-1 -m-1 rounded-lg transition"
-                                                        title={language === 'vi' ? 'Nhấp để đổi ca' : 'Click to change shift'}
+                                                        className={`w-full text-left flex items-center gap-2 p-1 -m-1 rounded-lg transition ${isPublished ? 'cursor-default' : 'hover:bg-gray-100/50'}`}
+                                                        title={isPublished ? undefined : (language === 'vi' ? 'Nhấp để đổi ca' : 'Click to change shift')}
                                                     >
                                                         <div
                                                             className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white shrink-0"
@@ -864,8 +1170,29 @@ export default function RosterDepartmentView({
                                                             {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                                         </div>
                                                         <div className="min-w-0 flex-1">
-                                                            <p className="text-xs font-medium text-gray-800 truncate">{staff.name}</p>
-                                                            <p className="text-[10px] text-gray-400 truncate">{staff.position}</p>
+                                                            <p className="text-xs font-semibold text-gray-800 leading-tight">{staff.name}</p>
+                                                            <div className="flex items-center gap-1.5 mt-0.5 flex-nowrap overflow-visible">
+                                                                <span className="text-[10px] text-gray-400 truncate shrink-0">{staff.position}</span>
+                                                                <span className={`text-[8px] px-1 py-0.5 rounded font-bold uppercase tracking-wider leading-none border shrink-0 ${
+                                                                    staff.employment_type === 'part_time'
+                                                                        ? 'bg-amber-50 text-amber-700 border-amber-200/55'
+                                                                        : staff.employment_type === 'full_time'
+                                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200/55'
+                                                                            : 'bg-purple-50 text-purple-700 border-purple-200/55'
+                                                                }`}>
+                                                                    {staff.employment_type === 'part_time'
+                                                                        ? (language === 'vi' ? 'PT' : 'Part-time')
+                                                                        : staff.employment_type === 'full_time'
+                                                                            ? (language === 'vi' ? 'FT' : 'Full-time')
+                                                                            : staff.employment_type
+                                                                    }
+                                                                </span>
+                                                                <div className="flex items-center gap-0.5 shrink-0" data-html2canvas-ignore="true" title={`Skill Level: ${staff.skill_level || 1}`}>
+                                                                    {Array.from({ length: staff.skill_level || 1 }).map((_, i) => (
+                                                                        <Star key={i} className="w-2.5 h-2.5 text-amber-600 fill-amber-400 shrink-0" />
+                                                                    ))}
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </button>
 
@@ -902,28 +1229,65 @@ export default function RosterDepartmentView({
                                                                     </div>
                                                                     <div className="space-y-1">
                                                                         <div className="max-h-[200px] overflow-y-auto space-y-1 pr-1">
-                                                                            {shiftTypes.filter(st => !st.isCustom).map(st => (
-                                                                                <button
-                                                                                    key={st.id}
-                                                                                    onClick={() => {
-                                                                                        assignSpecificShift(staff.id, st.id)
-                                                                                        setEditShiftStaffId(null)
-                                                                                        setPopoverAnchorRect(null)
-                                                                                    }}
-                                                                                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-50 transition text-left ${shift.id === st.id ? 'bg-blue-50 font-semibold' : ''}`}
-                                                                                >
-                                                                                    <div className="w-3 h-3 rounded shrink-0" style={{ backgroundColor: st.color }} />
-                                                                                    <div className="min-w-0 flex-1">
-                                                                                        <p className="text-xs text-gray-700 truncate">{st.name} ({st.code})</p>
-                                                                                        {st.startTime && (
-                                                                                            <p className="text-[10px] text-gray-400 leading-tight">
-                                                                                                {st.startTime}–{st.endTime}
-                                                                                                {st.startTime2 && ` & ${st.startTime2}–${st.endTime2}`}
-                                                                                            </p>
-                                                                                        )}
-                                                                                    </div>
-                                                                                </button>
-                                                                            ))}
+                                                                            {shiftTypes.filter(st => !st.isCustom).map(st => {
+                                                                                const hasConflict = (() => {
+                                                                                    // Cross branch conflict
+                                                                                    if (!st.globalAcrossBranches) {
+                                                                                        const branchConflict = branches.some(b => {
+                                                                                            if (b.id === selectedBranch) return false
+                                                                                            const key = rosterKey(b.id, staff.id, selectedDateStr)
+                                                                                            const otherShiftIdsStr = roster[key] || ''
+                                                                                            if (!otherShiftIdsStr) return false
+                                                                                            return otherShiftIdsStr.split(',').some(otherId => {
+                                                                                                const otherShift = shiftTypes.find(s => s.id === otherId)
+                                                                                                return otherShift && shiftsOverlap(st, otherShift)
+                                                                                            })
+                                                                                        })
+                                                                                        if (branchConflict) return true
+                                                                                    }
+                                                                                    
+                                                                                    // Local branch conflict (excluding the shift being edited)
+                                                                                    const key = rosterKey(selectedBranch, staff.id, selectedDateStr)
+                                                                                    const currentShiftIdsStr = roster[key] || ''
+                                                                                    const currentShifts = currentShiftIdsStr ? currentShiftIdsStr.split(',').map(id => shiftTypes.find(x => x.id === id)).filter((x): x is ShiftType => !!x) : []
+                                                                                    return currentShifts.some(otherShift => otherShift.id !== shift.id && otherShift.id !== st.id && shiftsOverlap(st, otherShift))
+                                                                                })()
+
+                                                                                return (
+                                                                                    <button
+                                                                                        key={st.id}
+                                                                                        disabled={hasConflict}
+                                                                                        onClick={() => {
+                                                                                            assignSpecificShift(staff.id, st.id)
+                                                                                            setEditShiftStaffId(null)
+                                                                                            setPopoverAnchorRect(null)
+                                                                                        }}
+                                                                                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition text-left 
+                                                                                            ${shift.id === st.id ? 'bg-blue-50 font-semibold' : ''}
+                                                                                            ${hasConflict 
+                                                                                                ? 'opacity-40 bg-gray-50/30 cursor-not-allowed hover:bg-transparent' 
+                                                                                                : 'hover:bg-blue-50'}`}
+                                                                                    >
+                                                                                        <div className="w-3 h-3 rounded shrink-0" style={{ backgroundColor: hasConflict ? '#D1D5DB' : st.color }} />
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <div className="flex items-center justify-between gap-1">
+                                                                                                <p className="text-xs text-gray-700 truncate">{st.name} ({st.code})</p>
+                                                                                                {hasConflict && (
+                                                                                                    <span className="text-[8px] font-semibold text-red-500 bg-red-50 border border-red-150 px-1 rounded leading-none shrink-0">
+                                                                                                        {language === 'vi' ? 'Trùng lịch' : 'Overlap'}
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            {st.startTime && (
+                                                                                                <p className="text-[10px] text-gray-400 leading-tight">
+                                                                                                    {st.startTime}–{st.endTime}
+                                                                                                    {st.startTime2 && ` & ${st.startTime2}–${st.endTime2}`}
+                                                                                                </p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </button>
+                                                                                )
+                                                                            })}
                                                                         </div>
                                                                         <div className="border-t border-gray-150 pt-2 mt-2">
                                                                             <button
@@ -958,7 +1322,55 @@ export default function RosterDepartmentView({
                                                             ))}
                                                         </div>
 
-                                                        {shift.type === 'leave' ? (
+                                                        {/* Render Cross-Branch Shifts (e.g. half-day leaves from other branches) */}
+                                                        {otherShifts.map((os, idx) => {
+                                                            const osShift = os.shift
+                                                            if (osShift.type === 'leave' && (osShift.allDay ?? true)) {
+                                                                return (
+                                                                    <div
+                                                                        key={`cross-${idx}`}
+                                                                        className="absolute top-0.5 bottom-0.5 left-0 right-0 rounded-md flex items-center justify-center opacity-50 hover:opacity-75 transition-opacity cursor-not-allowed border border-dashed"
+                                                                        style={{
+                                                                            backgroundColor: osShift.color + '15',
+                                                                            borderColor: osShift.color,
+                                                                        }}
+                                                                        title={`${osShift.name} (${getBranchName(os.branchId)})`}
+                                                                    >
+                                                                        <span className="text-[9px] font-bold drop-shadow-sm whitespace-nowrap px-1 select-none uppercase tracking-wide" style={{ color: osShift.color }}>
+                                                                            {osShift.code} ({getBranchName(os.branchId).split(' ')[0]})
+                                                                        </span>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            
+                                                            if (osShift.startTime && osShift.endTime) {
+                                                                const osStart = parseTime(osShift.startTime)
+                                                                const osEnd = parseTime(osShift.endTime)
+                                                                const osLeft = ((osStart - TIMELINE_START) / TIMELINE_HOURS) * 100
+                                                                const osWidth = ((osEnd - osStart) / TIMELINE_HOURS) * 100
+                                                                
+                                                                return (
+                                                                    <div
+                                                                        key={`cross-${idx}`}
+                                                                        className="absolute top-0.5 bottom-0.5 rounded-md flex items-center justify-center opacity-50 hover:opacity-75 transition-opacity cursor-not-allowed border border-dashed"
+                                                                        style={{
+                                                                            left: `${Math.max(0, osLeft)}%`,
+                                                                            width: `${Math.min(100 - Math.max(0, osLeft), osWidth)}%`,
+                                                                            backgroundColor: osShift.color + '15',
+                                                                            borderColor: osShift.color,
+                                                                        }}
+                                                                        title={`${osShift.name} (${getBranchName(os.branchId)})`}
+                                                                    >
+                                                                        <span className="text-[9px] font-bold drop-shadow-sm whitespace-nowrap px-1 select-none uppercase tracking-wide" style={{ color: osShift.color }}>
+                                                                            {osShift.code} ({getBranchName(os.branchId).split(' ')[0]})
+                                                                        </span>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            return null
+                                                        })}
+
+                                                        {shift.type === 'leave' && (shift.allDay ?? true) ? (
                                                             /* Leave Bar (Full Width) */
                                                             <div
                                                                 className="absolute top-0.5 bottom-0.5 left-0 right-0 rounded-md flex items-center justify-center cursor-not-allowed group/bar opacity-85 hover:opacity-100 transition-opacity"
@@ -971,20 +1383,46 @@ export default function RosterDepartmentView({
                                                                     {shift.name} ({shift.code})
                                                                 </span>
                                                                 {/* Delete on hover */}
-                                                                <button
-                                                                    onClick={() => removeShift(staff.id)}
-                                                                    className="absolute -right-1 -top-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity shadow"
-                                                                >
-                                                                    <X className="w-2.5 h-2.5 text-white" />
-                                                                </button>
+                                                                {!isPublished && (
+                                                                    <button
+                                                                        onClick={() => removeShift(staff.id)}
+                                                                        className="absolute -right-1 -top-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity shadow"
+                                                                    >
+                                                                        <X className="w-2.5 h-2.5 text-white" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        ) : shift.type === 'leave' && !(shift.allDay ?? true) ? (
+                                                            /* Leave Bar (Time-Specific / Half Day) */
+                                                            <div
+                                                                className="absolute top-0.5 bottom-0.5 rounded-md flex items-center justify-center cursor-not-allowed group/bar opacity-85 hover:opacity-100 transition-opacity"
+                                                                style={{
+                                                                    left: `${Math.max(0, left1)}%`,
+                                                                    width: `${Math.min(100 - Math.max(0, left1), width1)}%`,
+                                                                    backgroundColor: shift.color,
+                                                                }}
+                                                                title={shift.name}
+                                                            >
+                                                                <span className="text-[10px] font-bold text-white drop-shadow-sm whitespace-nowrap px-1 select-none uppercase tracking-wide">
+                                                                    {shift.code} {shift.startTime}–{shift.endTime}
+                                                                </span>
+                                                                {/* Delete on hover */}
+                                                                {!isPublished && (
+                                                                    <button
+                                                                        onClick={() => removeShift(staff.id)}
+                                                                        className="absolute -right-1 -top-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity shadow"
+                                                                    >
+                                                                        <X className="w-2.5 h-2.5 text-white" />
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         ) : (
                                                             /* Work Shifts - Part 1 & Part 2 */
                                                             <>
                                                                 {/* Shift Bar Part 1 */}
                                                                 <div
-                                                                    onMouseDown={(e) => handleDragStart(e, staff.id, 'move', shift, 1)}
-                                                                    className="absolute top-0.5 bottom-0.5 rounded-md flex items-center justify-center cursor-move group/bar transition-shadow hover:shadow-md"
+                                                                    onMouseDown={(e) => !isPublished && handleDragStart(e, staff.id, 'move', shift, 1)}
+                                                                    className={`absolute top-0.5 bottom-0.5 rounded-md flex items-center justify-center group/bar transition-shadow hover:shadow-md ${!isPublished ? 'cursor-move' : 'cursor-default'}`}
                                                                     style={{
                                                                         left: `${Math.max(0, left1)}%`,
                                                                         width: `${Math.min(100 - Math.max(0, left1), width1)}%`,
@@ -992,12 +1430,14 @@ export default function RosterDepartmentView({
                                                                     }}
                                                                 >
                                                                     {/* Left handle */}
-                                                                    <div
-                                                                        className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity"
-                                                                        onMouseDown={(e) => handleDragStart(e, staff.id, 'left', shift, 1)}
-                                                                    >
-                                                                        <div className="w-0.5 h-3 bg-white/80 rounded-full" />
-                                                                    </div>
+                                                                    {!isPublished && (
+                                                                        <div
+                                                                            className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity"
+                                                                            onMouseDown={(e) => handleDragStart(e, staff.id, 'left', shift, 1)}
+                                                                        >
+                                                                            <div className="w-0.5 h-3 bg-white/80 rounded-full" />
+                                                                        </div>
+                                                                    )}
 
                                                                     {/* Label */}
                                                                     <span className="text-[10px] font-bold text-white drop-shadow-sm whitespace-nowrap px-1 select-none">
@@ -1005,27 +1445,31 @@ export default function RosterDepartmentView({
                                                                     </span>
 
                                                                     {/* Right handle */}
-                                                                    <div
-                                                                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity"
-                                                                        onMouseDown={(e) => handleDragStart(e, staff.id, 'right', shift, 1)}
-                                                                    >
-                                                                        <div className="w-0.5 h-3 bg-white/80 rounded-full" />
-                                                                    </div>
+                                                                    {!isPublished && (
+                                                                        <div
+                                                                            className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity"
+                                                                            onMouseDown={(e) => handleDragStart(e, staff.id, 'right', shift, 1)}
+                                                                        >
+                                                                            <div className="w-0.5 h-3 bg-white/80 rounded-full" />
+                                                                        </div>
+                                                                    )}
 
                                                                     {/* Delete on hover */}
-                                                                    <button
-                                                                        onClick={() => removeShift(staff.id)}
-                                                                        className="absolute -right-1 -top-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity shadow"
-                                                                    >
-                                                                        <X className="w-2.5 h-2.5 text-white" />
-                                                                    </button>
+                                                                    {!isPublished && (
+                                                                        <button
+                                                                            onClick={() => hasPart2 ? removeShiftPart(staff.id, 1) : removeShift(staff.id)}
+                                                                            className="absolute -right-1 -top-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity shadow"
+                                                                        >
+                                                                            <X className="w-2.5 h-2.5 text-white" />
+                                                                        </button>
+                                                                    )}
                                                                 </div>
 
                                                                 {/* Shift Bar Part 2 */}
                                                                 {hasPart2 && (
                                                                     <div
-                                                                        onMouseDown={(e) => handleDragStart(e, staff.id, 'move', shift, 2)}
-                                                                        className="absolute top-0.5 bottom-0.5 rounded-md flex items-center justify-center cursor-move group/bar transition-shadow hover:shadow-md"
+                                                                        onMouseDown={(e) => !isPublished && handleDragStart(e, staff.id, 'move', shift, 2)}
+                                                                        className={`absolute top-0.5 bottom-0.5 rounded-md flex items-center justify-center group/bar transition-shadow hover:shadow-md ${!isPublished ? 'cursor-move' : 'cursor-default'}`}
                                                                         style={{
                                                                             left: `${Math.max(0, left2)}%`,
                                                                             width: `${Math.min(100 - Math.max(0, left2), width2)}%`,
@@ -1033,12 +1477,14 @@ export default function RosterDepartmentView({
                                                                         }}
                                                                     >
                                                                         {/* Left handle */}
-                                                                        <div
-                                                                            className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity"
-                                                                            onMouseDown={(e) => handleDragStart(e, staff.id, 'left', shift, 2)}
-                                                                        >
-                                                                            <div className="w-0.5 h-3 bg-white/80 rounded-full" />
-                                                                        </div>
+                                                                        {!isPublished && (
+                                                                            <div
+                                                                                className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity"
+                                                                                onMouseDown={(e) => handleDragStart(e, staff.id, 'left', shift, 2)}
+                                                                            >
+                                                                                <div className="w-0.5 h-3 bg-white/80 rounded-full" />
+                                                                            </div>
+                                                                        )}
 
                                                                         {/* Label */}
                                                                         <span className="text-[10px] font-bold text-white drop-shadow-sm whitespace-nowrap px-1 select-none">
@@ -1046,20 +1492,24 @@ export default function RosterDepartmentView({
                                                                         </span>
 
                                                                         {/* Right handle */}
-                                                                        <div
-                                                                            className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity"
-                                                                            onMouseDown={(e) => handleDragStart(e, staff.id, 'right', shift, 2)}
-                                                                        >
-                                                                            <div className="w-0.5 h-3 bg-white/80 rounded-full" />
-                                                                        </div>
+                                                                        {!isPublished && (
+                                                                            <div
+                                                                                className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity"
+                                                                                onMouseDown={(e) => handleDragStart(e, staff.id, 'right', shift, 2)}
+                                                                            >
+                                                                                <div className="w-0.5 h-3 bg-white/80 rounded-full" />
+                                                                            </div>
+                                                                        )}
 
                                                                         {/* Delete on hover */}
-                                                                        <button
-                                                                            onClick={() => removeShift(staff.id)}
-                                                                            className="absolute -right-1 -top-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity shadow"
-                                                                        >
-                                                                            <X className="w-2.5 h-2.5 text-white" />
-                                                                        </button>
+                                                                        {!isPublished && (
+                                                                            <button
+                                                                                onClick={() => removeShiftPart(staff.id, 2)}
+                                                                                className="absolute -right-1 -top-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition-opacity shadow"
+                                                                            >
+                                                                                <X className="w-2.5 h-2.5 text-white" />
+                                                                            </button>
+                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </>
@@ -1110,26 +1560,62 @@ export default function RosterDepartmentView({
                                                                     return (
                                                                         <div className="space-y-1">
                                                                             <div className="max-h-[160px] overflow-y-auto space-y-1">
-                                                                                {shiftTypes.filter(st => !st.isCustom).map(st => (
-                                                                                    <button
-                                                                                        key={st.id}
-                                                                                        onClick={() => {
-                                                                                            assignSpecificShift(selectedStaffForAdd.id, st.id)
-                                                                                            setAddSlotDept(null)
-                                                                                            setPopoverAnchorRect(null)
-                                                                                            setSelectedStaffForAdd(null)
-                                                                                        }}
-                                                                                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-50 transition text-left"
-                                                                                    >
-                                                                                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: st.color }} />
-                                                                                        <div className="min-w-0">
-                                                                                            <p className="text-xs font-medium text-gray-700 truncate">{st.name}</p>
-                                                                                            <p className="text-[10px] text-gray-400 truncate">
-                                                                                                {st.code} {st.startTime && `· ${st.startTime}–${st.endTime}`}
-                                                                                            </p>
-                                                                                        </div>
-                                                                                    </button>
-                                                                                ))}
+                                                                                {shiftTypes.filter(st => !st.isCustom).map(st => {
+                                                                                    const hasConflict = (() => {
+                                                                                        // Cross branch conflict
+                                                                                        if (!st.globalAcrossBranches) {
+                                                                                            const branchConflict = branches.some(b => {
+                                                                                                if (b.id === selectedBranch) return false
+                                                                                                const key = rosterKey(b.id, selectedStaffForAdd.id, selectedDateStr)
+                                                                                                const otherShiftIdsStr = roster[key] || ''
+                                                                                                if (!otherShiftIdsStr) return false
+                                                                                                return otherShiftIdsStr.split(',').some(otherId => {
+                                                                                                    const otherShift = shiftTypes.find(s => s.id === otherId)
+                                                                                                    return otherShift && shiftsOverlap(st, otherShift)
+                                                                                                })
+                                                                                            })
+                                                                                            if (branchConflict) return true
+                                                                                        }
+                                                                                        
+                                                                                        // Local branch conflict
+                                                                                        const key = rosterKey(selectedBranch, selectedStaffForAdd.id, selectedDateStr)
+                                                                                        const currentShiftIdsStr = roster[key] || ''
+                                                                                        const currentShifts = currentShiftIdsStr ? currentShiftIdsStr.split(',').map(id => shiftTypes.find(x => x.id === id)).filter((x): x is ShiftType => !!x) : []
+                                                                                        return currentShifts.some(otherShift => otherShift.id !== st.id && shiftsOverlap(st, otherShift))
+                                                                                    })()
+
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={st.id}
+                                                                                            disabled={hasConflict}
+                                                                                            onClick={() => {
+                                                                                                assignSpecificShift(selectedStaffForAdd.id, st.id)
+                                                                                                setAddSlotDept(null)
+                                                                                                setPopoverAnchorRect(null)
+                                                                                                setSelectedStaffForAdd(null)
+                                                                                            }}
+                                                                                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition text-left
+                                                                                                ${hasConflict 
+                                                                                                    ? 'opacity-40 bg-gray-50/30 cursor-not-allowed hover:bg-transparent' 
+                                                                                                    : 'hover:bg-blue-50'}`}
+                                                                                        >
+                                                                                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: hasConflict ? '#D1D5DB' : st.color }} />
+                                                                                            <div className="min-w-0 flex-1">
+                                                                                                <div className="flex items-center justify-between gap-1">
+                                                                                                    <p className="text-xs font-medium text-gray-700 truncate">{st.name}</p>
+                                                                                                    {hasConflict && (
+                                                                                                        <span className="text-[8px] font-semibold text-red-500 bg-red-50 border border-red-150 px-1 rounded leading-none shrink-0">
+                                                                                                            {language === 'vi' ? 'Trùng lịch' : 'Overlap'}
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                                <p className="text-[10px] text-gray-400 truncate">
+                                                                                                    {st.code} {st.startTime && `· ${st.startTime}–${st.endTime}`}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                        </button>
+                                                                                    )
+                                                                                })}
                                                                             </div>
                                                                             <button
                                                                                 type="button"
@@ -1169,20 +1655,56 @@ export default function RosterDepartmentView({
                                                                     <div className="space-y-1">
                                                                         <div className="max-h-[160px] overflow-y-auto space-y-1">
                                                                             {available.map(s => {
-                                                                                const crossShifts = getStaffCrossBranchShifts(roster, s.id, selectedDateStr, selectedBranch)
+                                                                                const crossShifts = getStaffCrossBranchShifts(roster, s.id, selectedDateStr, selectedBranch, shiftTypes)
+                                                                                const hasNonParallelShiftOtherBranch = branches.some(b => {
+                                                                                    if (b.id === selectedBranch) return false
+                                                                                    const key = rosterKey(b.id, s.id, selectedDateStr)
+                                                                                    const val = roster[key] || ''
+                                                                                    if (!val) return false
+                                                                                    return val.split(',').some(id => {
+                                                                                        const sh = shiftTypes.find(x => x.id === id)
+                                                                                        return sh && sh.type === 'work' && sh.allowParallel === false
+                                                                                    })
+                                                                                })
                                                                                 return (
                                                                                     <button
                                                                                         key={s.id}
+                                                                                        disabled={hasNonParallelShiftOtherBranch}
                                                                                         onClick={() => {
                                                                                             setSelectedStaffForAdd({ id: s.id, name: s.name })
                                                                                         }}
-                                                                                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-50 transition text-left"
+                                                                                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition text-left
+                                                                                            ${hasNonParallelShiftOtherBranch 
+                                                                                                ? 'opacity-40 bg-gray-50/30 cursor-not-allowed' 
+                                                                                                : 'hover:bg-blue-50'}`}
                                                                                     >
                                                                                         <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                                                                         <div className="min-w-0 flex-1">
-                                                                                            <p className="text-xs font-medium text-gray-700 truncate">{s.name}</p>
+                                                                                            <div className="flex items-center justify-between gap-1 w-full">
+                                                                                                <p className="text-xs font-semibold text-gray-700 truncate flex-1">{s.name}</p>
+                                                                                                <div className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200/50 text-[9px] font-bold shrink-0" data-html2canvas-ignore="true" title={`Skill Level: ${s.skill_level || 1}`}>
+                                                                                                    <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
+                                                                                                    <span>{s.skill_level || 1}</span>
+                                                                                                </div>
+                                                                                            </div>
                                                                                             <div className="flex flex-col gap-0.5">
-                                                                                                <p className="text-[10px] text-gray-400 truncate">{s.position}</p>
+                                                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                                    <span className="text-[10px] text-gray-400 truncate">{s.position}</span>
+                                                                                                    <span className={`text-[8px] px-1 py-0.5 rounded font-bold uppercase tracking-wider leading-none border ${
+                                                                                                        s.employment_type === 'part_time'
+                                                                                                            ? 'bg-amber-50 text-amber-700 border-amber-200/55'
+                                                                                                            : s.employment_type === 'full_time'
+                                                                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/55'
+                                                                                                                : 'bg-purple-50 text-purple-700 border-purple-200/55'
+                                                                                                    }`}>
+                                                                                                        {s.employment_type === 'part_time'
+                                                                                                            ? (language === 'vi' ? 'PT' : 'Part-time')
+                                                                                                            : s.employment_type === 'full_time'
+                                                                                                                ? (language === 'vi' ? 'FT' : 'Full-time')
+                                                                                                                : s.employment_type
+                                                                                                        }
+                                                                                                    </span>
+                                                                                                </div>
                                                                                                 {crossShifts.map((cs, idx) => {
                                                                                                     const bName = getBranchName(cs.branchId)
                                                                                                     const stCode = shiftTypes.find(st => st.id === cs.shiftTypeId)?.code || ''
@@ -1220,7 +1742,7 @@ export default function RosterDepartmentView({
                                                     </>,
                                                     document.body
                                                 )
-                                            })() : (
+                                            })() : !isPublished ? (
                                                 <button
                                                     onClick={(e) => {
                                                         const rect = e.currentTarget.getBoundingClientRect()
@@ -1232,7 +1754,7 @@ export default function RosterDepartmentView({
                                                     <Plus className="w-3.5 h-3.5" />
                                                     {language === 'vi' ? 'Thêm nhân viên' : 'Add staff'}
                                                 </button>
-                                            )}
+                                            ) : null}
                                         </div>
                                         <div className="flex-1 pr-4 relative h-8"></div>
                                     </div>
@@ -1255,10 +1777,12 @@ export default function RosterDepartmentView({
 
             {/* Shift Legend */}
             <div className="mt-3 flex flex-wrap items-center gap-3 px-1">
-                {shiftTypes.filter(s => s.type === 'work' && !s.isCustom).map(st => (
+                {activeShiftTypes.map(st => (
                     <div key={st.id} className="flex items-center gap-1.5">
                         <div className="w-3 h-3 rounded" style={{ backgroundColor: st.color }} />
-                        <span className="text-[10px] text-slate-300 font-medium">{st.code} · {st.name} ({st.startTime}–{st.endTime})</span>
+                        <span className="text-[10px] text-slate-300 font-medium">
+                            {st.code} {st.startTime && st.endTime ? `(${st.startTime}–${st.endTime}${st.startTime2 && st.endTime2 ? ` & ${st.startTime2}–${st.endTime2}` : ''})` : `· ${st.name}`}
+                        </span>
                     </div>
                 ))}
             </div>

@@ -18,6 +18,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
+import MonthPicker from '@/components/MonthPicker'
 import { exportToExcelTable, type ExcelColumn } from '@/lib/exportUtils'
 
 type SortKey = 'date' | 'dow' | 'time' | 'branch' | 'revenue' | 'unpaid' | 'cashout' | 'cashToTake' | 'card' | 'transfer'
@@ -230,12 +231,8 @@ export default function MonthlyClosingListPage() {
         return { count, totalRevenue, totalUnpaid, totalCashout, totalCard, totalTransfer, totalToTake, avgRevenue }
     }, [filtered])
 
-    function prevMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), -1)) }
-    function nextMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), 1)) }
-    function onPickMonth(val: string) {
-        const d = fromMonthInputValue(val)
-        if (d) setMonthCursor(d)
-    }
+
+
 
     async function handleExport() {
         // 1. Identify dynamic columns
@@ -376,40 +373,18 @@ export default function MonthlyClosingListPage() {
                 </div>
             )}
 
-            {/* Month Nav */}
-            <div className="mb-3 grid grid-cols-3 items-center">
-                <div className="justify-self-start">
-                    <button
-                        type="button"
-                        onClick={prevMonth}
-                        className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
-                    >
-                        {t.monthNav.previous}
-                    </button>
-                </div>
-                <div className="justify-self-center flex items-center gap-2">
-                    <span className="text-white font-semibold">{formatMonthLabel(monthCursor)}</span>
-                    <div className="relative w-6 h-6">
-                        <CalendarDaysIcon className="w-6 h-6 text-blue-200" />
-                        <input
-                            type="month"
-                            value={monthInputValue}
-                            onChange={e => onPickMonth(e.target.value)}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                            aria-label={t.monthNav.pickLabel}
-                        />
-                    </div>
-                </div>
-                <div className="justify-self-end">
-                    <button
-                        type="button"
-                        onClick={nextMonth}
-                        className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
-                    >
-                        {t.monthNav.next}
-                    </button>
-                </div>
-            </div>
+            <MonthPicker
+                value={monthInputValue}
+                onChange={(val) => {
+                    const d = fromMonthInputValue(val)
+                    if (d) setMonthCursor(d)
+                }}
+                language={language}
+                colorClass="text-blue-100 hover:text-white"
+                labelColorClass="text-white"
+                iconColorClass="text-blue-200 hover:text-white"
+                className="mb-3"
+            />
 
             {/* Tiles KPI */}
             <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">

@@ -1,0 +1,23 @@
+Created At: 2026-05-23T15:01:59Z
+Completed At: 2026-05-23T15:01:59Z
+The following changes were made by the replace_file_content tool to: /Users/valerio/.gemini/antigravity/brain/8c8b7827-f1fb-420a-b004-91d9a22c3062/task.md. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -1,10 +1,10 @@
+ # Checklist Attività - Fase 2: Internazionalizzazione Core Finance
+ 
+-- `[ ]` Fase 2.1: Estensione del Dizionario Centrale (`src/lib/i18n.ts`)
+-  - `[ ]` Aggiungere traduzioni per la pagina Invoices (Fatture)
+-  - `[ ]` Aggiungere traduzioni per la pagina Payments (Ordini di Pagamento)
+-  - `[ ]` Aggiungere traduzioni per la pagina P&L Report (Conto Economico)
+-  - `[ ]` Aggiungere traduzioni per la pagina Cash Flow (Flussi di Cassa)
++- `[x]` Fase 2.1: Estensione del Dizionario Centrale (`src/lib/i18n.ts`)
++  - `[x]` Aggiungere traduzioni per la pagina Invoices (Fatture)
++  - `[x]` Aggiungere traduzioni per la pagina Payments (Ordini di Pagamento)
++  - `[x]` Aggiungere traduzioni per la pagina P&L Report (Conto Economico)
++  - `[x]` Aggiungere traduzioni per la pagina Cash Flow (Flussi di Cassa)
+ - `[x]` Fase 2.2: Traduzione Pagina Invoices (`src/app/finance/invoices/page.tsx`)
+   - `[x]` Importare `t` e `useSettings`
+   - `[x]` Tradurre filtri, intestazioni tabella, stati, modali di creazione/collegamento e messaggi di alert
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

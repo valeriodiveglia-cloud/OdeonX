@@ -24,16 +24,17 @@ function calculateTenure(startStr: string, endStr: string | Date) {
     return { totalDays, months, years };
 }
 
-function formatTenure(t: { totalDays: number, months: number, years: number }) {
-    if (t.totalDays === 0) return '0 days';
+function formatTenure(t: { totalDays: number, months: number, years: number }, language?: string) {
+    const isVi = language === 'vi';
+    if (t.totalDays === 0) return isVi ? '0 ngày' : '0 days';
     if (t.years > 0) {
-        if (t.months > 0) return `${t.years} yr ${t.months} mo`;
-        return `${t.years} yr`;
+        if (t.months > 0) return isVi ? `${t.years} năm ${t.months} tháng` : `${t.years} yr ${t.months} mo`;
+        return isVi ? `${t.years} năm` : `${t.years} yr`;
     }
     if (t.months > 0) {
-        return `${t.months} mo`;
+        return isVi ? `${t.months} tháng` : `${t.months} mo`;
     }
-    return `${t.totalDays} days`;
+    return isVi ? `${t.totalDays} ngày` : `${t.totalDays} days`;
 }
 
 function get14thMonthMultiplier(years: number, baseYears: number, steps: { years: number, pct: number }[]) {
@@ -100,39 +101,39 @@ function calculatePartTimeBonus(hours: number, maxCap: number, targetHours: numb
 
 const fmtCurrency = (n: number) => new Intl.NumberFormat('vi-VN').format(Math.round(n))
 
-function ExportModalYear({ onClose, onExport, currentYear }: { onClose: () => void, onExport: (year: number) => void, currentYear: number }) {
+function ExportModalYear({ onClose, onExport, currentYear, language }: { onClose: () => void, onExport: (year: number) => void, currentYear: number, language?: string }) {
     const [range, setRange] = useState<'current' | 'prev' | 'custom'>('current')
     const [customYear, setCustomYear] = useState<number>(currentYear)
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 animate-in fade-in zoom-in-95 duration-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Bonus Data</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{language === 'vi' ? 'Xuất dữ liệu thưởng' : 'Export Bonus Data'}</h3>
                 
                 <div className="space-y-3 mb-6">
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="radio" checked={range === 'current'} onChange={() => setRange('current')} className="text-blue-600 focus:ring-blue-500" />
-                        <span className="text-sm text-gray-700">Current Year ({currentYear})</span>
+                        <span className="text-sm text-gray-700">{language === 'vi' ? `Năm hiện tại (${currentYear})` : `Current Year (${currentYear})`}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="radio" checked={range === 'prev'} onChange={() => setRange('prev')} className="text-blue-600 focus:ring-blue-500" />
-                        <span className="text-sm text-gray-700">Previous Year ({currentYear - 1})</span>
+                        <span className="text-sm text-gray-700">{language === 'vi' ? `Năm trước (${currentYear - 1})` : `Previous Year (${currentYear - 1})`}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="radio" checked={range === 'custom'} onChange={() => setRange('custom')} className="text-blue-600 focus:ring-blue-500" />
-                        <span className="text-sm text-gray-700">Custom Year</span>
+                        <span className="text-sm text-gray-700">{language === 'vi' ? 'Năm tùy chỉnh' : 'Custom Year'}</span>
                     </label>
 
                     {range === 'custom' && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
-                            <label className="block text-xs text-gray-500 mb-1">Select Year</label>
+                            <label className="block text-xs text-gray-500 mb-1">{language === 'vi' ? 'Chọn năm' : 'Select Year'}</label>
                             <input type="number" min={2024} max={currentYear} value={customYear} onChange={e => setCustomYear(parseInt(e.target.value))} className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
                         </div>
                     )}
                 </div>
 
                 <div className="flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">{language === 'vi' ? 'Hủy' : 'Cancel'}</button>
                     <button 
                         onClick={() => {
                             if (range === 'current') onExport(currentYear)
@@ -143,7 +144,7 @@ function ExportModalYear({ onClose, onExport, currentYear }: { onClose: () => vo
                         className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
                     >
                         <FileDown className="w-4 h-4" />
-                        Export
+                        {language === 'vi' ? 'Xuất' : 'Export'}
                     </button>
                 </div>
             </div>
@@ -155,6 +156,7 @@ type TabKey = 'full_time' | 'part_time';
 
 export default function BonusPage() {
     const { 
+        language,
         hrBonus14thBaseYears, hrBonus14thSteps, hrBonusPtMaxCap, hrBonusPtTargetHours, hrBonusPtMinHours,
         hrBonusPtMinRating, hrBonus14thMinRating, hrBonus13thGuaranteedPct, hrBonus13thPerfPct, hrBonus13thPerfTiers
     } = useSettings()
@@ -356,23 +358,23 @@ export default function BonusPage() {
         const ExcelJS = (await import('exceljs')).default
         const workbook = new ExcelJS.Workbook()
         
-        const ftSheet = workbook.addWorksheet('Full-Time')
-        const ptSheet = workbook.addWorksheet('Part-Time')
+        const ftSheet = workbook.addWorksheet(language === 'vi' ? 'Toàn thời gian' : 'Full-Time')
+        const ptSheet = workbook.addWorksheet(language === 'vi' ? 'Bán thời gian' : 'Part-Time')
 
         ftSheet.columns = [
-            { header: 'Name', key: 'name', width: 25 },
-            { header: 'Position', key: 'position', width: 25 },
-            { header: 'Total Work Days', key: 'days', width: 18 },
-            { header: `13th Month (${exportYear})`, key: 'bonus13', width: 20, style: { numFmt: '#,##0' } },
-            { header: `14th Month (${exportYear})`, key: 'bonus14', width: 20, style: { numFmt: '#,##0' } },
-            { header: 'Total Current Bonus', key: 'total', width: 20, style: { numFmt: '#,##0' } }
+            { header: language === 'vi' ? 'Họ và tên' : 'Name', key: 'name', width: 25 },
+            { header: language === 'vi' ? 'Chức vụ' : 'Position', key: 'position', width: 25 },
+            { header: language === 'vi' ? 'Tổng số ngày làm việc' : 'Total Work Days', key: 'days', width: 18 },
+            { header: language === 'vi' ? `Thưởng tháng 13 (${exportYear})` : `13th Month (${exportYear})`, key: 'bonus13', width: 20, style: { numFmt: '#,##0' } },
+            { header: language === 'vi' ? `Thưởng tháng 14 (${exportYear})` : `14th Month (${exportYear})`, key: 'bonus14', width: 20, style: { numFmt: '#,##0' } },
+            { header: language === 'vi' ? 'Tổng tiền thưởng hiện tại' : 'Total Current Bonus', key: 'total', width: 20, style: { numFmt: '#,##0' } }
         ]
 
         ptSheet.columns = [
-            { header: 'Name', key: 'name', width: 25 },
-            { header: 'Position', key: 'position', width: 25 },
-            { header: 'Total Hours', key: 'hours', width: 15 },
-            { header: `Current Bonus (${exportYear})`, key: 'bonus', width: 20, style: { numFmt: '#,##0' } }
+            { header: language === 'vi' ? 'Họ và tên' : 'Name', key: 'name', width: 25 },
+            { header: language === 'vi' ? 'Chức vụ' : 'Position', key: 'position', width: 25 },
+            { header: language === 'vi' ? 'Tổng số giờ' : 'Total Hours', key: 'hours', width: 15 },
+            { header: language === 'vi' ? `Thưởng hiện tại (${exportYear})` : `Current Bonus (${exportYear})`, key: 'bonus', width: 20, style: { numFmt: '#,##0' } }
         ]
 
         ftSheet.getRow(1).font = { bold: true }
@@ -432,7 +434,7 @@ export default function BonusPage() {
         });
 
         const buffer = await workbook.xlsx.writeBuffer()
-        saveAs(new Blob([buffer]), `Bonus_Export_${exportYear}.xlsx`)
+        saveAs(new Blob([buffer]), language === 'vi' ? `Bao_cao_thuong_${exportYear}.xlsx` : `Bonus_Export_${exportYear}.xlsx`)
         
         setExportModalOpen(false)
     }
@@ -445,14 +447,14 @@ export default function BonusPage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Bonus Management</h1>
-                        <p className="text-sm text-slate-400 mt-1">Track staff tenure and calculate bonus eligibility for the selected year.</p>
+                        <h1 className="text-2xl font-bold text-white">{language === 'vi' ? 'Quản lý tiền thưởng' : 'Bonus Management'}</h1>
+                        <p className="text-sm text-slate-400 mt-1">{language === 'vi' ? 'Theo dõi thâm niên nhân viên và tính điều kiện nhận tiền thưởng cho năm đã chọn.' : 'Track staff tenure and calculate bonus eligibility for the selected year.'}</p>
                     </div>
                     <button 
                         onClick={() => setExportModalOpen(true)}
                         className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-white/10 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 shadow-sm"
                     >
-                        <FileDown className="w-4 h-4" /> Export
+                        <FileDown className="w-4 h-4" /> {language === 'vi' ? 'Xuất' : 'Export'}
                     </button>
                 </div>
 
@@ -460,36 +462,36 @@ export default function BonusPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div className="bg-slate-800 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
                         <div className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div> Full-Time Bonus
+                            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div> {language === 'vi' ? 'Thưởng toàn thời gian' : 'Full-Time Bonus'}
                         </div>
                         <div>
                             <div className="text-xl font-bold text-white">{fmtCurrency(totals.ftCurrent)} <span className="text-[10px] font-normal text-slate-500 font-mono">VND</span></div>
                             <div className="text-xs text-slate-400 mt-1 flex items-center justify-between">
-                                <span>Projected max:</span>
+                                <span>{language === 'vi' ? 'Tối đa dự kiến:' : 'Projected max:'}</span>
                                 <span className="font-medium text-blue-400">{fmtCurrency(totals.ftProjected)} <span className="text-[10px] font-normal">VND</span></span>
                             </div>
                         </div>
                     </div>
                     <div className="bg-slate-800 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
                         <div className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> Part-Time Bonus
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> {language === 'vi' ? 'Thưởng bán thời gian' : 'Part-Time Bonus'}
                         </div>
                         <div>
                             <div className="text-xl font-bold text-white">{fmtCurrency(totals.ptCurrent)} <span className="text-[10px] font-normal text-slate-500 font-mono">VND</span></div>
                             <div className="text-xs text-slate-400 mt-1 flex items-center justify-between">
-                                <span>Projected max:</span>
+                                <span>{language === 'vi' ? 'Tối đa dự kiến:' : 'Projected max:'}</span>
                                 <span className="font-medium text-emerald-400">{fmtCurrency(totals.ptProjected)} <span className="text-[10px] font-normal">VND</span></span>
                             </div>
                         </div>
                     </div>
                     <div className="bg-gradient-to-br from-indigo-900/40 to-blue-900/40 border border-indigo-500/20 rounded-xl p-4 flex flex-col justify-between">
                         <div className="text-sm font-medium text-indigo-200 mb-2 flex items-center gap-2">
-                            <Star className="w-3.5 h-3.5 text-indigo-400 fill-current" /> Grand Total Liability
+                            <Star className="w-3.5 h-3.5 text-indigo-400 fill-current" /> {language === 'vi' ? 'Tổng nghĩa vụ chi trả' : 'Grand Total Liability'}
                         </div>
                         <div>
                             <div className="text-2xl font-black text-white">{fmtCurrency(totals.grandCurrent)} <span className="text-[10px] font-normal text-indigo-300/50 font-mono">VND</span></div>
                             <div className="text-xs text-indigo-300/70 mt-1 flex items-center justify-between">
-                                <span>Projected absolute max:</span>
+                                <span>{language === 'vi' ? 'Tối đa tuyệt đối dự kiến:' : 'Projected absolute max:'}</span>
                                 <span className="font-bold text-indigo-300">{fmtCurrency(totals.grandProjected)} <span className="text-[10px] font-normal">VND</span></span>
                             </div>
                         </div>
@@ -503,20 +505,20 @@ export default function BonusPage() {
                             onClick={() => setActiveTab('full_time')}
                             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'full_time' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
                         >
-                            Full-Time
+                            {language === 'vi' ? 'Toàn thời gian' : 'Full-Time'}
                         </button>
                         <button 
                             onClick={() => setActiveTab('part_time')}
                             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'part_time' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
                         >
-                            Part-Time
+                            {language === 'vi' ? 'Bán thời gian' : 'Part-Time'}
                         </button>
                     </div>
 
                     <div className="flex items-center gap-3">
                         <div className="relative w-full sm:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)}
+                            <input type="text" placeholder={language === 'vi' ? 'Tìm kiếm nhân viên...' : 'Search staff...'} value={search} onChange={e => setSearch(e.target.value)}
                                 className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none" />
                             {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"><X className="w-3 h-3 text-slate-400" /></button>}
                         </div>
@@ -532,7 +534,7 @@ export default function BonusPage() {
                         className="flex items-center gap-1 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <ChevronLeft className="w-4 h-4" />
-                        <span>Previous</span>
+                        <span>{language === 'vi' ? 'Trước' : 'Previous'}</span>
                     </button>
 
                     <div className="flex items-center gap-2 text-white">
@@ -545,7 +547,7 @@ export default function BonusPage() {
                         disabled={selectedYear >= currentYear}
                         className="flex items-center gap-1 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <span>Next</span>
+                        <span>{language === 'vi' ? 'Tiếp theo' : 'Next'}</span>
                         <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
@@ -556,15 +558,15 @@ export default function BonusPage() {
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-gray-50/80 border-b border-gray-200">
-                                    <th className="text-left px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 w-1/4">Staff Member</th>
-                                    <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Total Tenure</th>
+                                    <th className="text-left px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 w-1/4">{language === 'vi' ? 'Nhân viên' : 'Staff Member'}</th>
+                                    <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Tổng thâm niên' : 'Total Tenure'}</th>
                                     {activeTab === 'part_time' ? (
-                                        <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Hours in {selectedYear}</th>
+                                        <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? `Số giờ trong năm ${selectedYear}` : `Hours in ${selectedYear}`}</th>
                                     ) : (
-                                        <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Tenure in {selectedYear}</th>
+                                        <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? `Thâm niên trong năm ${selectedYear}` : `Tenure in ${selectedYear}`}</th>
                                     )}
-                                    <th className="text-right px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 border-l border-gray-200/60 bg-white/50">Current Bonus</th>
-                                    <th className="text-right px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50/50 border-l border-blue-100">Projected Year-End</th>
+                                    <th className="text-right px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 border-l border-gray-200/60 bg-white/50">{language === 'vi' ? 'Thưởng hiện tại' : 'Current Bonus'}</th>
+                                    <th className="text-right px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50/50 border-l border-blue-100">{language === 'vi' ? 'Dự kiến cuối năm' : 'Projected Year-End'}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -573,7 +575,7 @@ export default function BonusPage() {
                                         <td colSpan={5} className="px-6 py-12 text-center">
                                             <div className="flex flex-col items-center justify-center text-gray-400">
                                                 <Users className="w-12 h-12 mb-3 opacity-20" />
-                                                <p className="text-sm font-medium text-gray-500">No {activeTab === 'full_time' ? 'full-time' : 'part-time'} staff found.</p>
+                                                <p className="text-sm font-medium text-gray-500">{language === 'vi' ? `Không tìm thấy nhân viên ${activeTab === 'full_time' ? 'toàn thời gian' : 'bán thời gian'}.` : `No ${activeTab === 'full_time' ? 'full-time' : 'part-time'} staff found.`}</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -637,7 +639,7 @@ export default function BonusPage() {
                                                         </span>
                                                         {currentData.raw14th > 0 && (
                                                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${!currentData.passes14thGate ? "bg-red-50 text-red-600 border-red-200" : "bg-indigo-50 text-indigo-600 border-indigo-200"}`}>
-                                                                14th: {fmtCurrency(currentData.raw14th)} {!currentData.passes14thGate && <span title="Gatekeeper Missed">⚠️ Missed</span>}
+                                                                14th: {fmtCurrency(currentData.raw14th)} {!currentData.passes14thGate && <span title={language === 'vi' ? 'Không đạt chỉ tiêu' : 'Gatekeeper Missed'}>{language === 'vi' ? '⚠️ Chưa đạt' : '⚠️ Missed'}</span>}
                                                             </span>
                                                         )}
                                                     </div>
@@ -672,11 +674,11 @@ export default function BonusPage() {
                                                 <div className="flex flex-col items-end gap-1 mt-1.5">
                                                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
                                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                                            {hours} hrs (capped at {fmtCurrency(hrBonusPtMaxCap)})
+                                                            {language === 'vi' ? `${hours} giờ (giới hạn ở ${fmtCurrency(hrBonusPtMaxCap)})` : `${hours} hrs (capped at ${fmtCurrency(hrBonusPtMaxCap)})`}
                                                         </span>
                                                         {!passesGate && (
                                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
-                                                                ⚠️ Missed
+                                                                {language === 'vi' ? '⚠️ Chưa đạt' : '⚠️ Missed'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -685,7 +687,7 @@ export default function BonusPage() {
                                             detailsLine2 = (
                                                 <div className="flex flex-col items-end gap-1 mt-1.5">
                                                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100/50 text-blue-700 border border-blue-200/50">
-                                                        {selectedYear === currentYear ? `Max cap assumption` : `${hours} hrs`}
+                                                        {selectedYear === currentYear ? (language === 'vi' ? 'Giả định mức trần tối đa' : 'Max cap assumption') : (language === 'vi' ? `${hours} giờ` : `${hours} hrs`)}
                                                     </span>
                                                 </div>
                                             );
@@ -712,8 +714,8 @@ export default function BonusPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="text-sm font-medium text-gray-900">{formatTenure(totalTenureCurrent)}</div>
-                                                    <div className="text-xs text-gray-500">{totalTenureCurrent.totalDays} days</div>
+                                                    <div className="text-sm font-medium text-gray-900">{formatTenure(totalTenureCurrent, language)}</div>
+                                                    <div className="text-xs text-gray-500">{language === 'vi' ? `${totalTenureCurrent.totalDays} ngày` : `${totalTenureCurrent.totalDays} days`}</div>
                                                 </td>
                                                 <td className="px-4 py-3 whitespace-nowrap">
                                                     {activeTab === 'part_time' ? (
@@ -726,16 +728,16 @@ export default function BonusPage() {
                                                                 onBlur={(e) => handleUpdateHours(staff.id, e.target.value)}
                                                                 className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
                                                             />
-                                                            <span className="text-xs text-gray-500">hrs</span>
+                                                            <span className="text-xs text-gray-500">{language === 'vi' ? 'giờ' : 'hrs'}</span>
                                                         </div>
                                                     ) : (
                                                         workedThisYear ? (
                                                             <>
-                                                                <div className="text-sm font-medium text-blue-700">{formatTenure(tenureInYear)}</div>
-                                                                <div className="text-xs text-gray-500">{tenureInYear.totalDays} days</div>
+                                                                <div className="text-sm font-medium text-blue-700">{formatTenure(tenureInYear, language)}</div>
+                                                                <div className="text-xs text-gray-500">{language === 'vi' ? `${tenureInYear.totalDays} ngày` : `${tenureInYear.totalDays} days`}</div>
                                                             </>
                                                         ) : (
-                                                            <span className="text-sm text-gray-400 italic">Not employed</span>
+                                                            <span className="text-sm text-gray-400 italic">{language === 'vi' ? 'Chưa vào làm' : 'Not employed'}</span>
                                                         )
                                                     )}
                                                 </td>
@@ -770,7 +772,7 @@ export default function BonusPage() {
             </div>
 
             {exportModalOpen && (
-                <ExportModalYear onClose={() => setExportModalOpen(false)} onExport={handleExport} currentYear={currentYear} />
+                <ExportModalYear onClose={() => setExportModalOpen(false)} onExport={handleExport} currentYear={currentYear} language={language} />
             )}
         </div>
     )

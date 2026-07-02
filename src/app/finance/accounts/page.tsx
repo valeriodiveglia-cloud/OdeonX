@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Landmark, Plus, X, ArrowUpRight, ArrowDownRight, ArrowLeftRight, Pencil, Trash2, Briefcase, CircleDollarSign, CheckCircle2, ChevronLeft, ChevronRight, Search, Filter, MoreVertical, Wallet, AlertTriangle, CreditCard, Coins } from 'lucide-react'
+import { Landmark, Plus, X, ArrowUpRight, ArrowDownRight, ArrowLeftRight, Pencil, Trash2, Briefcase, CircleDollarSign, CheckCircle2, ChevronLeft, ChevronRight, Search, Filter, MoreVertical, Wallet, AlertTriangle, CreditCard, Coins, XCircle, Archive, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
 import CircularLoader from '@/components/CircularLoader'
@@ -68,9 +68,10 @@ export default function BankAccountsPage() {
     const syncLock = React.useRef(false)
 
     const [coas, setCoas] = useState<FinChartOfAccount[]>([])
+    const [accountsWithRecords, setAccountsWithRecords] = useState<Set<string>>(new Set())
 
     // Account form
-    const [accForm, setAccForm] = useState({ account_name: '', bank_name: '', account_number: '', account_type: 'Checking' as string, opening_balance: '', branch_id: '', notes: '', online_payment_fee: '0', bank_transfer_fee: '0', fee_account_id: '', currency: '', is_corporate_card: false, is_default_corporate_card: false })
+    const [accForm, setAccForm] = useState({ account_name: '', bank_name: '', account_number: '', account_type: 'Checking' as string, opening_balance: '', branch_id: '', notes: '', online_payment_fee: '0', bank_transfer_fee: '0', fee_account_id: '', currency: '', is_corporate_card: false, is_default_corporate_card: false, is_active: true })
     // Transaction form
     const [txForm, setTxForm] = useState({ type: 'Inflow' as string, category: '', description: '', amount: '', transaction_date: new Date().toISOString().split('T')[0], notes: '' })
 
@@ -94,11 +95,14 @@ export default function BankAccountsPage() {
 
     const fetchAccounts = async () => {
         setLoading(true)
-        const [accRes, brRes, coaRes, mapRes] = await Promise.all([
+        const [accRes, brRes, coaRes, mapRes, txAccRes, poAccRes, invAccRes] = await Promise.all([
             supabase.from('fin_bank_accounts').select('*, provider_branches(name)').order('account_name'),
-            supabase.from('provider_branches').select('id, name, bank, account_number, bank_account_name').order('name'),
+            supabase.from('provider_branches').select('id, name, bank, account_number, bank_account_name').eq('is_active', true).order('name'),
             supabase.from('fin_chart_of_accounts').select('*').eq('is_active', true).order('sort_order'),
-            supabase.from('fin_revenue_channel_mapping').select('*')
+            supabase.from('fin_revenue_channel_mapping').select('*'),
+            supabase.from('fin_bank_transactions').select('account_id'),
+            supabase.from('fin_payment_orders').select('bank_account_id').not('bank_account_id', 'is', null),
+            supabase.from('fin_invoices').select('paid_from_account_id').not('paid_from_account_id', 'is', null)
         ])
         
         let fetchedAccounts = accRes.data as any[] || []
@@ -106,6 +110,12 @@ export default function BankAccountsPage() {
         const fetchedCoas = coaRes.data as FinChartOfAccount[] || []
         const fetchedMappings = mapRes.data as any[] || []
         setMappings(fetchedMappings)
+
+        const idsWithRecords = new Set<string>()
+        if (txAccRes?.data) txAccRes.data.forEach((r: any) => { if (r.account_id) idsWithRecords.add(r.account_id) })
+        if (poAccRes?.data) poAccRes.data.forEach((r: any) => { if (r.bank_account_id) idsWithRecords.add(r.bank_account_id) })
+        if (invAccRes?.data) invAccRes.data.forEach((r: any) => { if (r.paid_from_account_id) idsWithRecords.add(r.paid_from_account_id) })
+        setAccountsWithRecords(idsWithRecords)
         
         // Auto-sync missing branches into fin_bank_accounts
         if (!syncLock.current) {
@@ -295,6 +305,7 @@ export default function BankAccountsPage() {
                     currency: accForm.currency || currency,
                     is_corporate_card: accForm.is_corporate_card,
                     is_default_corporate_card: accForm.is_default_corporate_card,
+                    is_active: accForm.is_active,
                 }).eq('id', editingAccount.id)
                 if (error) throw error
             } else {
@@ -308,12 +319,13 @@ export default function BankAccountsPage() {
                     fee_account_id: accForm.fee_account_id || null,
                     is_corporate_card: accForm.is_corporate_card,
                     is_default_corporate_card: accForm.is_default_corporate_card,
+                    is_active: accForm.is_active,
                 })
                 if (error) throw error
             }
             setShowAddAccount(false)
             setEditingAccount(null)
-            setAccForm({ account_name: '', bank_name: '', account_number: '', account_type: 'Checking', opening_balance: '', branch_id: '', notes: '', online_payment_fee: '0', bank_transfer_fee: '0', fee_account_id: '', currency: '', is_corporate_card: false, is_default_corporate_card: false })
+            setAccForm({ account_name: '', bank_name: '', account_number: '', account_type: 'Checking', opening_balance: '', branch_id: '', notes: '', online_payment_fee: '0', bank_transfer_fee: '0', fee_account_id: '', currency: '', is_corporate_card: false, is_default_corporate_card: false, is_active: true })
             fetchAccounts()
         } catch (err: any) { alert(t(language, 'FinAccAlertFailed') + err.message) }
         setSaving(false)
@@ -329,7 +341,8 @@ export default function BankAccountsPage() {
             fee_account_id: acc.fee_account_id || '',
             currency: acc.currency || currency,
             is_corporate_card: acc.is_corporate_card || false,
-            is_default_corporate_card: acc.is_default_corporate_card || false
+            is_default_corporate_card: acc.is_default_corporate_card || false,
+            is_active: acc.is_active !== false
         })
         setShowAddAccount(true)
     }
@@ -359,12 +372,51 @@ export default function BankAccountsPage() {
         setSaving(false)
     }
 
+    const handleArchiveAccount = async (id: string, active: boolean) => {
+        const confirmMsg = active 
+            ? (language === 'vi' ? 'Bạn có chắc chắn muốn kích hoạt lại tài khoản này không?' : 'Are you sure you want to reactivate this account?')
+            : (language === 'vi' ? 'Bạn có chắc chắn muốn ngừng hoạt động tài khoản này không?' : 'Are you sure you want to deactivate/archive this account?')
+        if (!confirm(confirmMsg)) return
+
+        try {
+            setSaving(true)
+            const { error } = await supabase
+                .from('fin_bank_accounts')
+                .update({ is_active: active })
+                .eq('id', id)
+            if (error) throw error
+
+            if (!active && selectedAccount?.id === id) {
+                setSelectedAccount(null)
+                setTransactions([])
+            }
+            fetchAccounts()
+        } catch (err: any) {
+            alert(t(language, 'FinAccAlertFailed') + ' ' + err.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
     const handleDeleteAccount = async (id: string) => {
+        if (accountsWithRecords.has(id)) {
+            alert(t(language, 'FinAccAlertCannotDeleteHasTransactions'))
+            return
+        }
         if (!confirm(t(language, 'FinAccAlertDeleteAccountConfirm'))) return
-        await supabase.from('fin_bank_transactions').delete().eq('account_id', id)
-        await supabase.from('fin_bank_accounts').delete().eq('id', id)
-        if (selectedAccount?.id === id) { setSelectedAccount(null); setTransactions([]) }
-        fetchAccounts()
+        
+        try {
+            setSaving(true)
+            await supabase.from('fin_bank_transactions').delete().eq('account_id', id)
+            const { error } = await supabase.from('fin_bank_accounts').delete().eq('id', id)
+            if (error) throw error
+            if (selectedAccount?.id === id) { setSelectedAccount(null); setTransactions([]) }
+            fetchAccounts()
+        } catch (err: any) {
+            alert(t(language, 'FinAccAlertFailed') + ' ' + err.message)
+        } finally {
+            setSaving(false)
+        }
     }
 
     const activeBaseCurrency = currency || 'VND'
@@ -710,7 +762,14 @@ export default function BankAccountsPage() {
                                             {activeTab === 'Bank' ? <Landmark className="w-5 h-5" /> : activeTab === 'Cash' ? <CircleDollarSign className="w-5 h-5" /> : <Wallet className="w-5 h-5" />}
                                         </div>
                                         <div>
-                                            <div className="font-bold text-slate-900">{acc.account_name}</div>
+                                            <div className="font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                                                <span>{acc.account_name}</span>
+                                                {acc.is_active === false && (
+                                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-bold text-[9px] border border-slate-200 uppercase tracking-wider">
+                                                        {t(language, 'FinAccDeactivatedBadge')}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                                                 {acc.account_number && <span className="font-semibold text-slate-600">{acc.account_number}</span>}
                                                 <span>{acc.bank_name || getAccountTypeLabel(acc.account_type)}{acc.provider_branches ? ` • ${(acc as any).provider_branches.name}` : ''}</span>
@@ -727,13 +786,33 @@ export default function BankAccountsPage() {
                                     {activeTab !== 'Wallet' && (
                                         <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition">
                                             <button onClick={(e) => { e.stopPropagation(); handleEditAccount(acc) }}
-                                                className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition">
+                                                className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition"
+                                                title={language === 'vi' ? 'Sửa' : 'Edit'}>
                                                 <Pencil className="w-3.5 h-3.5" />
                                             </button>
-                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id) }}
-                                                className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition">
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
+                                            {!acc.branch_id && (
+                                                acc.is_active !== false ? (
+                                                    accountsWithRecords.has(acc.id) ? (
+                                                        <button onClick={(e) => { e.stopPropagation(); handleArchiveAccount(acc.id, false) }}
+                                                            className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"
+                                                            title={language === 'vi' ? 'Ngừng hoạt động' : 'Archive / Deactivate'}>
+                                                            <Archive className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    ) : (
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id) }}
+                                                            className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"
+                                                            title={language === 'vi' ? 'Xóa' : 'Delete'}>
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )
+                                                ) : (
+                                                    <button onClick={(e) => { e.stopPropagation(); handleArchiveAccount(acc.id, true) }}
+                                                        className="p-1.5 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-500 transition"
+                                                        title={language === 'vi' ? 'Kích hoạt lại' : 'Reactivate'}>
+                                                        <RotateCcw className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -1051,6 +1130,25 @@ export default function BankAccountsPage() {
                                                 </label>
                                             )}
                                         </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {editingAccount && (
+                                <>
+                                    <hr className="border-slate-100" />
+                                    <div>
+                                        <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                            <XCircle className="w-4 h-4 text-slate-500" />
+                                            {language === 'vi' ? 'Trạng thái hoạt động' : 'Account Status'}
+                                        </h3>
+                                        <label className="flex items-center gap-3 p-3 border border-slate-200 bg-white rounded-xl cursor-pointer hover:border-blue-300 transition">
+                                            <input type="checkbox" checked={accForm.is_active} onChange={e => setAccForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500" />
+                                            <div>
+                                                <div className="font-bold text-slate-900 text-sm">{t(language, 'FinAccModalIsActive')}</div>
+                                                <div className="text-xs text-slate-500 mt-0.5">{language === 'vi' ? 'Nếu không hoạt động, tài khoản này sẽ bị ẩn khỏi các lựa chọn thanh toán mới nhưng giữ lại dữ liệu lịch sử.' : 'If inactive, this account will be hidden from new payment selections but historical data remains intact.'}</div>
+                                            </div>
+                                        </label>
                                     </div>
                                 </>
                             )}

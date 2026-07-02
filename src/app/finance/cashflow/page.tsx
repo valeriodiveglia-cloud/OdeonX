@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Briefcase, Landmark, CircleDollarSign, BarChart3 } from 'lucide-react'
+import { ChevronDown, ChevronRight as ChevronRightIcon, Briefcase, Landmark, CircleDollarSign, BarChart3 } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
 import { t } from '@/lib/i18n'
+import MonthPicker from '@/components/MonthPicker'
 import CircularLoader from '@/components/CircularLoader'
 import { computeCashFlowData } from './utils/cashflowCalculator'
 import CashFlowStatisticsModal from './components/CashFlowStatisticsModal'
@@ -168,23 +169,7 @@ export default function CashFlowPage() {
 
     const { summary, drilldown } = cashFlowData
 
-    // Navigation functions
-    const prevMonth = () => {
-        const [y, m] = month.split('-').map(Number)
-        if (m === 1) setMonth(`${y - 1}-12`)
-        else setMonth(`${y}-${String(m - 1).padStart(2, '0')}`)
-    }
-
-    const nextMonth = () => {
-        const [y, m] = month.split('-').map(Number)
-        if (m === 12) setMonth(`${y + 1}-01`)
-        else setMonth(`${y}-${String(m + 1).padStart(2, '0')}`)
-    }
-
-    const fmtMonth = (m: string) => { 
-        const [y, mo] = m.split('-').map(Number)
-        return new Date(y, mo - 1, 1).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' }) 
-    }
+    // Navigation functions (handled by MonthPicker)
 
     const renderSectionHeader = (title: string, sectionKey: 'Operating' | 'Investing' | 'Financing', net: number) => {
         const expanded = expandedSections[sectionKey]
@@ -388,18 +373,13 @@ export default function CashFlowPage() {
                         </div>
                     </div>
 
-                    {/* Month Navigation for Table */}
-                    <div className="grid grid-cols-3 items-center mb-1 mt-6">
-                        <button onClick={prevMonth} className="justify-self-start text-sm font-semibold text-emerald-600 hover:text-emerald-800 hover:underline transition flex items-center gap-1">
-                            <ChevronLeft className="w-4 h-4" /> {t(language, 'FinCFPrevious')}
-                        </button>
-                        <div className="justify-self-center text-lg font-bold text-slate-900">
-                            {fmtMonth(month)}
-                        </div>
-                        <button onClick={nextMonth} className="justify-self-end text-sm font-semibold text-emerald-600 hover:text-emerald-800 hover:underline transition flex items-center gap-1">
-                            {t(language, 'FinCFNext')} <ChevronRight className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <MonthPicker
+                        value={month}
+                        onChange={setMonth}
+                        language={language}
+                        colorClass="text-blue-600 hover:text-blue-800"
+                        className="mb-1 mt-6"
+                    />
 
                     {/* Drill-down Table */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">

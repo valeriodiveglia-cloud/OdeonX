@@ -34,7 +34,7 @@ export function HiringRequestForm({ initialData }: HiringRequestFormProps) {
     const router = useRouter()
     const { language } = useSettings() // Using context for language if needed later
     const [submitting, setSubmitting] = useState(false)
-    const [branches, setBranches] = useState<{ id: string, name: string }[]>([])
+    const [branches, setBranches] = useState<{ id: string, name: string, is_active?: boolean }[]>([])
     const [loadingBranches, setLoadingBranches] = useState(true)
     const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false)
 
@@ -58,11 +58,11 @@ export function HiringRequestForm({ initialData }: HiringRequestFormProps) {
             try {
                 const { data } = await supabase
                     .from('provider_branches')
-                    .select('id, name')
+                    .select('id, name, is_active')
                     .order('name')
 
                 if (data) {
-                    setBranches(data.map(b => ({ id: String(b.id), name: b.name })))
+                    setBranches(data.map(b => ({ id: String(b.id), name: b.name, is_active: (b as any).is_active })))
                 }
             } catch (err) {
                 console.error('Failed to load branches', err)
@@ -236,7 +236,7 @@ export function HiringRequestForm({ initialData }: HiringRequestFormProps) {
 
                         {isBranchDropdownOpen && (
                             <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
-                                {branches.map((b) => (
+                                {branches.filter(b => b.is_active !== false || (formData.branch_ids as string[]).includes(b.id)).map((b) => (
                                     <div
                                         key={b.id}
                                         className="relative flex cursor-pointer select-none items-center py-2 pl-3 pr-9 hover:bg-gray-100"

@@ -4,6 +4,7 @@ import { useState, useEffect, Fragment } from 'react'
 import { ShiftType, getShiftTypes, saveShiftTypes, DEFAULT_SHIFT_TYPES, getOvertimeSettings, saveOvertimeSettings, AutoScheduleTimeSlot, getAutoScheduleTimeSlots, saveAutoScheduleTimeSlots } from '@/lib/hr-operational-data'
 import { supabase } from '@/lib/supabase_shim'
 import { Plus, Pencil, Trash2, X, RotateCcw, GitBranch, Globe, Briefcase, Clock, Target, Wand2 } from 'lucide-react'
+import { useSettings } from '@/contexts/SettingsContext'
 
 const PRESET_COLORS = [
     '#3B82F6', '#F59E0B', '#8B5CF6', '#10B981', '#06B6D4',
@@ -18,6 +19,7 @@ const emptyShift = (): Omit<ShiftType, 'id'> => ({
 })
 
 export default function HROperationalSettingsPage() {
+    const { language } = useSettings()
     const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([])
     const [editing, setEditing] = useState<ShiftType | null>(null)
     const [isNew, setIsNew] = useState(false)
@@ -67,7 +69,7 @@ export default function HROperationalSettingsPage() {
 
     const save = () => {
         if (!editing) return
-        if (!editing.name || !editing.code) return alert('Name and Code are required.')
+        if (!editing.name || !editing.code) return alert(language === 'vi' ? 'Tên và Mã là bắt buộc.' : 'Name and Code are required.')
 
         let updated: ShiftType[]
         if (isNew) {
@@ -81,14 +83,14 @@ export default function HROperationalSettingsPage() {
     }
 
     const remove = (id: string) => {
-        if (!confirm('Delete this shift type?')) return
+        if (!confirm(language === 'vi' ? 'Xóa loại ca làm việc này?' : 'Delete this shift type?')) return
         const updated = shiftTypes.filter(s => s.id !== id)
         setShiftTypes(updated)
         saveShiftTypes(updated)
     }
 
     const resetDefaults = () => {
-        if (!confirm('Reset to default shift types? This will overwrite your customizations.')) return
+        if (!confirm(language === 'vi' ? 'Đặt lại về các loại ca mặc định? Thao tác này sẽ ghi đè lên các tùy chỉnh của bạn.' : 'Reset to default shift types? This will overwrite your customizations.')) return
         setShiftTypes(DEFAULT_SHIFT_TYPES)
         saveShiftTypes(DEFAULT_SHIFT_TYPES)
     }
@@ -172,7 +174,7 @@ export default function HROperationalSettingsPage() {
         const newSlot: AutoScheduleTimeSlot = {
             id: `ts-${Date.now()}`,
             branchId: selectedBranchId,
-            name: 'New Time Slot',
+            name: language === 'vi' ? 'Khung giờ mới' : 'New Time Slot',
             startTime: '12:00',
             endTime: '15:00',
             targets: {}
@@ -189,7 +191,7 @@ export default function HROperationalSettingsPage() {
     }
 
     const removeTimeSlot = (slotId: string) => {
-        if (!confirm('Remove this time slot?')) return
+        if (!confirm(language === 'vi' ? 'Xóa khung giờ này?' : 'Remove this time slot?')) return
         const newSlots = autoScheduleTimeSlots.filter(s => s.id !== slotId)
         setAutoScheduleTimeSlots(newSlots)
         saveAutoScheduleTimeSlots(newSlots)
@@ -218,9 +220,11 @@ export default function HROperationalSettingsPage() {
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-                            Operational Settings
+                            {language === 'vi' ? 'Cài đặt Vận hành' : 'Operational Settings'}
                         </h1>
-                        <p className="text-sm text-slate-400 mt-1">Configure shift types, scheduling parameters, and overtime factors.</p>
+                        <p className="text-sm text-slate-400 mt-1">
+                            {language === 'vi' ? 'Cấu hình các loại ca làm việc, tham số lập lịch, và các hệ số tăng ca.' : 'Configure shift types, scheduling parameters, and overtime factors.'}
+                        </p>
                     </div>
                 </div>
 
@@ -231,21 +235,21 @@ export default function HROperationalSettingsPage() {
                             activeTab === 'shifts' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'
                         }`}>
                         <Briefcase className="w-4 h-4" />
-                        Shifts
+                        {language === 'vi' ? 'Ca làm việc' : 'Shifts'}
                     </button>
                     <button onClick={() => setActiveTab('overtime')}
                         className={`min-w-[120px] flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
                             activeTab === 'overtime' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'
                         }`}>
                         <Clock className="w-4 h-4" />
-                        Overtime
+                        {language === 'vi' ? 'Tăng ca' : 'Overtime'}
                     </button>
                     <button onClick={() => setActiveTab('auto-schedule')}
                         className={`min-w-[150px] flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
                             activeTab === 'auto-schedule' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'
                         }`}>
                         <Target className="w-4 h-4" />
-                        Auto-Schedule Targets
+                        {language === 'vi' ? 'Mục tiêu Tự động Sắp ca' : 'Auto-Schedule Targets'}
                     </button>
                 </div>
 
@@ -257,14 +261,14 @@ export default function HROperationalSettingsPage() {
                             className="flex items-center gap-2 px-3 py-2 text-xs rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 transition"
                         >
                             <RotateCcw className="w-3.5 h-3.5" />
-                            Reset Defaults
+                            {language === 'vi' ? 'Đặt lại Mặc định' : 'Reset Defaults'}
                         </button>
                         <button
                             onClick={openNew}
                             className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition shadow"
                         >
                             <Plus className="w-4 h-4" />
-                            Add Shift Type
+                            {language === 'vi' ? 'Thêm Loại Ca' : 'Add Shift Type'}
                         </button>
                     </div>
 
@@ -273,14 +277,14 @@ export default function HROperationalSettingsPage() {
                     <table className="w-full">
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
-                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Color</th>
-                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Name</th>
-                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Code</th>
-                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Time</th>
-                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Hours</th>
-                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Type</th>
-                                <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500" title="Allow parallel shift in another branch">Cross-Branch</th>
-                                <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Actions</th>
+                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Màu sắc' : 'Color'}</th>
+                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Tên' : 'Name'}</th>
+                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Mã' : 'Code'}</th>
+                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Thời gian' : 'Time'}</th>
+                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Số giờ' : 'Hours'}</th>
+                                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Loại' : 'Type'}</th>
+                                <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500" title={language === 'vi' ? 'Cho phép ca song song ở chi nhánh khác' : 'Allow parallel shift in another branch'}>{language === 'vi' ? 'Liên Chi nhánh' : 'Cross-Branch'}</th>
+                                <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Hành động' : 'Actions'}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -308,23 +312,23 @@ export default function HROperationalSettingsPage() {
                                     <td className="px-4 py-3 text-sm text-gray-600">{st.hours > 0 ? `${st.hours}h` : '—'}</td>
                                     <td className="px-4 py-3">
                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${st.type === 'work' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                            {st.type}
+                                            {st.type === 'work' ? (language === 'vi' ? 'Làm việc' : 'work') : (language === 'vi' ? 'Nghỉ phép' : 'leave')}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-center">
                                         <div className="flex items-center justify-center gap-2">
                                             {st.globalAcrossBranches && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700" title="Appears in all branches">
-                                                    <Globe className="w-3 h-3" />Global
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700" title={language === 'vi' ? 'Xuất hiện ở tất cả chi nhánh' : 'Appears in all branches'}>
+                                                    <Globe className="w-3 h-3" />{language === 'vi' ? 'Toàn cục' : 'Global'}
                                                 </span>
                                             )}
                                             {st.allowParallel && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-100 text-sky-700" title="Can work same slot in another branch">
-                                                    <GitBranch className="w-3 h-3" />Parallel
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-100 text-sky-700" title={language === 'vi' ? 'Có thể làm cùng khung giờ ở chi nhánh khác' : 'Can work same slot in another branch'}>
+                                                    <GitBranch className="w-3 h-3" />{language === 'vi' ? 'Song song' : 'Parallel'}
                                                 </span>
                                             )}
                                             {!st.globalAcrossBranches && !st.allowParallel && (
-                                                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-400">Exclusive</span>
+                                                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-400">{language === 'vi' ? 'Độc quyền' : 'Exclusive'}</span>
                                             )}
                                         </div>
                                     </td>
@@ -343,7 +347,7 @@ export default function HROperationalSettingsPage() {
                             {shiftTypes.length === 0 && (
                                 <tr>
                                     <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                                        No shift types configured. Add one or reset to defaults.
+                                        {language === 'vi' ? 'Chưa cấu hình loại ca làm việc nào. Hãy thêm mới hoặc đặt lại về mặc định.' : 'No shift types configured. Add one or reset to defaults.'}
                                     </td>
                                 </tr>
                             )}
@@ -360,23 +364,23 @@ export default function HROperationalSettingsPage() {
                                 <Clock className="w-5 h-5 text-blue-600" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-gray-900">Overtime Multipliers</h2>
-                                <p className="text-sm text-gray-500">Configure multipliers for overtime compensation via Salary or Annual Leave.</p>
+                                <h2 className="text-lg font-bold text-gray-900">{language === 'vi' ? 'Hệ số Tăng ca' : 'Overtime Multipliers'}</h2>
+                                <p className="text-sm text-gray-500">{language === 'vi' ? 'Cấu hình hệ số đền bù tăng ca qua Lương hoặc Nghỉ phép năm.' : 'Configure multipliers for overtime compensation via Salary or Annual Leave.'}</p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             {/* Salary Card */}
                             <div className="p-5 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                                <label className="block text-base font-semibold text-gray-800 mb-1">Paid via Salary</label>
+                                <label className="block text-base font-semibold text-gray-800 mb-1">{language === 'vi' ? 'Thanh toán qua Lương' : 'Paid via Salary'}</label>
                                 <p className="text-xs text-gray-500 mb-5 h-8">
-                                    Multipliers applied when overtime hours are paid through the normal payroll.
+                                    {language === 'vi' ? 'Các hệ số được áp dụng khi số giờ tăng ca được chi trả qua bảng lương thông thường.' : 'Multipliers applied when overtime hours are paid through the normal payroll.'}
                                 </p>
                                 
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center justify-between">
-                                            <span>Standard Overtime</span>
+                                            <span>{language === 'vi' ? 'Tăng ca thông thường' : 'Standard Overtime'}</span>
                                         </label>
                                         <div className="relative">
                                             <input 
@@ -391,7 +395,7 @@ export default function HROperationalSettingsPage() {
                                     
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center justify-between">
-                                            <span>Public Holiday Overtime</span>
+                                            <span>{language === 'vi' ? 'Tăng ca ngày Lễ' : 'Public Holiday Overtime'}</span>
                                         </label>
                                         <div className="relative">
                                             <input 
@@ -408,15 +412,15 @@ export default function HROperationalSettingsPage() {
                             
                             {/* Annual Leave Card */}
                             <div className="p-5 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                                <label className="block text-base font-semibold text-gray-800 mb-1">Compensated via Annual Leave</label>
+                                <label className="block text-base font-semibold text-gray-800 mb-1">{language === 'vi' ? 'Đền bù qua Nghỉ phép năm' : 'Compensated via Annual Leave'}</label>
                                 <p className="text-xs text-gray-500 mb-5 h-8">
-                                    Multipliers applied when overtime is converted into time off (ROL / Holidays).
+                                    {language === 'vi' ? 'Các hệ số được áp dụng khi thời gian tăng ca được quy đổi thành ngày nghỉ (ROL / Ngày lễ).' : 'Multipliers applied when overtime is converted into time off (ROL / Holidays).'}
                                 </p>
                                 
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center justify-between">
-                                            <span>Standard Overtime</span>
+                                            <span>{language === 'vi' ? 'Tăng ca thông thường' : 'Standard Overtime'}</span>
                                         </label>
                                         <div className="relative">
                                             <input 
@@ -431,7 +435,7 @@ export default function HROperationalSettingsPage() {
                                     
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center justify-between">
-                                            <span>Public Holiday Overtime</span>
+                                            <span>{language === 'vi' ? 'Tăng ca ngày Lễ' : 'Public Holiday Overtime'}</span>
                                         </label>
                                         <div className="relative">
                                             <input 
@@ -457,14 +461,14 @@ export default function HROperationalSettingsPage() {
                                     <Target className="w-5 h-5 text-indigo-600" />
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-bold text-gray-900">Auto-Schedule Targets</h2>
-                                    <p className="text-sm text-gray-500">Set minimum required skill points per shift for automatic scheduling.</p>
+                                    <h2 className="text-lg font-bold text-gray-900">{language === 'vi' ? 'Mục tiêu Tự động Sắp ca' : 'Auto-Schedule Targets'}</h2>
+                                    <p className="text-sm text-gray-500">{language === 'vi' ? 'Thiết lập số điểm kỹ năng tối thiểu yêu cầu cho mỗi ca để tự động lập lịch.' : 'Set minimum required skill points per shift for automatic scheduling.'}</p>
                                 </div>
                             </div>
 
                             {/* Branch Selector */}
                             <div className="min-w-[200px]">
-                                <label className="block text-xs font-medium text-gray-500 mb-1">Select Branch</label>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Chọn chi nhánh' : 'Select Branch'}</label>
                                 <select 
                                     className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block px-3 py-2 outline-none"
                                     value={selectedBranchId}
@@ -473,7 +477,7 @@ export default function HROperationalSettingsPage() {
                                     {providerBranches.map(b => (
                                         <option key={b.id} value={b.id}>{b.name}</option>
                                     ))}
-                                    {providerBranches.length === 0 && <option value="">Loading branches...</option>}
+                                    {providerBranches.length === 0 && <option value="">{language === 'vi' ? 'Đang tải chi nhánh...' : 'Loading branches...'}</option>}
                                 </select>
                             </div>
                         </div>
@@ -481,22 +485,24 @@ export default function HROperationalSettingsPage() {
                         {selectedBranchId ? (
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-sm font-semibold text-gray-700">Time Slots for Targets</h3>
+                                    <h3 className="text-sm font-semibold text-gray-700">{language === 'vi' ? 'Khung giờ cho mục tiêu' : 'Time Slots for Targets'}</h3>
                                     <button 
                                         onClick={addTimeSlot}
                                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors"
                                     >
                                         <Plus className="w-3.5 h-3.5" />
-                                        Add Time Slot
+                                        {language === 'vi' ? 'Thêm khung giờ' : 'Add Time Slot'}
                                     </button>
                                 </div>
                                 <div className="overflow-x-auto rounded-xl border border-gray-200">
                                     <table className="w-full text-sm text-left">
                                         <thead className="bg-gray-50 text-gray-600 font-medium">
                                             <tr>
-                                                <th className="px-4 py-3 border-b border-gray-200 min-w-[250px]">Time Slot Configuration</th>
+                                                <th className="px-4 py-3 border-b border-gray-200 min-w-[250px]">{language === 'vi' ? 'Cấu hình Khung giờ' : 'Time Slot Configuration'}</th>
                                                 {DAYS.map(d => (
-                                                    <th key={d.index} className="px-3 py-3 border-b border-gray-200 text-center w-[90px]">{d.label}</th>
+                                                    <th key={d.index} className="px-3 py-3 border-b border-gray-200 text-center w-[90px]">
+                                                        {language === 'vi' ? ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'][d.index] : d.label}
+                                                    </th>
                                                 ))}
                                                 <th className="px-3 py-3 border-b border-gray-200 w-[50px]"></th>
                                             </tr>
@@ -513,7 +519,7 @@ export default function HROperationalSettingsPage() {
                                                                         type="text" 
                                                                         value={slot.name}
                                                                         onChange={(e) => updateTimeSlotField(slot.id, 'name', e.target.value)}
-                                                                        placeholder="Slot Name (e.g. Lunch)"
+                                                                        placeholder={language === 'vi' ? 'Tên khung giờ (ví dụ: Ăn trưa)' : 'Slot Name (e.g. Lunch)'}
                                                                         className="text-sm font-bold text-indigo-900 bg-transparent border-b border-dashed border-indigo-300 focus:border-indigo-500 outline-none pb-0.5 min-w-[150px]"
                                                                     />
                                                                     <div className="flex items-center gap-2 text-xs text-indigo-700">
@@ -524,7 +530,7 @@ export default function HROperationalSettingsPage() {
                                                                             onChange={(e) => updateTimeSlotField(slot.id, 'startTime', e.target.value)}
                                                                             className="bg-white/60 border border-indigo-200 rounded px-1.5 py-1 outline-none focus:border-indigo-500"
                                                                         />
-                                                                        <span>to</span>
+                                                                        <span>{language === 'vi' ? 'đến' : 'to'}</span>
                                                                         <input 
                                                                             type="time" 
                                                                             value={slot.endTime}
@@ -536,7 +542,7 @@ export default function HROperationalSettingsPage() {
                                                                 <button 
                                                                     onClick={() => removeTimeSlot(slot.id)}
                                                                     className="p-1.5 text-indigo-400 hover:text-red-500 hover:bg-white rounded-md transition-colors"
-                                                                    title="Delete Time Slot"
+                                                                    title={language === 'vi' ? 'Xóa Khung giờ' : 'Delete Time Slot'}
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </button>
@@ -569,7 +575,7 @@ export default function HROperationalSettingsPage() {
                                             {autoScheduleTimeSlots.filter(s => s.branchId === selectedBranchId).length === 0 && (
                                                 <tr>
                                                     <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                                                        No time slots defined for this branch. Click "Add Time Slot" to begin.
+                                                        {language === 'vi' ? 'Chưa định nghĩa khung giờ nào cho chi nhánh này. Bấm "Thêm khung giờ" để bắt đầu.' : 'No time slots defined for this branch. Click "Add Time Slot" to begin.'}
                                                     </td>
                                                 </tr>
                                             )}
@@ -579,7 +585,7 @@ export default function HROperationalSettingsPage() {
                             </div>
                         ) : (
                             <div className="text-center py-8 text-gray-500">
-                                Please select a branch to configure auto-schedule targets.
+                                {language === 'vi' ? 'Vui lòng chọn một chi nhánh để cấu hình mục tiêu tự động sắp ca.' : 'Please select a branch to configure auto-schedule targets.'}
                             </div>
                         )}
                     </div>
@@ -590,7 +596,9 @@ export default function HROperationalSettingsPage() {
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setEditing(null)}>
                         <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-lg p-5" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-bold text-gray-900">{isNew ? 'New Shift Type' : 'Edit Shift Type'}</h3>
+                                <h3 className="text-lg font-bold text-gray-900">
+                                    {isNew ? (language === 'vi' ? 'Loại ca làm việc mới' : 'New Shift Type') : (language === 'vi' ? 'Sửa Loại ca làm việc' : 'Edit Shift Type')}
+                                </h3>
                                 <button onClick={() => setEditing(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
                                     <X className="w-5 h-5" />
                                 </button>
@@ -600,7 +608,7 @@ export default function HROperationalSettingsPage() {
                                 {/* Row 1: Type, Name, Code */}
                                 <div className="grid grid-cols-[auto_1fr_80px] gap-3 items-end">
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Loại' : 'Type'}</label>
                                         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
                                             {(['work', 'leave'] as const).map(t => (
                                                 <button
@@ -611,27 +619,27 @@ export default function HROperationalSettingsPage() {
                                                             ? 'bg-white text-gray-900 shadow-sm'
                                                             : 'text-gray-500 hover:text-gray-700'}`}
                                                 >
-                                                    {t === 'work' ? '💼 Work' : '🌿 Leave'}
+                                                    {t === 'work' ? (language === 'vi' ? '💼 Làm việc' : '💼 Work') : (language === 'vi' ? '🌿 Nghỉ phép' : '🌿 Leave')}
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">Name *</label>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Tên *' : 'Name *'}</label>
                                         <input
                                             value={editing.name}
                                             onChange={e => updateField('name', e.target.value)}
                                             className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
-                                            placeholder="e.g. Morning"
+                                            placeholder={language === 'vi' ? 'ví dụ: Buổi sáng' : 'e.g. Morning'}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">Code *</label>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Mã *' : 'Code *'}</label>
                                         <input
                                             value={editing.code}
                                             onChange={e => updateField('code', e.target.value.toUpperCase())}
                                             className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow text-center font-semibold"
-                                            placeholder="e.g. M"
+                                            placeholder={language === 'vi' ? 'ví dụ: S' : 'e.g. M'}
                                             maxLength={4}
                                         />
                                     </div>
@@ -642,7 +650,7 @@ export default function HROperationalSettingsPage() {
                                     <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
                                         <div className="grid grid-cols-[1fr_1fr_80px] gap-3 items-end">
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-500 mb-1">Start Time</label>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Giờ bắt đầu' : 'Start Time'}</label>
                                                 <input
                                                     type="time"
                                                     value={editing.startTime}
@@ -651,7 +659,7 @@ export default function HROperationalSettingsPage() {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-500 mb-1">End Time</label>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Giờ kết thúc' : 'End Time'}</label>
                                                 <input
                                                     type="time"
                                                     value={editing.endTime}
@@ -660,7 +668,7 @@ export default function HROperationalSettingsPage() {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-500 mb-1">Total</label>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Tổng số giờ' : 'Total'}</label>
                                                 <input
                                                     type="number"
                                                     value={editing.hours}
@@ -677,12 +685,12 @@ export default function HROperationalSettingsPage() {
                                                 <button 
                                                     onClick={removeSplitSlot}
                                                     className="absolute -right-2 -top-3 bg-white text-gray-400 hover:text-red-500 p-1 rounded-full border border-gray-200 shadow-sm transition-colors"
-                                                    title="Remove split shift"
+                                                    title={language === 'vi' ? 'Xóa ca gãy' : 'Remove split shift'}
                                                 >
                                                     <X className="w-3.5 h-3.5" />
                                                 </button>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-500 mb-1">Split Start</label>
+                                                    <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Bắt đầu ca gãy' : 'Split Start'}</label>
                                                     <input
                                                         type="time"
                                                         value={editing.startTime2 || ''}
@@ -691,7 +699,7 @@ export default function HROperationalSettingsPage() {
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-500 mb-1">Split End</label>
+                                                    <label className="block text-xs font-medium text-gray-500 mb-1">{language === 'vi' ? 'Kết thúc ca gãy' : 'Split End'}</label>
                                                     <input
                                                         type="time"
                                                         value={editing.endTime2 || ''}
@@ -711,7 +719,7 @@ export default function HROperationalSettingsPage() {
                                                     className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium py-1 px-2 -ml-2 rounded-md hover:bg-blue-50 transition-colors"
                                                 >
                                                     <Plus className="w-3.5 h-3.5" />
-                                                    Add Time Slot
+                                                    {language === 'vi' ? 'Thêm Khung Giờ' : 'Add Time Slot'}
                                                 </button>
                                             </div>
                                         )}
@@ -720,7 +728,7 @@ export default function HROperationalSettingsPage() {
 
                                 {/* Cross-branch behavior */}
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-2">Cross-Branch Behavior</label>
+                                    <label className="block text-xs font-medium text-gray-500 mb-2">{language === 'vi' ? 'Hành vi Liên chi nhánh' : 'Cross-Branch Behavior'}</label>
                                     <div className="grid grid-cols-2 gap-3">
                                         {/* Allow Parallel toggle */}
                                         <label className="flex items-start gap-2.5 p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer transition">
@@ -739,9 +747,9 @@ export default function HROperationalSettingsPage() {
                                             <div className="flex-1" onClick={() => updateField('allowParallel', !editing.allowParallel)}>
                                                 <div className="flex items-center gap-1.5">
                                                     <GitBranch className="w-3.5 h-3.5 text-sky-500" />
-                                                    <span className="text-[13px] font-semibold text-gray-800">Allow Parallel</span>
+                                                    <span className="text-[13px] font-semibold text-gray-800">{language === 'vi' ? 'Cho phép Song song' : 'Allow Parallel'}</span>
                                                 </div>
-                                                <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">Can be assigned same slot in another branch</p>
+                                                <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{language === 'vi' ? 'Có thể được phân vào cùng khung giờ ở chi nhánh khác' : 'Can be assigned same slot in another branch'}</p>
                                             </div>
                                         </label>
 
@@ -762,9 +770,9 @@ export default function HROperationalSettingsPage() {
                                             <div className="flex-1" onClick={() => updateField('globalAcrossBranches', !editing.globalAcrossBranches)}>
                                                 <div className="flex items-center gap-1.5">
                                                     <Globe className="w-3.5 h-3.5 text-purple-500" />
-                                                    <span className="text-[13px] font-semibold text-gray-800">Global Shift</span>
+                                                    <span className="text-[13px] font-semibold text-gray-800">{language === 'vi' ? 'Ca Toàn cục' : 'Global Shift'}</span>
                                                 </div>
-                                                <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">Applies to all branches (e.g. Day Off)</p>
+                                                <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{language === 'vi' ? 'Áp dụng cho tất cả chi nhánh (ví dụ: Ngày nghỉ)' : 'Applies to all branches (e.g. Day Off)'}</p>
                                             </div>
                                         </label>
 
@@ -786,9 +794,9 @@ export default function HROperationalSettingsPage() {
                                                 <div className="flex-1" onClick={() => updateField('isAutoSchedulable', !editing.isAutoSchedulable)}>
                                                     <div className="flex items-center gap-1.5">
                                                         <Wand2 className="w-3.5 h-3.5 text-emerald-500" />
-                                                        <span className="text-[13px] font-semibold text-gray-800">Auto Schedulable</span>
+                                                        <span className="text-[13px] font-semibold text-gray-800">{language === 'vi' ? 'Tự động Sắp xếp' : 'Auto Schedulable'}</span>
                                                     </div>
-                                                    <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">Can be assigned automatically (e.g. Day Off)</p>
+                                                    <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{language === 'vi' ? 'Có thể được sắp xếp tự động (ví dụ: Ngày nghỉ)' : 'Can be assigned automatically (e.g. Day Off)'}</p>
                                                 </div>
                                             </label>
                                         )}
@@ -798,7 +806,7 @@ export default function HROperationalSettingsPage() {
                                 {/* Color picker & Preview Row */}
                                 <div className="grid grid-cols-[1fr_auto] gap-4 items-center pt-3 border-t border-gray-100">
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-2">Color</label>
+                                        <label className="block text-xs font-medium text-gray-500 mb-2">{language === 'vi' ? 'Màu sắc' : 'Color'}</label>
                                         <div className="flex flex-wrap gap-1.5">
                                             {PRESET_COLORS.map(c => (
                                                 <button
@@ -817,7 +825,7 @@ export default function HROperationalSettingsPage() {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-2 text-center">Preview</label>
+                                        <label className="block text-xs font-medium text-gray-500 mb-2 text-center">{language === 'vi' ? 'Xem trước' : 'Preview'}</label>
                                         <div
                                             className="inline-flex flex-col items-center rounded-lg px-3 py-1.5 shadow-sm"
                                             style={{ backgroundColor: editing.color + '15', border: `1px solid ${editing.color}30` }}
@@ -832,7 +840,7 @@ export default function HROperationalSettingsPage() {
                                                 <span className="text-[9px] text-gray-500 mt-0.5 leading-none">{editing.startTime2}–{editing.endTime2}</span>
                                             )}
                                             {editing.type === 'leave' && (
-                                                <span className="text-[9px] mt-0.5 font-medium" style={{ color: editing.color }}>{editing.name || 'Leave'}</span>
+                                                <span className="text-[9px] mt-0.5 font-medium" style={{ color: editing.color }}>{editing.name || (language === 'vi' ? 'Nghỉ phép' : 'Leave')}</span>
                                             )}
                                         </div>
                                     </div>
@@ -842,10 +850,10 @@ export default function HROperationalSettingsPage() {
                             {/* Actions */}
                             <div className="flex justify-end gap-2 mt-6">
                                 <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">
-                                    Cancel
+                                    {language === 'vi' ? 'Hủy' : 'Cancel'}
                                 </button>
                                 <button onClick={save} className="px-5 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition shadow-md">
-                                    {isNew ? 'Create Shift' : 'Save Changes'}
+                                    {isNew ? (language === 'vi' ? 'Tạo Ca' : 'Create Shift') : (language === 'vi' ? 'Lưu Thay đổi' : 'Save Changes')}
                                 </button>
                             </div>
                         </div>

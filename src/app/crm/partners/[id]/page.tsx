@@ -8,6 +8,7 @@ import { Menu } from '@headlessui/react'
 import { supabase } from '@/lib/supabase_shim'
 import type { CRMPartner, CRMInteraction, CRMReferral, CRMDocument, CRMTask } from '@/types/crm'
 import CircularLoader from '@/components/CircularLoader'
+import MonthPicker from '@/components/MonthPicker'
 import { formatDistanceToNow, format } from 'date-fns'
 import { vi, enUS } from 'date-fns/locale'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -42,9 +43,8 @@ export default function PartnerDetail() {
     const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()))
     const monthInputValue = React.useMemo(() => toMonthInputValue(monthCursor), [monthCursor])
 
-    function prevMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), -1)) }
-    function nextMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), 1)) }
-    function onPickMonth(val: string) { const d = fromMonthInputValue(val); if (d) setMonthCursor(d) }
+
+
 
     const [activeTab, setActiveTab] = useState('overview')
     const [partner, setPartner] = useState<CRMPartner | null>(null)
@@ -1092,22 +1092,13 @@ export default function PartnerDetail() {
                                 </div>
                             </div>
 
-                            <div className="mb-4 grid grid-cols-3 items-center">
-                                <div className="justify-self-start">
-                                    <button onClick={prevMonth} className="text-blue-600 hover:text-blue-800 underline underline-offset-4 decoration-blue-300/40 text-sm font-medium">
-                                        {t(language, 'Previous')}
-                                    </button>
-                                </div>
-                                <div className="justify-self-center flex items-center gap-2">
-                                    <span className="text-slate-700 font-semibold">{formatMonthLabel(monthCursor, language)}</span>
-                                    <Calendar className="w-5 h-5 text-slate-400" />
-                                </div>
-                                <div className="justify-self-end">
-                                    <button onClick={nextMonth} className="text-blue-600 hover:text-blue-800 underline underline-offset-4 decoration-blue-300/40 text-sm font-medium">
-                                        {t(language, 'Next')}
-                                    </button>
-                                </div>
-                            </div>
+                            <MonthPicker
+                                value={toMonthInputValue(monthCursor)}
+                                onChange={(val) => setMonthCursor(fromMonthInputValue(val))}
+                                language={language}
+                                colorClass="text-blue-600 hover:text-blue-800"
+                                className="mb-4"
+                            />
 
                             <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
                                 <div className="overflow-x-auto">

@@ -3,11 +3,13 @@
 import { useRouter } from 'next/navigation'
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react'
 import { Fragment } from 'react'
+import { useSettings } from '@/contexts/SettingsContext'
 import {
     UserGroupIcon,
     BriefcaseIcon,
     ClipboardDocumentCheckIcon,
-    XMarkIcon
+    XMarkIcon,
+    ClockIcon
 } from '@heroicons/react/24/outline'
 
 interface HRDashboardModalProps {
@@ -16,6 +18,7 @@ interface HRDashboardModalProps {
 
 export default function HRDashboardModal({ onClose }: HRDashboardModalProps) {
     const router = useRouter()
+    const { language } = useSettings()
 
     const navigateTo = (path: string) => {
         onClose()
@@ -36,7 +39,7 @@ export default function HRDashboardModal({ onClose }: HRDashboardModalProps) {
                 >
                     <div className="fixed inset-0 bg-black/25" />
                 </TransitionChild>
-
+ 
                 <div className="fixed inset-0 overflow-y-auto">
                     <div className="flex min-h-full items-center justify-center p-4 text-center">
                         <TransitionChild
@@ -52,7 +55,7 @@ export default function HRDashboardModal({ onClose }: HRDashboardModalProps) {
                                 <div className="flex items-center justify-between mb-5">
                                     <DialogTitle as="h3" className="text-lg font-medium leading-6 text-gray-900 flex items-center gap-2">
                                         <UserGroupIcon className="h-6 w-6 text-blue-600" />
-                                        Human Resources
+                                        {language === 'vi' ? 'Quản trị Nhân sự' : 'Human Resources'}
                                     </DialogTitle>
                                     <button
                                         onClick={onClose}
@@ -72,8 +75,12 @@ export default function HRDashboardModal({ onClose }: HRDashboardModalProps) {
                                             <ClipboardDocumentCheckIcon className="h-6 w-6" />
                                         </div>
                                         <div>
-                                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">Management</h4>
-                                            <p className="text-xs text-gray-600">Staff directory, positions & salaries</p>
+                                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">
+                                                {language === 'vi' ? 'Quản lý' : 'Management'}
+                                            </h4>
+                                            <p className="text-xs text-gray-600">
+                                                {language === 'vi' ? 'Danh mục nhân viên, vị trí & mức lương' : 'Staff directory, positions & salaries'}
+                                            </p>
                                         </div>
                                     </button>
 
@@ -86,8 +93,12 @@ export default function HRDashboardModal({ onClose }: HRDashboardModalProps) {
                                             <BriefcaseIcon className="h-6 w-6" />
                                         </div>
                                         <div>
-                                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">Recruitment</h4>
-                                            <p className="text-xs text-gray-600">Hiring requests & candidates</p>
+                                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">
+                                                {language === 'vi' ? 'Tuyển dụng' : 'Recruitment'}
+                                            </h4>
+                                            <p className="text-xs text-gray-600">
+                                                {language === 'vi' ? 'Yêu cầu tuyển dụng & ứng viên' : 'Hiring requests & candidates'}
+                                            </p>
                                         </div>
                                     </button>
 
@@ -100,8 +111,30 @@ export default function HRDashboardModal({ onClose }: HRDashboardModalProps) {
                                             <UserGroupIcon className="h-6 w-6" />
                                         </div>
                                         <div>
-                                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">HR Operational</h4>
-                                            <p className="text-xs text-gray-600">Roster, shifts & reports</p>
+                                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">
+                                                {language === 'vi' ? 'Vận hành HR' : 'HR Operational'}
+                                            </h4>
+                                            <p className="text-xs text-gray-600">
+                                                {language === 'vi' ? 'Lịch làm việc, ca làm & báo cáo' : 'Roster, shifts & reports'}
+                                            </p>
+                                        </div>
+                                    </button>
+
+                                    {/* Time Keeping - Active */}
+                                    <button
+                                        onClick={() => navigateTo('/human-resources/time-keeping')}
+                                        className="w-full flex items-center p-4 rounded-xl border border-blue-100 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 transition text-left group"
+                                    >
+                                        <div className="h-10 w-10 rounded-lg bg-blue-600 text-white flex items-center justify-center mr-4 shadow-sm group-hover:scale-105 transition-transform">
+                                            <ClockIcon className="h-6 w-6" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">
+                                                {language === 'vi' ? 'Chấm công' : 'Time Keeping'}
+                                            </h4>
+                                            <p className="text-xs text-gray-600">
+                                                {language === 'vi' ? 'Chuyên cần, tăng ca & phí dịch vụ' : 'Attendance, overtime & service charge'}
+                                            </p>
                                         </div>
                                     </button>
                                 </div>

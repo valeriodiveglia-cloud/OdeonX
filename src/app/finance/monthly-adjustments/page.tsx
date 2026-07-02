@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import { Save, AlertCircle, Plus, Trash2, Edit2 } from 'lucide-react'
-import { CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
+import MonthPicker from '@/components/MonthPicker'
 import CircularLoader from '@/components/CircularLoader'
 import { COACombobox } from '../components/COACombobox'
 import { t } from '@/lib/i18n'
@@ -247,13 +247,6 @@ export default function MonthlyAdjustmentsPage() {
         setAdjustments(adjustments.filter(a => a.id !== id))
     }
 
-    function prevMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), -1)) }
-    function nextMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), 1)) }
-    function onPickMonth(val: string) {
-        const d = fromMonthInputValue(val)
-        if (d) setMonthCursor(d)
-    }
-
     if (!authLoaded) {
         return <div className="flex items-center justify-center h-64"><CircularLoader /></div>
     }
@@ -291,28 +284,16 @@ export default function MonthlyAdjustmentsPage() {
             </div>
 
             {/* Month Navigation */}
-            <div className="grid grid-cols-3 items-center mb-6 px-2">
-                <button onClick={prevMonth} className="justify-self-start text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                    <ChevronLeftIcon className="w-4 h-4" /> {t(language, 'FinMAPrevious')}
-                </button>
-                <div className="justify-self-center flex items-center gap-2">
-                    <span className="text-lg font-bold text-slate-900">
-                        {formatMonthLabel(monthCursor, language)}
-                    </span>
-                    <div className="relative w-5 h-5">
-                        <CalendarDaysIcon className="w-5 h-5 text-slate-400 hover:text-blue-500 cursor-pointer transition-colors" />
-                        <input
-                            type="month"
-                            value={monthInputValue}
-                            onChange={e => onPickMonth(e.target.value)}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                    </div>
-                </div>
-                <button onClick={nextMonth} className="justify-self-end text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                    {t(language, 'FinMANext')} <ChevronRightIcon className="w-4 h-4" />
-                </button>
-            </div>
+            <MonthPicker
+                value={monthInputValue}
+                onChange={(val) => {
+                    const d = fromMonthInputValue(val)
+                    if (d) setMonthCursor(d)
+                }}
+                language={language}
+                colorClass="text-blue-600 hover:text-blue-800"
+                className="mb-6 px-2"
+            />
 
             {loading ? <div className="flex justify-center py-16"><CircularLoader /></div> : (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">

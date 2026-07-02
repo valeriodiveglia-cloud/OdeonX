@@ -128,6 +128,42 @@ export async function POST(req: Request) {
       uid = await findAuthUserIdByEmail(db, keyEmail) // <-- NOVITÀ: troviamo UID anche senza riga DB
     }
 
+    // Check if the user has historical operational records to prevent physical deletion
+    if (uid) {
+      const [
+        payOrders,
+        crmPartners,
+        crmTasks,
+        invoices,
+        bankTrans,
+        cashierClosings,
+        dailyClosings
+      ] = await Promise.all([
+        db.from('fin_payment_orders').select('id', { count: 'exact', head: true }).eq('created_by', uid),
+        db.from('crm_partners').select('id', { count: 'exact', head: true }).or(`owner_id.eq.${uid},created_by.eq.${uid}`),
+        db.from('crm_tasks').select('id', { count: 'exact', head: true }).eq('created_by', uid),
+        db.from('fin_invoices').select('id', { count: 'exact', head: true }).eq('created_by', uid),
+        db.from('fin_bank_transactions').select('id', { count: 'exact', head: true }).eq('created_by', uid),
+        db.from('cashier_closings').select('id', { count: 'exact', head: true }).eq('created_by', uid),
+        db.from('daily_closings').select('id', { count: 'exact', head: true }).eq('created_by', uid),
+      ])
+
+      const hasHistory =
+        (payOrders.count || 0) > 0 ||
+        (crmPartners.count || 0) > 0 ||
+        (crmTasks.count || 0) > 0 ||
+        (invoices.count || 0) > 0 ||
+        (bankTrans.count || 0) > 0 ||
+        (cashierClosings.count || 0) > 0 ||
+        (dailyClosings.count || 0) > 0;
+
+      if (hasHistory) {
+        return NextResponse.json({
+          error: 'This user has historical operational records (payment orders, CRM assignments, invoices, or daily reports) and cannot be permanently deleted. Please deactivate the account instead.'
+        }, { status: 400 })
+      }
+    }
+
     // 7) Cancella in Authentication (se trovato)
     let authDeleted = false
     let authDeleteError: string | null = null

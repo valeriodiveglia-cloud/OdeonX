@@ -61,6 +61,22 @@ export default function FinanceDashboard() {
     const [coa, setCoa] = useState<any[]>([])
     const [pendingVatItems, setPendingVatItems] = useState<any[]>([])
 
+    // States for configuration warnings
+    const [warningModalOpen, setWarningModalOpen] = useState(false)
+    const [missingConfigs, setMissingConfigs] = useState<{
+        revenueChannels: string[]
+        cashoutCategories: { branch: string; category: string }[]
+        inventoryCategories: string[]
+        recipeTypes: string[]
+        cashAccounts: string[]
+    }>({
+        revenueChannels: [],
+        cashoutCategories: [],
+        inventoryCategories: [],
+        recipeTypes: [],
+        cashAccounts: []
+    })
+
     useEffect(() => {
         async function fetchData() {
             setLoading(true)
@@ -134,6 +150,170 @@ export default function FinanceDashboard() {
         }
         fetchData()
     }, [selectedYear, financeStartDate])
+
+    const checkConfigs = async () => {
+        try {
+            const [
+                drSettingsRes,
+                revMapRes,
+                branchesRes,
+                cashoutMapRes,
+                categoriesRes,
+                invMapRes,
+                prepTypesRes,
+                finalTypesRes,
+                accountsRes
+            ] = await Promise.all([
+                supabase.from('daily_report_settings').select('branch_name, settings'),
+                supabase.from('fin_revenue_channel_mapping').select('*'),
+                supabase.from('provider_branches').select('name'),
+                supabase.from('fin_cashout_category_mapping').select('*'),
+                supabase.from('categories').select('id, name'),
+                supabase.from('fin_inventory_category_mapping').select('*'),
+                supabase.from('prep_recipes').select('type'),
+                supabase.from('final_recipes').select('type'),
+                supabase.from('fin_bank_accounts').select('account_name, account_type, is_active')
+            ])
+
+            if (
+                drSettingsRes.error ||
+                revMapRes.error ||
+                branchesRes.error ||
+                cashoutMapRes.error ||
+                categoriesRes.error ||
+                invMapRes.error ||
+                accountsRes.error
+            ) {
+                console.error("Error fetching check data:", {
+                    drSettings: drSettingsRes.error,
+                    revMap: revMapRes.error,
+                    branches: branchesRes.error,
+                    cashoutMap: cashoutMapRes.error,
+                    categories: categoriesRes.error,
+                    invMap: invMapRes.error,
+                    accounts: accountsRes.error
+                })
+                return
+            }
+
+            // 1. Revenue Channels
+            const uniqueTPs = new Set<string>()
+            if (drSettingsRes.data) {
+                for (const row of drSettingsRes.data) {
+                    const s = typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings
+                    if (s?.initialInfo?.thirdParties && Array.isArray(s.initialInfo.thirdParties)) {
+                        s.initialInfo.thirdParties.forEach((tp: string) => {
+                            if (tp && tp.trim() !== '') uniqueTPs.add(tp.trim())
+                        })
+                    }
+                }
+            }
+
+            const missingRevenue: string[] = []
+            const revMappings = revMapRes.data || []
+            uniqueTPs.forEach(tp => {
+                const isMapped = revMappings.some((m: any) => m.channel_type === 'third_party' && m.channel_label === tp && m.is_active)
+                if (!isMapped) {
+                    missingRevenue.push(tp)
+                }
+            })
+            // Check mpos
+            const isMposMapped = revMappings.some((m: any) => m.channel_type === 'mpos' && m.is_active)
+            if (!isMposMapped) {
+                missingRevenue.push('Card (MPOS)')
+            }
+
+            // 2. Cashout Categories
+            const branches = (branchesRes.data || []).map((b: any) => b.name)
+            const cashoutMappings = cashoutMapRes.data || []
+            const missingCashout: { branch: string; category: string }[] = []
+
+            for (const branchName of branches) {
+                const row = (drSettingsRes.data || []).find(r => r.branch_name === branchName)
+                let parsed = row?.settings || {}
+                if (typeof parsed === 'string') {
+                    try { parsed = JSON.parse(parsed) } catch { parsed = {} }
+                }
+
+                let cats: string[] = []
+                if (parsed?.cashOut?.categories && Array.isArray(parsed.cashOut.categories)) {
+                    cats = parsed.cashOut.categories.filter((c: any) => typeof c === 'string' && c.trim() !== '')
+                }
+                if (cats.length === 0) {
+                    cats = ['Petty cash', 'Maintenance', 'Misc']
+                }
+
+                cats.forEach(cat => {
+                    const isMapped = cashoutMappings.some((m: any) => m.branch_name === branchName && m.category_name === cat && m.account_id)
+                    if (!isMapped) {
+                        missingCashout.push({ branch: branchName, category: cat })
+                    }
+                })
+            }
+
+            // 3. Inventory Categories
+            const allCategories = categoriesRes.data || []
+            const invMappings = invMapRes.data || []
+            const missingInventory: string[] = []
+
+            allCategories.forEach(cat => {
+                const isMapped = invMappings.some((m: any) => m.category_id === cat.id && m.account_id)
+                if (!isMapped) {
+                    missingInventory.push(cat.name)
+                }
+            })
+
+            // 4. Recipe Types
+            const rTypes = new Set<string>()
+            prepTypesRes.data?.forEach(r => r.type && rTypes.add(r.type.trim()))
+            finalTypesRes.data?.forEach(r => r.type && rTypes.add(r.type.trim()))
+
+            const missingRecipes: string[] = []
+            rTypes.forEach(t => {
+                const isMapped = invMappings.some((m: any) => m.recipe_type === t && m.account_id)
+                if (!isMapped) {
+                    missingRecipes.push(t)
+                }
+            })
+
+            // 5. Branch Cash Accounts
+            const activeBankAccounts = accountsRes.data || []
+            const missingCashAccounts: string[] = []
+            branches.forEach(branchName => {
+                const targetAccountName = `Cash on Hand - ${branchName}`
+                const exists = activeBankAccounts.some((acc: any) => acc.account_name === targetAccountName && acc.account_type === 'Cash' && acc.is_active)
+                if (!exists) {
+                    missingCashAccounts.push(branchName)
+                }
+            })
+
+            const hasMissing =
+                missingRevenue.length > 0 ||
+                missingCashout.length > 0 ||
+                missingInventory.length > 0 ||
+                missingRecipes.length > 0 ||
+                missingCashAccounts.length > 0
+
+            if (hasMissing) {
+                setMissingConfigs({
+                    revenueChannels: missingRevenue,
+                    cashoutCategories: missingCashout,
+                    inventoryCategories: missingInventory,
+                    recipeTypes: missingRecipes,
+                    cashAccounts: missingCashAccounts
+                })
+                setWarningModalOpen(true)
+            }
+        } catch (err) {
+            console.error('Error during configuration checks:', err)
+        }
+    }
+
+    useEffect(() => {
+        if (!loading) {
+            checkConfigs()
+        }
+    }, [loading])
 
     // Filtered Invoices based on view mode (Operational vs Fiscal)
     const filteredInvoices = useMemo(() => {
@@ -613,7 +793,7 @@ export default function FinanceDashboard() {
 
                                                 const supplierName = inv.is_personal_deduction 
                                                     ? (inv.custom_supplier_name || t(language, 'FinDsbPersonal')) 
-                                                    : ((inv as any).suppliers?.name || t(language, 'FinDsbUnknown'))
+                                                    : ((inv as any).suppliers?.name || inv.custom_supplier_name || t(language, 'FinDsbUnknown'))
 
                                                 return (
                                                     <Link 
@@ -854,6 +1034,163 @@ export default function FinanceDashboard() {
                                 className="px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-sm transition"
                             >
                                 {t(language, 'Close')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {warningModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-2xl border border-slate-200 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-amber-50/50 shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                                <AlertCircle className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">{t(language, 'FinWarningModalTitle')}</h3>
+                                <p className="text-xs text-slate-500 mt-1">{t(language, 'FinWarningModalSubtitle')}</p>
+                            </div>
+                        </div>
+
+                        {/* List of issues */}
+                        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+                            {/* Revenue Channels */}
+                            {missingConfigs.revenueChannels.length > 0 && (
+                                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="flex-1">
+                                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">
+                                            {t(language, 'FinWarningSectionRevenue')}
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {missingConfigs.revenueChannels.map(item => (
+                                                <span key={item} className="inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
+                                                    {item}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <Link
+                                        href="/finance/settings/revenue-channels"
+                                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline shrink-0 self-center"
+                                    >
+                                        <span>{t(language, 'FinWarningConfigure')}</span>
+                                        <ChevronRight className="w-4 h-4" />
+                                    </Link>
+                                </div>
+                            )}
+
+                            {/* Branch Cash Accounts */}
+                            {missingConfigs.cashAccounts.length > 0 && (
+                                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="flex-1">
+                                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">
+                                            {t(language, 'FinWarningSectionCashAccounts')}
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {missingConfigs.cashAccounts.map(item => (
+                                                <span key={item} className="inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
+                                                    {item}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <Link
+                                        href="/finance/accounts"
+                                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline shrink-0 self-center"
+                                    >
+                                        <span>{t(language, 'FinWarningConfigure')}</span>
+                                        <ChevronRight className="w-4 h-4" />
+                                    </Link>
+                                </div>
+                            )}
+
+                            {/* Operational Categories */}
+                            {missingConfigs.cashoutCategories.length > 0 && (
+                                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="flex-1">
+                                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">
+                                            {t(language, 'FinWarningSectionCashout')}
+                                        </h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {missingConfigs.cashoutCategories.map(item => (
+                                                <span key={`${item.branch}-${item.category}`} className="inline-flex items-center justify-between px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
+                                                    <span className="truncate">{item.category}</span>
+                                                    <span className="text-[10px] opacity-75 font-normal ml-2 shrink-0">({item.branch})</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <Link
+                                        href="/finance/settings/chart-of-accounts"
+                                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline shrink-0 self-center"
+                                    >
+                                        <span>{t(language, 'FinWarningConfigure')}</span>
+                                        <ChevronRight className="w-4 h-4" />
+                                    </Link>
+                                </div>
+                            )}
+
+                            {/* Inventory Categories */}
+                            {missingConfigs.inventoryCategories.length > 0 && (
+                                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="flex-1">
+                                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">
+                                            {t(language, 'FinWarningSectionInventory')}
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {missingConfigs.inventoryCategories.map(item => (
+                                                <span key={item} className="inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
+                                                    {item}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <Link
+                                        href="/finance/settings/chart-of-accounts"
+                                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline shrink-0 self-center"
+                                    >
+                                        <span>{t(language, 'FinWarningConfigure')}</span>
+                                        <ChevronRight className="w-4 h-4" />
+                                    </Link>
+                                </div>
+                            )}
+
+                            {/* Recipe Types */}
+                            {missingConfigs.recipeTypes.length > 0 && (
+                                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="flex-1">
+                                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">
+                                            {t(language, 'FinWarningSectionRecipeTypes')}
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {missingConfigs.recipeTypes.map(item => (
+                                                <span key={item} className="inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
+                                                    {item}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <Link
+                                        href="/finance/settings/chart-of-accounts"
+                                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline shrink-0 self-center"
+                                    >
+                                        <span>{t(language, 'FinWarningConfigure')}</span>
+                                        <ChevronRight className="w-4 h-4" />
+                                    </Link>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setWarningModalOpen(false)}
+                                className="px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-sm transition"
+                            >
+                                {t(language, 'FinWarningRemindLater')}
                             </button>
                         </div>
                     </div>

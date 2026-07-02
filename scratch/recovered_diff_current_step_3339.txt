@@ -1,0 +1,30 @@
+Created At: 2026-05-23T15:53:09Z
+Completed At: 2026-05-23T15:53:09Z
+The following changes were made by the replace_file_content tool to: /Users/valerio/.gemini/antigravity/brain/8c8b7827-f1fb-420a-b004-91d9a22c3062/task.md. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -17,7 +17,21 @@
+ - `[x]` Fase 2.5: Traduzione Pagina Cash Flow (`src/app/finance/cashflow/page.tsx`)
+   - `[x]` Importare `t` e `useSettings`
+   - `[x]` Tradurre flussi, saldi, intestazioni, bottoni e grafici
+-- `[x]` Verifica & Build
++- `[x]` Verifica & Build (Fase 2)
+   - `[x]` Eseguire script controllo duplicati
+   - `[x]` Verificare la build con `npm run build`
++- `[ ]` Fase 3: Internazionalizzazione Completa del Modulo Finance (9 pagine restanti)
++  - `[ ]` Estensione del Dizionario Centrale (`src/lib/i18n.ts`)
++  - `[ ]` Traduzione Pagina Bank Accounts (`accounts/page.tsx`)
++  - `[ ]` Traduzione Pagina Tax Calendar (`calendar/page.tsx`)
++  - `[ ]` Traduzione Pagina Closing Stock (`closing-stock/page.tsx`)
++  - `[ ]` Traduzione Pagina Corporate Cards (`corporate-card/page.tsx`)
++  - `[ ]` Traduzione Pagina Monthly Adjustments (`monthly-adjustments/page.tsx`)
++  - `[ ]` Traduzione Impostazioni: Go-Live (`settings/go-live/page.tsx`)
++  - `[ ]` Traduzione Impostazioni: P&L (`settings/pnl/page.tsx`)
++  - `[ ]` Traduzione Impostazioni: Revenue Channels (`settings/revenue-channels/page.tsx`)
++  - `[ ]` Traduzione Impostazioni: Taxes (`settings/taxes/page.tsx`)
++- `[ ]` Verifica & Build Finale
++  - `[ ]` Eseguire script controllo duplicati
++  - `[ ]` Verificare la build con `npm run build`
+ 
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

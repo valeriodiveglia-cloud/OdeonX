@@ -1,0 +1,1 @@
+"- `[x]` Fase 2.1: Estensione del Dizionario Centrale (`src/lib/i18n.ts`)\n  - `[x]` Aggiungere traduzioni per la pagina Invoices (Fatture)\n  - `[x]` Aggiungere traduzioni per la pagina Payments (Ordini di Pagamento)\n  - `[x]` Aggiungere traduzioni per la pagina P&L Report (Conto Economico)\n  - `[x]` Aggiungere traduzioni per la pagina Cash Flow (Flussi di Cassa)"

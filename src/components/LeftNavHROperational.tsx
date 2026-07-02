@@ -3,23 +3,16 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React from 'react'
-import { CalendarDays, BarChart3, Settings, Home, Clock, Timer } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, Home } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
 
 const BASE = '/human-resources/operational'
-const NAV = [
-    { href: BASE, label: 'Dashboard', icon: Home, exact: true },
-    { href: `${BASE}/roster`, label: 'Roster', icon: CalendarDays },
-    { href: `${BASE}/reports`, label: 'Reports', icon: BarChart3 },
-    { href: `${BASE}/attendance`, label: 'Attendance', icon: Clock },
-    { href: `${BASE}/overtime`, label: 'Overtime', icon: Timer },
-    { href: `${BASE}/service-charge`, label: 'Service Charge', icon: CalendarDays },
-    { href: `${BASE}/settings`, label: 'Settings', icon: Settings },
-]
 
 const EXP_W_REM = 16
 const COLL_W_REM = 3.5
+
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v0.0'
 
 export default function LeftNavHROperational() {
     const pathname = usePathname()
@@ -39,6 +32,15 @@ export default function LeftNavHROperational() {
     const isEN = language === 'en'
     const toggleLang = () => setLanguage(isEN ? 'vi' : 'en')
 
+    const headerTitle = language === 'vi' ? 'Vận hành HR' : 'HR Operational'
+
+    const NAV = [
+        { href: BASE, label: language === 'vi' ? 'Bảng điều khiển' : 'Dashboard', icon: Home, exact: true },
+        { href: `${BASE}/roster`, label: language === 'vi' ? 'Lịch ca' : 'Roster', icon: CalendarDays },
+        { href: `${BASE}/reports`, label: language === 'vi' ? 'Báo cáo' : 'Reports', icon: BarChart3 },
+        { href: `${BASE}/settings`, label: language === 'vi' ? 'Cài đặt' : 'Settings', icon: Settings },
+    ]
+
     const norm = (s: string) => s.replace(/\/+$/, '')
 
     return (
@@ -54,7 +56,7 @@ export default function LeftNavHROperational() {
                     <Home className="w-5 h-5 text-white" />
                 </Link>
                 <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
-                    {open ? 'HR Operational' : ''}
+                    {open ? headerTitle : ''}
                 </div>
             </div>
 
@@ -91,8 +93,20 @@ export default function LeftNavHROperational() {
                     onClick={toggleLang}
                     className="w-8 h-8 rounded-full overflow-hidden border border-white/20 hover:bg-white/10 flex items-center justify-center p-0"
                 >
-                    <ReactCountryFlag countryCode={isEN ? 'GB' : 'VN'} svg style={{ width: '1.2em', height: '1.2em' }} />
+                    <ReactCountryFlag
+                        countryCode={isEN ? 'GB' : 'VN'}
+                        svg
+                        style={{
+                            width: '110%',
+                            height: '110%',
+                            objectFit: 'cover',
+                            display: 'block',
+                        }}
+                    />
                 </button>
+                {open && (
+                    <div className="text-xs text-slate-300 px-2">{appVersion}</div>
+                )}
             </div>
         </div>
     )

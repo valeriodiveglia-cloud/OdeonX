@@ -95,7 +95,7 @@ export default function PaymentOrdersPage() {
 
         const [ordRes, invRes, accRes, coaRes, brRes, supRes, globalPendingRes] = await Promise.all([
             supabase.from('fin_payment_orders')
-                .select('*, app_accounts!fin_payment_orders_created_by_fkey(name), fin_bank_accounts:fin_bank_accounts!fin_payment_orders_bank_account_id_fkey(account_name, bank_name), destination_bank_account:fin_bank_accounts!fin_payment_orders_destination_account_id_fkey(account_name, bank_name), fin_payment_order_items(*, fin_invoices(invoice_number, gross_amount, description, suppliers(name)), fin_chart_of_accounts(code, name), fin_corporate_card_expenses(amount, currency, is_variable_amount))')
+                .select('*, app_accounts!fin_payment_orders_created_by_fkey(name), fin_bank_accounts:fin_bank_accounts!fin_payment_orders_bank_account_id_fkey(account_name, bank_name), destination_bank_account:fin_bank_accounts!fin_payment_orders_destination_account_id_fkey(account_name, bank_name), fin_payment_order_items(*, fin_invoices(invoice_number, gross_amount, description, custom_supplier_name, suppliers(name)), fin_chart_of_accounts(code, name), fin_corporate_card_expenses(amount, currency, is_variable_amount))')
                 .gte('order_date', startStr)
                 .lte('order_date', endStr)
                 .order('order_date', { ascending: false }),
@@ -105,7 +105,7 @@ export default function PaymentOrdersPage() {
                 .order('invoice_date'),
             supabase.from('fin_bank_accounts').select('*').eq('is_active', true).in('account_type', ['Checking', 'Saving']).order('account_name'),
             supabase.from('fin_chart_of_accounts').select('*').eq('is_active', true).eq('is_group', false).order('sort_order'),
-            supabase.from('provider_branches').select('id, name').order('name'),
+            supabase.from('provider_branches').select('id, name, is_active').order('name'),
             supabase.from('suppliers').select('id, name').order('name'),
             supabase.from('fin_payment_orders').select('id', { count: 'exact', head: true }).eq('status', 'Pending Review'),
         ])
@@ -225,7 +225,7 @@ export default function PaymentOrdersPage() {
         return availableInvoices.filter(inv => {
             const matchesSearch = !invoiceSearch.trim() || 
                 inv.invoice_number.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
-                ((inv as any).suppliers?.name || '').toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                ((inv as any).suppliers?.name || inv.custom_supplier_name || '').toLowerCase().includes(invoiceSearch.toLowerCase()) ||
                 (inv.description || '').toLowerCase().includes(invoiceSearch.toLowerCase());
                 
             const matchesSelected = !showOnlySelectedInvoices || selectedInvoiceIds.has(inv.id);
@@ -1132,7 +1132,7 @@ export default function PaymentOrdersPage() {
                                                     <div className="font-semibold text-slate-800 text-sm flex items-center gap-2 flex-wrap">
                                                         <span>{inv.invoice_number}</span>
                                                         <span className="text-slate-300">•</span>
-                                                        <span className="text-slate-600 font-medium text-xs">{(inv as any).suppliers?.name || t(language, 'FinCCModalUnassigned')}</span>
+                                                        <span className="text-slate-600 font-medium text-xs">{(inv as any).suppliers?.name || inv.custom_supplier_name || t(language, 'FinCCModalUnassigned')}</span>
                                                     </div>
                                                     <div className="text-xs text-slate-500 mt-0.5 truncate">{inv.description || (language === 'vi' ? 'Không có mô tả' : 'No description')}</div>
                                                     <div className="text-[10px] text-slate-400 mt-0.5">{new Date(inv.invoice_date).toLocaleDateString('en-GB')}</div>
@@ -1237,13 +1237,13 @@ export default function PaymentOrdersPage() {
                                                             {t(language, 'FinInvBranchAllocation')} <span className="text-red-500">*</span>
                                                         </label>
                                                         <div className="flex flex-wrap gap-2">
-                                                            <button type="button" onClick={() => updateManualItem(m.id, 'branch_ids', branches.map(b => b.id))} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 rounded-md border border-slate-200 transition">
+                                                            <button type="button" onClick={() => updateManualItem(m.id, 'branch_ids', branches.filter(b => (b as any).is_active !== false).map(b => b.id))} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 rounded-md border border-slate-200 transition">
                                                                 {t(language, 'FinInvSelectAll')}
                                                             </button>
                                                             <button type="button" onClick={() => updateManualItem(m.id, 'branch_ids', [])} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 rounded-md border border-slate-200 transition">
                                                                 {t(language, 'FinInvClear')}
                                                             </button>
-                                                            {branches.map(b => (
+                                                            {branches.filter(b => (b as any).is_active !== false || m.branch_ids.includes(b.id)).map(b => (
                                                                 <label key={b.id} className="flex items-center gap-1.5 cursor-pointer bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm transition hover:border-blue-300">
                                                                     <input type="checkbox" checked={m.branch_ids.includes(b.id)} onChange={e => {
                                                                         const newIds = e.target.checked ? [...m.branch_ids, b.id] : m.branch_ids.filter(id => id !== b.id)
@@ -1480,7 +1480,7 @@ export default function PaymentOrdersPage() {
                                                                                 <Fragment key={item.id}>
                                                                                     <tr>
                                                                                         <td className="p-3 font-semibold text-slate-800">{item.fin_invoices?.invoice_number || '—'}</td>
-                                                                                        <td className="p-3 text-slate-600">{(item.fin_invoices as any)?.suppliers?.name || '—'}</td>
+                                                                                        <td className="p-3 text-slate-600">{(item.fin_invoices as any)?.suppliers?.name || (item.fin_invoices as any)?.custom_supplier_name || '—'}</td>
                                                                                         <td className="p-3 text-slate-600 text-sm">{item.fin_chart_of_accounts ? `${item.fin_chart_of_accounts.code} - ${item.fin_chart_of_accounts.name}` : <span className="italic text-slate-400">{t(language, 'FinPayUncategorized')}</span>}</td>
                                                                                         <td className="p-3">
                                                                                             <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 uppercase tracking-wider">{t(language, 'FinPayIssued')}</span>

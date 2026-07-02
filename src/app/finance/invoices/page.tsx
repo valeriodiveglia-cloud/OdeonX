@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
-import { Search, Plus, FileText, X, Filter, Download, ChevronDown, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
+import { Search, Plus, FileText, X, Filter, Download, ChevronDown, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
+import MonthPicker from '@/components/MonthPicker'
 import { t } from '@/lib/i18n'
 import CircularLoader from '@/components/CircularLoader'
 import type { FinInvoice, Supplier, FinChartOfAccount } from '@/types/finance'
@@ -131,11 +132,6 @@ export default function InvoicesPage() {
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     })
     
-    const fmtMonth = (m: string) => {
-        const d = new Date(Number(m.split('-')[0]), Number(m.split('-')[1]) - 1, 1)
-        return d.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' })
-    }
-
     // Form state
     const [form, setForm] = useState({
         invoice_number: '', invoice_date: new Date().toISOString().split('T')[0],
@@ -172,7 +168,7 @@ export default function InvoicesPage() {
                 .order('invoice_date', { ascending: false }),
             supabase.from('suppliers').select('*').order('name'),
             supabase.from('fin_chart_of_accounts').select('*').eq('is_group', false).eq('is_active', true).order('sort_order'),
-            supabase.from('provider_branches').select('id, name').order('name'),
+            supabase.from('provider_branches').select('id, name, is_active').order('name'),
             manQuery,
             cardQuery,
             cashoutQuery,
@@ -350,7 +346,7 @@ export default function InvoicesPage() {
             }
             if (search) {
                 const q = search.toLowerCase()
-                const supplierName = ((inv as any).suppliers?.name || '').toLowerCase()
+                const supplierName = ((inv as any).suppliers?.name || inv.custom_supplier_name || '').toLowerCase()
                 return inv.invoice_number.toLowerCase().includes(q) || supplierName.includes(q) || (inv.description || '').toLowerCase().includes(q)
             }
             return true
@@ -610,13 +606,16 @@ export default function InvoicesPage() {
         setSaving(true)
         try {
             let supplierId = form.is_personal_deduction ? null : (form.supplier_id || null)
+            let customSupplierName = form.is_personal_deduction
+                ? form.custom_supplier_name
+                : (suppliers.find(s => s.id === form.supplier_id)?.name || null)
 
             const payload = {
                 invoice_number: form.invoice_number,
                 invoice_date: form.invoice_date,
                 due_date: form.due_date || null,
                 supplier_id: supplierId,
-                custom_supplier_name: form.is_personal_deduction ? form.custom_supplier_name : null,
+                custom_supplier_name: customSupplierName,
                 is_personal_deduction: form.is_personal_deduction,
                 branch_ids: form.branch_ids.length > 0 ? form.branch_ids : null,
                 account_id: form.account_id || null,
@@ -759,25 +758,12 @@ export default function InvoicesPage() {
 
             {/* Month Navigation */}
             {activeTab === 'invoices' ? (
-                <div className="grid grid-cols-3 items-center mb-4">
-                    <button onClick={() => {
-                        const [y, m] = month.split('-').map(Number);
-                        const d = new Date(y, m - 2, 1);
-                        setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                    }} className="justify-self-start text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                        <ChevronLeft className="w-4 h-4" /> {t(language, 'Previous')}
-                    </button>
-                    <div className="justify-self-center text-lg font-bold text-slate-900">
-                        {fmtMonth(month)}
-                    </div>
-                    <button onClick={() => {
-                        const [y, m] = month.split('-').map(Number);
-                        const d = new Date(y, m, 1);
-                        setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                    }} className="justify-self-end text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1">
-                        {t(language, 'Next')} <ChevronRight className="w-4 h-4" />
-                    </button>
-                </div>
+                    <MonthPicker
+                        value={month}
+                        onChange={setMonth}
+                        language={language}
+                        colorClass="text-blue-600 hover:text-blue-800"
+                    />
             ) : (
                 <div className="flex items-center justify-between mb-4">
                     <span className="text-slate-500 text-sm font-semibold">{t(language, 'FinCFStatutory')} ({t(language, 'AllTime') || 'All Time'})</span>
@@ -851,7 +837,7 @@ export default function InvoicesPage() {
                                         </td>
                                         <td className="p-3 text-slate-600 whitespace-nowrap">{new Date(inv.invoice_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
                                         <td className="p-3 text-slate-700 font-medium">
-                                            {inv.is_personal_deduction ? inv.custom_supplier_name : ((inv as any).suppliers?.name || '—')}
+                                            {inv.is_personal_deduction ? inv.custom_supplier_name : ((inv as any).suppliers?.name || inv.custom_supplier_name || '—')}
                                         </td>
                                         <td className="p-3 text-slate-600 whitespace-nowrap">
                                             <div className="flex flex-row items-center gap-1 overflow-hidden">
@@ -1141,7 +1127,7 @@ export default function InvoicesPage() {
                                             {t(language, 'FinInvBranchAllocation')} <span className="text-red-500">*</span>
                                         </label>
                                         <div className="flex items-center gap-3">
-                                            <button type="button" onClick={() => setForm(f => ({ ...f, branch_ids: branches.map(b => b.id) }))} className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition">
+                                            <button type="button" onClick={() => setForm(f => ({ ...f, branch_ids: branches.filter(b => (b as any).is_active !== false).map(b => b.id) }))} className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition">
                                                 {t(language, 'FinInvSelectAll')}
                                             </button>
                                             <button type="button" onClick={() => setForm(f => ({ ...f, branch_ids: [] }))} className="text-xs font-bold text-slate-500 hover:text-slate-700 hover:underline transition">
@@ -1150,7 +1136,7 @@ export default function InvoicesPage() {
                                         </div>
                                     </div>
                                     <div className="flex flex-wrap gap-2 items-center bg-slate-50/50 p-3 rounded-xl border border-slate-200">
-                                        {branches.map(b => (
+                                        {branches.filter(b => (b as any).is_active !== false || form.branch_ids.includes(b.id)).map(b => (
                                             <button
                                                 type="button"
                                                 key={b.id}

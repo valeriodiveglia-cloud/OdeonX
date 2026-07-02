@@ -233,6 +233,7 @@ export default function EventSettingsPage() {
         const { data, error } = await supabase
           .from('provider_branches')
           .select('*')
+          .eq('is_active', true)
           .order('name', { ascending: true })
         if (error) throw error
         const map: Record<string, ProviderBranch> = {}

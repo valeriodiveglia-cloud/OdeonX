@@ -2227,6 +2227,33 @@ ALTER TABLE ONLY public.rental_equipment
 
 
 --
+-- Name: materials materials_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.materials
+    ADD CONSTRAINT fk_materials_supplier_id FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) ON DELETE RESTRICT;
+
+
+
+--
+-- Name: materials fk_materials_category_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.materials
+    ADD CONSTRAINT fk_materials_category_id FOREIGN KEY (category_id) REFERENCES public.categories(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: materials fk_materials_uom_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.materials
+    ADD CONSTRAINT fk_materials_uom_id FOREIGN KEY (uom_id) REFERENCES public.uom(id) ON DELETE RESTRICT;
+
+
+
+
+--
 -- Name: app_accounts admin can delete all; Type: POLICY; Schema: public; Owner: -
 --
 

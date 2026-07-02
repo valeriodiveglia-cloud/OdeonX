@@ -26,6 +26,7 @@ import {
 } from '../_data/useBankTransfers'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getDailyReportsDictionary } from '../_i18n'
+import MonthPicker from '@/components/MonthPicker'
 
 /* ---------- Bridge (solo per nome branch, come Credits) ---------- */
 function useBridgeSafe() {
@@ -176,42 +177,25 @@ function MonthNav({
   guardDisabled: boolean
   t: ReturnType<typeof getDailyReportsDictionary>['banktransfers']['monthNav']
 }) {
-  const baseBtn = 'flex items-center gap-1 text-blue-100 hover:text-white transition'
+  const { language } = useSettings()
+
+  const handleMonthChange = (newVal: string) => {
+    if (newVal > monthInputValue && guardDisabled) {
+      return
+    }
+    onPickMonth(newVal)
+  }
 
   return (
-    <div className="mt-3 mb-4 flex items-center justify-between text-sm text-blue-100">
-      <button type="button" onClick={prevMonth} className={baseBtn} title={t.prevTitle}>
-        <ChevronLeftIcon className="w-4 h-4" />
-        <span>{t.previous}</span>
-      </button>
-
-      <div className="flex items-center gap-2 text-white">
-        <span className="text-base font-semibold">{monthLabel}</span>
-        <div className="relative w-6 h-6">
-          <CalendarDaysIcon className="w-6 h-6 text-blue-200" />
-          <input
-            type="month"
-            value={monthInputValue}
-            onChange={e => onPickMonth(e.target.value)}
-            className="absolute inset-0 opacity-0 cursor-pointer"
-            aria-label={t.pick}
-            title={t.pick}
-          />
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={guardDisabled ? undefined : nextMonth}
-        disabled={guardDisabled}
-        aria-disabled={guardDisabled}
-        className={`${baseBtn} ${guardDisabled ? 'cursor-default' : ''}`}
-        title={t.nextTitle}
-      >
-        <span>{t.next}</span>
-        <ChevronRightIcon className="w-4 h-4" />
-      </button>
-    </div>
+    <MonthPicker
+      value={monthInputValue}
+      onChange={handleMonthChange}
+      language={language}
+      colorClass="text-blue-100 hover:text-white"
+      labelColorClass="text-white"
+      iconColorClass="text-blue-200 hover:text-white"
+      className="mt-3 mb-4"
+    />
   )
 }
 

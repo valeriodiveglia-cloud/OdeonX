@@ -15,6 +15,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
+import MonthPicker from '@/components/MonthPicker'
 
 import { exportToExcelTable, type ExcelColumn } from '@/lib/exportUtils'
 
@@ -137,12 +138,8 @@ export default function MonthlyBankTransfersPage() {
         return { count, totalAmount }
     }, [filtered])
 
-    function prevMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), -1)) }
-    function nextMonth() { setMonthCursor(addMonths(startOfMonth(monthCursor), 1)) }
-    function onPickMonth(val: string) {
-        const d = fromMonthInputValue(val)
-        if (d) setMonthCursor(d)
-    }
+
+
 
     const columnMenuDict = t.table?.columnMenu || { sortAsc: 'Sort Ascending', sortDesc: 'Sort Descending', selectAll: 'Select All', deselectAll: 'Deselect All', filterPlaceholder: 'Search...', clearFilters: 'Clear Filters' }
 
@@ -216,39 +213,18 @@ export default function MonthlyBankTransfersPage() {
             {/* Divider */}
             <div className="border-t border-blue-400/20 my-3"></div>
 
-            {/* Month Nav */}
-            <div className="mb-3 grid grid-cols-3 items-center">
-                <div className="justify-self-start">
-                    <button
-                        type="button"
-                        onClick={prevMonth}
-                        className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
-                    >
-                        Previous
-                    </button>
-                </div>
-                <div className="justify-self-center flex items-center gap-2">
-                    <span className="text-white font-semibold">{formatMonthLabel(monthCursor)}</span>
-                    <div className="relative w-6 h-6">
-                        <CalendarDaysIcon className="w-6 h-6 text-blue-200" />
-                        <input
-                            type="month"
-                            value={monthInputValue}
-                            onChange={e => onPickMonth(e.target.value)}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                    </div>
-                </div>
-                <div className="justify-self-end">
-                    <button
-                        type="button"
-                        onClick={nextMonth}
-                        className="text-blue-200 hover:text-white underline underline-offset-4 decoration-blue-300/40"
-                    >
-                        Next
-                    </button>
-                </div>
-            </div>
+            <MonthPicker
+                value={monthInputValue}
+                onChange={(val) => {
+                    const d = fromMonthInputValue(val)
+                    if (d) setMonthCursor(d)
+                }}
+                language={language}
+                colorClass="text-blue-100 hover:text-white"
+                labelColorClass="text-white"
+                iconColorClass="text-blue-200 hover:text-white"
+                className="mb-3"
+            />
 
             {/* KPI */}
             <div className="grid grid-cols-2 md:grid-cols-2 gap-2 mb-3">

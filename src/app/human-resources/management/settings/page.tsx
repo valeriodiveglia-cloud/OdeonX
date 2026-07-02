@@ -31,19 +31,28 @@ type TabKey = typeof TABS[number]['key']
 function DeleteConfirm({ label, onConfirm, onCancel, deleting }: {
     label: string; onConfirm: () => void; onCancel: () => void; deleting: boolean
 }) {
+    const { language } = useSettings()
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Delete</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {language === 'vi' ? 'Xác nhận xóa' : 'Confirm Delete'}
+                </h3>
                 <p className="text-sm text-gray-600 mb-6">
-                    Are you sure you want to delete <strong>{label}</strong>? This cannot be undone.
+                    {language === 'vi' ? (
+                        <>Bạn có chắc chắn muốn xóa <strong>{label}</strong>? Hành động này không thể hoàn tác.</>
+                    ) : (
+                        <>Are you sure you want to delete <strong>{label}</strong>? This cannot be undone.</>
+                    )}
                 </p>
                 <div className="flex justify-end gap-3">
-                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                        {language === 'vi' ? 'Hủy' : 'Cancel'}
+                    </button>
                     <button onClick={onConfirm} disabled={deleting}
                         className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2">
                         {deleting && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                        Delete
+                        {language === 'vi' ? 'Xóa' : 'Delete'}
                     </button>
                 </div>
             </div>
@@ -80,6 +89,7 @@ function InlineForm({ value, onSave, onCancel, placeholder, saving }: {
 function DepartmentsTab({ departments, positions, onRefresh }: {
     departments: HRDepartment[]; positions: HRPosition[]; onRefresh: () => void
 }) {
+    const { language } = useSettings()
     const [adding, setAdding]       = useState(false)
     const [editId, setEditId]       = useState<string | null>(null)
     const [saving, setSaving]       = useState(false)
@@ -108,12 +118,16 @@ function DepartmentsTab({ departments, positions, onRefresh }: {
         <div>
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Departments</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Organize staff into departments. These will appear as dropdown options.</p>
+                    <h2 className="text-lg font-semibold text-white">
+                        {language === 'vi' ? 'Phòng ban' : 'Departments'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                        {language === 'vi' ? 'Quản lý nhân viên theo phòng ban. Các phòng ban này sẽ hiển thị dưới dạng tùy chọn thả xuống.' : 'Organize staff into departments. These will appear as dropdown options.'}
+                    </p>
                 </div>
                 <button onClick={() => setAdding(true)}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition">
-                    <Plus className="w-4 h-4" /> Add
+                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm' : 'Add'}
                 </button>
             </div>
 
@@ -122,9 +136,15 @@ function DepartmentsTab({ departments, positions, onRefresh }: {
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
                             <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-8">#</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Name</th>
-                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Positions</th>
-                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">Actions</th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Tên' : 'Name'}
+                            </th>
+                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Chức vụ' : 'Positions'}
+                            </th>
+                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">
+                                {language === 'vi' ? 'Hành động' : 'Actions'}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -132,7 +152,7 @@ function DepartmentsTab({ departments, positions, onRefresh }: {
                             <tr className="border-t border-gray-100 bg-blue-50/30">
                                 <td className="px-4 py-2 text-sm text-gray-400">—</td>
                                 <td className="px-4 py-2" colSpan={2}>
-                                    <InlineForm value="" onSave={handleAdd} onCancel={() => setAdding(false)} placeholder="Department name…" saving={saving} />
+                                    <InlineForm value="" onSave={handleAdd} onCancel={() => setAdding(false)} placeholder={language === 'vi' ? 'Tên phòng ban…' : 'Department name…'} saving={saving} />
                                 </td>
                                 <td />
                             </tr>
@@ -144,7 +164,7 @@ function DepartmentsTab({ departments, positions, onRefresh }: {
                                     <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
                                     <td className="px-4 py-3">
                                         {editId === d.id ? (
-                                            <InlineForm value={d.name} onSave={(n) => handleEdit(d.id, n)} onCancel={() => setEditId(null)} placeholder="Department name…" saving={saving} />
+                                            <InlineForm value={d.name} onSave={(n) => handleEdit(d.id, n)} onCancel={() => setEditId(null)} placeholder={language === 'vi' ? 'Tên phòng ban…' : 'Department name…'} saving={saving} />
                                         ) : (
                                             <div className="flex items-center gap-2">
                                                 <Building2 className="w-4 h-4 text-blue-500" />
@@ -153,7 +173,9 @@ function DepartmentsTab({ departments, positions, onRefresh }: {
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-center">
-                                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{posCount} positions</span>
+                                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                            {language === 'vi' ? `${posCount} chức vụ` : `${posCount} positions`}
+                                        </span>
                                     </td>
                                     <td className="px-4 py-3 text-center">
                                         <div className="flex items-center justify-center gap-1">
@@ -166,7 +188,10 @@ function DepartmentsTab({ departments, positions, onRefresh }: {
                         })}
                         {departments.length === 0 && !adding && (
                             <tr><td colSpan={4} className="px-4 py-12 text-center text-gray-400 text-sm">
-                                No departments yet. <button onClick={() => setAdding(true)} className="text-blue-600 hover:text-blue-700 font-medium">Add your first</button>
+                                {language === 'vi' ? 'Chưa có phòng ban nào. ' : 'No departments yet. '}
+                                <button onClick={() => setAdding(true)} className="text-blue-600 hover:text-blue-700 font-medium">
+                                    {language === 'vi' ? 'Thêm phòng ban đầu tiên' : 'Add your first'}
+                                </button>
                             </td></tr>
                         )}
                     </tbody>
@@ -184,6 +209,7 @@ function DepartmentsTab({ departments, positions, onRefresh }: {
 function PositionsTab({ departments, positions, onRefresh }: {
     departments: HRDepartment[]; positions: HRPosition[]; onRefresh: () => void
 }) {
+    const { language } = useSettings()
     const [modalOpen, setModalOpen] = useState(false)
     const [editPos, setEditPos]     = useState<HRPosition | null>(null)
     const [saving, setSaving]       = useState(false)
@@ -224,12 +250,16 @@ function PositionsTab({ departments, positions, onRefresh }: {
         <div>
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Positions</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Define job positions. Optionally link them to a department.</p>
+                    <h2 className="text-lg font-semibold text-white">
+                        {language === 'vi' ? 'Chức vụ' : 'Positions'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                        {language === 'vi' ? 'Định nghĩa các chức vụ công việc. Tùy chọn liên kết chúng với một phòng ban.' : 'Define job positions. Optionally link them to a department.'}
+                    </p>
                 </div>
                 <button onClick={openAdd}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition">
-                    <Plus className="w-4 h-4" /> Add
+                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm' : 'Add'}
                 </button>
             </div>
 
@@ -238,9 +268,15 @@ function PositionsTab({ departments, positions, onRefresh }: {
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
                             <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-8">#</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Position</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Department</th>
-                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">Actions</th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Chức vụ' : 'Position'}
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Phòng ban' : 'Department'}
+                            </th>
+                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">
+                                {language === 'vi' ? 'Hành động' : 'Actions'}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -260,7 +296,9 @@ function PositionsTab({ departments, positions, onRefresh }: {
                                             {deptMap[p.department_id]}
                                         </span>
                                     ) : (
-                                        <span className="text-xs text-gray-400 italic">Any department</span>
+                                        <span className="text-xs text-gray-400 italic">
+                                            {language === 'vi' ? 'Tất cả phòng ban' : 'Any department'}
+                                        </span>
                                     )}
                                 </td>
                                 <td className="px-4 py-3 text-center">
@@ -273,7 +311,10 @@ function PositionsTab({ departments, positions, onRefresh }: {
                         ))}
                         {positions.length === 0 && (
                             <tr><td colSpan={4} className="px-4 py-12 text-center text-gray-400 text-sm">
-                                No positions yet. <button onClick={openAdd} className="text-blue-600 hover:text-blue-700 font-medium">Add your first</button>
+                                {language === 'vi' ? 'Chưa có chức vụ nào. ' : 'No positions yet. '}
+                                <button onClick={openAdd} className="text-blue-600 hover:text-blue-700 font-medium">
+                                    {language === 'vi' ? 'Thêm chức vụ đầu tiên' : 'Add your first'}
+                                </button>
                             </td></tr>
                         )}
                     </tbody>
@@ -284,28 +325,36 @@ function PositionsTab({ departments, positions, onRefresh }: {
             {modalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">{editPos ? 'Edit Position' : 'New Position'}</h3>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                            {editPos ? (language === 'vi' ? 'Sửa chức vụ' : 'Edit Position') : (language === 'vi' ? 'Chức vụ mới' : 'New Position')}
+                        </h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Position Name *</label>
-                                <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Head Chef"
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Tên chức vụ *' : 'Position Name *'}
+                                </label>
+                                <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={language === 'vi' ? 'vd. Bếp trưởng' : 'e.g. Head Chef'}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Department (optional)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Phòng ban (tùy chọn)' : 'Department (optional)'}
+                                </label>
                                 <select value={deptId} onChange={e => setDeptId(e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                                    <option value="">Any department</option>
+                                    <option value="">{language === 'vi' ? 'Tất cả phòng ban' : 'Any department'}</option>
                                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                 </select>
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
-                            <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                            <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                                {language === 'vi' ? 'Hủy' : 'Cancel'}
+                            </button>
                             <button onClick={handleSave} disabled={saving || !name.trim()}
                                 className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
                                 {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                                {editPos ? 'Update' : 'Create'}
+                                {editPos ? (language === 'vi' ? 'Cập nhật' : 'Update') : (language === 'vi' ? 'Tạo mới' : 'Create')}
                             </button>
                         </div>
                     </div>
@@ -323,6 +372,7 @@ function PositionsTab({ departments, positions, onRefresh }: {
 function AlertsTab({ departments, positions, alerts, onRefresh }: {
     departments: HRDepartment[]; positions: HRPosition[]; alerts: HRAlertSetting[]; onRefresh: () => void
 }) {
+    const { language } = useSettings()
     const [modalOpen, setModalOpen] = useState(false)
     const [editAlert, setEditAlert] = useState<HRAlertSetting | null>(null)
     const [saving, setSaving]       = useState(false)
@@ -383,27 +433,27 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
     const scopeBadge = (cat: HRAlertSetting) => {
         if (cat.scope === 'global') return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
-                <Globe className="w-3 h-3" /> Global
+                <Globe className="w-3 h-3" /> {language === 'vi' ? 'Toàn cục' : 'Global'}
             </span>
         )
         if (cat.scope === 'department') return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                <Building2 className="w-3 h-3" /> {cat.scope_id ? deptMap[cat.scope_id] || 'Unknown' : '—'}
+                <Building2 className="w-3 h-3" /> {cat.scope_id ? deptMap[cat.scope_id] || (language === 'vi' ? 'Không xác định' : 'Unknown') : '—'}
             </span>
         )
         return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                <Briefcase className="w-3 h-3" /> {cat.scope_id ? posMap[cat.scope_id] || 'Unknown' : '—'}
+                <Briefcase className="w-3 h-3" /> {cat.scope_id ? posMap[cat.scope_id] || (language === 'vi' ? 'Không xác định' : 'Unknown') : '—'}
             </span>
         )
     }
 
     const targetLabel = (tf: AlertTargetField) => {
-        if (tf === 'start_date') return 'Start Date'
-        if (tf === 'probation_end_date') return 'Probation End'
-        if (tf === 'contract_expiration_date') return 'Contract Exp.'
-        if (tf === 'contract_signing_date') return 'Contract Signing Date'
-        if (tf === 'last_status_change') return 'Last Status Change'
+        if (tf === 'start_date') return language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'
+        if (tf === 'probation_end_date') return language === 'vi' ? 'Hết hạn thử việc' : 'Probation End'
+        if (tf === 'contract_expiration_date') return language === 'vi' ? 'Hết hạn hợp đồng' : 'Contract Exp.'
+        if (tf === 'contract_signing_date') return language === 'vi' ? 'Ngày ký hợp đồng' : 'Contract Signing Date'
+        if (tf === 'last_status_change') return language === 'vi' ? 'Thay đổi trạng thái gần nhất' : 'Last Status Change'
         return tf
     }
 
@@ -411,12 +461,16 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
         <div>
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Staff Alerts</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Configure notification rules for staff deadlines (e.g. Contract expiration).</p>
+                    <h2 className="text-lg font-semibold text-white">
+                        {language === 'vi' ? 'Cảnh báo nhân viên' : 'Staff Alerts'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                        {language === 'vi' ? 'Cấu hình các quy tắc thông báo cho thời hạn của nhân viên (ví dụ: Hết hạn hợp đồng).' : 'Configure notification rules for staff deadlines (e.g. Contract expiration).'}
+                    </p>
                 </div>
                 <button onClick={openAdd}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition">
-                    <Plus className="w-4 h-4" /> Add
+                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm' : 'Add'}
                 </button>
             </div>
 
@@ -425,10 +479,18 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
                             <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-8">#</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Alert Name</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Trigger</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Scope</th>
-                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">Actions</th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Tên cảnh báo' : 'Alert Name'}
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Kích hoạt' : 'Trigger'}
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Phạm vi' : 'Scope'}
+                            </th>
+                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">
+                                {language === 'vi' ? 'Hành động' : 'Actions'}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -444,8 +506,14 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
                                 <td className="px-4 py-3">
                                     <div className="flex flex-col">
                                         <span className="text-sm text-gray-800">{targetLabel(a.target_field)}</span>
-                                        <span className="text-xs text-gray-400">{a.days} days {a.condition_type}</span>
-                                        {a.deactivate_trigger && <span className="text-[10px] text-emerald-600 font-medium mt-0.5">Deactivates on: {targetLabel(a.deactivate_trigger)}</span>}
+                                        <span className="text-xs text-gray-400">
+                                            {language === 'vi' ? `${a.days} ngày ${a.condition_type === 'before' ? 'trước' : 'sau'}` : `${a.days} days ${a.condition_type}`}
+                                        </span>
+                                        {a.deactivate_trigger && (
+                                            <span className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                                                {language === 'vi' ? 'Tự động hủy khi:' : 'Deactivates on:'} {targetLabel(a.deactivate_trigger)}
+                                            </span>
+                                        )}
                                     </div>
                                 </td>
                                 <td className="px-4 py-3">{scopeBadge(a)}</td>
@@ -459,7 +527,10 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
                         ))}
                         {alerts.length === 0 && (
                             <tr><td colSpan={5} className="px-4 py-12 text-center text-gray-400 text-sm">
-                                No alerts configured. <button onClick={openAdd} className="text-blue-600 hover:text-blue-700 font-medium">Add your first</button>
+                                {language === 'vi' ? 'Chưa cấu hình cảnh báo nào. ' : 'No alerts configured. '}
+                                <button onClick={openAdd} className="text-blue-600 hover:text-blue-700 font-medium">
+                                    {language === 'vi' ? 'Thêm cảnh báo đầu tiên' : 'Add your first'}
+                                </button>
                             </td></tr>
                         )}
                     </tbody>
@@ -472,7 +543,9 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
                     <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col">
                         {/* Header */}
                         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-                            <h3 className="text-lg font-semibold text-gray-900">{editAlert ? 'Edit Alert' : 'New Alert'}</h3>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                                {editAlert ? (language === 'vi' ? 'Sửa cảnh báo' : 'Edit Alert') : (language === 'vi' ? 'Cảnh báo mới' : 'New Alert')}
+                            </h3>
                             <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
                                 <X className="w-5 h-5" />
                             </button>
@@ -481,63 +554,85 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
                         <div className="p-6 space-y-6 flex-1 overflow-y-auto max-h-[80vh]">
                             {/* General Settings */}
                             <div>
-                                <label className="block text-sm font-semibold text-gray-900 mb-1">Alert Label</label>
-                                <p className="text-xs text-gray-500 mb-3">Give this alert a clear, descriptive name.</p>
-                                <input autoFocus value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Renew Contract"
+                                <label className="block text-sm font-semibold text-gray-900 mb-1">
+                                    {language === 'vi' ? 'Nhãn cảnh báo' : 'Alert Label'}
+                                </label>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    {language === 'vi' ? 'Đặt tên rõ ràng và mô tả cho cảnh báo này.' : 'Give this alert a clear, descriptive name.'}
+                                </p>
+                                <input autoFocus value={label} onChange={e => setLabel(e.target.value)} placeholder={language === 'vi' ? 'vd. Gia hạn hợp đồng' : 'e.g. Renew Contract'}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" />
                             </div>
 
                             {/* Rule Configuration */}
                             <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-4">
                                 <div>
-                                    <h4 className="text-sm font-semibold text-gray-900 mb-1">Trigger Condition</h4>
-                                    <p className="text-xs text-gray-500 mb-3">Define exactly when this alert should appear.</p>
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                                        {language === 'vi' ? 'Điều kiện kích hoạt' : 'Trigger Condition'}
+                                    </h4>
+                                    <p className="text-xs text-gray-500 mb-3">
+                                        {language === 'vi' ? 'Xác định chính xác thời điểm cảnh báo này xuất hiện.' : 'Define exactly when this alert should appear.'}
+                                    </p>
                                 </div>
                                 <div className="grid grid-cols-12 gap-3 items-end">
                                     <div className="col-span-5">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Target Field</label>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            {language === 'vi' ? 'Trường mục tiêu' : 'Target Field'}
+                                        </label>
                                         <select value={targetField} onChange={e => setTargetField(e.target.value as AlertTargetField)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                            <option value="start_date">Start Date</option>
-                                            <option value="probation_end_date">Probation End</option>
-                                            <option value="contract_expiration_date">Contract Expiration</option>
-                                            <option value="last_status_change">Last Status Change</option>
+                                            <option value="start_date">{language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'}</option>
+                                            <option value="probation_end_date">{language === 'vi' ? 'Hết hạn thử việc' : 'Probation End'}</option>
+                                            <option value="contract_expiration_date">{language === 'vi' ? 'Hết hạn hợp đồng' : 'Contract Expiration'}</option>
+                                            <option value="last_status_change">{language === 'vi' ? 'Thay đổi trạng thái gần nhất' : 'Last Status Change'}</option>
                                         </select>
                                     </div>
                                     <div className="col-span-4">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Condition</label>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            {language === 'vi' ? 'Điều kiện' : 'Condition'}
+                                        </label>
                                         <select value={conditionType} onChange={e => setConditionType(e.target.value as 'before' | 'after')}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                            <option value="before">Before</option>
-                                            <option value="after">After</option>
+                                            <option value="before">{language === 'vi' ? 'Trước' : 'Before'}</option>
+                                            <option value="after">{language === 'vi' ? 'Sau' : 'After'}</option>
                                         </select>
                                     </div>
                                     <div className="col-span-3">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Days</label>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            {language === 'vi' ? 'Số ngày' : 'Days'}
+                                        </label>
                                         <input type="number" min="0" value={days} onChange={e => setDays(e.target.value)}
                                             placeholder="30"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1 mt-1">Deactivation Trigger (Optional)</label>
-                                    <p className="text-[11px] text-gray-500 mb-2">If set, the alert disappears automatically once this field is updated to a date after the alert started.</p>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1 mt-1">
+                                        {language === 'vi' ? 'Điều kiện hủy kích hoạt (Tùy chọn)' : 'Deactivation Trigger (Optional)'}
+                                    </label>
+                                    <p className="text-[11px] text-gray-500 mb-2">
+                                        {language === 'vi' ? 'Nếu được đặt, cảnh báo sẽ tự động biến mất khi trường này được cập nhật ngày sau ngày bắt đầu cảnh báo.' : 'If set, the alert disappears automatically once this field is updated to a date after the alert started.'}
+                                    </p>
                                     <select value={deactivateTrigger} onChange={e => setDeactivateTrigger(e.target.value as any)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                        <option value="">None (Stays until Target Date changes)</option>
-                                        <option value="start_date">Start Date</option>
-                                        <option value="probation_end_date">Probation End</option>
-                                        <option value="contract_expiration_date">Contract Expiration</option>
-                                        <option value="contract_signing_date">Contract Signing Date</option>
-                                        <option value="last_status_change">Last Status Change</option>
+                                        <option value="">{language === 'vi' ? 'Không (Giữ cho đến khi Ngày mục tiêu thay đổi)' : 'None (Stays until Target Date changes)'}</option>
+                                        <option value="start_date">{language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'}</option>
+                                        <option value="probation_end_date">{language === 'vi' ? 'Hết hạn thử việc' : 'Probation End'}</option>
+                                        <option value="contract_expiration_date">{language === 'vi' ? 'Hết hạn hợp đồng' : 'Contract Expiration'}</option>
+                                        <option value="contract_signing_date">{language === 'vi' ? 'Ngày ký hợp đồng' : 'Contract Signing Date'}</option>
+                                        <option value="last_status_change">{language === 'vi' ? 'Thay đổi trạng thái gần nhất' : 'Last Status Change'}</option>
                                     </select>
                                 </div>
                             </div>
 
                             {/* Scope Configuration */}
                             <div>
-                                <h4 className="text-sm font-semibold text-gray-900 mb-1">Alert Scope</h4>
-                                <p className="text-xs text-gray-500 mb-3">Who should this alert apply to?</p>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                                    {language === 'vi' ? 'Phạm vi cảnh báo' : 'Alert Scope'}
+                                </h4>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    {language === 'vi' ? 'Cảnh báo này áp dụng cho ai?' : 'Who should this alert apply to?'}
+                                </p>
                                 <div className="flex gap-2 mb-4">
                                     {(['global', 'department', 'position'] as AlertScope[]).map(s => (
                                         <button key={s} type="button" onClick={() => { setScope(s); setScopeId('') }}
@@ -549,27 +644,33 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
                                             {s === 'global' && <Globe className="w-5 h-5 mb-1.5" />}
                                             {s === 'department' && <Building2 className="w-5 h-5 mb-1.5" />}
                                             {s === 'position' && <Briefcase className="w-5 h-5 mb-1.5" />}
-                                            <span className="text-xs font-medium">{s.charAt(0).toUpperCase() + s.slice(1)}</span>
+                                            <span className="text-xs font-medium">
+                                                {s === 'global' ? (language === 'vi' ? 'Toàn cục' : 'Global') : s === 'department' ? (language === 'vi' ? 'Phòng ban' : 'Department') : (language === 'vi' ? 'Chức vụ' : 'Position')}
+                                            </span>
                                         </button>
                                     ))}
                                 </div>
 
                                 {scope === 'department' && (
                                     <div className="animate-in slide-in-from-top-1 fade-in duration-200">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Select Department</label>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            {language === 'vi' ? 'Chọn phòng ban' : 'Select Department'}
+                                        </label>
                                         <select value={scopeId} onChange={e => setScopeId(e.target.value)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                            <option value="">Select department…</option>
+                                            <option value="">{language === 'vi' ? 'Chọn phòng ban…' : 'Select department…'}</option>
                                             {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                         </select>
                                     </div>
                                 )}
                                 {scope === 'position' && (
                                     <div className="animate-in slide-in-from-top-1 fade-in duration-200">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Select Position</label>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            {language === 'vi' ? 'Chọn chức vụ' : 'Select Position'}
+                                        </label>
                                         <select value={scopeId} onChange={e => setScopeId(e.target.value)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                            <option value="">Select position…</option>
+                                            <option value="">{language === 'vi' ? 'Chọn chức vụ…' : 'Select position…'}</option>
                                             {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                         </select>
                                     </div>
@@ -581,11 +682,11 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
                         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3">
                             <button onClick={() => setModalOpen(false)}
                                 className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition">
-                                Cancel
+                                {language === 'vi' ? 'Hủy' : 'Cancel'}
                             </button>
                             <button onClick={handleSave} disabled={saving || !label.trim() || (scope !== 'global' && !scopeId)}
                                 className="inline-flex items-center justify-center min-w-[100px] px-4 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
-                                {saving ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : (editAlert ? 'Update' : 'Create')}
+                                {saving ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : (editAlert ? (language === 'vi' ? 'Cập nhật' : 'Update') : (language === 'vi' ? 'Tạo mới' : 'Create'))}
                             </button>
                         </div>
                     </div>
@@ -603,6 +704,7 @@ function AlertsTab({ departments, positions, alerts, onRefresh }: {
 function CategoriesTab({ departments, positions, categories, onRefresh }: {
     departments: HRDepartment[]; positions: HRPosition[]; categories: HRRatingCategory[]; onRefresh: () => void
 }) {
+    const { language } = useSettings()
     const [modalOpen, setModalOpen] = useState(false)
     const [editCat, setEditCat]     = useState<HRRatingCategory | null>(null)
     const [saving, setSaving]       = useState(false)
@@ -649,17 +751,17 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
     const scopeBadge = (cat: HRRatingCategory) => {
         if (cat.scope === 'global') return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
-                <Globe className="w-3 h-3" /> Global
+                <Globe className="w-3 h-3" /> {language === 'vi' ? 'Toàn cục' : 'Global'}
             </span>
         )
         if (cat.scope === 'department') return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                <Building2 className="w-3 h-3" /> {cat.scope_id ? deptMap[cat.scope_id] || 'Unknown' : '—'}
+                <Building2 className="w-3 h-3" /> {cat.scope_id ? deptMap[cat.scope_id] || (language === 'vi' ? 'Không xác định' : 'Unknown') : '—'}
             </span>
         )
         return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                <Briefcase className="w-3 h-3" /> {cat.scope_id ? posMap[cat.scope_id] || 'Unknown' : '—'}
+                <Briefcase className="w-3 h-3" /> {cat.scope_id ? posMap[cat.scope_id] || (language === 'vi' ? 'Không xác định' : 'Unknown') : '—'}
             </span>
         )
     }
@@ -668,12 +770,16 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
         <div>
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Rating Categories</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Define performance rating criteria. Assign globally, per department, or per position.</p>
+                    <h2 className="text-lg font-semibold text-white">
+                        {language === 'vi' ? 'Danh mục đánh giá' : 'Rating Categories'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                        {language === 'vi' ? 'Định nghĩa tiêu chí đánh giá hiệu suất. Áp dụng toàn cục, theo phòng ban, hoặc theo chức vụ.' : 'Define performance rating criteria. Assign globally, per department, or per position.'}
+                    </p>
                 </div>
                 <button onClick={openAdd}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition">
-                    <Plus className="w-4 h-4" /> Add
+                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm' : 'Add'}
                 </button>
             </div>
 
@@ -682,9 +788,15 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
                             <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-8">#</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Category</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Scope</th>
-                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">Actions</th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Danh mục' : 'Category'}
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Phạm vi' : 'Scope'}
+                            </th>
+                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">
+                                {language === 'vi' ? 'Hành động' : 'Actions'}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -708,7 +820,10 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
                         ))}
                         {categories.length === 0 && (
                             <tr><td colSpan={4} className="px-4 py-12 text-center text-gray-400 text-sm">
-                                No rating categories yet. <button onClick={openAdd} className="text-blue-600 hover:text-blue-700 font-medium">Add your first</button>
+                                {language === 'vi' ? 'Chưa có danh mục đánh giá nào. ' : 'No rating categories yet. '}
+                                <button onClick={openAdd} className="text-blue-600 hover:text-blue-700 font-medium">
+                                    {language === 'vi' ? 'Thêm danh mục đầu tiên' : 'Add your first'}
+                                </button>
                             </td></tr>
                         )}
                     </tbody>
@@ -719,17 +834,23 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
             {modalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">{editCat ? 'Edit Category' : 'New Rating Category'}</h3>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                            {editCat ? (language === 'vi' ? 'Sửa danh mục' : 'Edit Category') : (language === 'vi' ? 'Danh mục đánh giá mới' : 'New Rating Category')}
+                        </h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Label *</label>
-                                <input autoFocus value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Knife Skills"
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Nhãn *' : 'Label *'}
+                                </label>
+                                <input autoFocus value={label} onChange={e => setLabel(e.target.value)} placeholder={language === 'vi' ? 'vd. Kỹ năng dùng dao' : 'e.g. Knife Skills'}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" />
                             </div>
 
                             {/* Scope selector */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Scope</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    {language === 'vi' ? 'Phạm vi' : 'Scope'}
+                                </label>
                                 <div className="flex gap-2">
                                     {(['global', 'department', 'position'] as RatingCategoryScope[]).map(s => (
                                         <button key={s} type="button" onClick={() => { setScope(s); setScopeId('') }}
@@ -741,7 +862,7 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
                                             {s === 'global' && <Globe className="w-3.5 h-3.5 inline mr-1.5" />}
                                             {s === 'department' && <Building2 className="w-3.5 h-3.5 inline mr-1.5" />}
                                             {s === 'position' && <Briefcase className="w-3.5 h-3.5 inline mr-1.5" />}
-                                            {s.charAt(0).toUpperCase() + s.slice(1)}
+                                            {s === 'global' ? (language === 'vi' ? 'Toàn cục' : 'Global') : s === 'department' ? (language === 'vi' ? 'Phòng ban' : 'Department') : (language === 'vi' ? 'Chức vụ' : 'Position')}
                                         </button>
                                     ))}
                                 </div>
@@ -750,20 +871,24 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
                             {/* Scope target */}
                             {scope === 'department' && (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {language === 'vi' ? 'Phòng ban' : 'Department'}
+                                    </label>
                                     <select value={scopeId} onChange={e => setScopeId(e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                                        <option value="">Select department…</option>
+                                        <option value="">{language === 'vi' ? 'Chọn phòng ban…' : 'Select department…'}</option>
                                         {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                     </select>
                                 </div>
                             )}
                             {scope === 'position' && (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {language === 'vi' ? 'Chức vụ' : 'Position'}
+                                    </label>
                                     <select value={scopeId} onChange={e => setScopeId(e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                                        <option value="">Select position…</option>
+                                        <option value="">{language === 'vi' ? 'Chọn chức vụ…' : 'Select position…'}</option>
                                         {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                     </select>
                                 </div>
@@ -771,11 +896,13 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
                         </div>
 
                         <div className="flex justify-end gap-3 mt-6">
-                            <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                            <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                                {language === 'vi' ? 'Hủy' : 'Cancel'}
+                            </button>
                             <button onClick={handleSave} disabled={saving || !label.trim() || (scope !== 'global' && !scopeId)}
                                 className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
                                 {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                                {editCat ? 'Update' : 'Create'}
+                                {editCat ? (language === 'vi' ? 'Cập nhật' : 'Update') : (language === 'vi' ? 'Tạo mới' : 'Create')}
                             </button>
                         </div>
                     </div>
@@ -791,25 +918,39 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
    REVIEW PERIODS TAB
    ═══════════════════════════════════════════════════ */
 function ReviewPeriodsTab() {
-    const { hrReviewFrequency, setHrReviewFrequency } = useSettings()
+    const { hrReviewFrequency, setHrReviewFrequency, language } = useSettings()
 
     const PERIOD_OPTIONS = [
         'Daily', 'Weekly', 'Monthly', 'Quarterly', 'Semi-Annually', 'Annually'
     ]
 
+    const getPeriodLabel = (o: string) => {
+        if (o === 'Daily') return language === 'vi' ? 'Hàng ngày' : 'Daily'
+        if (o === 'Weekly') return language === 'vi' ? 'Hàng tuần' : 'Weekly'
+        if (o === 'Monthly') return language === 'vi' ? 'Hàng tháng' : 'Monthly'
+        if (o === 'Quarterly') return language === 'vi' ? 'Hàng quý' : 'Quarterly'
+        if (o === 'Semi-Annually') return language === 'vi' ? 'Nửa năm' : 'Semi-Annually'
+        if (o === 'Annually') return language === 'vi' ? 'Hàng năm' : 'Annually'
+        return o
+    }
+
     return (
         <div>
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Review Frequency</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Define how often performance reviews are conducted across the organization.</p>
+                    <h2 className="text-lg font-semibold text-white">
+                        {language === 'vi' ? 'Tần suất đánh giá' : 'Review Frequency'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                        {language === 'vi' ? 'Xác định tần suất thực hiện đánh giá hiệu suất trong toàn tổ chức.' : 'Define how often performance reviews are conducted across the organization.'}
+                    </p>
                 </div>
             </div>
 
             <div className="rounded-xl bg-white shadow-md overflow-hidden p-6">
                 <div className="max-w-sm">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Frequency
+                        {language === 'vi' ? 'Tần suất' : 'Frequency'}
                     </label>
                     <select 
                         value={hrReviewFrequency} 
@@ -817,11 +958,11 @@ function ReviewPeriodsTab() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                     >
                         {PERIOD_OPTIONS.map(o => (
-                            <option key={o} value={o}>{o}</option>
+                            <option key={o} value={o}>{getPeriodLabel(o)}</option>
                         ))}
                     </select>
                     <p className="text-xs text-gray-500 mt-3">
-                        This setting will automatically organize all performance reviews based on this cycle.
+                        {language === 'vi' ? 'Cài đặt này sẽ tự động tổ chức tất cả các đợt đánh giá hiệu suất dựa trên chu kỳ này.' : 'This setting will automatically organize all performance reviews based on this cycle.'}
                     </p>
                 </div>
             </div>
@@ -835,6 +976,7 @@ function ReviewPeriodsTab() {
 function DisciplinaryCategoriesTab({ categories, onRefresh }: {
     categories: HRDisciplinaryCategory[]; onRefresh: () => void
 }) {
+    const { language } = useSettings()
     const [adding, setAdding]       = useState(false)
     const [editId, setEditId]       = useState<string | null>(null)
     const [saving, setSaving]       = useState(false)
@@ -862,12 +1004,16 @@ function DisciplinaryCategoriesTab({ categories, onRefresh }: {
         <div>
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Disciplinary Categories</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Manage categories for fines/disciplinary actions (e.g., Attendance, Hygiene, Performance).</p>
+                    <h2 className="text-lg font-semibold text-white">
+                        {language === 'vi' ? 'Danh mục kỷ luật' : 'Disciplinary Categories'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                        {language === 'vi' ? 'Quản lý các danh mục cho tiền phạt/hành động kỷ luật (ví dụ: Chuyên cần, Vệ sinh, Hiệu suất).' : 'Manage categories for fines/disciplinary actions (e.g., Attendance, Hygiene, Performance).'}
+                    </p>
                 </div>
                 <button onClick={() => setAdding(true)}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition">
-                    <Plus className="w-4 h-4" /> Add
+                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm' : 'Add'}
                 </button>
             </div>
 
@@ -876,8 +1022,12 @@ function DisciplinaryCategoriesTab({ categories, onRefresh }: {
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
                             <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-8">#</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Category Name</th>
-                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">Actions</th>
+                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                {language === 'vi' ? 'Tên danh mục' : 'Category Name'}
+                            </th>
+                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">
+                                {language === 'vi' ? 'Hành động' : 'Actions'}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -885,7 +1035,7 @@ function DisciplinaryCategoriesTab({ categories, onRefresh }: {
                             <tr className="border-t border-gray-100 bg-blue-50/30">
                                 <td className="px-4 py-2 text-sm text-gray-400">—</td>
                                 <td className="px-4 py-2">
-                                    <InlineForm value="" onSave={handleAdd} onCancel={() => setAdding(false)} placeholder="e.g. Behavioral" saving={saving} />
+                                    <InlineForm value="" onSave={handleAdd} onCancel={() => setAdding(false)} placeholder={language === 'vi' ? 'vd. Hành vi' : 'e.g. Behavioral'} saving={saving} />
                                 </td>
                                 <td />
                             </tr>
@@ -895,7 +1045,7 @@ function DisciplinaryCategoriesTab({ categories, onRefresh }: {
                                 <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
                                 <td className="px-4 py-3">
                                     {editId === c.id ? (
-                                        <InlineForm value={c.name} onSave={(n) => handleEdit(c.id, n)} onCancel={() => setEditId(null)} placeholder="Category name…" saving={saving} />
+                                        <InlineForm value={c.name} onSave={(n) => handleEdit(c.id, n)} onCancel={() => setEditId(null)} placeholder={language === 'vi' ? 'Tên danh mục…' : 'Category name…'} saving={saving} />
                                     ) : (
                                         <span className="text-sm font-medium text-gray-900">{c.name}</span>
                                     )}
@@ -910,7 +1060,10 @@ function DisciplinaryCategoriesTab({ categories, onRefresh }: {
                         ))}
                         {categories.length === 0 && !adding && (
                             <tr><td colSpan={3} className="px-4 py-12 text-center text-gray-400 text-sm">
-                                No disciplinary categories yet. <button onClick={() => setAdding(true)} className="text-blue-600 hover:text-blue-700 font-medium">Add your first</button>
+                                {language === 'vi' ? 'Chưa có danh mục kỷ luật nào. ' : 'No disciplinary categories yet. '}
+                                <button onClick={() => setAdding(true)} className="text-blue-600 hover:text-blue-700 font-medium">
+                                    {language === 'vi' ? 'Thêm danh mục đầu tiên' : 'Add your first'}
+                                </button>
                             </td></tr>
                         )}
                     </tbody>
@@ -937,7 +1090,8 @@ function BonusTab() {
         hrBonus13thGuaranteedPct, setHrBonus13thGuaranteedPct,
         hrBonus13thPerfPct, setHrBonus13thPerfPct,
         hrBonus13thPerfTiers, setHrBonus13thPerfTiers,
-        currency
+        currency,
+        language
     } = useSettings()
 
     const formatCurrencyInput = (val: string) => {
@@ -1049,12 +1203,16 @@ function BonusTab() {
         <div>
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Bonus Configurations</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Configure 14th month rules globally across all staff.</p>
+                    <h2 className="text-lg font-semibold text-white">
+                        {language === 'vi' ? 'Cấu hình tiền thưởng' : 'Bonus Configurations'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                        {language === 'vi' ? 'Cấu hình các quy tắc tháng lương 14 trên toàn bộ nhân viên.' : 'Configure 14th month rules globally across all staff.'}
+                    </p>
                 </div>
                 {hasChanges && (
                     <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
-                        Save Changes
+                        {language === 'vi' ? 'Lưu thay đổi' : 'Save Changes'}
                     </button>
                 )}
             </div>
@@ -1064,11 +1222,15 @@ function BonusTab() {
                 <div>
                     <h3 className="text-md font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <Gift className="w-5 h-5 text-blue-600" />
-                        14th Month Base Eligibility
+                        {language === 'vi' ? 'Điều kiện nhận tháng lương 14 cơ bản' : '14th Month Base Eligibility'}
                     </h3>
                     <div className="max-w-xs">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Base Tenure Threshold (Years)</label>
-                        <p className="text-xs text-gray-500 mb-3">Staff must complete this many years before unlocking the 14th month bonus.</p>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {language === 'vi' ? 'Ngưỡng thâm niên cơ bản (Năm)' : 'Base Tenure Threshold (Years)'}
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                            {language === 'vi' ? 'Nhân viên phải hoàn thành số năm này trước khi mở khóa phần thưởng tháng 14.' : 'Staff must complete this many years before unlocking the 14th month bonus.'}
+                        </p>
                         <div className="relative">
                             <input 
                                 type="number" min="0" max="20"
@@ -1076,7 +1238,9 @@ function BonusTab() {
                                 onChange={e => setBaseYears(e.target.value)}
                                 className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
                             />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">years</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                                {language === 'vi' ? 'năm' : 'years'}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -1087,11 +1251,15 @@ function BonusTab() {
                 <div>
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-md font-semibold text-gray-900 mb-1">Percentage Steps</h3>
-                            <p className="text-xs text-gray-500">Configure what percentage is given each year after reaching the base threshold.</p>
+                            <h3 className="text-md font-semibold text-gray-900 mb-1">
+                                {language === 'vi' ? 'Các bước phần trăm' : 'Percentage Steps'}
+                            </h3>
+                            <p className="text-xs text-gray-500">
+                                {language === 'vi' ? 'Cấu hình tỷ lệ phần trăm được trao mỗi năm sau khi đạt đến ngưỡng cơ bản.' : 'Configure what percentage is given each year after reaching the base threshold.'}
+                            </p>
                         </div>
                         <button onClick={openAddStepModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 transition">
-                            <Plus className="w-4 h-4" /> Add Step
+                            <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm bước' : 'Add Step'}
                         </button>
                     </div>
 
@@ -1100,7 +1268,11 @@ function BonusTab() {
                             <div key={idx} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
                                 <div className="flex-1">
                                     <span className="text-sm font-medium text-gray-700">
-                                        After <span className="font-bold text-gray-900">{step.years}</span> total years
+                                        {language === 'vi' ? (
+                                            <>Sau tổng cộng <span className="font-bold text-gray-900">{step.years}</span> năm</>
+                                        ) : (
+                                            <>After <span className="font-bold text-gray-900">{step.years}</span> total years</>
+                                        )}
                                     </span>
                                 </div>
                                 <div className="relative w-32 shrink-0">
@@ -1115,14 +1287,16 @@ function BonusTab() {
                                 <button 
                                     onClick={() => removeStep(idx)}
                                     className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
-                                    title="Remove this step"
+                                    title={language === 'vi' ? 'Xóa bước này' : 'Remove this step'}
                                 >
                                     <Trash2 className="w-4 h-4" />
                                 </button>
                             </div>
                         ))}
                         {steps.length === 0 && (
-                            <p className="text-sm text-gray-500 text-center py-4 italic">No percentage steps defined. Staff will receive 0% of the 14th month.</p>
+                            <p className="text-sm text-gray-500 text-center py-4 italic">
+                                {language === 'vi' ? 'Chưa định nghĩa bước phần trăm nào. Nhân viên sẽ nhận được 0% của tháng lương 14.' : 'No percentage steps defined. Staff will receive 0% of the 14th month.'}
+                            </p>
                         )}
                     </div>
                 </div>
@@ -1133,12 +1307,16 @@ function BonusTab() {
                 <div>
                     <h3 className="text-md font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <Gift className="w-5 h-5 text-blue-600" />
-                        Part-Time Bonus Calculation
+                        {language === 'vi' ? 'Tính thưởng cho nhân viên bán thời gian' : 'Part-Time Bonus Calculation'}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="flex flex-col h-full">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Max Cap ({currency})</label>
-                            <p className="text-xs text-gray-500 mb-3">Maximum bonus given for reaching target hours.</p>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {language === 'vi' ? 'Giới hạn tối đa' : 'Max Cap'} ({currency})
+                            </label>
+                            <p className="text-xs text-gray-500 mb-3">
+                                {language === 'vi' ? 'Tiền thưởng tối đa được trao khi đạt số giờ mục tiêu.' : 'Maximum bonus given for reaching target hours.'}
+                            </p>
                             <div className="relative mt-auto">
                                 <input 
                                     type="text"
@@ -1150,8 +1328,12 @@ function BonusTab() {
                             </div>
                         </div>
                         <div className="flex flex-col h-full">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Target Hours</label>
-                            <p className="text-xs text-gray-500 mb-3">Hours required to receive the max cap.</p>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {language === 'vi' ? 'Giờ mục tiêu' : 'Target Hours'}
+                            </label>
+                            <p className="text-xs text-gray-500 mb-3">
+                                {language === 'vi' ? 'Số giờ yêu cầu để nhận mức giới hạn tối đa.' : 'Hours required to receive the max cap.'}
+                            </p>
                             <div className="relative mt-auto">
                                 <input 
                                     type="number" min="1"
@@ -1163,8 +1345,12 @@ function BonusTab() {
                             </div>
                         </div>
                         <div className="flex flex-col h-full">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Hours</label>
-                            <p className="text-xs text-gray-500 mb-3">Hours below this get 0 bonus.</p>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {language === 'vi' ? 'Số giờ tối thiểu' : 'Minimum Hours'}
+                            </label>
+                            <p className="text-xs text-gray-500 mb-3">
+                                {language === 'vi' ? 'Số giờ dưới mức này sẽ nhận 0 tiền thưởng.' : 'Hours below this get 0 bonus.'}
+                            </p>
                             <div className="relative mt-auto">
                                 <input 
                                     type="number" min="0"
@@ -1184,19 +1370,25 @@ function BonusTab() {
                 <div>
                     <h3 className="text-md font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <Star className="w-5 h-5 text-amber-500" />
-                        Performance Integration
+                        {language === 'vi' ? 'Tích hợp hiệu suất' : 'Performance Integration'}
                     </h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         {/* 13th Month Split */}
                         <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl space-y-4">
                             <div>
-                                <h4 className="text-sm font-semibold text-gray-900">13th Month Structure</h4>
-                                <p className="text-xs text-gray-500 mt-1">Split the 13th month bonus into a guaranteed portion and a performance-based portion.</p>
+                                <h4 className="text-sm font-semibold text-gray-900">
+                                    {language === 'vi' ? 'Cấu trúc tháng lương 13' : '13th Month Structure'}
+                                </h4>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {language === 'vi' ? 'Chia nhỏ phần thưởng tháng lương 13 thành phần cam kết và phần dựa trên hiệu suất.' : 'Split the 13th month bonus into a guaranteed portion and a performance-based portion.'}
+                                </p>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="relative">
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Guaranteed</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        {language === 'vi' ? 'Cam kết' : 'Guaranteed'}
+                                    </label>
                                     <input 
                                         type="number" min="0" max="100"
                                         value={guaranteed13th} 
@@ -1206,7 +1398,9 @@ function BonusTab() {
                                     <span className="absolute right-3 top-7 text-gray-400 text-sm font-medium">%</span>
                                 </div>
                                 <div className="relative">
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Performance</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        {language === 'vi' ? 'Hiệu suất' : 'Performance'}
+                                    </label>
                                     <input 
                                         type="number" min="0" max="100"
                                         value={perf13th} 
@@ -1221,12 +1415,18 @@ function BonusTab() {
                         {/* Gatekeepers */}
                         <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl space-y-4">
                             <div>
-                                <h4 className="text-sm font-semibold text-gray-900">Bonus Gatekeepers</h4>
-                                <p className="text-xs text-gray-500 mt-1">Minimum average rating required to receive these bonuses at all.</p>
+                                <h4 className="text-sm font-semibold text-gray-900">
+                                    {language === 'vi' ? 'Điều kiện tối thiểu nhận thưởng' : 'Bonus Gatekeepers'}
+                                </h4>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {language === 'vi' ? 'Điểm đánh giá trung bình tối thiểu để nhận các khoản thưởng này.' : 'Minimum average rating required to receive these bonuses at all.'}
+                                </p>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="relative">
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">14th Month Min. Rating</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        {language === 'vi' ? 'Đánh giá tối thiểu tháng 14' : '14th Month Min. Rating'}
+                                    </label>
                                     <input 
                                         type="number" step="0.1" min="0" max="5"
                                         value={minRating14th} 
@@ -1236,7 +1436,9 @@ function BonusTab() {
                                     <span className="absolute right-3 top-7 text-amber-500 text-sm"><Star className="w-4 h-4 fill-current"/></span>
                                 </div>
                                 <div className="relative">
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Part-Time Min. Rating</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        {language === 'vi' ? 'Đánh giá tối thiểu bán thời gian' : 'Part-Time Min. Rating'}
+                                    </label>
                                     <input 
                                         type="number" step="0.1" min="0" max="5"
                                         value={ptMinRating} 
@@ -1253,11 +1455,15 @@ function BonusTab() {
                     <div>
                         <div className="flex items-center justify-between mb-4">
                             <div>
-                                <h3 className="text-md font-semibold text-gray-900 mb-1">13th Month Performance Multipliers</h3>
-                                <p className="text-xs text-gray-500">Configure how the performance portion of the 13th month bonus scales with the rating.</p>
+                                <h3 className="text-md font-semibold text-gray-900 mb-1">
+                                    {language === 'vi' ? 'Hệ số nhân hiệu suất tháng lương 13' : '13th Month Performance Multipliers'}
+                                </h3>
+                                <p className="text-xs text-gray-500">
+                                    {language === 'vi' ? 'Cấu hình cách phần thưởng hiệu suất tháng 13 điều chỉnh theo điểm đánh giá.' : 'Configure how the performance portion of the 13th month bonus scales with the rating.'}
+                                </p>
                             </div>
                             <button onClick={() => { setNewTierMinRating(''); setNewTierMultiplier(''); setAddTierModalOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 transition">
-                                <Plus className="w-4 h-4" /> Add Tier
+                                <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm bậc' : 'Add Tier'}
                             </button>
                         </div>
 
@@ -1270,13 +1476,17 @@ function BonusTab() {
                                 return (
                                     <div key={idx} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
                                         <div className="flex-1 flex items-center gap-2">
-                                            <span className="text-sm font-medium text-gray-700">Rating from</span>
+                                            <span className="text-sm font-medium text-gray-700">
+                                                {language === 'vi' ? 'Điểm đánh giá từ' : 'Rating from'}
+                                            </span>
                                             <span className="font-bold text-gray-900 flex items-center gap-1">
-                                                {tier.min_rating.toFixed(2)} to {upperBound} <Star className="w-3.5 h-3.5 text-amber-500 fill-current" />
+                                                {tier.min_rating.toFixed(2)} {language === 'vi' ? 'đến' : 'to'} {upperBound} <Star className="w-3.5 h-3.5 text-amber-500 fill-current" />
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-xs text-gray-500">gets</span>
+                                            <span className="text-xs text-gray-500">
+                                                {language === 'vi' ? 'nhận' : 'gets'}
+                                            </span>
                                             <div className="relative w-28 shrink-0">
                                                 <input 
                                                     type="number" min="0"
@@ -1290,7 +1500,7 @@ function BonusTab() {
                                         <button 
                                             onClick={() => removeTier(idx)}
                                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
-                                            title="Remove this tier"
+                                            title={language === 'vi' ? 'Xóa bậc này' : 'Remove this tier'}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
@@ -1301,13 +1511,17 @@ function BonusTab() {
                             {perfTiers.length > 0 && perfTiers[0].min_rating > 0 && (
                                 <div className="flex items-center gap-4 bg-gray-100/50 p-3 rounded-lg border border-gray-200 border-dashed text-gray-500">
                                     <div className="flex-1 flex items-center gap-2">
-                                        <span className="text-sm font-medium">Rating from</span>
+                                        <span className="text-sm font-medium">
+                                            {language === 'vi' ? 'Điểm đánh giá từ' : 'Rating from'}
+                                        </span>
                                         <span className="font-bold flex items-center gap-1">
-                                            0.00 to {(perfTiers[0].min_rating - 0.01).toFixed(2)} <Star className="w-3.5 h-3.5 opacity-50 fill-current" />
+                                            0.00 {language === 'vi' ? 'đến' : 'to'} {(perfTiers[0].min_rating - 0.01).toFixed(2)} <Star className="w-3.5 h-3.5 opacity-50 fill-current" />
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-xs">gets</span>
+                                        <span className="text-xs">
+                                            {language === 'vi' ? 'nhận' : 'gets'}
+                                        </span>
                                         <div className="relative w-28 shrink-0 flex justify-end">
                                             <span className="font-bold text-sm text-gray-400 pr-3 py-1.5">0%</span>
                                         </div>
@@ -1317,7 +1531,9 @@ function BonusTab() {
                             )}
 
                             {perfTiers.length === 0 && (
-                                <p className="text-sm text-gray-500 text-center py-4 italic">No performance tiers defined. Performance multiplier will be 0%.</p>
+                                <p className="text-sm text-gray-500 text-center py-4 italic">
+                                    {language === 'vi' ? 'Chưa định nghĩa bậc hiệu suất nào. Hệ số nhân hiệu suất sẽ là 0%.' : 'No performance tiers defined. Performance multiplier will be 0%.'}
+                                </p>
                             )}
                         </div>
                     </div>
@@ -1328,30 +1544,40 @@ function BonusTab() {
             {addModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Bonus Step</h3>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                            {language === 'vi' ? 'Thêm bước thưởng' : 'Add Bonus Step'}
+                        </h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Total Years Completed *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Tổng số năm hoàn thành *' : 'Total Years Completed *'}
+                                </label>
                                 <div className="relative">
-                                    <input autoFocus type="number" min="0" max="50" value={newStepYears} onChange={e => setNewStepYears(e.target.value)} placeholder="e.g. 5"
+                                    <input autoFocus type="number" min="0" max="50" value={newStepYears} onChange={e => setNewStepYears(e.target.value)} placeholder={language === 'vi' ? 'vd. 5' : 'e.g. 5'}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none pr-12" />
-                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">years</span>
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                                        {language === 'vi' ? 'năm' : 'years'}
+                                    </span>
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Percentage *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Tỷ lệ phần trăm *' : 'Percentage *'}
+                                </label>
                                 <div className="relative">
-                                    <input type="number" min="0" max="100" value={newStepPct} onChange={e => setNewStepPct(e.target.value)} placeholder="e.g. 80"
+                                    <input type="number" min="0" max="100" value={newStepPct} onChange={e => setNewStepPct(e.target.value)} placeholder={language === 'vi' ? 'vd. 80' : 'e.g. 80'}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none pr-8" />
                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
                                 </div>
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
-                            <button onClick={() => setAddModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                            <button onClick={() => setAddModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                                {language === 'vi' ? 'Hủy' : 'Cancel'}
+                            </button>
                             <button onClick={confirmAddStep} disabled={!newStepYears || !newStepPct}
                                 className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
-                                Add
+                                {language === 'vi' ? 'Thêm' : 'Add'}
                             </button>
                         </div>
                     </div>
@@ -1362,28 +1588,38 @@ function BonusTab() {
             {addTierModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Performance Tier</h3>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                            {language === 'vi' ? 'Thêm bậc hiệu suất' : 'Add Performance Tier'}
+                        </h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Rating *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Điểm đánh giá tối thiểu *' : 'Minimum Rating *'}
+                                </label>
                                 <div className="relative">
-                                    <input autoFocus type="number" step="0.1" min="0" max="5" value={newTierMinRating} onChange={e => setNewTierMinRating(e.target.value)} placeholder="e.g. 4.8"
+                                    <input autoFocus type="number" step="0.1" min="0" max="5" value={newTierMinRating} onChange={e => setNewTierMinRating(e.target.value)} placeholder={language === 'vi' ? 'vd. 4.8' : 'e.g. 4.8'}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none pr-8" />
                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-500 text-sm"><Star className="w-4 h-4 fill-current"/></span>
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Multiplier Percentage *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Tỷ lệ phần trăm hệ số nhân *' : 'Multiplier Percentage *'}
+                                </label>
                                 <div className="relative">
-                                    <input type="number" min="0" value={newTierMultiplier} onChange={e => setNewTierMultiplier(e.target.value)} placeholder="e.g. 150"
+                                    <input type="number" min="0" value={newTierMultiplier} onChange={e => setNewTierMultiplier(e.target.value)} placeholder={language === 'vi' ? 'vd. 150' : 'e.g. 150'}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none pr-8" />
                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">%</span>
                                 </div>
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
-                            <button onClick={() => setAddTierModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancel</button>
-                            <button onClick={confirmAddTier} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition">Add Tier</button>
+                            <button onClick={() => setAddTierModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                                {language === 'vi' ? 'Hủy' : 'Cancel'}
+                            </button>
+                            <button onClick={confirmAddTier} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition">
+                                {language === 'vi' ? 'Thêm bậc' : 'Add Tier'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1400,6 +1636,7 @@ function FinesTableTab({ departments, positions, categories }: {
     positions: HRPosition[];
     categories: HRDisciplinaryCategory[];
 }) {
+    const { language } = useSettings()
     const [catalog, setCatalog] = useState<HRDisciplinaryCatalog[]>([])
     const [loading, setLoading] = useState(true)
     const [modalOpen, setModalOpen] = useState(false)
@@ -1435,19 +1672,19 @@ function FinesTableTab({ departments, positions, categories }: {
             setModalOpen(false)
         } catch (err) {
             console.error(err)
-            alert('Failed to save infraction.')
+            alert(language === 'vi' ? 'Không thể lưu vi phạm.' : 'Failed to save infraction.')
         }
     }
 
     async function handleDelete(id: string) {
-        if (!window.confirm('Delete this infraction template? This will not remove past fines, but it will remove the template.')) return
+        if (!window.confirm(language === 'vi' ? 'Xóa biểu mẫu vi phạm này? Hành động này sẽ không xóa các khoản phạt trong quá khứ, nhưng sẽ xóa biểu mẫu.' : 'Delete this infraction template? This will not remove past fines, but it will remove the template.')) return
         try {
             const { error } = await supabase.from('hr_disciplinary_catalog').delete().eq('id', id)
             if (error) throw error
             fetchCatalog()
         } catch (err) {
             console.error(err)
-            alert('Failed to delete infraction.')
+            alert(language === 'vi' ? 'Không thể xóa vi phạm.' : 'Failed to delete infraction.')
         }
     }
 
@@ -1460,14 +1697,18 @@ function FinesTableTab({ departments, positions, categories }: {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div>
-                    <h2 className="text-lg font-bold text-gray-900">Fine Tables</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage the predefined list of infractions and their default fine amounts.</p>
+                    <h2 className="text-lg font-bold text-gray-900">
+                        {language === 'vi' ? 'Bảng tiền phạt' : 'Fine Tables'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'vi' ? 'Quản lý danh sách định nghĩa sẵn của các vi phạm và số tiền phạt mặc định.' : 'Manage the predefined list of infractions and their default fine amounts.'}
+                    </p>
                 </div>
                 <button 
                     onClick={() => { setEditingNode(null); setModalOpen(true); }} 
                     className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap"
                 >
-                    <Plus className="w-4 h-4" /> Add Infraction
+                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm vi phạm' : 'Add Infraction'}
                 </button>
             </div>
 
@@ -1476,11 +1717,21 @@ function FinesTableTab({ departments, positions, categories }: {
                     <table className="w-full">
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
-                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-2/5">Infraction / Reason</th>
-                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-1/5">Category</th>
-                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-1/5">Applicability</th>
-                                <th className="text-right px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">Default Amount (VND)</th>
-                                <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-32">Actions</th>
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-2/5">
+                                    {language === 'vi' ? 'Vi phạm / Lý do' : 'Infraction / Reason'}
+                                </th>
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-1/5">
+                                    {language === 'vi' ? 'Danh mục' : 'Category'}
+                                </th>
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-1/5">
+                                    {language === 'vi' ? 'Phạm vi áp dụng' : 'Applicability'}
+                                </th>
+                                <th className="text-right px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    {language === 'vi' ? 'Số tiền mặc định (VND)' : 'Default Amount (VND)'}
+                                </th>
+                                <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-32">
+                                    {language === 'vi' ? 'Hành động' : 'Actions'}
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -1489,7 +1740,7 @@ function FinesTableTab({ departments, positions, categories }: {
                         ) : catalog.length === 0 ? (
                             <tr>
                                 <td colSpan={5} className="text-center py-12 text-gray-400">
-                                    No infractions found. Add one to build the disciplinary catalog.
+                                    {language === 'vi' ? 'Không tìm thấy vi phạm nào. Hãy thêm một vi phạm để xây dựng danh mục kỷ luật.' : 'No infractions found. Add one to build the disciplinary catalog.'}
                                 </td>
                             </tr>
                         ) : (
@@ -1510,17 +1761,17 @@ function FinesTableTab({ departments, positions, categories }: {
                                     <td className="px-6 py-4">
                                         {c.applicability_type === 'global' && (
                                             <div className="flex items-center gap-1.5 text-gray-600">
-                                                <Globe className="w-3.5 h-3.5" /> <span className="text-sm font-medium">Global</span>
+                                                <Globe className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{language === 'vi' ? 'Toàn cục' : 'Global'}</span>
                                             </div>
                                         )}
                                         {c.applicability_type === 'department' && (
                                             <div className="flex items-center gap-1.5 text-blue-600">
-                                                <Building2 className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{departments.find(d => d.id === c.target_id)?.name || 'Unknown Department'}</span>
+                                                <Building2 className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{departments.find(d => d.id === c.target_id)?.name || (language === 'vi' ? 'Phòng ban không xác định' : 'Unknown Department')}</span>
                                             </div>
                                         )}
                                         {c.applicability_type === 'position' && (
                                             <div className="flex items-center gap-1.5 text-purple-600">
-                                                <Briefcase className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{positions.find(p => p.id === c.target_id)?.name || 'Unknown Position'}</span>
+                                                <Briefcase className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{positions.find(p => p.id === c.target_id)?.name || (language === 'vi' ? 'Chức vụ không xác định' : 'Unknown Position')}</span>
                                             </div>
                                         )}
                                     </td>
@@ -1529,10 +1780,10 @@ function FinesTableTab({ departments, positions, categories }: {
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => { setEditingNode(c); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                            <button onClick={() => { setEditingNode(c); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={language === 'vi' ? 'Sửa' : 'Edit'}>
                                                 <Pencil className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => handleDelete(c.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                                            <button onClick={() => handleDelete(c.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={language === 'vi' ? 'Xóa' : 'Delete'}>
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
@@ -1550,7 +1801,9 @@ function FinesTableTab({ departments, positions, categories }: {
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-900">{editingNode ? 'Edit Infraction' : 'Add Infraction'}</h3>
+                            <h3 className="text-lg font-bold text-gray-900">
+                                {editingNode ? (language === 'vi' ? 'Sửa vi phạm' : 'Edit Infraction') : (language === 'vi' ? 'Thêm vi phạm' : 'Add Infraction')}
+                            </h3>
                             <button onClick={() => setModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-900 transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
@@ -1587,6 +1840,7 @@ function FormCatalog({
     onSave: (d: Partial<HRDisciplinaryCatalog>) => void, 
     onCancel: () => void 
 }) {
+    const { language } = useSettings()
     const [name, setName] = useState(initialData?.infraction_name || '')
     const [amount, setAmount] = useState(initialData?.default_amount || 0)
     const [categoryId, setCategoryId] = useState(initialData?.category_id || '')
@@ -1599,7 +1853,7 @@ function FormCatalog({
         e.preventDefault()
         if (!name || amount < 0) return
         if (applicabilityType !== 'global' && !targetId) {
-            alert('Please select a target department or position.')
+            alert(language === 'vi' ? 'Vui lòng chọn phòng ban hoặc chức vụ mục tiêu.' : 'Please select a target department or position.')
             return
         }
         setSubmitting(true)
@@ -1615,33 +1869,39 @@ function FormCatalog({
     return (
         <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Reason / Infraction Name <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    {language === 'vi' ? 'Lý do / Tên vi phạm' : 'Reason / Infraction Name'} <span className="text-red-500">*</span>
+                </label>
                 <input 
                     type="text" 
                     required 
                     value={name} 
                     onChange={e => setName(e.target.value)} 
                     className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                    placeholder="e.g. Late for Shift" 
+                    placeholder={language === 'vi' ? 'vd. Đi trễ ca' : 'e.g. Late for Shift'} 
                 />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {language === 'vi' ? 'Danh mục' : 'Category'}
+                    </label>
                     <select 
                         value={categoryId} 
                         onChange={e => setCategoryId(e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     >
-                        <option value="">No Category</option>
+                        <option value="">{language === 'vi' ? 'Không có danh mục' : 'No Category'}</option>
                         {categories.map(c => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Default Fine (VND) <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {language === 'vi' ? 'Tiền phạt mặc định (VND)' : 'Default Fine (VND)'} <span className="text-red-500">*</span>
+                    </label>
                     <input 
                         type="text" 
                         required 
@@ -1664,42 +1924,46 @@ function FormCatalog({
 
             <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-4">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-3">Applicability Scope</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-3">
+                        {language === 'vi' ? 'Phạm vi áp dụng' : 'Applicability Scope'}
+                    </label>
                     <div className="grid grid-cols-3 gap-2">
                         <button
                             type="button"
                             onClick={() => { setApplicabilityType('global'); setTargetId(''); }}
                             className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'global' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
                         >
-                            <Globe className="w-4 h-4" /> Global
+                            <Globe className="w-4 h-4" /> {language === 'vi' ? 'Toàn cục' : 'Global'}
                         </button>
                         <button
                             type="button"
                             onClick={() => { setApplicabilityType('department'); setTargetId(''); }}
                             className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'department' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
                         >
-                            <Building2 className="w-4 h-4" /> Department
+                            <Building2 className="w-4 h-4" /> {language === 'vi' ? 'Phòng ban' : 'Department'}
                         </button>
                         <button
                             type="button"
                             onClick={() => { setApplicabilityType('position'); setTargetId(''); }}
                             className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'position' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
                         >
-                            <Briefcase className="w-4 h-4" /> Position
+                            <Briefcase className="w-4 h-4" /> {language === 'vi' ? 'Chức vụ' : 'Position'}
                         </button>
                     </div>
                 </div>
 
                 {applicabilityType === 'department' && (
                     <div className="animate-in fade-in slide-in-from-top-1">
-                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Target Department <span className="text-red-500">*</span></label>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {language === 'vi' ? 'Phòng ban mục tiêu' : 'Target Department'} <span className="text-red-500">*</span>
+                        </label>
                         <select 
                             required
                             value={targetId} 
                             onChange={e => setTargetId(e.target.value)}
                             className="w-full px-3 py-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                         >
-                            <option value="">Select Department...</option>
+                            <option value="">{language === 'vi' ? 'Chọn phòng ban...' : 'Select Department...'}</option>
                             {departments.map(d => (
                                 <option key={d.id} value={d.id}>{d.name}</option>
                             ))}
@@ -1709,14 +1973,16 @@ function FormCatalog({
 
                 {applicabilityType === 'position' && (
                     <div className="animate-in fade-in slide-in-from-top-1">
-                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Target Position <span className="text-red-500">*</span></label>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {language === 'vi' ? 'Chức vụ mục tiêu' : 'Target Position'} <span className="text-red-500">*</span>
+                        </label>
                         <select 
                             required
                             value={targetId} 
                             onChange={e => setTargetId(e.target.value)}
                             className="w-full px-3 py-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                         >
-                            <option value="">Select Position...</option>
+                            <option value="">{language === 'vi' ? 'Chọn chức vụ...' : 'Select Position...'}</option>
                             {positions.map(p => (
                                 <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
@@ -1726,10 +1992,12 @@ function FormCatalog({
             </div>
 
             <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
-                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                    {language === 'vi' ? 'Hủy' : 'Cancel'}
+                </button>
                 <button type="submit" disabled={submitting || !name || amount < 0} className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    {submitting ? 'Saving...' : 'Save'}
+                    {submitting ? (language === 'vi' ? 'Đang lưu...' : 'Saving...') : (language === 'vi' ? 'Lưu' : 'Save')}
                 </button>
             </div>
         </form>
@@ -1740,6 +2008,7 @@ function FormCatalog({
    MAIN SETTINGS PAGE
    ═══════════════════════════════════════════════════ */
 export default function HRManagementSettingsPage() {
+    const { language } = useSettings()
     const [loading, setLoading]       = useState(true)
     const [activeTab, setActiveTab]   = useState<TabKey>('departments')
     const [departments, setDepartments] = useState<HRDepartment[]>([])
@@ -1776,9 +2045,11 @@ export default function HRManagementSettingsPage() {
                 <div className="mb-8 border-b border-white/10 pb-6">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Settings className="w-6 h-6 text-slate-400" />
-                        HR Management Settings
+                        {language === 'vi' ? 'Cài đặt quản trị nhân sự' : 'HR Management Settings'}
                     </h1>
-                    <p className="text-sm text-slate-400 mt-1">Configure departments, positions, rules, and categories.</p>
+                    <p className="text-sm text-slate-400 mt-1">
+                        {language === 'vi' ? 'Cấu hình các phòng ban, chức vụ, quy tắc và danh mục.' : 'Configure departments, positions, rules, and categories.'}
+                    </p>
                 </div>
 
                 <div className="flex flex-col lg:flex-row gap-8">
@@ -1797,7 +2068,16 @@ export default function HRManagementSettingsPage() {
                                     `}
                                 >
                                     <tab.icon className="w-4 h-4 shrink-0" />
-                                    <span className="truncate">{tab.label}</span>
+                                    <span className="truncate">
+                                        {tab.key === 'departments' ? (language === 'vi' ? 'Phòng ban' : 'Departments')
+                                        : tab.key === 'positions' ? (language === 'vi' ? 'Chức vụ' : 'Positions')
+                                        : tab.key === 'alerts' ? (language === 'vi' ? 'Cảnh báo' : 'Alerts')
+                                        : tab.key === 'categories' ? (language === 'vi' ? 'Danh mục đánh giá' : 'Rating Categories')
+                                        : tab.key === 'fines_categories' ? (language === 'vi' ? 'Danh mục kỷ luật' : 'Disciplinary Categories')
+                                        : tab.key === 'fines_table' ? (language === 'vi' ? 'Bảng tiền phạt' : 'Fine Tables')
+                                        : tab.key === 'periods' ? (language === 'vi' ? 'Chu kỳ đánh giá' : 'Review Periods')
+                                        : (language === 'vi' ? 'Cấu hình thưởng' : 'Bonus Settings')}
+                                    </span>
                                 </button>
                             ))}
                         </nav>

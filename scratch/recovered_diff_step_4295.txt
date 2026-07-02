@@ -1,0 +1,1 @@
+I will write a script `scratch/print_step_i18n.js` to find the JSON objects in `transcript.jsonl` that are related to writes, edits, or diffs of `i18n.ts` and inspect their keys and values. This will help us correctly identify where the translations are located in the log.

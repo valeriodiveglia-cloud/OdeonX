@@ -104,6 +104,7 @@ export function useDRBranch(opts?: { validate?: boolean }) {
           .from('provider_branches')
           .select('id,name,address')
           .eq('id', b.id)
+          .eq('is_active', true)
           .maybeSingle()
         if (error) throw error
         if (!ignore && isActiveRef.current) {

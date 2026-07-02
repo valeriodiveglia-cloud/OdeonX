@@ -132,6 +132,26 @@ function SupplierEditor(props: {
 
   async function handleDelete() {
     if (viewMode || !id) return
+
+    const { data: materials, error: checkError } = await supabase
+      .from('materials')
+      .select('name')
+      .eq('supplier_id', id)
+      .is('deleted_at', null)
+
+    if (checkError) {
+      console.error('[SupplierEditor] Error checking materials:', checkError)
+    } else if (materials && materials.length > 0) {
+      const materialNames = materials.map((m: any) => m.name).join(', ')
+      const msg = (lang as string) === 'vi' 
+        ? `Không thể xóa nhà cung cấp này vì đang liên kết với các nguyên liệu sau:\n\n${materialNames}`
+        : (lang as string) === 'it'
+        ? `Impossibile eliminare questo fornitore perché è associato ai seguenti materiali:\n\n${materialNames}`
+        : `Cannot delete this supplier because it is associated with the following materials:\n\n${materialNames}`
+      alert(msg)
+      return
+    }
+
     const ok = window.confirm(t('DeleteConfirm', lang) || 'Delete?')
     if (!ok) return
     const { error } = await supabase.from(TBL_SUPS).delete().eq('id', id)
@@ -369,6 +389,30 @@ export default function SuppliersPage() {
 
   async function bulkDelete() {
     if (selectedIds.length === 0) return
+
+    // Check if any selected suppliers are referenced by active materials
+    const { data: materials, error: checkError } = await supabase
+      .from('materials')
+      .select('name, supplier_id')
+      .in('supplier_id', selectedIds)
+      .is('deleted_at', null)
+
+    if (checkError) {
+      console.error('[SuppliersPage] Error checking materials bulk:', checkError)
+    } else if (materials && materials.length > 0) {
+      // Find the names of suppliers that are in use
+      const usedSupplierIds = new Set(materials.map((m: any) => m.supplier_id))
+      const usedSuppliers = rows.filter(r => usedSupplierIds.has(r.id)).map(r => r.name).join(', ')
+
+      const msg = (language as string) === 'vi'
+        ? `Không thể xóa một số nhà cung cấp đã chọn vì họ đang liên kết với các nguyên liệu hoạt động. Các nhà cung cấp liên quan: ${usedSuppliers}`
+        : (language as string) === 'it'
+        ? `Alcuni dei fornitori selezionati non possono essere eliminati perché sono associati a dei materiali attivi. Fornitori interessati: ${usedSuppliers}`
+        : `Some of the selected suppliers cannot be deleted because they are associated with active materials. Affected suppliers: ${usedSuppliers}`
+      alert(msg)
+      return
+    }
+
     const ok = window.confirm((t('DeleteConfirm', language) || 'Delete selected?') + ` (${selectedIds.length})`)
     if (!ok) return
     const { error } = await supabase.from(TBL_SUPS).delete().in('id', selectedIds)

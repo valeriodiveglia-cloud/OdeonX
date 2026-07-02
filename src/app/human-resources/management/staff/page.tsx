@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRStaffMember, EmploymentType, SalaryType, StaffStatus, HRDepartment, HRPosition, HRAlertSetting } from '@/types/human-resources'
+import { HRStaffMember, EmploymentType, SalaryType, StaffStatus, HRDepartment, HRPosition, HRAlertSetting, HRRatingCategory } from '@/types/human-resources'
 import CircularLoader from '@/components/CircularLoader'
 import {
     Users, UserPlus, Search, X, Pencil, Trash2,
@@ -13,8 +13,8 @@ import { useRouter } from 'next/navigation'
 import PerformanceModal from '@/components/human-resources/PerformanceModal'
 import SalaryModal from '@/components/human-resources/SalaryModal'
 import { StaffModal } from '@/components/human-resources/StaffModal'
-import { HRRatingCategory } from '@/types/human-resources'
 import { saveAs } from 'file-saver'
+import { useSettings } from '@/contexts/SettingsContext'
 
 /* ─── Helpers ─── */
 const fmt = (n: number) =>
@@ -32,20 +32,23 @@ const SALARY_LABEL: Record<SalaryType, string> = {
 }
 
 const BranchCell = ({ branchNames }: { branchNames: string[] }) => {
+    const { language } = useSettings()
     const [isExpanded, setIsExpanded] = useState(false)
-    if (branchNames.length === 0) return <span className="text-xs text-gray-400 italic">Not assigned</span>
+    if (branchNames.length === 0) return <span className="text-[11px] text-gray-400 italic">{language === 'vi' ? 'Chưa phân công' : 'Not assigned'}</span>
     
     if (branchNames.length <= 2 || isExpanded) {
         return (
             <div className="flex flex-wrap gap-1">
                 {branchNames.map((name, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
-                        <Building2 className="w-3 h-3" />
+                    <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200/80 bg-slate-50 text-[10px] font-semibold text-slate-500">
+                        <Building2 className="w-2.5 h-2.5 text-slate-400" />
                         {name}
                     </span>
                 ))}
                 {isExpanded && branchNames.length > 2 && (
-                    <button onClick={(e) => { e.stopPropagation(); setIsExpanded(false) }} className="text-[10px] text-blue-500 hover:underline ml-1">Show less</button>
+                    <button onClick={(e) => { e.stopPropagation(); setIsExpanded(false) }} className="text-[9px] font-bold text-blue-600 hover:text-blue-700 ml-1">
+                        {language === 'vi' ? 'Thu gọn' : 'Show less'}
+                    </button>
                 )}
             </div>
         )
@@ -54,16 +57,16 @@ const BranchCell = ({ branchNames }: { branchNames: string[] }) => {
     return (
         <div className="flex flex-wrap gap-1 items-center">
             {branchNames.slice(0, 2).map((name, i) => (
-                <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
-                    <Building2 className="w-3 h-3" />
+                <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200/80 bg-slate-50 text-[10px] font-semibold text-slate-500">
+                    <Building2 className="w-2.5 h-2.5 text-slate-400" />
                     {name}
                 </span>
             ))}
             <button 
                 onClick={(e) => { e.stopPropagation(); setIsExpanded(true) }}
-                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                className="inline-flex items-center px-1.5 py-0.5 rounded border border-blue-200/80 bg-blue-50 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
             >
-                +{branchNames.length - 2} more
+                +{branchNames.length - 2} {language === 'vi' ? 'thêm' : 'more'}
             </button>
         </div>
     )
@@ -113,7 +116,7 @@ export default function StaffListPage() {
     const [search, setSearch]         = useState('')
 
     // Column Header state
-    type SortKey = 'name' | 'position' | 'branch' | 'type' | 'status' | 'salary' | 'alerts' | 'skill';
+    type SortKey = 'name' | 'department' | 'position' | 'branch' | 'type' | 'status' | 'salary' | 'alerts' | 'skill';
     const [sortKey, setSortKey] = useState<SortKey>('name')
     const [sortAsc, setSortAsc] = useState(true)
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
@@ -184,6 +187,7 @@ export default function StaffListPage() {
     const displayValue = useCallback((s: HRStaffMember, key: SortKey): string | string[] => {
         switch (key) {
             case 'name': return s.full_name || '';
+            case 'department': return s.department || '';
             case 'position': return s.position || '';
             case 'branch': return (s.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean);
             case 'type': return EMPLOYMENT_LABEL[s.employment_type];
@@ -196,7 +200,7 @@ export default function StaffListPage() {
 
     const columnValues = useMemo(() => {
         const map: Record<string, string[]> = {}
-        const keys: SortKey[] = ['name', 'position', 'branch', 'type', 'status', 'salary', 'skill']
+        const keys: SortKey[] = ['name', 'department', 'position', 'branch', 'type', 'status', 'salary', 'skill']
         keys.forEach(k => {
             const set = new Set<string>()
             staff.forEach(s => { 
@@ -238,6 +242,7 @@ export default function StaffListPage() {
             let av: any, bv: any
             switch(sortKey) {
                 case 'name': av = a.full_name; bv = b.full_name; break;
+                case 'department': av = a.department; bv = b.department; break;
                 case 'position': av = a.position; bv = b.position; break;
                 case 'type': av = EMPLOYMENT_LABEL[a.employment_type]; bv = EMPLOYMENT_LABEL[b.employment_type]; break;
                 case 'status': av = a.status; bv = b.status; break;
@@ -537,10 +542,10 @@ export default function StaffListPage() {
                                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">#</th>
                                     {([
                                         ['name', 'Name'], 
+                                        ['department', 'Department'], 
                                         ['position', 'Position'], 
                                         ['branch', 'Branch(es)'], 
                                         ['type', 'Type', true], 
-                                        ['status', 'Status', true], 
                                         ['skill', 'Skill', true],
                                         ['salary', 'Salary (VND)', false, true]
                                     ] as [SortKey, string, boolean?, boolean?][]).map(([k, lbl, center, right]) => (
@@ -555,7 +560,6 @@ export default function StaffListPage() {
                                         />
                                     ))}
                                     <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Alerts</th>
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -570,58 +574,33 @@ export default function StaffListPage() {
                                             onClick={() => router.push(`/human-resources/management/staff/${s.id}`)}
                                             className={`border-t border-gray-100 hover:bg-gray-50/80 transition-colors cursor-pointer ${idx % 2 === 0 ? 'bg-gray-50/30' : ''}`}
                                         >
-                                            <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
+                                            <td className="px-4 py-3 text-xs text-gray-400">{idx + 1}</td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-2.5">
                                                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
                                                         {(s.full_name || '').trim().split(/\s+/).filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??'}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <span className="text-sm font-medium text-gray-900 block truncate">{s.full_name}</span>
-                                                        {s.department && <span className="text-xs text-gray-400 block">{s.department}</span>}
+                                                        <span className="text-xs font-semibold text-gray-900 block truncate">{s.full_name}</span>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{s.position}</td>
+                                            <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{s.department || <span className="text-gray-400 italic">—</span>}</td>
+                                            <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{s.position}</td>
                                             <td className="px-4 py-3">
                                                 <BranchCell branchNames={branchNames} />
                                             </td>
                                             <td className="px-4 py-3 text-center whitespace-nowrap">
-                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium
+                                                <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold border
                                                     ${s.employment_type === 'full_time'
-                                                        ? 'bg-indigo-50 text-indigo-700'
-                                                        : 'bg-amber-50 text-amber-700'
+                                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                                                        : 'bg-amber-50 text-amber-700 border-amber-100'
                                                     }`}
                                                 >
                                                     {EMPLOYMENT_LABEL[s.employment_type]}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 text-center whitespace-nowrap">
-                                                {s.probation_end_date && new Date(s.probation_end_date).getTime() > Date.now() ? (() => {
-                                                    const perfs = (s as any).hr_staff_performance;
-                                                    const isConfirmed = Array.isArray(perfs) && perfs.some((p: any) => p && p.period === 'Probation Confirmed');
-                                                    return (
-                                                        <button 
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                setPerfStaffId(s.id)
-                                                                setPerfModalOpen(true)
-                                                            }}
-                                                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors cursor-pointer ${
-                                                                isConfirmed 
-                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                                                    : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
-                                                            }`}
-                                                        >
-                                                            {isConfirmed ? 'Probation Confirmed' : 'Probation'}
-                                                        </button>
-                                                    )
-                                                })() : (
-                                                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                        Active
-                                                    </span>
-                                                )}
-                                            </td>
+                                            {/* Status column removed */}
                                             <td className="px-4 py-3 text-center whitespace-nowrap">
                                                 <div className="flex items-center justify-center gap-0.5" title={`Skill Level: ${s.skill_level || 1}`}>
                                                     {Array.from({ length: 5 }).map((_, i) => (
@@ -632,9 +611,9 @@ export default function StaffListPage() {
                                                     ))}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 text-right text-sm font-mono whitespace-nowrap">
-                                                <span className="text-gray-900 font-semibold">{fmt(s.salary_amount)}</span>
-                                                <span className="text-gray-400 text-xs ml-1">{SALARY_LABEL[s.salary_type]}</span>
+                                            <td className="px-4 py-3 text-right text-xs font-mono whitespace-nowrap">
+                                                <span className="text-gray-900 font-bold">{fmt(s.salary_amount)}</span>
+                                                <span className="text-gray-400 text-[10px] ml-1">{SALARY_LABEL[s.salary_type]}</span>
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                                 {(() => {
@@ -724,26 +703,13 @@ export default function StaffListPage() {
                                                     );
                                                 })()}
                                             </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            setDeletingId(s.id)
-                                                        }}
-                                                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition relative z-10"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
+                                            {/* Actions column removed */}
                                         </tr>
                                     )
                                 })}
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-16 text-center">
+                                        <td colSpan={9} className="px-4 py-16 text-center">
                                             <Users className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                                             <p className="text-gray-500 text-sm font-medium">
                                                 {staff.length === 0 ? 'No staff members yet' : 'No results match your filters'}

@@ -94,7 +94,9 @@ function loadSelectedBranch(): SelectedBranch | null {
 /* ---------- DB mappers ---------- */
 function normFromDb(d: any, suppliers: Sup[]): CashoutRow {
   const supplier_id = d?.supplier_id ? String(d.supplier_id) : null
-  const supplier_name = supplier_id ? (suppliers.find(s => s.id === supplier_id)?.name || null) : null
+  const supplier_name = supplier_id 
+    ? (suppliers.find(s => s.id === supplier_id)?.name || d?.supplier_name || null) 
+    : (d?.supplier_name || null)
   return {
     id: String(d?.id || uuid()),
     branch: d?.branch != null ? String(d.branch) : null,
@@ -120,6 +122,7 @@ function toDbPayload(r: CashoutRow) {
     category: sanitizeString(r.category),
     amount: Math.round(r.amount || 0),
     supplier_id: r.supplier_id,
+    supplier_name: sanitizeString(r.supplier_name),
     invoice: r.invoice,
     delivery_note: r.deliveryNote,
     shift: sanitizeString(r.shift),

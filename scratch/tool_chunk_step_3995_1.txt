@@ -1,0 +1,5 @@
+    RecentInvoices: 'Hóa đơn gần đây',
+    PendingVatInvoices: 'Hóa đơn VAT đang chờ',
+    NoPendingVatInvoices: 'Không có hóa đơn VAT đang chờ',
+    FinDsbPaymentOrder: 'Lệnh chi',
+    FinanceActionCenter: 'Trung tâm Hành động',

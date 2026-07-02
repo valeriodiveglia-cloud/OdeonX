@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { HRStaffMember, HRDepartment, HRPosition, EmploymentType, SalaryType, StaffStatus } from '@/types/human-resources'
 import { supabase } from '@/lib/supabase'
+import { useSettings } from '@/contexts/SettingsContext'
 
 export interface StaffModalProps {
     open: boolean
@@ -16,6 +17,7 @@ export interface StaffModalProps {
 }
 
 export function StaffModal({ open, onClose, onSave, staff, branches, departments, positions, saving, isRehire }: StaffModalProps) {
+    const { language } = useSettings()
     const [lastName, setLastName]             = useState('')
     const [middleName, setMiddleName]         = useState('')
     const [firstName, setFirstName]           = useState('')
@@ -132,7 +134,14 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
             const { data, error } = await query;
             if (!error && data && data.length > 0) {
                 const duplicate = data[0];
-                alert(`Cannot save: A staff member named "${duplicate.full_name}" (Status: ${duplicate.status}) already exists with this phone or email.`);
+                const duplicateStatus = duplicate.status === 'active' 
+                    ? (language === 'vi' ? 'Đang hoạt động' : 'active') 
+                    : duplicate.status === 'inactive' 
+                        ? (language === 'vi' ? 'Ngừng hoạt động' : 'inactive') 
+                        : (language === 'vi' ? 'Đã thôi việc' : 'terminated');
+                alert(language === 'vi' 
+                    ? `Không thể lưu: Nhân viên tên "${duplicate.full_name}" (Trạng thái: ${duplicateStatus}) đã tồn tại với số điện thoại hoặc email này.` 
+                    : `Cannot save: A staff member named "${duplicate.full_name}" (Status: ${duplicate.status}) already exists with this phone or email.`);
                 return; // Stop submission
             }
         }
@@ -184,7 +193,11 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                     <h2 className="text-lg font-semibold text-gray-900">
-                        {isRehire ? 'Re-hire Staff Member' : (staff ? 'Edit Staff Member' : 'Add Staff Member')}
+                        {isRehire 
+                            ? (language === 'vi' ? 'Tuyển dụng lại nhân viên' : 'Re-hire Staff Member') 
+                            : (staff 
+                                ? (language === 'vi' ? 'Chỉnh sửa nhân viên' : 'Edit Staff Member') 
+                                : (language === 'vi' ? 'Thêm nhân viên' : 'Add Staff'))}
                     </h2>
                     <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
                         <X className="w-5 h-5" />
@@ -195,17 +208,17 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                     {/* Row 1: Name Parts */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Họ *' : 'Last Name *'}</label>
                             <input required value={lastName} onChange={e => setLastName(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Tên đệm' : 'Middle Name'}</label>
                             <input value={middleName} onChange={e => setMiddleName(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Tên *' : 'First Name *'}</label>
                             <input required value={firstName} onChange={e => setFirstName(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                         </div>
@@ -214,12 +227,12 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                     {/* Row 2: Phone + Email */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Số điện thoại' : 'Phone'}</label>
                             <input value={phone} onChange={e => setPhone(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Email' : 'Email'}</label>
                             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                         </div>
@@ -228,29 +241,29 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                     {/* Row 3: Department + Position + (Status if editing/not rehire) */}
                     <div className={`grid grid-cols-1 gap-4 ${(staff && !isRehire) ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Phòng ban' : 'Department'}</label>
                             <select value={departmentId} onChange={e => { setDepartmentId(e.target.value); setPositionId('') }}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="">Select department…</option>
+                                <option value="">{language === 'vi' ? 'Chọn phòng ban…' : 'Select department…'}</option>
                                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Position *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Chức vụ *' : 'Position *'}</label>
                             <select required value={positionId} onChange={e => setPositionId(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="">Select position…</option>
+                                <option value="">{language === 'vi' ? 'Chọn chức vụ…' : 'Select position…'}</option>
                                 {filteredPositions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         </div>
                         {(staff && !isRehire) && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Trạng thái' : 'Status'}</label>
                                 <select value={status} onChange={e => setStatus(e.target.value as StaffStatus)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                    <option value="active">Active</option>
-                                    <option value="inactive">Inactive</option>
-                                    <option value="terminated">Terminated</option>
+                                    <option value="active">{language === 'vi' ? 'Đang hoạt động' : 'Active'}</option>
+                                    <option value="inactive">{language === 'vi' ? 'Ngừng hoạt động' : 'Inactive'}</option>
+                                    <option value="terminated">{language === 'vi' ? 'Đã thôi việc' : 'Terminated'}</option>
                                 </select>
                             </div>
                         )}
@@ -259,7 +272,7 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                     {/* Row 4: Employment + Salary */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Loại hình làm việc' : 'Employment Type'}</label>
                             <select value={employmentType} onChange={e => {
                                 const val = e.target.value as EmploymentType;
                                 setEmploymentType(val);
@@ -272,14 +285,16 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                                 }
                             }}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                <option value="full_time">Full-time</option>
-                                <option value="part_time">Part-time</option>
-                                <option value="outsourced">Outsourced</option>
+                                <option value="full_time">{language === 'vi' ? 'Toàn thời gian' : 'Full-time'}</option>
+                                <option value="part_time">{language === 'vi' ? 'Bán thời gian' : 'Part-time'}</option>
+                                <option value="outsourced">{language === 'vi' ? 'Thuê ngoài' : 'Outsourced'}</option>
                             </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Amount (VND) {employmentType === 'full_time' ? '/month' : '/hour'}
+                                {language === 'vi' 
+                                    ? `Lương (VND) ${employmentType === 'full_time' ? '/tháng' : '/giờ'}` 
+                                    : `Amount (VND) ${employmentType === 'full_time' ? '/month' : '/hour'}`}
                             </label>
                             <input type="text" value={salaryAmount} onChange={e => {
                                 const val = e.target.value.replace(/\D/g, '')
@@ -294,18 +309,18 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                     {employmentType !== 'outsourced' && (
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'}</label>
                                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Probation Time (Months)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Thời gian thử việc (Tháng)' : 'Probation Time (Months)'}</label>
                                 <input type="number" min="0" step="1" value={probationMonths} onChange={e => setProbationMonths(e.target.value)}
-                                    placeholder="e.g. 2"
+                                    placeholder={language === 'vi' ? 'Ví dụ: 2' : 'e.g. 2'}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Probation Salary (%)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Lương thử việc (%)' : 'Probation Salary (%)'}</label>
                                 <div className="relative">
                                     <input type="number" min="0" max="100" step="1" value={probationSalaryPct} onChange={e => setProbationSalaryPct(e.target.value)}
                                         placeholder="100"
@@ -318,7 +333,7 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
 
                     {/* Branch Assignment */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Branch Assignment</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">{language === 'vi' ? 'Phân công chi nhánh' : 'Branch Assignment'}</label>
                         <div className="flex flex-wrap gap-2">
                             {branches.map(branch => {
                                 const isSelected = selectedBranches.includes(branch.id)
@@ -339,13 +354,13 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                             })}
                         </div>
                         {branches.length === 0 && (
-                            <p className="text-xs text-gray-400 mt-1">No branches found. Add branches in General Settings first.</p>
+                            <p className="text-xs text-gray-400 mt-1">{language === 'vi' ? 'Không tìm thấy chi nhánh nào. Vui lòng thêm chi nhánh trong phần Cài đặt chung trước.' : 'No branches found. Add branches in General Settings first.'}</p>
                         )}
                     </div>
 
                     {/* Notes */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Ghi chú' : 'Notes'}</label>
                         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none" />
                     </div>
@@ -354,12 +369,12 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                     <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
                         <button type="button" onClick={onClose}
                             className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                            Cancel
+                            {language === 'vi' ? 'Hủy' : 'Cancel'}
                         </button>
                         <button type="submit" disabled={saving || !lastName.trim() || !firstName.trim() || !positionId}
                             className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                             {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                            {isRehire ? 'Re-hire Staff' : (staff ? 'Update' : 'Create')}
+                            {isRehire ? (language === 'vi' ? 'Tuyển dụng lại' : 'Re-hire Staff') : (staff ? (language === 'vi' ? 'Cập nhật' : 'Update') : (language === 'vi' ? 'Tạo mới' : 'Create'))}
                         </button>
                     </div>
                 </form>
