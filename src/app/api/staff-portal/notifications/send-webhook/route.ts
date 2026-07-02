@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import webpush from 'web-push'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const resend = new Resend(process.env.RESEND_API_KEY || 're_placeholder')
 
 const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
 const privateKey = process.env.VAPID_PRIVATE_KEY
