@@ -158,6 +158,7 @@ export interface HRStaffMember {
   hr_departments?: HRDepartment;
   hr_positions?: HRPosition;
   hr_staff_contracts?: HRStaffContract[];
+  hr_staff_assets?: HRStaffAsset[];
 }
 
 export interface HRStaffContract {
@@ -268,6 +269,8 @@ export interface HRStaffSalaryHistory {
   increase_type: 'percentage' | 'fixed' | 'none' | null;
   increase_value: number | null;
   previous_salary_type: SalaryType | null;
+  previous_employment_type: EmploymentType | null;
+  employment_type: EmploymentType | null;
   previous_position_id: string | null;
   new_position_id: string | null;
   previous_department_id: string | null;
@@ -332,6 +335,7 @@ export interface HRStaffOvertime {
 
 export interface HRServiceCharge {
   month_id: string;
+  city: string;
   total_amount: number;
   created_at: string;
   updated_at: string;
@@ -340,6 +344,7 @@ export interface HRServiceCharge {
 export interface HRServiceChargeStaff {
   id: string;
   month_id: string;
+  city: string;
   staff_id: string;
   hours_worked: number;
   created_at: string;
@@ -357,4 +362,33 @@ export interface HRStaffDocument {
   uploaded_at: string;
   uploaded_by: string | null;
   tags: string[];
+}
+
+export type HRStaffAssetStatus = 'assigned' | 'returned' | 'damaged' | 'lost';
+
+export interface HRStaffAssetHistory {
+  id: string;
+  asset_id: string;
+  status: HRStaffAssetStatus;
+  changed_at: string;
+  notes: string | null;
+  created_at?: string;
+}
+
+export interface HRStaffAsset {
+  id: string;
+  staff_id: string;
+  asset_name: string;
+  category: string | null;
+  serial_number: string | null;
+  quantity: number;
+  assigned_date: string;
+  return_date: string | null;
+  status: HRStaffAssetStatus;
+  notes: string | null;
+  initial_condition?: string | null;
+  return_condition?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  hr_staff_asset_history?: HRStaffAssetHistory[];
 }
