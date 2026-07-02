@@ -105,12 +105,34 @@ export async function POST(req: Request) {
 )
     } catch {}
 
+    // --- Recupera il nome dell'utente da app_accounts o hr_staff
+    let userName = ''
+    try {
+      const { data: accData } = await srv
+        .from('app_accounts')
+        .select('name')
+        .eq('email', email)
+        .maybeSingle()
+      if (accData?.name) {
+        userName = accData.name
+      } else {
+        const { data: staffData } = await srv
+          .from('hr_staff')
+          .select('full_name')
+          .eq('email', email)
+          .maybeSingle()
+        if (staffData?.full_name) {
+          userName = staffData.full_name
+        }
+      }
+    } catch {}
+
     // --- Se l’utente ESISTE in Authentication → set needs_onboarding, collega user_id, manda reset
     const existsUid = await findAuthUserIdByEmail(email)
     if (existsUid) {
       try {
         await supabaseAdmin.auth.admin.updateUserById(existsUid, {
-          user_metadata: { needs_onboarding: true, is_onboarded: false },
+          user_metadata: { needs_onboarding: true, is_onboarded: false, full_name: userName },
         })
       } catch {}
 
@@ -136,7 +158,14 @@ export async function POST(req: Request) {
     }
 
     // --- Altrimenti invito nuovo utente (abbiamo già creato app_accounts)
-    const invite = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo })
+    const invite = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { 
+      redirectTo,
+      data: {
+        full_name: userName,
+        needs_onboarding: true,
+        is_onboarded: false
+      }
+    })
     if (!invite.error) {
       const newUid = invite.data?.user?.id || null
 
@@ -144,7 +173,7 @@ export async function POST(req: Request) {
       try {
         if (newUid) {
           await supabaseAdmin.auth.admin.updateUserById(newUid, {
-            user_metadata: { needs_onboarding: true, is_onboarded: false },
+            user_metadata: { needs_onboarding: true, is_onboarded: false, full_name: userName },
           })
         }
       } catch {}
