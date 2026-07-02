@@ -35,6 +35,7 @@ import {
 } from '../_data/useWastage'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getDailyReportsDictionary } from '../_i18n'
+import MonthPicker from '@/components/MonthPicker'
 
 /* ---------- Const & LS Keys ---------- */
 const BRANCH_KEYS = ['dailyreports.selectedBranch', 'dailyreports.selectedBranch.v1'] as const
@@ -85,6 +86,9 @@ const DEFAULT_T = {
     close: 'Close',
     save: 'Save',
     saving: 'Saving…',
+    saveAndAddNew: 'Save & Add New',
+    registerTitle: 'Register Wastage',
+    editTitle: 'Edit Wastage',
     typeTabs: { Dish: 'Dish', Material: 'Material', Prep: 'Prep' },
     fields: {
       date: 'Date',
@@ -381,7 +385,7 @@ function EditorModal({
   dishes: Dish[]
   preps: Prep[]
   onClose: () => void
-  onSaved: (row: WastageRow) => Promise<void> | void
+  onSaved: (row: WastageRow, keepOpen?: boolean) => Promise<void> | void
   onDeleted: (id: string) => Promise<void> | void
   t: typeof DEFAULT_T['editor']
 }) {
@@ -563,7 +567,7 @@ function EditorModal({
     return true
   }, [date, time, qty, itemId])
 
-  async function handleSave() {
+  async function handleSave(keepOpen = false) {
     if (!canSave || viewMode || isSaving) return
     setIsSaving(true)
     try {
@@ -585,7 +589,17 @@ function EditorModal({
         responsible: responsible ? responsible : null,
         enteredBy: enteredBy ? enteredBy : null,
       }
-      await onSaved(row)
+      await onSaved(row, keepOpen)
+      if (keepOpen) {
+        setCategoryId('')
+        setCategoryName('')
+        setItemId('')
+        setItemName('')
+        setUnit('')
+        setQtyInput('')
+        setPackageCost(0)
+        setUnitCost(0)
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -609,62 +623,66 @@ function EditorModal({
   return (
     <Overlay onClose={() => { if (!isSaving) onClose() }}>
       <div className="h-full flex flex-col text-gray-900">
-        <div className="px-6 pt-5 pb-4 flex items-center justify-between border-b border-blue-100 bg-blue-50/20">
-          <div className="flex items-center gap-3">
+        <div className="px-6 py-3 border-b border-blue-100 bg-blue-50/20 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
             <div className="text-xl font-bold text-blue-900">
-              {viewMode ? t.title : initialRow?.id ? t.edit : t.save}
+              {viewMode ? t.title : initialRow?.id ? (t.editTitle || 'Edit Wastage') : (t.registerTitle || 'Register Wastage')}
             </div>
-            <div className="hidden sm:block">
-              <div className="inline-flex rounded-lg border border-blue-300 overflow-hidden">
-                {(['Dish', 'Material', 'Prep'] as WType[]).map(tt => {
-                  const active = tt === type
-                  const typeLabel = t.typeTabs?.[tt] || tt
-                  return (
-                     <button
-                       key={tt}
-                       onClick={() => {
-                         if (viewMode || isSaving) return
-                         setType(tt)
-                         setCategoryId('')
-                         setCategoryName('')
-                         setItemId('')
-                         setItemName('')
-                         setUnit('')
-                         setPackageCost(0)
-                         setUnitCost(0)
-                         setQtyInput('')
-                       }}
-                       className={`px-3 py-2 text-sm transition ${active ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 hover:bg-blue-50'} ${tt === 'Dish' ? '' : 'border-l border-blue-300'}`}
-                       disabled={viewMode || isSaving}
-                     >
-                       {typeLabel}
-                     </button>
-                  )
-                })}
-              </div>
-            </div>
+            <button onClick={onClose} disabled={isSaving} className="p-1 rounded text-blue-700 hover:bg-blue-50 disabled:opacity-50" title={t.close}>
+              <XMarkIcon className="w-6 h-6" />
+            </button>
           </div>
-          <button onClick={onClose} disabled={isSaving} className="p-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50" title={t.close}>
-            <XMarkIcon className="w-7 h-7" />
-          </button>
+          {!viewMode && (
+            <div className="flex border-b border-blue-100/50 mt-3">
+              {(['Dish', 'Material', 'Prep'] as WType[]).map(tt => {
+                const active = tt === type
+                const typeLabel = t.typeTabs?.[tt] || tt
+                return (
+                  <button
+                    key={tt}
+                    onClick={() => {
+                      if (viewMode || isSaving) return
+                      setType(tt)
+                      setCategoryId('')
+                      setCategoryName('')
+                      setItemId('')
+                      setItemName('')
+                      setUnit('')
+                      setPackageCost(0)
+                      setUnitCost(0)
+                      setQtyInput('')
+                    }}
+                    className={`px-4 py-1 text-sm font-semibold border-b-2 transition ${
+                      active
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-blue-600'
+                    }`}
+                    disabled={viewMode || isSaving}
+                  >
+                    {typeLabel}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 flex-1 overflow-y-auto">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
             <div>
               <label className="text-sm text-gray-800">{t.fields.date}</label>
-              <input type="date" className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={date} onChange={e => setDate(e.target.value)} disabled={viewMode || isSaving} />
+              <input type="date" className="mt-1 w-full border rounded-lg px-2 h-10 bg-white" value={date} onChange={e => setDate(e.target.value)} disabled={viewMode || isSaving} />
             </div>
             <div>
               <label className="text-sm text-gray-800">{t.fields.time}</label>
-              <input type="time" className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={time} onChange={e => setTime(e.target.value)} disabled={viewMode || isSaving} />
+              <input type="time" className="mt-1 w-full border rounded-lg px-2 h-10 bg-white" value={time} onChange={e => setTime(e.target.value)} disabled={viewMode || isSaving} />
             </div>
 
             {type === 'Material' ? (
               <>
                 <div>
                   <label className="text-sm text-gray-800">{t.fields.category}</label>
-                  <select className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={viewMode || isSaving}>
+                  <select className="mt-1 w-full border rounded-lg px-2 h-10 bg-white" value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={viewMode || isSaving}>
                     <option value="">{t.fields.category}</option>
                     {safeCategories.map(c => (
                       <option key={c.id} value={c.id}>
@@ -676,7 +694,7 @@ function EditorModal({
                 <div>
                   <label className="text-sm text-gray-800">{t.fields.item}</label>
                   <select
-                    className="mt-1 w-full border rounded-lg px-3 h-11 bg:white"
+                    className="mt-1 w-full border rounded-lg px-2 h-10 bg-white"
                     value={itemId}
                     onChange={e => {
                       const val = e.target.value
@@ -702,7 +720,7 @@ function EditorModal({
                 <div>
                   <label className="text-sm text-gray-800">{t.fields.category}</label>
                   <select
-                    className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
+                    className="mt-1 w-full border rounded-lg px-2 h-10 bg-white"
                     value={categoryName}
                     onChange={e => {
                       if (viewMode || isSaving) return
@@ -728,7 +746,7 @@ function EditorModal({
                 <div>
                   <label className="text-sm text-gray-800">{type === 'Dish' ? t.typeOpts.Dish : t.typeOpts.Prep}</label>
                   <select
-                    className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
+                    className="mt-1 w-full border rounded-lg px-2 h-10 bg-white"
                     value={itemId}
                     onChange={e => {
                       const val = e.target.value
@@ -757,7 +775,7 @@ function EditorModal({
               <input
                 type="text"
                 inputMode="decimal"
-                className="mt-1 w-full border rounded-lg px-3 h-11 bg-white text-right tabular-nums"
+                className="mt-1 w-full border rounded-lg px-2 h-10 bg-white text-right tabular-nums"
                 value={qtyInput}
                 onChange={e => {
                   const val = e.target.value.replace(/[^0-9.,]/g, '')
@@ -769,7 +787,7 @@ function EditorModal({
             </div>
             <div>
               <label className="text-sm text-gray-800">{t.fields.unit}</label>
-              <input className="mt-1 w-full border rounded-lg px-3 h-11 bg-gray-50" value={unit || ''} readOnly />
+              <input className="mt-1 w-full border rounded-lg px-2 h-10 bg-gray-50" value={unit || ''} readOnly />
             </div>
 
             {type === 'Material' && (
@@ -777,13 +795,13 @@ function EditorModal({
                 <div>
                   <label className="text-sm text-gray-800">{t.fields.packageCost}</label>
                   <div className="mt-1">
-                    <MoneyInput value={packageCost} onChange={() => { }} className="h-11 bg-gray-50 pointer-events-none" />
+                    <MoneyInput value={packageCost} onChange={() => { }} className="h-10 bg-gray-50 pointer-events-none text-sm" />
                   </div>
                 </div>
                 <div>
                   <label className="text-sm text-gray-800">{t.fields.unitCost}</label>
                   <div className="mt-1">
-                    <MoneyInput value={unitCost} onChange={() => { }} className="h-11 bg-gray-50 pointer-events-none" />
+                    <MoneyInput value={unitCost} onChange={() => { }} className="h-10 bg-gray-50 pointer-events-none text-sm" />
                   </div>
                 </div>
               </>
@@ -792,7 +810,7 @@ function EditorModal({
               <div className="md:col-span-2">
                 <label className="text-sm text-gray-800">{t.unitCostInput || t.fields.unitCost}</label>
                 <div className="mt-1">
-                  <MoneyInput value={unitCost} onChange={() => { }} className="h-11 bg-gray-50 pointer-events-none" />
+                  <MoneyInput value={unitCost} onChange={() => { }} className="h-10 bg-gray-50 pointer-events-none text-sm" />
                 </div>
               </div>
             )}
@@ -800,7 +818,7 @@ function EditorModal({
             <div>
               <label className="text-sm text-gray-800">{t.fields.responsible}</label>
               <input
-                className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
+                className="mt-1 w-full border rounded-lg px-2 h-10 bg-white"
                 placeholder={t.responsiblePh || ''}
                 value={responsible}
                 onChange={e => setResponsible(e.target.value)}
@@ -810,13 +828,13 @@ function EditorModal({
 
             <div>
               <label className="text-sm text-gray-800">{t.fields.enteredBy}</label>
-              <input className="mt-1 w-full border rounded-lg px-3 h-11 bg-gray-50" value={enteredBy} readOnly />
+              <input className="mt-1 w-full border rounded-lg px-2 h-10 bg-gray-50" value={enteredBy} readOnly />
             </div>
 
             <div className="md:col-span-2">
               <label className="text-sm text-gray-800">{t.fields.reason}</label>
               <input
-                className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
+                className="mt-1 w-full border rounded-lg px-2 h-10 bg-white"
                 placeholder={t.reasonPh || ''}
                 value={reason}
                 onChange={e => setReason(e.target.value)}
@@ -844,7 +862,7 @@ function EditorModal({
           </div>
         </div>
 
-        <div className="px-6 pb-6 pt-4 border-t border-blue-100 flex items-center justify-between bg-blue-50/10 gap-2">
+        <div className="px-6 py-3 border-t border-blue-100 flex items-center justify-between bg-blue-50/10 gap-2">
           <div className="flex items-center gap-2">
             {viewMode ? (
               <button onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80">
@@ -871,19 +889,36 @@ function EditorModal({
               {t.close}
             </button>
             {!viewMode && (
-              <button
-                onClick={handleSave}
-                disabled={!canSave || isSaving}
-                className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50 inline-flex items-center gap-2"
-              >
-                {isSaving && (
-                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
+              <>
+                {!initialRow?.id && (
+                  <button
+                    onClick={() => handleSave(true)}
+                    disabled={!canSave || isSaving}
+                    className="ml-2 px-4 py-2 rounded-lg border border-blue-600 text-blue-600 bg-white hover:bg-blue-50 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    {isSaving && (
+                      <svg className="animate-spin h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    )}
+                    {t.saveAndAddNew || 'Save & Add New'}
+                  </button>
                 )}
-                {isSaving ? t.saving : t.save}
-              </button>
+                <button
+                  onClick={() => handleSave(false)}
+                  disabled={!canSave || isSaving}
+                  className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {isSaving && (
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  )}
+                  {isSaving ? t.saving : t.save}
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -942,12 +977,6 @@ export default function WastageReportPage() {
     }
   }
 
-  function prevMonth() {
-    setMonth(m => (m === 0 ? (setYear(y => y - 1), 11) : m - 1))
-  }
-  function nextMonth() {
-    setMonth(m => (m === 11 ? (setYear(y => y + 1), 0) : m + 1))
-  }
   function onPickMonth(val: string) {
     const [y, m] = val.split('-').map(Number)
     if (Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12) {
@@ -1066,7 +1095,7 @@ export default function WastageReportPage() {
     setOpenEditor(true)
   }
 
-  async function onSavedRow(r: WastageRow) {
+  async function onSavedRow(r: WastageRow, keepOpen?: boolean) {
     let result: WastageRow | null = null
     if (editorInitialRow?.id) {
       // Edit existing
@@ -1081,8 +1110,10 @@ export default function WastageReportPage() {
       throw new Error('Save failed')
     }
 
-    setOpenEditor(false)
-    setEditorInitialRow(null)
+    if (!keepOpen) {
+      setOpenEditor(false)
+      setEditorInitialRow(null)
+    }
   }
 
   async function onDeletedRow(id: string) {
@@ -1208,31 +1239,20 @@ export default function WastageReportPage() {
         }
       />
 
-      <div className="mt-3 mb-4 flex items-center justify-between text-sm text-blue-100">
-        <button type="button" onClick={prevMonth} className="flex items-center gap-1 hover:text-white" title={t.monthNav.prevTitle}>
-          <ChevronLeftIcon className="w-4 h-4" />
-          <span>{t.monthNav.previous}</span>
-        </button>
-
-        <div className="flex items-center gap-2 text-white">
-          <span className="text-base font-semibold">{monthLabel}</span>
-          <div className="relative w-6 h-6">
-            <CalendarDaysIcon className="w-6 h-6 text-blue-200" />
-            <input type="month" value={monthInputValue} onChange={e => onPickMonth(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label={t.monthNav.pick} title={t.monthNav.pick} />
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={aheadIsFutureGuard(year, month) ? () => { } : nextMonth}
-          disabled={aheadIsFutureGuard(year, month)}
-          className={`flex items-center gap-1 hover:text-white ${aheadIsFutureGuard(year, month) ? 'opacity-40 cursor-default' : ''}`}
-          title={t.monthNav.nextTitle}
-        >
-          <span>{t.monthNav.next}</span>
-          <ChevronRightIcon className="w-4 h-4" />
-        </button>
-      </div>
+      <MonthPicker
+        value={monthInputValue}
+        onChange={(newVal) => {
+          if (newVal > monthInputValue && aheadIsFutureGuard(year, month)) {
+            return
+          }
+          onPickMonth(newVal)
+        }}
+        language={language}
+        colorClass="text-blue-100 hover:text-white"
+        labelColorClass="text-white"
+        iconColorClass="text-blue-200 hover:text-white"
+        className="mt-3 mb-4"
+      />
 
       <Card>
         <div className="p-3">

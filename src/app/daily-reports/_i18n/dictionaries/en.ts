@@ -540,6 +540,9 @@ const en = {
       close: 'Close',
       save: 'Save',
       saving: 'Saving…',
+      saveAndAddNew: 'Save & Add New',
+      registerTitle: 'Register Wastage',
+      editTitle: 'Edit Wastage',
       fields: {
         date: 'Date',
         time: 'Time',

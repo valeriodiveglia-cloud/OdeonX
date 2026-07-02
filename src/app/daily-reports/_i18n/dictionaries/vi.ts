@@ -538,6 +538,9 @@ const vi = {
       close: 'Đóng',
       save: 'Lưu',
       saving: 'Đang lưu…',
+      saveAndAddNew: 'Lưu & Thêm mới',
+      registerTitle: 'Ghi nhận hao hụt',
+      editTitle: 'Sửa hao hụt',
       fields: {
         date: 'Ngày',
         time: 'Giờ',
