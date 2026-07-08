@@ -180,8 +180,9 @@ export default function TimeKeepingDashboard() {
             setSalaryHistory(filteredHistory)
             setServiceChargePools((scPoolRes as any[]) || [])
             setServiceChargeStaff(filteredScStaff)
-        } catch (err) {
-            console.error('Error fetching Time Keeping dashboard data:', err)
+        } catch (err: any) {
+            console.error('Error fetching Time Keeping dashboard data:', err?.message || err?.details || err)
+            console.error('Full error object:', err)
         } finally {
             setLoading(false)
         }

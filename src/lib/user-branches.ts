@@ -1,5 +1,5 @@
 // src/lib/user-branches.ts
-import { supabase } from './supabase'
+import { supabase } from './supabase_shim'
 
 export interface UserPermissions {
   role: string | null
