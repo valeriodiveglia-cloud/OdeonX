@@ -71,7 +71,7 @@ export default function AllActivityPage() {
             // Fetch all activity logs
             const { data: activityData, error } = await supabase
                 .from('hr_activity_log')
-                .select('*')
+                .select('*, actor:app_accounts!hr_activity_log_actor_id_fkey(name)')
                 .order('created_at', { ascending: false })
 
             if (error) throw error
@@ -401,6 +401,11 @@ export default function AllActivityPage() {
                                                                 <div className="min-w-0 flex-1 py-1.5 flex justify-between gap-4">
                                                                     <div className="space-y-1.5">
                                                                         <p className="text-sm font-semibold text-slate-800">
+                                                                            {activity.actor?.name && (
+                                                                                <span className="font-extrabold text-blue-700 mr-1.5">
+                                                                                    {activity.actor.name}:
+                                                                                </span>
+                                                                            )}
                                                                             {formatActivityMessage(activity.message || '', language)}
                                                                         </p>
                                                                         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs">

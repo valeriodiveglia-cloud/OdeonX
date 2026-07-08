@@ -54,7 +54,7 @@ export default function HiringRequestDetailPage() {
 
             const { data: requestData, error: requestError } = await supabase
                 .from('hiring_requests')
-                .select('*')
+                .select('*, creator:app_accounts!hiring_requests_created_by_fkey(name)')
                 .eq('id', id)
                 .single()
 

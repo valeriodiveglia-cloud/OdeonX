@@ -84,7 +84,7 @@ export default function RecruitmentPage() {
 
             const { data, error } = await supabase
                 .from('hiring_requests')
-                .select('*, candidates(id)')
+                .select('*, candidates(id), creator:app_accounts!hiring_requests_created_by_fkey(name)')
                 .order('created_at', { ascending: false })
 
             if (error) throw error

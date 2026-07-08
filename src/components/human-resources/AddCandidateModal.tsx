@@ -26,7 +26,11 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
         document_type: 'id_card',
         document_number: '',
         source: 'Referral',
-        notes: ''
+        notes: '',
+        gender: '',
+        address: '',
+        city: '',
+        date_of_birth: ''
     })
     const [file, setFile] = useState<File | null>(null)
     const [currentCvUrl, setCurrentCvUrl] = useState<string | null>(null)
@@ -35,6 +39,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
     const [selectedPostingId, setSelectedPostingId] = useState<string>('')
     const [activeRequests, setActiveRequests] = useState<HiringRequest[]>([])
     const [selectedRequestId, setSelectedRequestId] = useState<string>('')
+    const [branches, setBranches] = useState<any[]>([])
 
     // Duplicate check states
     const [duplicateCandidate, setDuplicateCandidate] = useState<any>(null)
@@ -56,9 +61,17 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 setMiddleName('')
                 setFirstName(parts[1])
             } else if (parts.length > 2) {
-                setLastName(parts[0])
-                setFirstName(parts[parts.length - 1])
-                setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+                const firstWordLower = parts[0].toLowerCase()
+                const westernLastNamePrefixes = ['di', 'de', 'da', 'la', 'lo', 'della', 'dalla', 'del', 'du', 'van', 'von', 'le']
+                if (westernLastNamePrefixes.includes(firstWordLower)) {
+                    setLastName(parts.slice(0, 2).join(' '))
+                    setFirstName(parts[parts.length - 1])
+                    setMiddleName(parts.slice(2, parts.length - 1).join(' '))
+                } else {
+                    setLastName(parts[0])
+                    setFirstName(parts[parts.length - 1])
+                    setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+                }
             }
 
             setFormData({
@@ -67,7 +80,11 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 document_type: candidateToEdit.document_type || 'id_card',
                 document_number: candidateToEdit.document_number || '',
                 source: candidateToEdit.source || 'Referral',
-                notes: candidateToEdit.notes || ''
+                notes: candidateToEdit.notes || '',
+                gender: candidateToEdit.gender || '',
+                address: candidateToEdit.address || '',
+                city: candidateToEdit.city || '',
+                date_of_birth: candidateToEdit.date_of_birth || ''
             })
             setSelectedPostingId(candidateToEdit.recruitment_posting_id || '')
             setSelectedRequestId(candidateToEdit.hiring_request_id || '')
@@ -83,7 +100,11 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 document_type: 'id_card',
                 document_number: '',
                 source: 'Referral',
-                notes: ''
+                notes: '',
+                gender: '',
+                address: '',
+                city: '',
+                date_of_birth: ''
             })
             setSelectedPostingId('')
             setSelectedRequestId('')
@@ -138,6 +159,16 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
             fetchRequests()
         }
     }, [hiringRequest])
+
+    useEffect(() => {
+        const fetchBranches = async () => {
+            const { data } = await supabase
+                .from('provider_branches')
+                .select('id, name, city')
+            if (data) setBranches(data)
+        }
+        fetchBranches()
+    }, [])
 
     useEffect(() => {
         const checkContactDuplicates = async () => {
@@ -292,6 +323,10 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                         source: formData.source,
                         notes: formData.notes || null,
                         cv_url: cv_url,
+                        gender: formData.gender || null,
+                        address: formData.address || null,
+                        city: formData.city || null,
+                        date_of_birth: formData.date_of_birth || null,
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', candidateToEdit.id)
@@ -321,6 +356,10 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                         source: formData.source,
                         notes: formData.notes || null,
                         cv_url: cv_url,
+                        gender: formData.gender || null,
+                        address: formData.address || null,
+                        city: formData.city || null,
+                        date_of_birth: formData.date_of_birth || null,
                         stage: 'new'
                     }])
 
@@ -415,7 +454,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                         <div>
                                             <label htmlFor="last_name" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                                                {isVI ? 'Họ *' : 'Last Name *'}
+                                                {isVI ? 'Họ' : 'Last Name'} <span className="text-red-500">*</span>
                                             </label>
                                             <input
                                                 type="text"
@@ -442,7 +481,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                         </div>
                                         <div>
                                             <label htmlFor="first_name" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                                                {isVI ? 'Tên *' : 'First Name *'}
+                                                {isVI ? 'Tên' : 'First Name'} <span className="text-red-500">*</span>
                                             </label>
                                             <input
                                                 type="text"
@@ -460,12 +499,13 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <label htmlFor="phone" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                                                {isVI ? 'Số điện thoại' : 'Phone'}
+                                                {isVI ? 'Số điện thoại' : 'Phone'} <span className="text-red-500">*</span>
                                             </label>
                                             <input
                                                 type="text"
                                                 name="phone"
                                                 id="phone"
+                                                required
                                                 value={formData.phone}
                                                 onChange={handleChange}
                                                 placeholder="0901234567"
@@ -488,34 +528,73 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                         </div>
                                     </div>
 
-                                    {/* Row 2.5: Document Info */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* Row: Date of Birth & Gender & City */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                         <div>
-                                            <label htmlFor="document_type" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                                                {isVI ? 'Loại giấy tờ' : 'Document Type'}
+                                            <label htmlFor="date_of_birth" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Ngày sinh' : 'Date of Birth'} <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="date"
+                                                name="date_of_birth"
+                                                id="date_of_birth"
+                                                required
+                                                value={formData.date_of_birth}
+                                                onChange={handleChange}
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="gender" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Giới tính' : 'Gender'} <span className="text-red-500">*</span>
                                             </label>
                                             <select
-                                                name="document_type"
-                                                id="document_type"
-                                                value={formData.document_type}
+                                                name="gender"
+                                                id="gender"
+                                                required
+                                                value={formData.gender}
                                                 onChange={handleChange}
-                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold cursor-pointer"
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
                                             >
-                                                <option value="id_card">{isVI ? 'CCCD / CMND' : 'ID Card'}</option>
-                                                <option value="passport">{isVI ? 'Hộ chiếu' : 'Passport'}</option>
+                                                <option value="">{isVI ? 'Chọn giới tính...' : 'Select gender...'}</option>
+                                                <option value="Nam">{isVI ? 'Nam' : 'Male'}</option>
+                                                <option value="Nữ">{isVI ? 'Nữ' : 'Female'}</option>
+                                                <option value="Khác">{isVI ? 'Khác' : 'Other'}</option>
                                             </select>
                                         </div>
                                         <div>
-                                            <label htmlFor="document_number" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                                                {isVI ? 'Số giấy tờ' : 'Document Number'}
+                                            <label htmlFor="city" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Thành phố' : 'City'} <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                name="city"
+                                                id="city"
+                                                required
+                                                value={formData.city}
+                                                onChange={handleChange}
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
+                                            >
+                                                <option value="">{isVI ? 'Chọn thành phố...' : 'Select city...'}</option>
+                                                {Array.from(new Set(branches.map(b => b.city).filter(Boolean))).sort().map((c: any) => (
+                                                    <option key={c} value={c}>{c}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Row: Address */}
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <div>
+                                            <label htmlFor="address" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Địa chỉ' : 'Address'}
                                             </label>
                                             <input
                                                 type="text"
-                                                name="document_number"
-                                                id="document_number"
-                                                value={formData.document_number}
+                                                name="address"
+                                                id="address"
+                                                value={formData.address}
                                                 onChange={handleChange}
-                                                placeholder="012345678901"
+                                                placeholder={isVI ? '123 Đường...' : '123 Street...'}
                                                 className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
                                             />
                                         </div>
@@ -707,7 +786,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                         </button>
                                         <button
                                             type="submit"
-                                            disabled={submitting || !lastName.trim() || !firstName.trim() || !!duplicateCandidate || checkingDuplicates}
+                                            disabled={submitting || !lastName.trim() || !firstName.trim() || !formData.date_of_birth || !formData.gender || !formData.city || !!duplicateCandidate || checkingDuplicates}
                                             className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-all cursor-pointer h-10 flex items-center justify-center disabled:opacity-40"
                                         >
                                             {submitting ? (isVI ? 'Đang lưu...' : 'Saving...') : candidateToEdit ? (isVI ? 'Lưu thay đổi' : 'Save Changes') : (isVI ? 'Thêm ứng viên' : 'Add Candidate')}

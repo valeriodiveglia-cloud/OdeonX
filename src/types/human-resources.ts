@@ -22,6 +22,7 @@ export interface HiringRequest {
   created_by: string | null;
   employment_type?: string | null;
   closed_at?: string | null;
+  creator?: { name: string | null } | null;
 }
 
 export interface Candidate {
@@ -37,6 +38,15 @@ export interface Candidate {
   stage: CandidateStage;
   source: string | null;
   notes: string | null;
+  gender?: string | null;
+  address?: string | null;
+  city?: string | null;
+  date_of_birth?: string | null;
+  screened_by?: string | null;
+  interviewed_by?: string | null;
+  screener?: { name: string | null } | null;
+  interviewer?: { name: string | null } | null;
+  approver?: { name: string | null } | null;
   interview_scheduled_at?: string | null;
   interview_location?: string | null;
   english_level?: string | null;
@@ -73,6 +83,7 @@ export interface HRActivityLog {
   action_type: string;
   message: string | null;
   payload: any; // JSONB
+  actor?: { name: string | null } | null;
 }
 
 export type PostingStatus = 'active' | 'paused' | 'expired' | 'removed' | 'archived';
@@ -94,6 +105,7 @@ export interface RecruitmentPosting {
   currency: string;
   package_name: string | null;
   hired_count: number;
+  poster?: { name: string | null } | null;
 }
 
 export interface RecruitmentPlatform {

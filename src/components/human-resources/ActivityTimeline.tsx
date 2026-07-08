@@ -61,7 +61,7 @@ export function ActivityTimeline({ hiringRequestId }: ActivityTimelineProps) {
         try {
             const { data, error } = await supabase
                 .from('hr_activity_log')
-                .select('*')
+                .select('*, actor:app_accounts!hr_activity_log_actor_id_fkey(name)')
                 .eq('hiring_request_id', hiringRequestId)
                 .order('created_at', { ascending: false })
 
@@ -107,6 +107,11 @@ export function ActivityTimeline({ hiringRequestId }: ActivityTimelineProps) {
                                     <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
                                         <div>
                                             <p className="text-sm text-gray-600">
+                                                {activity.actor?.name && (
+                                                    <span className="font-semibold text-slate-800 mr-1">
+                                                        {activity.actor.name}:
+                                                    </span>
+                                                )}
                                                 {formatActivityMessage(activity.message || '', language)}
                                             </p>
                                         </div>

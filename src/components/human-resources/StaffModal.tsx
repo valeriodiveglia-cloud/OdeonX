@@ -87,9 +87,17 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                 setMiddleName('')
                 setFirstName(parts[1])
             } else if (parts.length > 2) {
-                setLastName(parts[0])
-                setFirstName(parts[parts.length - 1])
-                setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+                const firstWordLower = parts[0].toLowerCase()
+                const westernLastNamePrefixes = ['di', 'de', 'da', 'la', 'lo', 'della', 'dalla', 'del', 'du', 'van', 'von', 'le']
+                if (westernLastNamePrefixes.includes(firstWordLower)) {
+                    setLastName(parts.slice(0, 2).join(' '))
+                    setFirstName(parts[parts.length - 1])
+                    setMiddleName(parts.slice(2, parts.length - 1).join(' '))
+                } else {
+                    setLastName(parts[0])
+                    setFirstName(parts[parts.length - 1])
+                    setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+                }
             } else {
                 setLastName('')
                 setMiddleName('')

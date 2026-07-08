@@ -230,7 +230,7 @@ export function RecruitmentPostings({ hiringRequestId, positionTitle, onActivity
         try {
             const { data, error } = await supabase
                 .from('recruitment_postings')
-                .select('*')
+                .select('*, poster:app_accounts!recruitment_postings_posted_by_fkey(name)')
                 .eq('hiring_request_id', hiringRequestId)
                 .order('posted_at', { ascending: false })
 
@@ -598,9 +598,17 @@ export function RecruitmentPostings({ hiringRequestId, positionTitle, onActivity
                                         >
                                             {/* Platform */}
                                             <td className="px-4 py-3">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${platformInfo.color}`}>
-                                                    {posting.platform}
-                                                </span>
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className={`inline-flex items-center self-start px-2.5 py-0.5 rounded-full text-xs font-semibold ${platformInfo.color}`}>
+                                                        {posting.platform}
+                                                    </span>
+                                                    {posting.poster?.name && (
+                                                        <span className="text-[10px] text-slate-400 font-semibold ml-1">
+                                                            {isVI ? 'Đăng bởi: ' : 'Posted by: '}
+                                                            {posting.poster.name}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
 
                                             {/* Package Name */}

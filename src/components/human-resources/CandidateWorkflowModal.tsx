@@ -251,6 +251,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
     const [branches, setBranches] = useState<{ id: string; name: string; address: string; city?: string | null }[]>([])
     const [selectedTab, setSelectedTab] = useState<number>(1)
     const [userRole, setUserRole] = useState<string | null>(null)
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+    const [currentUserName, setCurrentUserName] = useState<string | null>(null)
     const [offerApprovalNotes, setOfferApprovalNotes] = useState('')
 
     // Form states for Step 1: CV Screening
@@ -398,9 +400,17 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 setMiddleName('')
                 setFirstName(parts[1])
             } else if (parts.length > 2) {
-                setLastName(parts[0])
-                setFirstName(parts[parts.length - 1])
-                setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+                const firstWordLower = parts[0].toLowerCase()
+                const westernLastNamePrefixes = ['di', 'de', 'da', 'la', 'lo', 'della', 'dalla', 'del', 'du', 'van', 'von', 'le']
+                if (westernLastNamePrefixes.includes(firstWordLower)) {
+                    setLastName(parts.slice(0, 2).join(' '))
+                    setFirstName(parts[parts.length - 1])
+                    setMiddleName(parts.slice(2, parts.length - 1).join(' '))
+                } else {
+                    setLastName(parts[0])
+                    setFirstName(parts[parts.length - 1])
+                    setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+                }
             }
 
             setPhone(candidate.phone || '')
@@ -451,14 +461,18 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 setSelectedBranches(requestBranches)
             }
 
-            // Pre-select city based on hiring request branches
-            const matchedBranch = branches.find(b => requestBranches.includes(b.id))
-            if (matchedBranch && matchedBranch.city) {
-                setCity(matchedBranch.city)
+            // Pre-select city based on candidate or hiring request branches
+            if (candidate.city) {
+                setCity(candidate.city)
             } else {
-                setCity('')
+                const matchedBranch = branches.find(b => requestBranches.includes(b.id))
+                if (matchedBranch && matchedBranch.city) {
+                    setCity(matchedBranch.city)
+                } else {
+                    setCity('')
+                }
             }
-            setAddress('')
+            setAddress(candidate.address || '')
             setSkillLevel('1')
 
             const candidateOfferStartDate = (candidate as any).offer_start_date
@@ -489,8 +503,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             setDocumentType(candidate.document_type || 'id_card')
             setDocumentNumber(candidate.document_number || '')
             setStaffCode('')
-            setDateOfBirth('')
-            setGender('Nam')
+            setDateOfBirth(candidate.date_of_birth || '')
+            setGender(candidate.gender || 'Nam')
             setMaritalStatus('Độc thân')
             setBankBranch('')
             setEmergencyContactName('')
@@ -573,9 +587,17 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 setMiddleName('')
                 setFirstName(parts[1])
             } else if (parts.length > 2) {
-                setLastName(parts[0])
-                setFirstName(parts[parts.length - 1])
-                setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+                const firstWordLower = parts[0].toLowerCase()
+                const westernLastNamePrefixes = ['di', 'de', 'da', 'la', 'lo', 'della', 'dalla', 'del', 'du', 'van', 'von', 'le']
+                if (westernLastNamePrefixes.includes(firstWordLower)) {
+                    setLastName(parts.slice(0, 2).join(' '))
+                    setFirstName(parts[parts.length - 1])
+                    setMiddleName(parts.slice(2, parts.length - 1).join(' '))
+                } else {
+                    setLastName(parts[0])
+                    setFirstName(parts[parts.length - 1])
+                    setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+                }
             }
 
             if (staff.phone) setPhone(staff.phone)
@@ -655,13 +677,15 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
         try {
             const { data: { user } } = await supabase.auth.getUser()
             if (user) {
+                setCurrentUserId(user.id)
                 const { data } = await supabase
                     .from('app_accounts')
-                    .select('role')
+                    .select('role, name')
                     .eq('user_id', user.id)
                     .single()
                 if (data) {
                     setUserRole(data.role)
+                    setCurrentUserName(data.name || '')
                 }
             }
         } catch (err) {
@@ -676,6 +700,9 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 .from('candidates')
                 .select(`
                     *,
+                    screener:app_accounts!candidates_screened_by_fkey(name),
+                    interviewer:app_accounts!candidates_interviewed_by_fkey(name),
+                    approver:app_accounts!candidates_offer_approval_by_fkey(name),
                     hiring_requests (
                         id,
                         position_title,
@@ -943,7 +970,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             english_level: englishLevel,
             experience_years: experienceYears,
             initial_rating: initialRating,
-            screening_notes: screeningNotes
+            screening_notes: screeningNotes,
+            screened_by: currentUserId
         }
         const activityMsg = pass
             ? `Candidate ${candidate.full_name} passed CV screening (English: ${englishLevel}, Exp: ${experienceYears}) / Ứng viên ${candidate.full_name} đã đạt vòng lọc hồ sơ (Tiếng Anh: ${englishLevel}, Kn: ${experienceYears})`
@@ -1012,7 +1040,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
         const newStage = pass ? 'offer_sent' : 'rejected'
         const payload: any = {
             interview_rating: interviewRating,
-            interview_feedback: interviewFeedback
+            interview_feedback: interviewFeedback,
+            interviewed_by: currentUserId
         }
         if (!pass) {
             payload.offer_salary_amount = null
@@ -1762,6 +1791,7 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
         const payload = {
             interview_rating: null,
             interview_feedback: null,
+            interviewed_by: null,
             offer_approval_status: 'none'
         }
         const activityMsg = `Reverted interview evaluation for candidate ${candidate.full_name} / Hủy đánh giá phỏng vấn cho ứng viên ${candidate.full_name}, chuyển về trạng thái đã phỏng vấn`
@@ -1780,7 +1810,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
         const payload = {
             interview_answers: null,
             interview_rating: null,
-            interview_feedback: null
+            interview_feedback: null,
+            interviewed_by: null
         }
         const activityMsg = `Reverted interview questionnaire for candidate ${candidate.full_name} / Hủy phỏng vấn cho ứng viên ${candidate.full_name}, chuyển về trạng thái đặt lịch`
         await handleUpdateStage('interview_scheduled', payload, activityMsg)
@@ -1793,7 +1824,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             interview_location: null,
             interview_answers: null,
             interview_rating: null,
-            interview_feedback: null
+            interview_feedback: null,
+            interviewed_by: null
         }
         const activityMsg = `Reverted scheduled interview for candidate ${candidate.full_name} / Hủy lịch phỏng vấn cho ứng viên ${candidate.full_name}, chuyển về trạng thái đã lọc`
         await handleUpdateStage('screened', payload, activityMsg)
@@ -1806,11 +1838,13 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             experience_years: null,
             initial_rating: null,
             screening_notes: null,
+            screened_by: null,
             interview_scheduled_at: null,
             interview_location: null,
             interview_answers: null,
             interview_rating: null,
-            interview_feedback: null
+            interview_feedback: null,
+            interviewed_by: null
         }
         const activityMsg = `Reverted screening for candidate ${candidate.full_name} / Hủy lọc hồ sơ cho ứng viên ${candidate.full_name}, chuyển về trạng thái mới`
         await handleUpdateStage('new', payload, activityMsg)
@@ -1977,7 +2011,6 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                         >
                             <DialogPanel className="w-full max-w-4xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl border border-gray-100 transition-all text-gray-900">
                                 
-                                {/* Header */}
                                 <div className="flex items-center justify-between mb-5 pb-3 border-b border-gray-100">
                                     <div className="text-left">
                                         <DialogTitle as="h3" className="text-lg font-bold text-slate-800">
@@ -2003,21 +2036,68 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                 ) : (
                                     <div className="space-y-6">
                                         {/* Candidate Card Summary */}
-                                        <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                            <div className="text-left">
-                                                <h4 className="text-base font-bold text-slate-800">{candidate.full_name}</h4>
-                                                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 font-semibold">
-                                                    {candidate.phone && <span>📞 {candidate.phone}</span>}
-                                                    {candidate.email && <span>✉ {candidate.email}</span>}
-                                                    {candidate.source && (
-                                                        <span className="bg-slate-200 px-2 py-0.5 rounded-md text-[10px]">
-                                                            {isVI ? 'Nguồn:' : 'Source:'} {candidate.source}
-                                                        </span>
-                                                    )}
+                                        <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-start gap-6 lg:gap-5">
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 min-w-0">
+                                                {/* Initials Avatar */}
+                                                <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-150 flex items-center justify-center shrink-0 text-blue-650 font-bold text-lg">
+                                                    {candidate.full_name ? candidate.full_name.split(' ').pop()?.charAt(0).toUpperCase() : '?'}
+                                                </div>
+                                                
+                                                <div className="space-y-1.5 flex-1 min-w-0 text-left">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <h4 className="text-base font-extrabold text-slate-800 leading-snug">{candidate.full_name}</h4>
+                                                        {candidate.source && (
+                                                            <span className="bg-slate-200 text-slate-650 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                                                                {isVI ? 'Nguồn:' : 'Source:'} {candidate.source}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 font-semibold">
+                                                        {candidate.phone && (
+                                                            <span className="flex items-center gap-1">
+                                                                <span className="text-slate-400">📞</span> {candidate.phone}
+                                                            </span>
+                                                        )}
+                                                        {candidate.email && (
+                                                            <>
+                                                                <span className="text-slate-300">•</span>
+                                                                <span className="flex items-center gap-1 min-w-0 truncate" title={candidate.email}>
+                                                                    <span className="text-slate-400">✉</span> {candidate.email}
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center gap-2">
+                                            {/* Structured Meta Fields with light dividers (shifted to the left) */}
+                                            <div className="flex flex-col gap-3 border-t lg:border-t-0 lg:border-l border-slate-200 pt-4 lg:pt-0 lg:pl-3 shrink-0 text-xs text-slate-600 font-bold">
+                                                <div className="flex items-center gap-6">
+                                                    {candidate.date_of_birth && (
+                                                        <div className="space-y-0.5 text-left">
+                                                            <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{isVI ? 'Ngày sinh' : 'Date of Birth'}</span>
+                                                            <span className="text-slate-800 flex items-center gap-1">🎂 {formatToDDMMYYYY(candidate.date_of_birth)}</span>
+                                                        </div>
+                                                    )}
+                                                    {candidate.gender && (
+                                                        <div className="space-y-0.5 text-left">
+                                                            <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{isVI ? 'Giới tính' : 'Gender'}</span>
+                                                            <span className="text-slate-800 flex items-center gap-1">👤 {candidate.gender === 'Nam' ? (isVI ? 'Nam' : 'Male') : candidate.gender === 'Nữ' ? (isVI ? 'Nữ' : 'Female') : (isVI ? 'Khác' : 'Other')}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {(candidate.city || candidate.address) && (
+                                                    <div className="space-y-0.5 text-left min-w-[150px] max-w-[240px]">
+                                                        <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{isVI ? 'Địa chỉ' : 'Address'}</span>
+                                                        <span className="text-slate-800 flex items-center gap-1 truncate" title={candidate.address ? `${candidate.address}, ${candidate.city || ''}` : candidate.city || ''}>
+                                                            📍 {candidate.address ? `${candidate.address}, ` : ''}{candidate.city || ''}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Action Buttons pushed to the right */}
+                                            <div className="flex items-center gap-2 lg:ml-auto">
                                                 {candidate.cv_url && (
                                                     <a
                                                         href={candidate.cv_url}
@@ -2215,6 +2295,9 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                 <span>⭐ {isVI ? 'Đánh giá:' : 'Rating:'}</span>
                                                                 {renderStars(initialRating)}
                                                             </div>
+                                                            {candidate.screener?.name && (
+                                                                <p>👤 {isVI ? 'Người đánh giá:' : 'Assessed by:'} <span className="text-slate-900 font-bold">{candidate.screener.name}</span></p>
+                                                            )}
                                                             {screeningNotes && (
                                                                 <div className="pt-2 border-t border-slate-200">
                                                                     <p className="text-slate-400 mb-1">📝 {isVI ? 'Ghi chú vòng lọc:' : 'Screening Notes:'}</p>
@@ -2235,10 +2318,15 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                     ) : candidate.stage !== 'rejected' ? (
                                                         /* Active form view */
                                                         <div className="border border-slate-100 rounded-2xl p-6 bg-white shadow-sm space-y-5">
-                                                            <div className="pb-2 border-b border-slate-100">
+                                                            <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
                                                                 <h5 className="text-sm font-bold text-slate-800 text-left">
                                                                     {isVI ? 'Vòng lọc hồ sơ & Scrutinio CV' : 'CV Screening & Initial Scrutiny'}
                                                                 </h5>
+                                                                {currentUserName && (
+                                                                    <span className="text-xs text-slate-500 font-semibold bg-slate-100 px-2.5 py-0.5 rounded-md">
+                                                                        👤 {isVI ? 'Người đánh giá: ' : 'Assessor: '}{currentUserName}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                                 <div className="space-y-4">
@@ -2361,10 +2449,15 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                     ) : (
                                                         /* Active form view */
                                                         <div className="border border-slate-100 rounded-2xl p-6 bg-white shadow-sm space-y-5">
-                                                            <div className="pb-2 border-b border-slate-100">
+                                                            <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
                                                                 <h5 className="text-sm font-bold text-slate-800 text-left">
                                                                     {isVI ? 'Đặt lịch phỏng vấn' : 'Schedule Interview'}
                                                                 </h5>
+                                                                {currentUserName && (
+                                                                    <span className="text-xs text-slate-500 font-semibold bg-slate-100 px-2.5 py-0.5 rounded-md">
+                                                                        👤 {isVI ? 'Người lên lịch: ' : 'Scheduler: '}{currentUserName}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
                                                                 <div>
@@ -2584,8 +2677,13 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                 <ChatBubbleBottomCenterTextIcon className="h-8 w-8" />
                                                             </div>
                                                             <div className="space-y-1">
-                                                                <h5 className="text-sm font-extrabold text-blue-800">
+                                                                <h5 className="text-sm font-extrabold text-blue-800 flex items-center justify-center gap-2">
                                                                     {isVI ? 'Đang thực hiện phỏng vấn...' : 'Interview in Progress...'}
+                                                                    {currentUserName && (
+                                                                        <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-2 py-0.5 rounded">
+                                                                            👤 {isVI ? 'Người phỏng vấn: ' : 'Interviewer: '}{currentUserName}
+                                                                        </span>
+                                                                    )}
                                                                 </h5>
                                                                 <p className="text-xs text-slate-500 font-semibold mt-1 max-w-sm mx-auto leading-relaxed">
                                                                     {isVI
@@ -2622,6 +2720,9 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                 <span>⭐ {isVI ? 'Đánh giá:' : 'Rating:'}</span>
                                                                 {renderStars(interviewRating)}
                                                             </div>
+                                                            {candidate.interviewer?.name && (
+                                                                <p>👤 {isVI ? 'Người phỏng vấn:' : 'Interviewed by:'} <span className="text-slate-900 font-bold">{candidate.interviewer.name}</span></p>
+                                                            )}
                                                             {interviewFeedback && (
                                                                 <div className={`pt-2 border-t ${candidate.stage === 'rejected' ? 'border-red-200' : 'border-slate-200'}`}>
                                                                     <p className="text-slate-450 mb-1">📝 {isVI ? 'Nhận xét & Feedback:' : 'Feedback & Remarks:'}</p>
@@ -2654,10 +2755,15 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                     ) : (
                                                         /* Active form view */
                                                         <div className="border border-slate-100 rounded-2xl p-6 bg-white shadow-sm space-y-5">
-                                                            <div className="pb-2 border-b border-slate-100">
+                                                            <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
                                                                 <h5 className="text-sm font-bold text-slate-800 text-left">
                                                                     {isVI ? 'Đánh giá cuộc phỏng vấn' : 'Interview Evaluation'}
                                                                 </h5>
+                                                                {currentUserName && (
+                                                                    <span className="text-xs text-slate-500 font-semibold bg-slate-100 px-2.5 py-0.5 rounded-md">
+                                                                        👤 {isVI ? 'Người phỏng vấn: ' : 'Interviewer: '}{currentUserName}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                                 <div className="space-y-4">
@@ -2792,13 +2898,20 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                     ) : (
                                                         /* Active form view: Job Offer Details */
                                                         <div className="border border-slate-100 rounded-2xl p-6 bg-white shadow-sm space-y-6">
-                                                            <div className="pb-2 border-b border-slate-100">
-                                                                <h5 className="text-sm font-bold text-slate-800 text-left">
-                                                                    {isVI ? 'Chi tiết lời mời nhận việc' : 'Job Offer Details'}
-                                                                </h5>
-                                                                <p className="text-xs text-slate-500 font-semibold mt-0.5 text-left">
-                                                                    {isVI ? 'Cấu hình thông tin lương, thử việc và ngày bắt đầu để gửi offer cho ứng viên' : 'Configure compensation, probation, and start date to draft candidate job offer'}
-                                                                </p>
+                                                            <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
+                                                                <div className="text-left">
+                                                                    <h5 className="text-sm font-bold text-slate-800">
+                                                                        {isVI ? 'Chi tiết lời mời nhận việc' : 'Job Offer Details'}
+                                                                    </h5>
+                                                                    <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                                                                        {isVI ? 'Cấu hình thông tin lương, thử việc và ngày bắt đầu để gửi offer cho ứng viên' : 'Configure compensation, probation, and start date to draft candidate job offer'}
+                                                                    </p>
+                                                                </div>
+                                                                {currentUserName && (
+                                                                    <span className="text-xs text-slate-500 font-semibold bg-slate-100 px-2.5 py-0.5 rounded-md shrink-0">
+                                                                        👤 {isVI ? 'Người đề xuất: ' : 'Proposer: '}{currentUserName}
+                                                                    </span>
+                                                                )}
                                                             </div>
 
                                                             {/* Salary Offer and Probation details */}
@@ -2992,7 +3105,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                             ❌ {isVI ? 'Đề xuất lời mời nhận việc bị từ chối' : 'Job Offer Proposal Rejected'}
                                                                         </span>
                                                                         <p className="text-xs text-slate-600 font-semibold mt-0.5">
-                                                                            {isVI ? 'Đề xuất này đã bị từ chối bởi Quản trị viên.' : 'This offer proposal was rejected by the Administrator.'}
+                                                                            {isVI ? 'Đề xuất này đã bị từ chối bởi ' : 'This offer proposal was rejected by '}
+                                                                            {candidate.approver?.name || (isVI ? 'Quản trị viên.' : 'the Administrator.')}
                                                                             {candidate.offer_approval_notes && (
                                                                                 <span className="block mt-1 font-bold text-red-700">
                                                                                     {isVI ? 'Lý do: ' : 'Reason: '} {candidate.offer_approval_notes}
@@ -3006,7 +3120,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                 {candidate?.offer_approval_status === 'approved' && (
                                                                     <div className="p-3 rounded-xl border border-green-200 bg-green-50/30 text-left">
                                                                         <span className="text-xs font-bold text-green-800 flex items-center gap-1.5">
-                                                                            ✅ {isVI ? 'Lời mời nhận việc đã được phê duyệt' : 'Job Offer Approved'}
+                                                                            ✅ {isVI ? 'Lời mời nhận việc đã được phê duyệt bởi ' : 'Job Offer Approved by '}
+                                                                            {candidate.approver?.name || (isVI ? 'Quản trị viên' : 'the Administrator')}
                                                                         </span>
                                                                     </div>
                                                                 )}
@@ -3155,13 +3270,20 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                      ) : (
                                                         /* Active form view: Staff Onboarding */
                                                         <form onSubmit={handleSaveOnboarding} className="border border-slate-100 rounded-2xl p-6 bg-white shadow-sm space-y-6">
-                                                            <div className="pb-2 border-b border-slate-100">
-                                                                <h5 className="text-sm font-bold text-slate-800 text-left">
-                                                                    {isVI ? 'Hồ sơ tuyển dụng nhân sự (Onboarding)' : 'Staff Onboarding & Creation Form'}
-                                                                </h5>
-                                                                <p className="text-xs text-slate-500 font-semibold mt-0.5 text-left">
-                                                                    {isVI ? 'Điền đầy đủ thông tin để tạo nhân sự chính thức từ ứng viên này' : 'Fill out the details below to register this candidate as active staff'}
-                                                                </p>
+                                                            <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
+                                                                <div className="text-left">
+                                                                    <h5 className="text-sm font-bold text-slate-800">
+                                                                        {isVI ? 'Hồ sơ tuyển dụng nhân sự (Onboarding)' : 'Staff Onboarding & Creation Form'}
+                                                                    </h5>
+                                                                    <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                                                                        {isVI ? 'Điền đầy đủ thông tin để tạo nhân sự chính thức từ ứng viên này' : 'Fill out the details below to register this candidate as active staff'}
+                                                                    </p>
+                                                                </div>
+                                                                {currentUserName && (
+                                                                    <span className="text-xs text-slate-500 font-semibold bg-slate-100 px-2.5 py-0.5 rounded-md shrink-0">
+                                                                        👤 {isVI ? 'Người tiếp nhận: ' : 'HR Specialist: '}{currentUserName}
+                                                                    </span>
+                                                                )}
                                                             </div>
 
                                                             <div className="max-h-[500px] overflow-y-auto pr-2 space-y-5">

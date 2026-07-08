@@ -192,6 +192,19 @@ export function RequestOverview({ request, branchNames }: RequestOverviewProps) 
                     </div>
                 </div>
 
+                {/* Created By */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        {isVI ? 'Người tạo' : 'Created By'}
+                    </span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                        <Users className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm font-semibold text-slate-800">
+                            {request.creator?.name || (isVI ? 'Không xác định' : 'Unknown')}
+                        </span>
+                    </div>
+                </div>
+
                 {/* Target Branches */}
                 <div className="flex flex-col gap-1.5 md:col-span-2">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">

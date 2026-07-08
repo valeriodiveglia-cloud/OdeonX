@@ -368,11 +368,22 @@ export function HiringRequestList({ requests, branchNames = {}, activeSubTab, on
                                             <div className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors text-sm">
                                                 {request.position_title}
                                             </div>
-                                            <div className="text-xs text-slate-400 mt-0.5">
-                                                {request.employment_type === 'part_time' 
-                                                    ? (language === 'vi' ? 'Bán thời gian' : 'Part-time')
-                                                    : (language === 'vi' ? 'Toàn thời gian' : 'Full-time')
-                                                }
+                                            <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap gap-x-2">
+                                                <span>
+                                                    {request.employment_type === 'part_time' 
+                                                        ? (language === 'vi' ? 'Bán thời gian' : 'Part-time')
+                                                        : (language === 'vi' ? 'Toàn thời gian' : 'Full-time')
+                                                    }
+                                                </span>
+                                                {request.creator?.name && (
+                                                    <>
+                                                        <span className="text-slate-350">•</span>
+                                                        <span className="text-slate-400 font-medium">
+                                                            {language === 'vi' ? 'Tạo bởi: ' : 'Created by: '}
+                                                            <strong className="font-semibold text-slate-500">{request.creator.name}</strong>
+                                                        </span>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
 
