@@ -316,6 +316,7 @@ export function useCashierLuke(initialId?: string | null) {
             return null
           }
 
+          newId = data.id
         }
 
         if (newId) {
