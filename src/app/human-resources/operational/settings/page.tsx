@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react'
 import { ShiftType, getShiftTypes, saveShiftTypes, DEFAULT_SHIFT_TYPES, getOvertimeSettings, saveOvertimeSettings, AutoScheduleTimeSlot, getAutoScheduleTimeSlots, saveAutoScheduleTimeSlots } from '@/lib/hr-operational-data'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 import { supabase } from '@/lib/supabase_shim'
 import { Plus, Pencil, Trash2, X, RotateCcw, GitBranch, Globe, Briefcase, Clock, Target, Wand2 } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -32,28 +33,39 @@ export default function HROperationalSettingsPage() {
     const [selectedBranchId, setSelectedBranchId] = useState<string>('')
     const [departments, setDepartments] = useState<string[]>([])
 
+    // Permissions states
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
+
     useEffect(() => { 
         setShiftTypes(getShiftTypes()) 
         setOvertimeSettings(getOvertimeSettings())
         setAutoScheduleTimeSlots(getAutoScheduleTimeSlots())
 
-        const fetchBranches = async () => {
-            const { data } = await supabase.from('provider_branches').select('id, name').order('name')
-            if (data) {
-                setProviderBranches(data)
-                if (data.length > 0) setSelectedBranchId(data[0].id)
+        const fetchBranchesAndDepts = async () => {
+            const perms = await getCurrentUserPermissions()
+            const userRole = perms.role
+            const userBranches = perms.branches
+            setCurrentUserRole(userRole)
+            setCurrentUserBranches(userBranches)
+
+            const { data: branchData } = await supabase.from('provider_branches').select('id, name').order('name')
+            if (branchData) {
+                let filteredBranches = branchData
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    filteredBranches = branchData.filter(b => userBranches.includes(b.id))
+                }
+                setProviderBranches(filteredBranches)
+                if (filteredBranches.length > 0) setSelectedBranchId(filteredBranches[0].id)
+            }
+            
+            const { data: deptData } = await supabase.from('hr_departments').select('name').order('name')
+            if (deptData) {
+                setDepartments(deptData.map(d => d.name))
             }
         }
         
-        const fetchDepartments = async () => {
-            const { data } = await supabase.from('hr_departments').select('name').order('name')
-            if (data) {
-                setDepartments(data.map(d => d.name))
-            }
-        }
-        
-        fetchBranches()
-        fetchDepartments()
+        fetchBranchesAndDepts()
     }, [])
 
     const openNew = () => {

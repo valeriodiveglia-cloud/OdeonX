@@ -13,6 +13,7 @@ import {
     CalendarDays, Clock, Palmtree, Thermometer, Coffee,
     ChevronLeft, ChevronRight, Users, BarChart3, X
 } from 'lucide-react'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 import { useSettings } from '@/contexts/SettingsContext'
 
 type Period = 'day' | 'week' | 'month' | 'year'
@@ -99,6 +100,10 @@ export default function ReportsPage() {
     const [staffTypeTab, setStaffTypeTab] = useState<'full_time' | 'part_time' | 'outsourced'>('full_time')
     const [activeDetailStaff, setActiveDetailStaff] = useState<any | null>(null)
     const [holidays, setHolidays] = useState<Record<string, string>>({})
+
+    // Permissions states
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
 
     const getStaffBreakdown = (staffId: string) => {
         const breakdown: Record<string, { 
@@ -328,10 +333,20 @@ export default function ReportsPage() {
             setShiftTypes(getShiftTypes())
             setRoster(getRosterData())
 
+            const perms = await getCurrentUserPermissions()
+            const userRole = perms.role
+            const userBranches = perms.branches
+            setCurrentUserRole(userRole)
+            setCurrentUserBranches(userBranches)
+
             const { data: bData } = await supabase.from('provider_branches').select('id, name, city').order('name')
             if (bData && bData.length > 0) {
-                setBranches(bData)
-                const uniqueCities = Array.from(new Set(bData.map((b: any) => b.city || 'Unknown'))).filter(c => c !== 'Unknown')
+                let filteredBranches = bData
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    filteredBranches = filteredBranches.filter(b => userBranches.includes(b.id))
+                }
+                setBranches(filteredBranches)
+                const uniqueCities = Array.from(new Set(filteredBranches.map((b: any) => b.city || 'Unknown'))).filter(c => c !== 'Unknown')
                 setCities(uniqueCities)
                 if (uniqueCities.length > 0) {
                     setSelectedCity(uniqueCities[0])
@@ -354,7 +369,7 @@ export default function ReportsPage() {
                 .eq('status', 'active')
 
             if (sData) {
-                const formatted = sData.map((s: any) => ({
+                let formatted = sData.map((s: any) => ({
                     id: s.id,
                     name: s.full_name,
                     role: s.position ? `${s.position}${s.employment_type === 'outsourced' ? ' (Outsourced)' : ''}` : (s.employment_type === 'outsourced' ? 'Outsourced' : 'Staff'),
@@ -366,6 +381,11 @@ export default function ReportsPage() {
                     salary_type: s.salary_type || 'hourly',
                     branchIds: s.hr_staff_branches?.map((b: any) => b.branch_id) || []
                 }))
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    formatted = formatted.filter(s =>
+                        s.branchIds.some((bid: string) => userBranches.includes(bid))
+                    )
+                }
                 setStaffList(formatted)
             }
 
