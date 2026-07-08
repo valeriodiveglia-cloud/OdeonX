@@ -103,10 +103,10 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   { id: 'loyalty-settings', href: '/loyalty-manager/settings', title: 'Loyalty Settings', module: 'Loyalty', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
 
   // HR Module - Global
-  { id: 'hr-dashboard', href: '/human-resources', title: 'HR Dashboard', module: 'HR General', icon: Home, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hr-recruitment', href: '/human-resources/recruitment', title: 'Recruitment', module: 'HR General', icon: Briefcase, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hr-activity', href: '/human-resources/activity', title: 'Activity', module: 'HR General', icon: Activity, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hr-candidates', href: '/human-resources/candidates', title: 'Candidates', module: 'HR General', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hr-dashboard', href: '/human-resources', title: 'HR Dashboard', module: 'HR General', icon: Home, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'hr manager'] },
+  { id: 'hr-recruitment', href: '/human-resources/recruitment', title: 'Recruitment', module: 'HR General', icon: Briefcase, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'hr manager'] },
+  { id: 'hr-activity', href: '/human-resources/activity', title: 'Activity', module: 'HR General', icon: Activity, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'hr manager'] },
+  { id: 'hr-candidates', href: '/human-resources/candidates', title: 'Candidates', module: 'HR General', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'hr manager'] },
   
   // HR Management
   { id: 'hrm-staff', href: '/human-resources/management/staff', title: 'Staff List', module: 'HR Management', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },

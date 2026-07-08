@@ -23,7 +23,9 @@ export default function LeftNavHRManagement() {
         const root = document.documentElement
         const width = open ? `${EXP_W_REM}rem` : `${COLL_W_REM}rem`
         root.style.setProperty('--leftnav-w', width)
-        return () => root.style.setProperty('--leftnav-w', `${COLL_W_REM}rem`)
+        return () => {
+            root.style.removeProperty('--leftnav-w')
+        }
     }, [open])
 
     const handleMouseEnter = () => setOpen(true)
@@ -46,7 +48,7 @@ export default function LeftNavHRManagement() {
     return (
         <div
             className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
-                  ${open ? 'w-64' : 'w-14'} bg-slate-900 border-r border-white/10`}
+                  ${open ? 'w-64' : 'w-14'} bg-gradient-to-b from-slate-800 to-slate-900 border-r border-white/10`}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >

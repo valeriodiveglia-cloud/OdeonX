@@ -3,8 +3,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { UserGroupIcon, HomeIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
-import { ChefHat, Utensils, Package, BarChart3, LineChart, Building2, Handshake } from 'lucide-react'
+import { ChefHat, Utensils, Package, BarChart3, LineChart, Building2, Handshake, Home, Settings } from 'lucide-react'
 import React from 'react'
 
 // i18n
@@ -18,7 +17,7 @@ type Item = {
   href: string
   i18nKey: string | null
   fallback: string
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+  icon: React.ComponentType<any>
 }
 const NAV: Item[] = [
   { href: '/materials', i18nKey: 'Materials', fallback: 'Materials', icon: Package },
@@ -27,29 +26,10 @@ const NAV: Item[] = [
   { href: '/equipment', i18nKey: 'Equipment', fallback: 'Equipment', icon: Utensils },
   { href: '/equipment-history', i18nKey: 'EquipmentHistory', fallback: 'Equipment History', icon: LineChart },
   { href: '/suppliers', i18nKey: 'Suppliers', fallback: 'Suppliers', icon: Building2 },
-  { href: '/settings', i18nKey: 'Settings', fallback: 'Settings', icon: Cog6ToothIcon },
+  { href: '/settings', i18nKey: 'Settings', fallback: 'Settings', icon: Settings },
 ]
 
-// doppio layer per le icone
-function DualIcon({
-  Icon,
-  active,
-  open,
-}: {
-  Icon: Item['icon']
-  active: boolean
-  open: boolean
-}) {
-  return (
-    <span className="relative inline-block w-5 h-5 shrink-0">
-      <Icon className="absolute inset-0 w-5 h-5 text-white" />
-      <Icon
-        className={`absolute inset-0 w-5 h-5 text-slate-900 ${open && active ? 'opacity-100' : 'opacity-0'
-          } transition-opacity`}
-      />
-    </span>
-  )
-}
+
 
 /* Config */
 const COLLAPSED_W = 56 // px (w-14)
@@ -79,9 +59,17 @@ export default function LeftNav() {
     return () => mq?.removeEventListener?.('change', update)
   }, [])
 
+  React.useEffect(() => {
+    const root = document.documentElement
+    const width = open ? '16rem' : '3.5rem'
+    root.style.setProperty('--leftnav-w', width)
+    return () => {
+      root.style.removeProperty('--leftnav-w')
+    }
+  }, [open])
+
   // Flag interni
   const hoverInsideRef = React.useRef(false)
-  const focusInsideRef = React.useRef(false)
 
   // Timer di chiusura
   const closeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -95,7 +83,7 @@ export default function LeftNav() {
 
   const scheduleCloseIfNeeded = React.useCallback(() => {
     clearCloseTimer()
-    if (!hoverInsideRef.current && !focusInsideRef.current) {
+    if (!hoverInsideRef.current) {
       closeTimerRef.current = setTimeout(() => {
         setOpen(false)
         closeTimerRef.current = null
@@ -104,18 +92,6 @@ export default function LeftNav() {
   }, [clearCloseTimer])
 
   React.useEffect(() => () => clearCloseTimer(), [clearCloseTimer])
-
-  // Focus tastiera
-  const handleFocusWithin: React.FocusEventHandler<HTMLDivElement> = () => {
-    focusInsideRef.current = true
-    clearCloseTimer()
-    setOpen(true)
-  }
-  const handleBlurWithin: React.FocusEventHandler<HTMLDivElement> = (e) => {
-    const stillInside = e.currentTarget.contains(e.relatedTarget as Node)
-    focusInsideRef.current = !!stillInside
-    if (!stillInside) scheduleCloseIfNeeded()
-  }
 
   // Overlay rail: dietro, combacia con larghezza chiusa
   const IconRailOverlay = () => (
@@ -157,11 +133,20 @@ export default function LeftNav() {
 
   return (
     <div
-      className={`relative z-10 h-full flex flex-col text-white transition-[width] duration-150 ease-out ${open ? 'w-64' : 'w-14'
-        } ${stateClass}`}
+      className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
+                  ${open ? 'w-64' : 'w-14'} ${stateClass} bg-gradient-to-b from-slate-800 to-slate-900 border-r border-white/10`}
       aria-expanded={open}
-      onFocus={handleFocusWithin}
-      onBlur={handleBlurWithin}
+      onPointerEnter={() => {
+        if (isTouch) return
+        hoverInsideRef.current = true
+        clearCloseTimer()
+        setOpen(true)
+      }}
+      onPointerLeave={() => {
+        if (isTouch) return
+        hoverInsideRef.current = false
+        scheduleCloseIfNeeded()
+      }}
     >
       {/* Rail overlay: attivo solo da chiusa e solo desktop */}
       {!open && !isTouch && <IconRailOverlay />}
@@ -178,7 +163,7 @@ export default function LeftNav() {
             if (!isTouch) setOpen(true)
           }}
         >
-          <DualIcon Icon={HomeIcon} active={pathname === '/'} open={open} />
+          <Home className="w-5 h-5 text-white" />
         </Link>
         <div className="ml-3 font-bold tracking-wide text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis min-w-0 nav-text">
           {open ? appName : ''}
@@ -206,32 +191,17 @@ export default function LeftNav() {
                 if (!isTouch) setOpen(true)
               }}
             >
-              {active &&
-                (open ? (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r bg-blue-500" />
-                ) : (
-                  <span
-                    className="absolute inset-0 rounded-xl ring-1 ring-white/30"
-                    aria-hidden="true"
-                  />
-                ))}
-
-              <DualIcon Icon={Icon} active={active} open={open} />
-
+              {active && (
+                <div className="absolute inset-0 bg-blue-600/10 rounded-xl border border-blue-500/30" />
+              )}
+              <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-blue-400' : 'text-slate-400'}`} />
               {open && (
                 <span
-                  className={`whitespace-nowrap overflow-hidden text-ellipsis font-medium nav-text ${active ? 'text-slate-900' : 'text-slate-100'
+                  className={`whitespace-nowrap overflow-hidden text-ellipsis transition-opacity ${active ? 'text-blue-100 font-medium' : 'text-slate-300'
                     }`}
                 >
                   {labelTxt}
                 </span>
-              )}
-
-              {open && (
-                <span
-                  className={`pointer-events-none absolute inset-0 -z-10 rounded-xl bg-blue-100 nav-active-bg ${active ? '' : 'opacity-0'
-                    }`}
-                />
               )}
             </Link>
           )

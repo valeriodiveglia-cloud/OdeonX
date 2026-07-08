@@ -15,6 +15,9 @@ import {
   EllipsisVerticalIcon,
   CheckCircleIcon,
   ArrowPathIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline'
 import CircularLoader from '@/components/CircularLoader'
 import Papa from 'papaparse'
@@ -65,6 +68,219 @@ type CsvRow = {
   vat_rate_percent?: string | number | null
   is_food_drink?: boolean | null
   is_default?: boolean | null
+}
+
+interface ColumnHeaderProps {
+  colKey: string
+  label: string
+  sortCol: string
+  sortAsc: boolean
+  onSort: (key: any, asc: boolean) => void
+  values: string[]
+  activeFilter: Set<string> | null
+  onFilter: (vals: Set<string> | null) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  dict: {
+    sortAsc: string
+    sortDesc: string
+    selectAll: string
+    deselectAll: string
+    filterPlaceholder: string
+    clearFilters: string
+  }
+  right?: boolean
+  center?: boolean
+  className?: string
+}
+
+function ColumnHeader({
+  colKey,
+  label,
+  sortCol,
+  sortAsc,
+  onSort,
+  values,
+  activeFilter,
+  onFilter,
+  onClear,
+  open,
+  onToggle,
+  onClose,
+  dict,
+  right,
+  center,
+  className = '',
+}: ColumnHeaderProps) {
+  const ref = useRef<HTMLTableCellElement>(null)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+  useEffect(() => {
+    if (open) {
+      setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+      setFilterSearch('')
+    }
+  }, [open, values, activeFilter])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open, onClose])
+
+  const isActive = sortCol === colKey
+  const hasFilter = !!activeFilter
+  const dropdownStyle = useMemo(() => {
+    if (!open || !ref.current) return undefined
+    const rect = ref.current.getBoundingClientRect()
+    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+  }, [open, right])
+
+  const filteredValues = filterSearch
+    ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+    : values
+
+  const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+  function toggleAll() {
+    const next = new Set(localChecked)
+    if (allVisibleChecked) {
+      filteredValues.forEach(v => next.delete(v))
+    } else {
+      filteredValues.forEach(v => next.add(v))
+    }
+    setLocalChecked(next)
+  }
+
+  function toggleOne(v: string) {
+    const next = new Set(localChecked)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    setLocalChecked(next)
+  }
+
+  function handleApply() {
+    let finalChecked = localChecked
+    if (filterSearch) {
+      finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+    }
+    if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+  }
+
+  return (
+    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <span className="select-none">{label}</span>
+        {isActive && (
+          sortAsc ? (
+            <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          ) : (
+            <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          )
+        )}
+        {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation()
+            onToggle()
+          }}
+          className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+          aria-label={`Menu ${label}`}
+        >
+          <EllipsisVerticalIcon className="w-3.5 h-3.5 text-gray-500" />
+        </button>
+      </div>
+
+      {open && dropdownStyle && (
+        <div
+          className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case"
+          style={dropdownStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 space-y-1">
+            <button
+              type="button"
+              onClick={() => onSort(colKey, true)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowUpIcon className="w-4 h-4" />
+              {dict.sortAsc}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSort(colKey, false)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowDownIcon className="w-4 h-4" />
+              {dict.sortDesc}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              value={filterSearch}
+              onChange={e => setFilterSearch(e.target.value)}
+              placeholder={dict.filterPlaceholder}
+              className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+            >
+              {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+            </button>
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+              {filteredValues.map(v => (
+                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localChecked.has(v)}
+                    onChange={() => toggleOne(v)}
+                    className="accent-blue-600 rounded"
+                  />
+                  <span className="truncate text-xs">{v || '(Empty)'}</span>
+                </label>
+              ))}
+              {filteredValues.length === 0 && (
+                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+            >
+              {dict.clearFilters}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+    </th>
+  )
 }
 
 /* ---------- Small UI helpers ---------- */
@@ -1194,15 +1410,101 @@ export default function MaterialsPage() {
   const [sortCol, setSortCol] = useState<SortKey>('name')
   const [sortAsc, setSortAsc] = useState(true)
 
-  const [filters, setFilters] = useState({
-    name: '',
-    brand: '',
-    categoryId: '' as string | number | '',
-    supplierId: '' as string | '',
-    uomId: '' as number | '',
-    foodDrink: '' as '' | 'yes' | 'no',
-    isDefault: '' as '' | 'yes' | 'no',
-  })
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+
+  const hasActiveFilters = Object.values(columnFilters).some(vals => vals !== null)
+  function clearAllColumnFilters() {
+    setColumnFilters({})
+  }
+
+  function applyColumnFilter(col: SortKey, vals: Set<string> | null) {
+    setColumnFilters(prev => ({ ...prev, [col]: vals }))
+    setOpenMenu(null)
+  }
+
+  function clearColumnFilter(col: SortKey) {
+    setColumnFilters(prev => {
+      const n = { ...prev }
+      delete n[col]
+      return n
+    })
+    setOpenMenu(null)
+  }
+
+  function toggleSort(k: SortKey, asc?: boolean) {
+    setSortCol(k)
+    if (asc !== undefined) {
+      setSortAsc(asc)
+    } else {
+      setSortAsc(prev => !prev)
+    }
+    setOpenMenu(null)
+  }
+
+  const getColValue = (m: Mat, k: string) => {
+    switch (k) {
+      case 'name':
+        return toTitleCase(m.name)
+      case 'category':
+        return cats.find(c => c.id === m.category_id)?.name || ''
+      case 'brand':
+        return m.brand || ''
+      case 'supplier':
+        return sups.find(s => s.id === m.supplier_id)?.name || ''
+      case 'uom':
+        return uoms.find(u => u.id === m.uom_id)?.name || ''
+      case 'packaging_size':
+        return m.packaging_size != null ? m.packaging_size.toLocaleString(locale) : ''
+      case 'package_price':
+        return m.package_price != null ? num.format(m.package_price) : ''
+      case 'vat_rate':
+        return num.format(effVatPct(m)) + '%'
+      case 'package_plus_vat':
+        return num.format(packagePlusVat(m))
+      case 'unit_cost':
+        return m.unit_cost != null ? num.format(m.unit_cost) : ''
+      case 'unit_plus_vat':
+        return num.format(unitPlusVat(m))
+      case 'is_food_drink':
+        return m.is_food_drink ? t('Yes', lang) : t('No', lang)
+      case 'is_default':
+        return m.is_default ? t('Yes', lang) : t('No', lang)
+      case 'last_update':
+        return fmtDate(m.last_update)
+      default:
+        return ''
+    }
+  }
+
+  const columnValues = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    const filterableKeys = [
+      'name',
+      'category',
+      'brand',
+      'supplier',
+      'uom',
+      'packaging_size',
+      'package_price',
+      'vat_rate',
+      'package_plus_vat',
+      'unit_cost',
+      'unit_plus_vat',
+      'is_food_drink',
+      'is_default',
+      'last_update'
+    ]
+    filterableKeys.forEach(k => {
+      const set = new Set<string>()
+      mats.forEach(m => {
+        const v = getColValue(m, k)
+        if (v) set.add(v)
+      })
+      map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    })
+    return map
+  }, [mats, cats, sups, uoms, lang])
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [progress, setProgress] = useState<number | null>(null)
@@ -1248,10 +1550,7 @@ export default function MaterialsPage() {
     setSelected({})
   }
 
-  function toggleSort(col: SortKey) {
-    if (sortCol === col) setSortAsc(!sortAsc)
-    else { setSortCol(col); setSortAsc(true) }
-  }
+
 
   function effVatPct(m: Mat) {
     if (!vatEnabled) return 0
@@ -1276,19 +1575,15 @@ export default function MaterialsPage() {
 
   function applyFilters(list: Mat[]) {
     let rows = [...list]
-    if (filters.name.trim()) rows = rows.filter((r: any) => r.name.toLowerCase().includes(filters.name.trim().toLowerCase()))
-    if (filters.brand.trim()) rows = rows.filter((r: any) => (r.brand ?? '').toLowerCase().includes(filters.brand.trim().toLowerCase()))
-    if (filters.categoryId !== '') rows = rows.filter((r: any) => r.category_id === Number(filters.categoryId))
-    if (filters.supplierId !== '') rows = rows.filter((r: any) => r.supplier_id === String(filters.supplierId))
-    if (filters.uomId !== '') rows = rows.filter((r: any) => r.uom_id === Number(filters.uomId))
-    if (filters.foodDrink) {
-      const want = filters.foodDrink === 'yes'
-      rows = rows.filter((r: any) => r.is_food_drink === want)
-    }
-    if (filters.isDefault) {
-      const want = filters.isDefault === 'yes'
-      rows = rows.filter((r: any) => r.is_default === want)
-    }
+
+    // Apply column checklist filters
+    Object.entries(columnFilters).forEach(([col, vals]) => {
+      if (!vals) return
+      rows = rows.filter(m => {
+        const v = getColValue(m, col)
+        return vals.has(v)
+      })
+    })
 
     rows.sort((a, b) => {
       const getVal = (m: Mat): any => {
@@ -2004,60 +2299,76 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
     )
   }
 
+  const columnHeaderDict = {
+    sortAsc: lang === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
+    sortDesc: lang === 'vi' ? 'Sắp xếp giảm dần' : 'Sort Descending',
+    selectAll: lang === 'vi' ? 'Chọn tất cả' : 'Select All',
+    deselectAll: lang === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect All',
+    filterPlaceholder: lang === 'vi' ? 'Lọc...' : 'Filter...',
+    clearFilters: lang === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters',
+  }
+
   return (
     <div className="max-w-none mx-auto p-4 text-gray-100">
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* Kebab menu: visibile solo in modalità Select */}
-          {selectMode && (
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setMenuOpen(v => !v)}
-                className="p-2 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                title={t('BulkActions', lang)}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-              >
-                <EllipsisVerticalIcon className="w-6 h-6 text-white" />
-              </button>
-              {menuOpen && (
-                <div className="absolute z-10 mt-2 w-64 rounded-xl border border-white/10 bg-white text-gray-900 shadow-xl">
-                  {/* NEW: Bulk Edit VAT */}
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
-                    onClick={() => { setMenuOpen(false); setShowVatModal(true) }}
-                    disabled={selectedIds.length === 0 || !vatEnabled}
-                    title={!vatEnabled ? t('VatDisabledWarn', lang) : undefined}
-                  >
-                    {t('BulkEditVat', lang)}
-                  </button>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            {/* Kebab menu: visibile solo in modalità Select */}
+            {selectMode && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(v => !v)}
+                  className="p-2 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                  title={t('BulkActions', lang)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                >
+                  <EllipsisVerticalIcon className="w-6 h-6 text-white" />
+                </button>
+                {menuOpen && (
+                  <div className="absolute z-10 mt-2 w-64 rounded-xl border border-white/10 bg-white text-gray-900 shadow-xl">
+                    {/* NEW: Bulk Edit VAT */}
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
+                      onClick={() => { setMenuOpen(false); setShowVatModal(true) }}
+                      disabled={selectedIds.length === 0 || !vatEnabled}
+                      title={!vatEnabled ? t('VatDisabledWarn', lang) : undefined}
+                    >
+                      {t('BulkEditVat', lang)}
+                    </button>
 
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
-                    onClick={() => { setMenuOpen(false); bulkMarkReviewed() }}
-                    disabled={selectedIds.length === 0}
-                  >
-                    {t('MarkReviewed', lang)}
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 text-red-600 disabled:opacity-50 flex items-center gap-2"
-                    onClick={() => { setMenuOpen(false); bulkMoveToTrash() }}
-                    disabled={selectedIds.length === 0}
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                    {t('MoveToTrash', lang)}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
+                      onClick={() => { setMenuOpen(false); bulkMarkReviewed() }}
+                      disabled={selectedIds.length === 0}
+                    >
+                      {t('MarkReviewed', lang)}
+                    </button>
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 text-red-600 disabled:opacity-50 flex items-center gap-2"
+                      onClick={() => { setMenuOpen(false); bulkMoveToTrash() }}
+                      disabled={selectedIds.length === 0}
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                      {t('MoveToTrash', lang)}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
-          <h1 className="text-2xl font-bold text-white">{t('Materials', lang)}</h1>
-          {selectedIds.length > 0 && (
-            <span className="ml-2 text-sm text-blue-200">({selectedIds.length} {t('Selected', lang)})</span>
-          )}
+            <h1 className="text-2xl font-bold text-white sm:text-3xl tracking-tight leading-normal">{t('Materials', lang)}</h1>
+            {selectedIds.length > 0 && (
+              <span className="ml-2 text-sm text-blue-200">({selectedIds.length} {t('Selected', lang)})</span>
+            )}
+          </div>
+          <p className="text-xs text-slate-400">
+            {lang === 'vi'
+              ? 'Quản lý nguyên liệu, đơn giá và cấu hình thuế VAT'
+              : 'Manage ingredients, unit costs, and VAT configurations'}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2105,6 +2416,17 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
             </button>
           )}
 
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllColumnFilters}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-200 border border-red-500/20 text-sm font-medium"
+            >
+              <XMarkIcon className="w-4 h-4" />
+              {lang === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters'}
+            </button>
+          )}
+
           {role && role !== 'accountant' && (
             <button
               onClick={openCreate}
@@ -2116,90 +2438,11 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
         </div>
       </div>
 
-      {/* Barra filtri */}
-      <div className="bg-white rounded-2xl shadow p-3 mb-4">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder={t('FilterByName', lang)}
-            value={filters.name}
-            onChange={e => setFilters(s => ({ ...s, name: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm text-gray-900 placeholder-gray-600 w-[180px]"
-          />
-          <select
-            value={filters.categoryId}
-            onChange={e => setFilters(s => ({ ...s, categoryId: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[160px]"
-          >
-            <option value="">{t('AllCategories', lang)}</option>
-            {cats.map(c => <option key={c.id} value={c.id}>{toTitleCase(c.name)}</option>)}
-          </select>
-          <input
-            type="text"
-            placeholder={t('FilterByBrand', lang)}
-            value={filters.brand}
-            onChange={e => setFilters(s => ({ ...s, brand: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm text-gray-900 placeholder-gray-600 w-[160px]"
-          />
-          <select
-            value={filters.supplierId}
-            onChange={e => setFilters(s => ({ ...s, supplierId: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[160px]"
-          >
-            <option value="">{t('AllSuppliers', lang)}</option>
-            {sups.map(s => <option key={s.id} value={s.id}>{toTitleCase(s.name)}</option>)}
-          </select>
-          <select
-            value={filters.uomId}
-            onChange={e => setFilters(s => ({ ...s, uomId: (e.target.value === "" ? "" : Number(e.target.value)) }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[110px]"
-          >
-            <option value="">{t('AllUOM', lang)}</option>
-            {uoms.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-          <select
-            value={filters.foodDrink}
-            onChange={e => setFilters(s => ({ ...s, foodDrink: e.target.value as any }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[140px]"
-          >
-            <option value="">{t('FoodDrinkAll', lang)}</option>
-            <option value="yes">{t('Yes', lang)}</option>
-            <option value="no">{t('No', lang)}</option>
-          </select>
-          <select
-            value={filters.isDefault}
-            onChange={e => setFilters(s => ({ ...s, isDefault: e.target.value as any }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[130px]"
-          >
-            <option value="">{t('DefaultAll', lang)}</option>
-            <option value="yes">{t('Yes', lang)}</option>
-            <option value="no">{t('No', lang)}</option>
-          </select>
-
-          <div className="ml-auto" />
-
-          <button
-            type="button"
-            onClick={() =>
-              setFilters({ name: '', brand: '', categoryId: '', supplierId: '', uomId: '', foodDrink: '', isDefault: '' })
-            }
-            className="inline-flex items-center gap-1 px-3 h-9 rounded-lg
-             border border-blue-600 text-blue-700 hover:bg-blue-50
-             overflow-hidden min-w-0"
-            title={t('Clear', lang)}
-          >
-            <span className='truncate whitespace-nowrap overflow-hidden text-ellipsis max-w-[80px]'>
-              {t('Clear', lang)}
-            </span>
-          </button>
-        </div>
-      </div>
-
       {/* Tabella */}
-      <div className="bg-white rounded-2xl shadow p-3">
+      <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
         <table key={vatEnabled ? 'vat-on' : 'vat-off'} className="w-full table-auto text-sm text-gray-900">
           <thead>
-            <tr>
+            <tr className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
               <th className="p-2 w-7">
                 {selectMode ? (
                   <input
@@ -2213,142 +2456,264 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
                 ) : null}
               </th>
 
-              <th className="p-2 max-w-[12rem]">
-                <button type="button" onClick={() => toggleSort('name')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 font-semibold">
-                    <SortIcon active={sortCol === 'name'} asc={sortAsc} />
-                    <span>{t('Name', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="name"
+                label={t('Name', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.name || []}
+                activeFilter={columnFilters.name || null}
+                onFilter={vals => applyColumnFilter('name', vals)}
+                onClear={() => clearColumnFilter('name')}
+                open={openMenu === 'name'}
+                onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-36 min-w-[7rem]"
+              />
 
-              <th className="p-2 max-w-[10rem] truncate">
-                <button type="button" onClick={() => toggleSort('category')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 font-semibold">
-                    <SortIcon active={sortCol === 'category'} asc={sortAsc} />
-                    <span>{t('Category', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="category"
+                label={t('Category', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.category || []}
+                activeFilter={columnFilters.category || null}
+                onFilter={vals => applyColumnFilter('category', vals)}
+                onClear={() => clearColumnFilter('category')}
+                open={openMenu === 'category'}
+                onToggle={() => setOpenMenu(openMenu === 'category' ? null : 'category')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-28 min-w-[5.5rem]"
+              />
 
-              <th className="p-2 max-w-[8rem] truncate">
-                <button type="button" onClick={() => toggleSort('brand')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 font-semibold">
-                    <SortIcon active={sortCol === 'brand'} asc={sortAsc} />
-                    <span>{t('Brand', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="brand"
+                label={t('Brand', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.brand || []}
+                activeFilter={columnFilters.brand || null}
+                onFilter={vals => applyColumnFilter('brand', vals)}
+                onClear={() => clearColumnFilter('brand')}
+                open={openMenu === 'brand'}
+                onToggle={() => setOpenMenu(openMenu === 'brand' ? null : 'brand')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-20 min-w-[4.5rem]"
+              />
 
-              <th className="p-2 max-w-[10rem] truncate">
-                <button type="button" onClick={() => toggleSort('supplier')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 font-semibold">
-                    <SortIcon active={sortCol === 'supplier'} asc={sortAsc} />
-                    <span>{t('Supplier', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="supplier"
+                label={t('Supplier', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.supplier || []}
+                activeFilter={columnFilters.supplier || null}
+                onFilter={vals => applyColumnFilter('supplier', vals)}
+                onClear={() => clearColumnFilter('supplier')}
+                open={openMenu === 'supplier'}
+                onToggle={() => setOpenMenu(openMenu === 'supplier' ? null : 'supplier')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-28 min-w-[5.5rem]"
+              />
 
-              <th className="p-2 w-14 min-w-[3.25rem]">
-                <button type="button" onClick={() => toggleSort('uom')} className="w-full cursor-pointer">
-                  <div className="flex items-center justify-center font-semibold gap-1">
-                    <SortIcon active={sortCol === 'uom'} asc={sortAsc} />
-                    <span>{t('Uom', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="uom"
+                label={t('Uom', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.uom || []}
+                activeFilter={columnFilters.uom || null}
+                onFilter={vals => applyColumnFilter('uom', vals)}
+                onClear={() => clearColumnFilter('uom')}
+                open={openMenu === 'uom'}
+                onToggle={() => setOpenMenu(openMenu === 'uom' ? null : 'uom')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-12 min-w-[2.5rem]"
+                center
+              />
 
-              <th className="p-2 w-20 min-w-[5rem]">
-                <button type="button" onClick={() => toggleSort('packaging_size')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 justify-center font-semibold">
-                    <SortIcon active={sortCol === 'packaging_size'} asc={sortAsc} />
-                    <span>{t('PackagingSize', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="packaging_size"
+                label={t('PackagingSize', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.packaging_size || []}
+                activeFilter={columnFilters.packaging_size || null}
+                onFilter={vals => applyColumnFilter('packaging_size', vals)}
+                onClear={() => clearColumnFilter('packaging_size')}
+                open={openMenu === 'packaging_size'}
+                onToggle={() => setOpenMenu(openMenu === 'packaging_size' ? null : 'packaging_size')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-16 min-w-[3.5rem]"
+                center
+              />
 
-              <th className="p-2 w-24 min-w-[6rem]">
-                <button type="button" onClick={() => toggleSort('package_price')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 justify-center font-semibold">
-                    <SortIcon active={sortCol === 'package_price'} asc={sortAsc} />
-                    <span>{t('PackagePrice', lang)}</span>
-                  </div>
-                </button>
-              </th>
-
+              <ColumnHeader
+                colKey="package_price"
+                label={t('PackagePrice', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.package_price || []}
+                activeFilter={columnFilters.package_price || null}
+                onFilter={vals => applyColumnFilter('package_price', vals)}
+                onClear={() => clearColumnFilter('package_price')}
+                open={openMenu === 'package_price'}
+                onToggle={() => setOpenMenu(openMenu === 'package_price' ? null : 'package_price')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-20 min-w-[4.5rem]"
+                center
+              />
 
               {vatEnabled && (
-                <th className="p-2 w-16 min-w-[4rem]">
-                  <button type="button" onClick={() => toggleSort('vat_rate')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-center font-semibold">
-                      <SortIcon active={sortCol === 'vat_rate'} asc={sortAsc} />
-                      <span>{t('VatRatePct', lang)}</span>
-                    </div>
-                  </button>
-                </th>
+                <ColumnHeader
+                  colKey="vat_rate"
+                  label={t('VatRatePct', lang)}
+                  sortCol={sortCol}
+                  sortAsc={sortAsc}
+                  onSort={toggleSort}
+                  values={columnValues.vat_rate || []}
+                  activeFilter={columnFilters.vat_rate || null}
+                  onFilter={vals => applyColumnFilter('vat_rate', vals)}
+                  onClear={() => clearColumnFilter('vat_rate')}
+                  open={openMenu === 'vat_rate'}
+                  onToggle={() => setOpenMenu(openMenu === 'vat_rate' ? null : 'vat_rate')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnHeaderDict}
+                  className="w-14 min-w-[3.5rem]"
+                  center
+                />
               )}
 
               {vatEnabled && (
-                <th className="p-2 w-28 min-w-[7rem]">
-                  <button type="button" onClick={() => toggleSort('package_plus_vat')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-center font-semibold">
-                      <SortIcon active={sortCol === 'package_plus_vat'} asc={sortAsc} />
-                      <span>{t('PackagePricePlusVat', lang)}</span>
-                    </div>
-                  </button>
-                </th>
+                <ColumnHeader
+                  colKey="package_plus_vat"
+                  label={t('PackagePricePlusVat', lang)}
+                  sortCol={sortCol}
+                  sortAsc={sortAsc}
+                  onSort={toggleSort}
+                  values={columnValues.package_plus_vat || []}
+                  activeFilter={columnFilters.package_plus_vat || null}
+                  onFilter={vals => applyColumnFilter('package_plus_vat', vals)}
+                  onClear={() => clearColumnFilter('package_plus_vat')}
+                  open={openMenu === 'package_plus_vat'}
+                  onToggle={() => setOpenMenu(openMenu === 'package_plus_vat' ? null : 'package_plus_vat')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnHeaderDict}
+                  className="w-22 min-w-[5.5rem]"
+                  center
+                />
               )}
 
-              <th className="p-2 w-24 min-w-[6rem]">
-                <button type="button" onClick={() => toggleSort('unit_cost')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 justify-center font-semibold">
-                    <SortIcon active={sortCol === 'unit_cost'} asc={sortAsc} />
-                    <span>{t('UnitCost', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="unit_cost"
+                label={t('UnitCost', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.unit_cost || []}
+                activeFilter={columnFilters.unit_cost || null}
+                onFilter={vals => applyColumnFilter('unit_cost', vals)}
+                onClear={() => clearColumnFilter('unit_cost')}
+                open={openMenu === 'unit_cost'}
+                onToggle={() => setOpenMenu(openMenu === 'unit_cost' ? null : 'unit_cost')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-20 min-w-[4.5rem]"
+                center
+              />
 
               {vatEnabled && (
-                <th className="p-2 w-28 min-w-[7rem]">
-                  <button type="button" onClick={() => toggleSort('unit_plus_vat')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-center font-semibold">
-                      <SortIcon active={sortCol === 'unit_plus_vat'} asc={sortAsc} />
-                      <UnitPlusVatHeader />
-                    </div>
-                  </button>
-                </th>
+                <ColumnHeader
+                  colKey="unit_plus_vat"
+                  label={lang === 'vi' ? 'Đơn giá + VAT' : t('UnitCostPlusVat', lang)}
+                  sortCol={sortCol}
+                  sortAsc={sortAsc}
+                  onSort={toggleSort}
+                  values={columnValues.unit_plus_vat || []}
+                  activeFilter={columnFilters.unit_plus_vat || null}
+                  onFilter={vals => applyColumnFilter('unit_plus_vat', vals)}
+                  onClear={() => clearColumnFilter('unit_plus_vat')}
+                  open={openMenu === 'unit_plus_vat'}
+                  onToggle={() => setOpenMenu(openMenu === 'unit_plus_vat' ? null : 'unit_plus_vat')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnHeaderDict}
+                  className="w-22 min-w-[5.5rem]"
+                  center
+                />
               )}
 
-              <th className="p-2 w-12 min-w-[3rem]">
-                <button type="button" onClick={() => toggleSort('is_food_drink')} className="w-full cursor-pointer">
-                  <div className="flex flex-col items-center justify-center leading-tight font-semibold text-center">
-                    <span>{t('Food', lang)}</span><span>/</span><span>{t('Drink', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="is_food_drink"
+                label={t('Food', lang) + '/' + t('Drink', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.is_food_drink || []}
+                activeFilter={columnFilters.is_food_drink || null}
+                onFilter={vals => applyColumnFilter('is_food_drink', vals)}
+                onClear={() => clearColumnFilter('is_food_drink')}
+                open={openMenu === 'is_food_drink'}
+                onToggle={() => setOpenMenu(openMenu === 'is_food_drink' ? null : 'is_food_drink')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-12 min-w-[3rem]"
+                center
+              />
 
-              <th className="p-2 w-12 min-w-[3rem]">
-                <button type="button" onClick={() => toggleSort('is_default')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 justify-center font-semibold">
-                    <span>{t('IsDefault', lang)}</span>
-                    <SortIcon active={sortCol === 'is_default'} asc={sortAsc} />
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="is_default"
+                label={t('IsDefault', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.is_default || []}
+                activeFilter={columnFilters.is_default || null}
+                onFilter={vals => applyColumnFilter('is_default', vals)}
+                onClear={() => clearColumnFilter('is_default')}
+                open={openMenu === 'is_default'}
+                onToggle={() => setOpenMenu(openMenu === 'is_default' ? null : 'is_default')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-10 min-w-[2.5rem]"
+                center
+              />
 
-              <th className="p-2 w-24 min-w-[6rem]">
-                <button type="button" onClick={() => toggleSort('last_update')} className="w-full cursor-pointer">
-                  <div className="flex items-center gap-1 justify-center font-semibold">
-                    <SortIcon active={sortCol === 'last_update'} asc={sortAsc} />
-                    <span>{t('UpdatedAt', lang)}</span>
-                  </div>
-                </button>
-              </th>
+              <ColumnHeader
+                colKey="last_update"
+                label={t('UpdatedAt', lang)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={toggleSort}
+                values={columnValues.last_update || []}
+                activeFilter={columnFilters.last_update || null}
+                onFilter={vals => applyColumnFilter('last_update', vals)}
+                onClear={() => clearColumnFilter('last_update')}
+                open={openMenu === 'last_update'}
+                onToggle={() => setOpenMenu(openMenu === 'last_update' ? null : 'last_update')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="w-20 min-w-[4.5rem]"
+                center
+              />
             </tr>
           </thead>
 
           <tbody>
-            {applyFilters(mats).map(m => {
+            {applyFilters(mats).map((m, idx) => {
               const catName = cats.find(c => c.id === m.category_id)?.name || ''
               const supName = sups.find(s => s.id === m.supplier_id)?.name || ''
               const uomName = uoms.find(u => u.id === m.uom_id)?.name || ''
@@ -2360,15 +2725,17 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
               return (
                 <tr
                   key={m.id}
-                  className="border-t hover:bg-blue-50/40 cursor-pointer"
+                  className={`border-t border-gray-100 hover:bg-gray-50/80 transition-colors cursor-pointer text-xs text-gray-600 ${
+                    idx % 2 === 0 ? 'bg-gray-50/30' : ''
+                  }`}
                   onClick={() => openView(m)}
                   onDoubleClick={() => role === 'accountant' ? openView(m) : openEdit(m)}
                 >
-                  <td className="p-2 w-7" onClick={e => e.stopPropagation()}>
+                  <td className="px-3 py-2.5 w-7" onClick={e => e.stopPropagation()}>
                     {selectMode ? (
                       <input
                         type="checkbox"
-                        className="h-4 w-4"
+                        className="h-4 w-4 accent-blue-600 rounded"
                         checked={!!selected[m.id]}
                         onChange={e => setSelected(prev => ({ ...prev, [m.id]: e.target.checked }))}
                         title={t('SelectRow', lang)}
@@ -2376,53 +2743,52 @@ ${t('Skipped', lang)}: ${stats.skipped}`)
                     ) : null}
                   </td>
 
-                  <td className="p-2 max-w-[12rem] truncate">{toTitleCase(m.name)}</td>
-                  <td className="p-2 max-w-[10rem] truncate">{toTitleCase(catName) || '-'}</td>
-                  <td className="p-2 max-w-[8rem] truncate">{m.brand ? toTitleCase(m.brand) : '-'}</td>
-                  <td className="p-2 max-w-[10rem] truncate">{toTitleCase(supName) || '-'}</td>
+                  <td className="px-3 py-2.5 w-36 min-w-[7rem] whitespace-normal break-words leading-tight font-semibold text-gray-900">{toTitleCase(m.name)}</td>
+                  <td className="px-3 py-2.5 w-28 min-w-[5.5rem] whitespace-normal break-words leading-tight">{toTitleCase(catName) || '-'}</td>
+                  <td className="px-3 py-2.5 w-20 min-w-[4.5rem] whitespace-normal break-words leading-tight text-gray-500">{m.brand ? toTitleCase(m.brand) : '-'}</td>
+                  <td className="px-3 py-2.5 w-28 min-w-[5.5rem] whitespace-normal break-words leading-tight">{toTitleCase(supName) || '-'}</td>
 
-                  <td className="p-2 w-14 min-w-[3.25rem] text-center">{uomName || '-'}</td>
+                  <td className="px-3 py-2.5 w-12 min-w-[2.5rem] text-center">{uomName || '-'}</td>
 
-                  <td className="p-2 w-20 min-w-[5rem] text-center tabular-nums whitespace-nowrap">
+                  <td className="px-3 py-2.5 w-16 min-w-[3.5rem] text-center font-mono text-gray-900">
                     {m.packaging_size?.toLocaleString(locale) || '-'}
                   </td>
-                  <td className="p-2 w-24 min-w-[6rem] text-center tabular-nums whitespace-nowrap">
+                  <td className="px-3 py-2.5 w-20 min-w-[4.5rem] text-center font-mono text-gray-900">
                     {m.package_price != null ? num.format(m.package_price) : '-'}
                   </td>
 
-
                   {vatEnabled && (
-                    <td className="p-2 w-16 min-w-[4rem] text-center tabular-nums whitespace-nowrap">
+                    <td className="px-3 py-2.5 w-14 min-w-[3.5rem] text-center font-mono text-gray-500">
                       {num.format(effPct)}%
                     </td>
                   )}
 
                   {vatEnabled && (
-                    <td className="p-2 w-28 min-w-[7rem] text-center tabular-nums whitespace-nowrap">
+                    <td className="px-3 py-2.5 w-22 min-w-[5.5rem] text-center font-mono text-gray-900">
                       {num.format(packagePlusVat(m))}
                     </td>
                   )}
 
-                  <td className="p-2 w-24 min-w-[6rem] text-center tabular-nums whitespace-nowrap">
+                  <td className="px-3 py-2.5 w-20 min-w-[4.5rem] text-center font-mono text-gray-900">
                     {m.unit_cost != null ? num.format(m.unit_cost) : '-'}
                   </td>
 
                   {vatEnabled && (
-                    <td className="p-2 w-28 min-w-[7rem] text-center tabular-nums whitespace-nowrap">
+                    <td className="px-3 py-2.5 w-22 min-w-[5.5rem] text-center font-mono text-gray-900">
                       {num.format(unitPlusVat(m))}
                     </td>
                   )}
 
-                  <td className="p-2 w-12 min-w-[3rem] text-center">
+                  <td className="px-3 py-2.5 w-12 min-w-[3rem] text-center">
                     {m.is_food_drink ? t('Yes', lang) : t('No', lang)}
                   </td>
 
-                  <td className="p-2 w-12 min-w-[3rem] text-center">
+                  <td className="px-3 py-2.5 w-10 min-w-[2.5rem] text-center">
                     {m.is_default ? t('Yes', lang) : t('No', lang)}
                   </td>
 
                   <td
-                    className={`p-2 w-24 min-w-[6rem] text-center tabular-nums whitespace-nowrap ${overdue ? 'text-red-600 font-semibold' : ''}`}
+                    className={`px-3 py-2.5 w-20 min-w-[4.5rem] text-center font-mono whitespace-normal leading-tight ${overdue ? 'text-red-600 font-semibold' : ''}`}
                     title={m.last_update || ''}
                   >
                     {fmtDate(m.last_update)}

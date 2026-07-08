@@ -10,41 +10,20 @@ import AssetDetailPanel from './AssetDetailPanel'
 import NewAssetModal from './NewAssetModal'
 import TransferAssetModal from './TransferAssetModal'
 import CateringAssetModal from './CateringAssetModal'
-import TransferNotificationModal from './TransferNotificationModal'
-import AssetNotificationCenterModal from './AssetNotificationCenterModal'
 import AssetActivityLogModal from './AssetActivityLogModal'
-// Mock Data
-import { MOCK_ASSETS, STORAGE_KEY, LOG_STORAGE_KEY } from '../_data/mockData'
-
-const loadAssets = (defaults: Asset[]) => {
-    if (typeof window === 'undefined') return defaults
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : defaults
-}
-const saveAssets = (assets: Asset[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(assets))
-}
-
-const loadLogs = () => {
-    if (typeof window === 'undefined') return []
-    const stored = localStorage.getItem(LOG_STORAGE_KEY)
-    return stored ? JSON.parse(stored) : []
-}
+import { supabase } from '@/lib/supabase_shim'
 
 export default function AssetInventoryLayout() {
     const searchParams = useSearchParams()
     const branchName = searchParams.get('branchName') || 'all'
 
-    // Initialize with storage if available, else MOCK
-    const [allAssets, setAllAssets] = useState<Asset[]>(MOCK_ASSETS)
+    // Assets States
+    const [allAssets, setAllAssets] = useState<Asset[]>([])
     const [assets, setAssets] = useState<Asset[]>([])
 
     // Log State
     const [logs, setLogs] = useState<AssetLogEntry[]>([])
     const [isLogOpen, setIsLogOpen] = useState(false)
-
-    // Notification UI State
-    const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false)
 
     // UI States
     const [isNewModalOpen, setIsNewModalOpen] = useState(false)
@@ -54,46 +33,124 @@ export default function AssetInventoryLayout() {
     // Transfer States
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
     const [assetToTransfer, setAssetToTransfer] = useState<Asset | null>(null)
-    const [notifications, setNotifications] = useState<any[]>([])
 
     // User State
     const [currentUser, setCurrentUser] = useState<string>('')
     const [userRole, setUserRole] = useState<string | null>(null)
 
-    // Load initial state
+    // Load initial state from Supabase
+    const fetchAssets = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('assets')
+                .select('*')
+                .order('name', { ascending: true })
+            if (error) throw error
+            
+            const mapped: Asset[] = (data || []).map((row: any) => ({
+                id: row.id,
+                name: row.name,
+                sku: row.sku,
+                category: row.category,
+                branch: row.branch,
+                location: row.location,
+                type: row.type,
+                status: row.status,
+                condition: row.condition,
+                quantity: row.quantity,
+                parLevel: row.par_level,
+                serialNumber: row.serial_number,
+                images: row.images || [],
+                financials: {
+                    purchasePrice: row.financials?.purchasePrice || 0,
+                    purchaseDate: row.financials?.purchaseDate || '',
+                    usefulLifeYears: row.financials?.usefulLifeYears || 1,
+                    salvageValue: row.financials?.salvageValue,
+                    warrantyYears: row.financials?.warrantyYears
+                },
+                targetBranch: row.target_branch,
+                transferDate: row.transfer_date,
+                transferBy: row.transfer_by,
+                cateringEvent: row.catering_event
+            }))
+            setAllAssets(mapped)
+        } catch (err) {
+            console.error('Error loading assets:', err)
+        }
+    }
+
+    const fetchLogs = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('asset_logs')
+                .select('*')
+                .order('timestamp', { ascending: false })
+            if (error) throw error
+            
+            const mapped: AssetLogEntry[] = (data || []).map((row: any) => ({
+                id: row.id,
+                timestamp: row.timestamp,
+                action: row.action,
+                details: row.details,
+                user: row.user,
+                assetId: row.asset_id,
+                assetName: row.asset_name
+            }))
+            setLogs(mapped)
+        } catch (err) {
+            console.error('Error loading asset logs:', err)
+        }
+    }
+
     useEffect(() => {
-        const loaded = loadAssets(MOCK_ASSETS)
-        setAllAssets(loaded)
-        setLogs(loadLogs())
+        fetchAssets()
+        fetchLogs()
+    }, [])
+
+    // Ascolta gli eventi di ricezione asset per aggiornare in tempo reale
+    useEffect(() => {
+        const handleAssetReceived = () => {
+            fetchAssets()
+            fetchLogs()
+        }
+        window.addEventListener('asset-received', handleAssetReceived)
+        return () => window.removeEventListener('asset-received', handleAssetReceived)
     }, [])
 
     // Fetch current user for transfer tracking
     useEffect(() => {
         const getUser = async () => {
-            const localName = localStorage.getItem('user.displayName') || localStorage.getItem('user.name')
-            if (localName) {
-                setCurrentUser(localName)
-                return
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                const { data: acc } = await supabase
+                    .from('app_accounts')
+                    .select('name')
+                    .eq('user_id', user.id)
+                    .single()
+                setCurrentUser(acc?.name || user.email || 'Staff')
             }
-            setCurrentUser('Staff')
         }
         getUser()
     }, [])
 
     useEffect(() => {
         const fetchRole = async () => {
-            const { data: user } = await import('@/lib/supabase_shim').then(m => m.supabase.auth.getUser())
+            const { data: user } = await supabase.auth.getUser()
             if (user?.user) {
-                const { data } = await import('@/lib/supabase_shim').then(m => m.supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single())
+                const { data } = await supabase
+                    .from('app_accounts')
+                    .select('role')
+                    .eq('user_id', user.user.id)
+                    .single()
                 setUserRole(data?.role || 'staff')
             }
         }
         fetchRole()
     }, [])
 
-    // Filter assets when branch or allAssets changes, AND when activeTab changes
     const [activeTab, setActiveTab] = useState<'all' | 'fixed' | 'smallware'>('all')
 
+    // Filter assets when branch or allAssets changes, AND when activeTab changes
     useEffect(() => {
         let filtered = allAssets
 
@@ -110,67 +167,79 @@ export default function AssetInventoryLayout() {
         setAssets(filtered)
     }, [branchName, allAssets, activeTab])
 
-    // Check for notifications (THE POPUP LOGIC)
-    useEffect(() => {
-        if (!branchName || branchName === 'all') return
-
-        const notifs: any[] = []
-
-        // 1. Sender Reminder
-        const mySentAssets = allAssets.filter(a =>
-            a.status === 'in_transit' &&
-            a.branch === branchName
-        )
-        mySentAssets.forEach(a => {
-            notifs.push({ type: 'sender_reminder', asset: a })
-        })
-
-        // 2. Receiver Alert
-        const incomingAssets = allAssets.filter(a =>
-            a.status === 'in_transit' &&
-            a.targetBranch === branchName
-        )
-        incomingAssets.forEach(a => {
-            notifs.push({ type: 'receiver_alert', asset: a })
-        })
-
-        setNotifications(notifs)
-    }, [branchName, allAssets])
-
-    const addLog = (action: LogAction, details: string, assetId?: string, assetName?: string) => {
-        const newLog: AssetLogEntry = {
-            id: Math.random().toString(36).substr(2, 9),
-            timestamp: new Date().toISOString(),
-            action,
-            details,
-            user: currentUser || 'Staff',
-            assetId,
-            assetName
+    const addLog = async (action: LogAction, details: string, assetId?: string, assetName?: string) => {
+        try {
+            const { error } = await supabase
+                .from('asset_logs')
+                .insert({
+                    action,
+                    details,
+                    user: currentUser || 'Staff',
+                    asset_id: assetId,
+                    asset_name: assetName
+                })
+            if (error) throw error
+            fetchLogs()
+        } catch (err) {
+            console.error('Error writing asset log:', err)
         }
-        const updatedLogs = [newLog, ...logs]
-        setLogs(updatedLogs)
-        localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(updatedLogs))
     }
 
-    const handleSaveAsset = (assetData: Omit<Asset, 'id'>) => {
-        let newAllAssets = [...allAssets]
-        if (assetToEdit) {
-            newAllAssets = newAllAssets.map(a => a.id === assetToEdit.id ? { ...assetData, id: assetToEdit.id, images: assetData.images || a.images || [] } : a)
-            addLog('UPDATE', `Updated asset '${assetData.name}'`, assetToEdit.id, assetData.name)
-            setAssetToEdit(null)
-        } else {
-            const newId = Math.random().toString(36).substr(2, 9)
-            const newAsset: Asset = {
-                ...assetData,
-                id: newId,
-                images: assetData.images || []
+    const handleSaveAsset = async (assetData: Omit<Asset, 'id'>) => {
+        try {
+            const rowData = {
+                name: assetData.name,
+                sku: assetData.sku,
+                category: assetData.category,
+                branch: assetData.branch,
+                location: assetData.location,
+                type: assetData.type,
+                status: assetData.status,
+                condition: assetData.condition,
+                quantity: assetData.quantity,
+                par_level: assetData.parLevel || null,
+                serial_number: assetData.serialNumber || null,
+                images: assetData.images || [],
+                financials: {
+                    purchasePrice: assetData.financials.purchasePrice,
+                    purchaseDate: assetData.financials.purchaseDate,
+                    usefulLifeYears: assetData.financials.usefulLifeYears,
+                    salvageValue: assetData.financials.salvageValue,
+                    warrantyYears: assetData.financials.warrantyYears
+                },
+                target_branch: assetData.targetBranch || null,
+                transfer_date: assetData.transferDate || null,
+                transfer_by: assetData.transferBy || null,
+                catering_event: assetData.cateringEvent || null
             }
-            newAllAssets = [newAsset, ...newAllAssets]
-            addLog('CREATE', `Created new asset '${assetData.name}'`, newId, assetData.name)
+
+            if (assetToEdit) {
+                const { error } = await supabase
+                    .from('assets')
+                    .update(rowData)
+                    .eq('id', assetToEdit.id)
+                
+                if (error) throw error
+                await addLog('UPDATE', `Updated asset '${assetData.name}'`, assetToEdit.id, assetData.name)
+                setAssetToEdit(null)
+            } else {
+                const newId = Math.random().toString(36).substr(2, 9)
+                const { error } = await supabase
+                    .from('assets')
+                    .insert({
+                        ...rowData,
+                        id: newId
+                    })
+                
+                if (error) throw error
+                await addLog('CREATE', `Created new asset '${assetData.name}'`, newId, assetData.name)
+            }
+            
+            fetchAssets()
+            setIsNewModalOpen(false)
+        } catch (err) {
+            console.error('Error saving asset:', err)
         }
-        setAllAssets(newAllAssets)
-        saveAssets(newAllAssets)
-        setIsNewModalOpen(false)
     }
 
     const handleEditAsset = () => {
@@ -181,18 +250,21 @@ export default function AssetInventoryLayout() {
         }
     }
 
-    const handleCloseModal = () => {
-        setIsNewModalOpen(false)
-        setAssetToEdit(null)
-    }
-
-    const handleDeleteAsset = (id: string) => {
-        const asset = allAssets.find(a => a.id === id)
-        const newAllAssets = allAssets.filter(a => a.id !== id)
-        setAllAssets(newAllAssets)
-        saveAssets(newAllAssets)
-        addLog('DELETE', `Deleted asset '${asset?.name || 'Unknown'}'`, id, asset?.name)
-        setSelectedAsset(null)
+    const handleDeleteAsset = async (id: string) => {
+        try {
+            const asset = allAssets.find(a => a.id === id)
+            const { error } = await supabase
+                .from('assets')
+                .delete()
+                .eq('id', id)
+            
+            if (error) throw error
+            await addLog('DELETE', `Deleted asset '${asset?.name || 'Unknown'}'`, id, asset?.name)
+            fetchAssets()
+            setSelectedAsset(null)
+        } catch (err) {
+            console.error('Error deleting asset:', err)
+        }
     }
 
     // Transfer Logic
@@ -201,49 +273,32 @@ export default function AssetInventoryLayout() {
         setIsTransferModalOpen(true)
     }
 
-    const confirmTransfer = (targetBranch: string, note?: string) => {
+    const confirmTransfer = async (targetBranch: string, note?: string) => {
         if (!assetToTransfer) return
-
-        const newAllAssets = allAssets.map(a => {
-            if (a.id === assetToTransfer.id) {
-                return {
-                    ...a,
-                    status: 'in_transit' as const,
-                    targetBranch: targetBranch,
-                    transferDate: new Date().toISOString().split('T')[0],
-                    transferBy: currentUser || 'Staff'
-                }
-            }
-            return a
-        })
-
-        setAllAssets(newAllAssets)
-        saveAssets(newAllAssets)
-        addLog('TRANSFER_INIT', `Transferred '${assetToTransfer.name}' to ${targetBranch}`, assetToTransfer.id, assetToTransfer.name)
-        setIsTransferModalOpen(false)
-        setAssetToTransfer(null)
-        setSelectedAsset(null) // Close detail
-    }
-
-    // Notification Actions
-    const handleReceiveAsset = (assetId: string) => {
-        const asset = allAssets.find(a => a.id === assetId)
-        const newAllAssets = allAssets.map(a => {
-            if (a.id === assetId) {
-                return {
-                    ...a,
-                    status: 'active' as const, // or maintains previous condition?
-                    branch: a.targetBranch!, // Move to new branch
-                    targetBranch: undefined,
-                    transferDate: undefined
-                }
-            }
-            return a
-        })
-        setAllAssets(newAllAssets)
-        saveAssets(newAllAssets)
-        if (asset) {
-            addLog('TRANSFER_RECEIVE', `Received asset '${asset.name}' at ${branchName}`, asset.id, asset.name)
+        try {
+            const transferDateStr = new Date().toISOString().split('T')[0]
+            const { error } = await supabase
+                .from('assets')
+                .update({
+                    status: 'in_transit',
+                    target_branch: targetBranch,
+                    transfer_date: transferDateStr,
+                    transfer_by: currentUser || 'Staff'
+                })
+                .eq('id', assetToTransfer.id)
+            
+            if (error) throw error
+            await addLog('TRANSFER_INIT', `Transferred '${assetToTransfer.name}' to ${targetBranch}`, assetToTransfer.id, assetToTransfer.name)
+            
+            // Forza l'aggiornamento immediato delle notifiche in TopHeader
+            window.dispatchEvent(new CustomEvent('assets-updated'))
+            
+            fetchAssets()
+            setIsTransferModalOpen(false)
+            setAssetToTransfer(null)
+            setSelectedAsset(null)
+        } catch (err) {
+            console.error('Error confirming transfer:', err)
         }
     }
 
@@ -252,57 +307,57 @@ export default function AssetInventoryLayout() {
     const [assetForCatering, setAssetForCatering] = useState<Asset | null>(null)
 
     const handleCateringClick = (asset: Asset) => {
-        // If already out, return it
         if (asset.status === 'out_for_catering') {
             if (confirm(`Mark '${asset.name}' as returned from catering?`)) {
                 handleReturnFromCatering(asset)
             }
             return
         }
-        // Else open modal
         setAssetForCatering(asset)
         setIsCateringModalOpen(true)
     }
 
-    const confirmCateringOut = (details: CateringEvent) => {
+    const confirmCateringOut = async (details: CateringEvent) => {
         if (!assetForCatering) return
-
-        const newAllAssets = allAssets.map(a => {
-            if (a.id === assetForCatering.id) {
-                return {
-                    ...a,
-                    status: 'out_for_catering' as const,
-                    cateringEvent: details
-                }
-            }
-            return a
-        })
-
-        setAllAssets(newAllAssets)
-        saveAssets(newAllAssets)
-        addLog('CATERING_OUT', `Sent '${assetForCatering.name}' from ${assetForCatering.branch} to event: ${details.eventName}`, assetForCatering.id, assetForCatering.name)
-        setIsCateringModalOpen(false)
-        setAssetForCatering(null)
-        setSelectedAsset(null)
+        try {
+            const { error } = await supabase
+                .from('assets')
+                .update({
+                    status: 'out_for_catering',
+                    catering_event: details
+                })
+                .eq('id', assetForCatering.id)
+            
+            if (error) throw error
+            await addLog('CATERING_OUT', `Sent '${assetForCatering.name}' from ${assetForCatering.branch} to event: ${details.eventName}`, assetForCatering.id, assetForCatering.name)
+            
+            fetchAssets()
+            setIsCateringModalOpen(false)
+            setAssetForCatering(null)
+            setSelectedAsset(null)
+        } catch (err) {
+            console.error('Error confirming catering out:', err)
+        }
     }
 
-    const handleReturnFromCatering = (asset: Asset) => {
-        const newAllAssets = allAssets.map(a => {
-            if (a.id === asset.id) {
-                // Restore to active, clear event logic
-                // Could ideally check condition here too
-                const { cateringEvent, ...rest } = a
-                return {
-                    ...rest,
-                    status: 'active' as const
-                }
-            }
-            return a
-        })
-        setAllAssets(newAllAssets)
-        saveAssets(newAllAssets)
-        addLog('CATERING_RETURN', `Returned '${asset.name}' from catering back to ${asset.branch}`, asset.id, asset.name)
-        setSelectedAsset(null)
+    const handleReturnFromCatering = async (asset: Asset) => {
+        try {
+            const { error } = await supabase
+                .from('assets')
+                .update({
+                    status: 'active',
+                    catering_event: null
+                })
+                .eq('id', asset.id)
+            
+            if (error) throw error
+            await addLog('CATERING_RETURN', `Returned '${asset.name}' from catering back to ${asset.branch}`, asset.id, asset.name)
+            
+            fetchAssets()
+            setSelectedAsset(null)
+        } catch (err) {
+            console.error('Error returning from catering:', err)
+        }
     }
 
     return (
@@ -313,8 +368,6 @@ export default function AssetInventoryLayout() {
                     setIsNewModalOpen(true)
                 }}
                 onViewLog={() => setIsLogOpen(true)}
-                onViewNotifications={() => setIsNotificationCenterOpen(true)}
-                notificationCount={notifications.length}
                 userRole={userRole}
             />
 
@@ -350,8 +403,6 @@ export default function AssetInventoryLayout() {
             </div>
 
             <AssetKPICards assets={assets} />
-
-
 
             <AssetTable
                 assets={assets}
@@ -395,14 +446,6 @@ export default function AssetInventoryLayout() {
                 open={isLogOpen}
                 onClose={() => setIsLogOpen(false)}
                 logs={logs}
-            />
-
-            <AssetNotificationCenterModal
-                open={isNotificationCenterOpen}
-                onClose={() => setIsNotificationCenterOpen(false)}
-                notifications={notifications}
-                onReceive={handleReceiveAsset}
-                userRole={userRole}
             />
         </div>
     )

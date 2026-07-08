@@ -412,7 +412,7 @@ export default function NewAssetModal({ open, onClose, onSave, initialData, defa
 
                                 {type === 'fixed' ? (
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700">Serial Number <span className="text-red-500">*</span></label>
+                                        <label className="block text-sm font-medium text-slate-700">Serial Number</label>
                                         <input
                                             className={`w-full mt-1 border rounded-lg px-3 h-10 ${initialData ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
                                             value={serialNumber}

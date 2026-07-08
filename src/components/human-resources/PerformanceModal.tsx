@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Star, X, TrendingUp, TrendingDown, Plus, Trash2, Pencil } from 'lucide-react'
+import { Star, X, TrendingUp, TrendingDown, Plus, Trash2, Pencil, UserMinus } from 'lucide-react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffPerformance, HRStaffMember, HRRatingCategory } from '@/types/human-resources'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -305,8 +305,8 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white shrink-0">
                     <h2 className="text-lg font-semibold text-gray-900">
                         {review 
                             ? (language === 'vi' ? 'Chỉnh sửa đánh giá hiệu quả' : 'Edit Performance Review') 
@@ -318,172 +318,177 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    {/* ── Staff + Date ── */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {language === 'vi' ? 'Nhân viên *' : 'Staff Member *'}
-                            </label>
-                            <input type="text" readOnly disabled value={selectedStaff ? `${selectedStaff.full_name} — ${selectedStaff.position || (language === 'vi' ? 'Không có vị trí' : 'No Pos')}` : ''}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {language === 'vi' ? 'Ngày đánh giá' : 'Review Date'}
-                            </label>
-                            <input type="date" value={reviewDate} onChange={e => handleDateChange(e.target.value)}
-                                disabled
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
-                        </div>
-                    </div>
-
-                    {/* ── Reviewer + Period ── */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {language === 'vi' ? 'Người đánh giá' : 'Reviewer'}
-                            </label>
-                            <input value={reviewerName} onChange={e => setReviewerName(e.target.value)}
-                                placeholder={language === 'vi' ? 'Ví dụ: Tên quản lý' : 'e.g. Manager Name'}
-                                disabled={!isEditing}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {language === 'vi' ? 'Kỳ đánh giá' : 'Period'}
-                            </label>
-                            <input disabled value={period}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
-                        </div>
-                    </div>
-
-                    {previousGoals && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                            <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wider mb-2">
-                                {language === 'vi' ? 'Mục tiêu từ kỳ trước' : 'Goals from Previous Period'}
-                            </h4>
-                            <p className="text-sm text-amber-900 whitespace-pre-wrap">{previousGoals}</p>
-                        </div>
-                    )}
-
-                    {/* Conditional Sections */}
-                    {staffId && (
-                        <>
-                            {/* Category Ratings */}
-                            <div className="border border-gray-200 rounded-xl overflow-hidden">
-                                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                                    <h3 className="text-sm font-semibold text-gray-800">
-                                        {language === 'vi' ? 'Danh mục đánh giá *' : 'Rating Categories *'}
-                                    </h3>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-gray-500">
-                                            {language === 'vi' 
-                                                ? `${ratedCount}/${applicableCategories.length} đã đánh giá` 
-                                                : `${ratedCount}/${applicableCategories.length} rated`
-                                            }
-                                        </span>
-                                    </div>
-                                </div>
-                                {applicableCategories.length === 0 ? (
-                                    <div className="px-4 py-8 text-center text-sm text-gray-400">
-                                        {language === 'vi' 
-                                            ? 'Chưa cấu hình danh mục đánh giá cho nhân viên này' 
-                                            : 'No rating categories configured for this staff member'
-                                        }
-                                    </div>
-                                ) : (
-                                    <div className="divide-y divide-gray-100">
-                                        {applicableCategories.map(cat => {
-                                            const key = labelToKey(cat.label)
-                                            return (
-                                                <div key={cat.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 transition">
-                                                    <span className="text-sm text-gray-700 font-medium">
-                                                        {translateCategoryLabel(cat.label, language)}
-                                                    </span>
-                                                    <StarPicker
-                                                        value={categoryRatings[key] || 0}
-                                                        onChange={(v) => setCatRating(key, v)}
-                                                        disabled={!isEditing}
-                                                    />
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                                {/* Overall average bar */}
-                                <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
-                                    <span className="text-sm font-bold text-white">
-                                        {language === 'vi' ? 'Điểm trung bình chung' : 'Overall Average'}
-                                    </span>
-                                    <div className="flex items-center gap-3">
-                                        <RatingStars rating={overallAvg} size="md" />
-                                        <span className={`text-lg font-bold ${
-                                            overallAvg >= 4 ? 'text-emerald-400' :
-                                            overallAvg >= 3 ? 'text-amber-400' :
-                                            overallAvg > 0 ? 'text-red-400' : 'text-gray-400'
-                                        }`}>
-                                            {overallAvg > 0 ? overallAvg.toFixed(1) : '—'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* ── Strengths + Improvements ── */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                                            {language === 'vi' ? 'Điểm mạnh *' : 'Strengths *'}
-                                        </span>
-                                    </label>
-                                    <textarea value={strengths} onChange={e => setStrengths(e.target.value)} rows={3}
-                                        placeholder={language === 'vi' ? 'Các điểm mạnh chính ghi nhận trong kỳ này…' : 'Key strengths observed during this period…'}
-                                        disabled={!isEditing}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <TrendingDown className="w-3.5 h-3.5 text-orange-500" />
-                                            {language === 'vi' ? 'Điểm cần cải thiện *' : 'Areas for Improvement *'}
-                                        </span>
-                                    </label>
-                                    <textarea value={improvements} onChange={e => setImprovements(e.target.value)} rows={3}
-                                        placeholder={language === 'vi' ? 'Các điểm cần cải thiện thêm…' : 'Areas that need improvement…'}
-                                        disabled={!isEditing}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
-                                </div>
-                            </div>
-
-                            {/* ── Goals ── */}
-                            {!isExitReview && !(isProbation && overallAvg < 2.5) && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        {language === 'vi' ? 'Mục tiêu cho kỳ tiếp theo *' : 'Goals for Next Period *'}
-                                    </label>
-                                    <textarea value={goals} onChange={e => setGoals(e.target.value)} rows={2}
-                                        placeholder={language === 'vi' ? 'Mục tiêu và chỉ tiêu cho kỳ đánh giá tiếp theo…' : 'Objectives and targets for the next review period…'}
-                                        disabled={!isEditing}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
-                                </div>
-                            )}
-
-                            {/* ── Notes ── */}
+                <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+                    <div className="p-6 overflow-y-auto space-y-6 flex-1 text-left">
+                        {/* ── Staff + Date ── */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    {language === 'vi' ? 'Ghi chú bổ sung' : 'Additional Notes'}
+                                    {language === 'vi' ? 'Nhân viên *' : 'Staff Member *'}
                                 </label>
-                                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-                                    disabled={!isEditing}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
+                                <input type="text" readOnly disabled value={selectedStaff ? `${selectedStaff.full_name} — ${selectedStaff.position || (language === 'vi' ? 'Không có vị trí' : 'No Pos')}` : ''}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
                             </div>
-                        </>
-                    )}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Ngày đánh giá' : 'Review Date'}
+                                </label>
+                                <input type="date" value={reviewDate} onChange={e => handleDateChange(e.target.value)}
+                                    disabled
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
+                            </div>
+                        </div>
+
+                        {/* ── Reviewer + Period ── */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Người đánh giá' : 'Reviewer'}
+                                </label>
+                                <input value={reviewerName} onChange={e => setReviewerName(e.target.value)}
+                                    placeholder={language === 'vi' ? 'Ví dụ: Tên quản lý' : 'e.g. Manager Name'}
+                                    disabled={!isEditing}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Kỳ đánh giá' : 'Period'}
+                                </label>
+                                <input disabled value={period}
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
+                            </div>
+                        </div>
+
+                        {previousGoals && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                                <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wider mb-2">
+                                    {language === 'vi' ? 'Mục tiêu từ kỳ trước' : 'Goals from Previous Period'}
+                                </h4>
+                                <p className="text-sm text-amber-900 whitespace-pre-wrap">{previousGoals}</p>
+                            </div>
+                        )}
+
+                        {/* Conditional Sections */}
+                        {staffId && (
+                            <>
+                                {/* Category Ratings */}
+                                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold text-gray-800">
+                                            {language === 'vi' ? 'Danh mục đánh giá *' : 'Rating Categories *'}
+                                        </h3>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500">
+                                                {language === 'vi' 
+                                                    ? `${ratedCount}/${applicableCategories.length} đã đánh giá` 
+                                                    : `${ratedCount}/${applicableCategories.length} rated`
+                                                }
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {applicableCategories.length === 0 ? (
+                                        <div className="px-4 py-8 text-center text-sm text-gray-400">
+                                            {language === 'vi' 
+                                                ? 'Chưa cấu hình danh mục đánh giá cho nhân viên này' 
+                                                : 'No rating categories configured for this staff member'
+                                            }
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-gray-100">
+                                            {applicableCategories.map(cat => {
+                                                const key = labelToKey(cat.label)
+                                                return (
+                                                    <div key={cat.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 transition">
+                                                        <span className="text-sm text-gray-700 font-medium">
+                                                            {language === 'vi' 
+                                                                ? (cat.label_vi || translateCategoryLabel(cat.label, language)) 
+                                                                : cat.label
+                                                            }
+                                                        </span>
+                                                        <StarPicker
+                                                            value={categoryRatings[key] || 0}
+                                                            onChange={(v) => setCatRating(key, v)}
+                                                            disabled={!isEditing}
+                                                        />
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                    {/* Overall average bar */}
+                                    <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
+                                        <span className="text-sm font-bold text-white">
+                                            {language === 'vi' ? 'Điểm trung bình chung' : 'Overall Average'}
+                                        </span>
+                                        <div className="flex items-center gap-3">
+                                            <RatingStars rating={overallAvg} size="md" />
+                                            <span className={`text-lg font-bold ${
+                                                overallAvg >= 4 ? 'text-emerald-400' :
+                                                overallAvg >= 3 ? 'text-amber-400' :
+                                                overallAvg > 0 ? 'text-red-400' : 'text-gray-400'
+                                            }`}>
+                                                {overallAvg > 0 ? overallAvg.toFixed(1) : '—'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* ── Strengths + Improvements ── */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            <span className="inline-flex items-center gap-1.5">
+                                                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                                                {language === 'vi' ? 'Điểm mạnh *' : 'Strengths *'}
+                                            </span>
+                                        </label>
+                                        <textarea value={strengths} onChange={e => setStrengths(e.target.value)} rows={3}
+                                            placeholder={language === 'vi' ? 'Các điểm mạnh chính ghi nhận trong kỳ này…' : 'Key strengths observed during this period…'}
+                                            disabled={!isEditing}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            <span className="inline-flex items-center gap-1.5">
+                                                <TrendingDown className="w-3.5 h-3.5 text-orange-500" />
+                                                {language === 'vi' ? 'Điểm cần cải thiện *' : 'Areas for Improvement *'}
+                                            </span>
+                                        </label>
+                                        <textarea value={improvements} onChange={e => setImprovements(e.target.value)} rows={3}
+                                            placeholder={language === 'vi' ? 'Các điểm cần cải thiện thêm…' : 'Areas that need improvement…'}
+                                            disabled={!isEditing}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
+                                    </div>
+                                </div>
+
+                                {/* ── Goals ── */}
+                                {!isExitReview && !(isProbation && overallAvg < 2.5) && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            {language === 'vi' ? 'Mục tiêu cho kỳ tiếp theo *' : 'Goals for Next Period *'}
+                                        </label>
+                                        <textarea value={goals} onChange={e => setGoals(e.target.value)} rows={2}
+                                            placeholder={language === 'vi' ? 'Mục tiêu và chỉ tiêu cho kỳ đánh giá tiếp theo…' : 'Objectives and targets for the next review period…'}
+                                            disabled={!isEditing}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
+                                    </div>
+                                )}
+
+                                {/* ── Notes ── */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {language === 'vi' ? 'Ghi chú bổ sung' : 'Additional Notes'}
+                                    </label>
+                                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                                        disabled={!isEditing}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500" />
+                                </div>
+                            </>
+                        )}
+                    </div>
 
                     {/* ── Actions ── */}
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-150 flex justify-between items-center shrink-0">
                         <div>
                             {review && isEditing && onDelete && (
                                 <button type="button" onClick={() => {
@@ -541,19 +546,27 @@ export default function PerformanceModal({ open, onClose, onSave, review, staffL
                                             {language === 'vi' ? 'Xác nhận' : 'Confirm'}
                                         </button>
                                     </>
-                                ) : (
+                                ) : isExitReview ? (
                                     <button type="button" onClick={(e) => handleSubmit(e)} disabled={saving || !isFormValid}
-                                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
+                                        className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition disabled:opacity-50 flex items-center gap-2 shadow-md shadow-blue-500/20">
                                         {saving ? (
                                             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                         ) : (
-                                            <Plus className="w-4 h-4" />
+                                            <UserMinus className="w-4 h-4" />
+                                        )}
+                                        {language === 'vi' ? 'Đặt trạng thái ngưng hoạt động' : 'Set Inactive'}
+                                    </button>
+                                ) : (
+                                    <button type="button" onClick={(e) => handleSubmit(e)} disabled={saving || !isFormValid}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50 flex items-center gap-2">
+                                        {saving ? (
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        ) : (
+                                            review ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />
                                         )}
                                         {review 
                                             ? (language === 'vi' ? 'Cập nhật đánh giá' : 'Update Review') 
-                                            : (isExitReview 
-                                                ? (language === 'vi' ? 'Đặt trạng thái ngưng hoạt động' : 'Set Inactive') 
-                                                : (language === 'vi' ? 'Tạo đánh giá' : 'Create Review'))
+                                            : (language === 'vi' ? 'Tạo đánh giá' : 'Create Review')
                                         }
                                     </button>
                                 )

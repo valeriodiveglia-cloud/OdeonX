@@ -13,9 +13,226 @@ import {
   TrashIcon,
   XMarkIcon,
   ArrowPathIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline'
 import CircularLoader from '@/components/CircularLoader'
 import ExcelJS from 'exceljs'
+
+interface ColumnHeaderProps {
+  colKey: string
+  label: string
+  sortCol: string
+  sortAsc: boolean
+  onSort: (key: any, asc: boolean) => void
+  values: string[]
+  activeFilter: Set<string> | null
+  onFilter: (vals: Set<string> | null) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  dict: {
+    sortAsc: string
+    sortDesc: string
+    selectAll: string
+    deselectAll: string
+    filterPlaceholder: string
+    clearFilters: string
+  }
+  right?: boolean
+  center?: boolean
+  className?: string
+}
+
+function ColumnHeader({
+  colKey,
+  label,
+  sortCol,
+  sortAsc,
+  onSort,
+  values,
+  activeFilter,
+  onFilter,
+  onClear,
+  open,
+  onToggle,
+  onClose,
+  dict,
+  right,
+  center,
+  className = '',
+}: ColumnHeaderProps) {
+  const ref = useRef<HTMLTableCellElement>(null)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+  useEffect(() => {
+    if (open) {
+      setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+      setFilterSearch('')
+    }
+  }, [open, values, activeFilter])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open, onClose])
+
+  const isActive = sortCol === colKey
+  const hasFilter = !!activeFilter
+  const dropdownStyle = useMemo(() => {
+    if (!open || !ref.current) return undefined
+    const rect = ref.current.getBoundingClientRect()
+    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+  }, [open, right])
+
+  const filteredValues = filterSearch
+    ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+    : values
+
+  const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+  function toggleAll() {
+    const next = new Set(localChecked)
+    if (allVisibleChecked) {
+      filteredValues.forEach(v => next.delete(v))
+    } else {
+      filteredValues.forEach(v => next.add(v))
+    }
+    setLocalChecked(next)
+  }
+
+  // helper to ensure all strings are safely handled
+  function toggleOne(v: string) {
+    const next = new Set(localChecked)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    setLocalChecked(next)
+  }
+
+  function handleApply() {
+    let finalChecked = localChecked
+    if (filterSearch) {
+      finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+    }
+    if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+  }
+
+  return (
+    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <span className="select-none">{label}</span>
+        {isActive && (
+          sortAsc ? (
+            <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          ) : (
+            <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          )
+        )}
+        {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation()
+            onToggle()
+          }}
+          className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+          aria-label={`Menu ${label}`}
+        >
+          <EllipsisVerticalIcon className="w-3.5 h-3.5 text-gray-500" />
+        </button>
+      </div>
+
+      {open && dropdownStyle && (
+        <div
+          className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case"
+          style={dropdownStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 space-y-1">
+            <button
+              type="button"
+              onClick={() => onSort(colKey, true)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowUpIcon className="w-4 h-4" />
+              {dict.sortAsc}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSort(colKey, false)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowDownIcon className="w-4 h-4" />
+              {dict.sortDesc}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              value={filterSearch}
+              onChange={e => setFilterSearch(e.target.value)}
+              placeholder={dict.filterPlaceholder}
+              className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+            >
+              {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+            </button>
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+              {filteredValues.map(v => (
+                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localChecked.has(v)}
+                    onChange={() => toggleOne(v)}
+                    className="accent-blue-600 rounded"
+                  />
+                  <span className="truncate text-xs">{v || '(Empty)'}</span>
+                </label>
+              ))}
+              {filteredValues.length === 0 && (
+                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+            >
+              {dict.clearFilters}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+    </th>
+  )
+}
 
 /* ---------- DB ---------- */
 const TBL_SUPS = 'suppliers'
@@ -271,12 +488,18 @@ export default function SuppliersPage() {
   const [sortCol, setSortCol] = useState<SortKey>('name')
   const [sortAsc, setSortAsc] = useState(true)
 
-  const [filters, setFilters] = useState({
-    q: '',
-    orderMethod: '',
-    paymentTerm: '',
-    paymentMethod: '',
-  })
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+
+  const hasActiveFilters = Object.values(columnFilters).some(vals => vals !== null)
+  function clearAllColumnFilters() {
+    setColumnFilters({})
+  }
+
+  function applyColumnFilter(col: SortKey, vals: Set<string> | null) {
+    setColumnFilters(prev => ({ ...prev, [col]: vals }))
+    setOpenMenu(null)
+  }
 
   // selection
   const [selectMode, setSelectMode] = useState(false)
@@ -326,23 +549,45 @@ export default function SuppliersPage() {
     return Array.from(new Set((rows || []).map(r => (r.payment_method || '').trim()).filter(Boolean))).sort()
   }, [rows])
 
-  function applyFilters(list: Supplier[]) {
-    const q = filters.q.trim().toLowerCase()
-    const om = filters.orderMethod.trim().toLowerCase()
-    const pt = filters.paymentTerm.trim().toLowerCase()
-    const pm = filters.paymentMethod.trim().toLowerCase()
-
-    let r = [...list]
-    if (q) {
-      r = r.filter(x =>
-        [x.name, x.poc, x.phone, x.email, x.order_method, x.payment_term, x.payment_method, x.notes]
-          .filter(Boolean)
-          .some(v => String(v).toLowerCase().includes(q))
-      )
+  function getColValue(it: Supplier, k: string) {
+    switch (k) {
+      case 'name':
+        return it.name || ''
+      case 'poc':
+        return it.poc || ''
+      case 'phone':
+        return it.phone || ''
+      case 'email':
+        return it.email || ''
+      case 'order_method':
+        return it.order_method || ''
+      case 'payment_term':
+        return it.payment_term || ''
+      case 'payment_method':
+        return it.payment_method || ''
+      case 'notes':
+        return it.notes || ''
+      default:
+        return ''
     }
-    if (om) r = r.filter(x => (x.order_method || '').toLowerCase() === om)
-    if (pt) r = r.filter(x => (x.payment_term || '').toLowerCase() === pt)
-    if (pm) r = r.filter(x => (x.payment_method || '').toLowerCase() === pm)
+  }
+
+  function handleSort(col: SortKey, asc: boolean) {
+    setSortCol(col)
+    setSortAsc(asc)
+  }
+
+  function applyFilters(list: Supplier[]) {
+    let r = [...list]
+
+    // Apply column checklist filters
+    Object.entries(columnFilters).forEach(([col, vals]) => {
+      if (!vals) return
+      r = r.filter(x => {
+        const v = getColValue(x, col)
+        return vals.has(v)
+      })
+    })
 
     r.sort((a, b) => {
       const getVal = (it: Supplier): any => {
@@ -472,51 +717,79 @@ export default function SuppliersPage() {
 
   if (loading) return <CircularLoader />
 
-  return (
-    <div className="max-w-7xl mx-auto p-4 text-gray-100">
-      {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* Kebab menu in modalità selezione */}
-          {selectMode && (
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setMenuOpen(v => !v)}
-                className="p-2 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                title={t('BulkActions', language)}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-              >
-                <EllipsisVerticalIcon className="w-6 h-6 text-white" />
-              </button>
-              {menuOpen && (
-                <div className="absolute z-10 mt-2 w-56 rounded-xl border border-white/10 bg-white text-gray-900 shadow-xl">
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 text-red-600 disabled:opacity-50 flex items-center gap-2"
-                    onClick={() => { setMenuOpen(false); bulkDelete() }}
-                    disabled={selectedIds.length === 0}
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                    {t('Delete', language)}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+  const columnHeaderDict = {
+    sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
+    sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort Descending',
+    selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select All',
+    deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect All',
+    filterPlaceholder: language === 'vi' ? 'Lọc...' : 'Filter...',
+    clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters',
+  }
 
-          <h1 className="text-2xl font-bold text-white">{t('Suppliers', language) || 'Suppliers'}</h1>
-          {selectedIds.length > 0 && (
-            <span className="ml-2 text-sm text-blue-200">({selectedIds.length} {t('SelectedCountSuffix', language) || 'selected'})</span>
-          )}
+  return (
+    <div className="max-w-none mx-auto p-4 text-gray-100">
+      {/* Header */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            {/* Kebab menu in modalità selezione */}
+            {selectMode && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(v => !v)}
+                  className="p-2 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                  title={t('BulkActions', language)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                >
+                  <EllipsisVerticalIcon className="w-6 h-6 text-white" />
+                </button>
+                {menuOpen && (
+                  <div className="absolute z-10 mt-2 w-56 rounded-xl border border-white/10 bg-white text-gray-900 shadow-xl">
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 text-red-600 disabled:opacity-50 flex items-center gap-2"
+                      onClick={() => { setMenuOpen(false); bulkDelete() }}
+                      disabled={selectedIds.length === 0}
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                      {t('Delete', language)}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <h1 className="text-2xl font-bold text-white sm:text-3xl tracking-tight leading-normal">{t('Suppliers', language) || 'Suppliers'}</h1>
+            {selectedIds.length > 0 && (
+              <span className="ml-2 text-sm text-blue-200">({selectedIds.length} {t('SelectedCountSuffix', language) || 'selected'})</span>
+            )}
+          </div>
+          <p className="text-xs text-slate-400">
+            {language === 'vi'
+              ? 'Quản lý thông tin nhà cung cấp, phương thức đặt hàng và điều khoản thanh toán'
+              : 'Manage supplier information, order methods, and payment terms'}
+          </p>
         </div>
 
+        {/* Header Actions */}
         <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllColumnFilters}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-200 border border-red-500/20 text-sm font-medium cursor-pointer"
+            >
+              <XMarkIcon className="w-4 h-4" />
+              {language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters'}
+            </button>
+          )}
+
           <button
             onClick={handleExportExcel}
             className="inline-flex items-center gap-2 px-3 h-9 rounded-lg
                        bg-blue-600/15 text-blue-200 hover:bg-blue-600/25
-                       border border-blue-400/30"
+                       border border-blue-400/30 text-sm font-medium cursor-pointer"
             title={t('Export', language)}
           >
             <ArrowUpTrayIcon className="w-5 h-5" />
@@ -525,7 +798,7 @@ export default function SuppliersPage() {
 
           <button
             onClick={() => setSelectMode(s => !s)}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
+            className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium cursor-pointer ${selectMode
               ? 'bg-blue-600 text-white border-blue-600'
               : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
               }`}
@@ -537,164 +810,219 @@ export default function SuppliersPage() {
 
           <button
             onClick={openCreate}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
+            className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white text-sm font-medium cursor-pointer hover:opacity-80"
           >
             <PlusIcon className="w-5 h-5" /> {(t('NewSupplier', language) || t('New', language) || 'New')}
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl shadow p-3 mb-4">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder={t('SearchSuppliersPlaceholder', language) || 'Search suppliers, contact, phone, email…'}
-            value={filters.q}
-            onChange={e => setFilters(s => ({ ...s, q: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm text-gray-900 placeholder-gray-600 w-[260px]"
-          />
-          <select
-            value={filters.orderMethod}
-            onChange={e => setFilters(s => ({ ...s, orderMethod: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[200px]"
-            title={t('OrderMethod', language)}
-          >
-            <option value="">{(t('All', language) || 'All') + ' · ' + (t('OrderMethod', language) || 'Order Method')}</option>
-            {orderMethodOptions.map(v => <option key={v} value={v.toLowerCase()}>{v}</option>)}
-          </select>
-
-          {/* ⇨ Payment Term prima di Payment Method */}
-          <select
-            value={filters.paymentTerm}
-            onChange={e => setFilters(s => ({ ...s, paymentTerm: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[200px]"
-            title={t('PaymentTerm', language)}
-          >
-            <option value="">{(t('All', language) || 'All') + ' · ' + (t('PaymentTerm', language) || 'Payment Term')}</option>
-            {paymentTermOptions.map(v => <option key={v} value={v.toLowerCase()}>{v}</option>)}
-          </select>
-
-          <select
-            value={filters.paymentMethod}
-            onChange={e => setFilters(s => ({ ...s, paymentMethod: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[220px]"
-            title={t('PaymentMethod', language)}
-          >
-            <option value="">{(t('All', language) || 'All') + ' · ' + (t('PaymentMethod', language) || 'Payment Method')}</option>
-            {paymentMethodOptions.map(v => <option key={v} value={v.toLowerCase()}>{v}</option>)}
-          </select>
-
-          <div className="ml-auto" />
-          <button
-            type="button"
-            onClick={() => setFilters({ q: '', orderMethod: '', paymentTerm: '', paymentMethod: '' })}
-            className="inline-flex items-center gap-1 px-3 h-9 rounded-lg
-                       border border-blue-600 text-blue-700 hover:bg-blue-50"
-            title={t('Clear', language)}
-          >
-            {t('Clear', language)}
-          </button>
-        </div>
-      </div>
-
       {/* Table */}
-      <div className="bg-white rounded-2xl shadow p-3">
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed text-sm text-gray-900">
-            <colgroup>
-              {[
-                <col key="c0" className="w-[3rem]" />,
-                <col key="c1" className="w-[20rem]" />,
-                <col key="c2" className="w-[14rem]" />,
-                <col key="c3" className="w-[22rem]" />, // Email (più larga)
-                <col key="c4" className="w-[14rem]" />, // Phone
-                <col key="c5" className="w-[16rem]" />, // Order Method
-                <col key="c6" className="w-[16rem]" />, // Payment Term
-                <col key="c7" className="w-[16rem]" />, // Payment Method
-                <col key="c8" className="w-[22rem]" />, // Notes
-              ]}
-            </colgroup>
+      <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
+        <table className="w-full table-auto text-sm text-gray-900">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+              <th className="p-2 w-7">
+                {selectMode ? (
+                  <input
+                    ref={headerCbRef}
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every(m => !!selected[m.id])}
+                    onChange={toggleSelectAllVisible}
+                    className="h-4 w-4"
+                    title={t('SelectAll', language)}
+                  />
+                ) : null}
+              </th>
 
-            <thead>
-              <tr className="bg-blue-50 text-gray-800">
-                <th className="p-2 text-left">
-                  {selectMode ? (
-                    <input
-                      ref={headerCbRef}
-                      type="checkbox"
-                      checked={filtered.length > 0 && filtered.every(m => !!selected[m.id])}
-                      onChange={toggleSelectAllVisible}
-                      className="h-4 w-4"
-                      title={t('SelectAll', language)}
-                    />
-                  ) : null}
-                </th>
+              <ColumnHeader
+                colKey="name"
+                label={t('Name', language) || 'Name'}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'name')))).sort()}
+                activeFilter={columnFilters.name || null}
+                onFilter={vals => applyColumnFilter('name', vals)}
+                onClear={() => applyColumnFilter('name', null)}
+                open={openMenu === 'name'}
+                onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
 
-                {([
-                  ['name', 'Name'],
-                  ['poc', 'PointOfContact'],
-                  ['email', 'Email'],
-                  ['phone', 'Phone'],
-                  ['order_method', 'OrderMethod'],
-                  ['payment_term', 'PaymentTerm'],
-                  ['payment_method', 'PaymentMethod'],
-                  ['notes', 'Notes'],
-                ] as [SortKey, string][]).map(([key, label]) => (
-                  <th key={key} className="p-2 text-left">
-                    <button type="button" onClick={() => toggleSort(key)} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t(label as any, language) || label}</span>
-                        <SortIcon active={sortCol === key} asc={sortAsc} />
-                      </div>
-                    </button>
-                  </th>
-                ))}
-              </tr>
-            </thead>
+              <ColumnHeader
+                colKey="poc"
+                label={t('PointOfContact', language) || 'Point of Contact'}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'poc')))).sort()}
+                activeFilter={columnFilters.poc || null}
+                onFilter={vals => applyColumnFilter('poc', vals)}
+                onClear={() => applyColumnFilter('poc', null)}
+                open={openMenu === 'poc'}
+                onToggle={() => setOpenMenu(openMenu === 'poc' ? null : 'poc')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
 
-            <tbody>
-              {filtered.map(it => {
-                const isSelected = !!selected[it.id]
-                return (
-                  <tr
-                    key={it.id}
-                    className={`border-t hover:bg-blue-50/40 cursor-pointer ${isSelected ? 'bg-blue-100/70' : ''}`}
-                    onClick={() => openView(it)}
-                    onDoubleClick={() => openEdit(it)}
+              <ColumnHeader
+                colKey="email"
+                label={t('Email', language) || 'Email'}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'email')))).sort()}
+                activeFilter={columnFilters.email || null}
+                onFilter={vals => applyColumnFilter('email', vals)}
+                onClear={() => applyColumnFilter('email', null)}
+                open={openMenu === 'email'}
+                onToggle={() => setOpenMenu(openMenu === 'email' ? null : 'email')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
+
+              <ColumnHeader
+                colKey="phone"
+                label={t('Phone', language) || 'Phone'}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'phone')))).sort()}
+                activeFilter={columnFilters.phone || null}
+                onFilter={vals => applyColumnFilter('phone', vals)}
+                onClear={() => applyColumnFilter('phone', null)}
+                open={openMenu === 'phone'}
+                onToggle={() => setOpenMenu(openMenu === 'phone' ? null : 'phone')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
+
+              <ColumnHeader
+                colKey="order_method"
+                label={t('OrderMethod', language) || 'Order Method'}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'order_method')))).sort()}
+                activeFilter={columnFilters.order_method || null}
+                onFilter={vals => applyColumnFilter('order_method', vals)}
+                onClear={() => applyColumnFilter('order_method', null)}
+                open={openMenu === 'order_method'}
+                onToggle={() => setOpenMenu(openMenu === 'order_method' ? null : 'order_method')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
+
+              <ColumnHeader
+                colKey="payment_term"
+                label={t('PaymentTerm', language) || 'Payment Term'}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'payment_term')))).sort()}
+                activeFilter={columnFilters.payment_term || null}
+                onFilter={vals => applyColumnFilter('payment_term', vals)}
+                onClear={() => applyColumnFilter('payment_term', null)}
+                open={openMenu === 'payment_term'}
+                onToggle={() => setOpenMenu(openMenu === 'payment_term' ? null : 'payment_term')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
+
+              <ColumnHeader
+                colKey="payment_method"
+                label={t('PaymentMethod', language) || 'Payment Method'}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'payment_method')))).sort()}
+                activeFilter={columnFilters.payment_method || null}
+                onFilter={vals => applyColumnFilter('payment_method', vals)}
+                onClear={() => applyColumnFilter('payment_method', null)}
+                open={openMenu === 'payment_method'}
+                onToggle={() => setOpenMenu(openMenu === 'payment_method' ? null : 'payment_method')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
+
+              <ColumnHeader
+                colKey="notes"
+                label={t('Notes', language) || 'Notes'}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'notes')))).sort()}
+                activeFilter={columnFilters.notes || null}
+                onFilter={vals => applyColumnFilter('notes', vals)}
+                onClear={() => applyColumnFilter('notes', null)}
+                open={openMenu === 'notes'}
+                onToggle={() => setOpenMenu(openMenu === 'notes' ? null : 'notes')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
+            </tr>
+          </thead>
+
+          <tbody>
+            {filtered.map((it, idx) => {
+              const isSelected = !!selected[it.id]
+              return (
+                <tr
+                  key={it.id}
+                  className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer ${
+                    idx % 2 === 0 ? 'bg-gray-50/30' : ''
+                  }`}
+                  onClick={() => openView(it)}
+                  onDoubleClick={() => openEdit(it)}
+                >
+                  {/* checkbox: non propagare il click */}
+                  <td
+                    className="px-3 py-2.5 text-center"
+                    onClick={e => e.stopPropagation()}
+                    onDoubleClick={e => e.stopPropagation()}
                   >
-                    {/* checkbox: non propagare il click */}
-                    <td
-                      className="p-2"
-                      onClick={e => e.stopPropagation()}
-                      onDoubleClick={e => e.stopPropagation()}
-                    >
-                      {selectMode && (
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          checked={isSelected}
-                          onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
-                        />
-                      )}
-                    </td>
+                    {selectMode && (
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={isSelected}
+                        onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
+                      />
+                    )}
+                  </td>
 
-                    {/* niente link blu: il click è sulla riga */}
-                    <td className="p-2 font-medium">{it.name}</td>
-                    <td className="p-2">{it.poc}</td>
-                    <td className="p-2 truncate">{it.email}</td>
-                    <td className="p-2">{it.phone}</td>
-                    <td className="p-2">{it.order_method}</td>
-                    <td className="p-2">{it.payment_term}</td>
-                    <td className="p-2">{it.payment_method}</td>
-                    <td className="p-2 truncate">{it.notes}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
+                  {/* niente link blu: il click è sulla riga */}
+                  <td className="px-3 py-2.5 text-xs text-gray-900 font-semibold truncate max-w-[20rem]">{it.name}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[14rem]">{it.poc}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[22rem]">{it.email}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[14rem]">{it.phone}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[16rem]">{it.order_method}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[16rem]">{it.payment_term}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[16rem]">{it.payment_method}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[22rem]">{it.notes}</td>
+                </tr>
+              )
+            })}
 
-          </table>
-        </div>
+            {filtered.length === 0 && (
+              <tr>
+                <td className="px-3 py-4 text-center text-gray-500" colSpan={9}>
+                  {t('NoSuppliers', language) || 'No suppliers found'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       {openEditor && (
@@ -705,11 +1033,11 @@ export default function SuppliersPage() {
           onClose={() => setOpenEditor(false)}
           onSaved={async () => {
             await fetchAll()
-            setOpenEditor(false)   // chiudi dopo il save
+            setOpenEditor(false)
           }}
           onDeleted={async () => {
             await fetchAll()
-            setOpenEditor(false)   // chiudi dopo il delete
+            setOpenEditor(false)
           }}
         />
       )}

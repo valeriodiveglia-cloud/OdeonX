@@ -357,57 +357,56 @@ export default function MaterialsHistoryPage() {
   /* ────────────────────────────────────────
      🔎  FILTER & SORT — LIST
      ──────────────────────────────────────── */
-const filteredList = useMemo(() => {
-  let rows = [...listRows]
-  if (filterName.trim()) {
-    rows = rows.filter(r =>
-      r.name.toLowerCase().includes(filterName.trim().toLowerCase())
-    )
-  }
-
-  const col = listSortCol
-
-  function trendCmp(a: ListRow, b: ListRow) {
-    const ap = a.pct ?? 0
-    const bp = b.pct ?? 0
-    const as = ap > 0 ? 1 : ap < 0 ? -1 : 0
-    const bs = bp > 0 ? 1 : bp < 0 ? -1 : 0
-    let cmp = as - bs
-    if (cmp === 0) {
-      cmp = Math.abs(bp) - Math.abs(ap)
-    }
-    return listSortAsc ? cmp : -cmp
-  }
-
-  rows.sort((a, b) => {
-    if (col === 'trend') return trendCmp(a, b)
-    if (col === 'changed_at') {
-      const ta = a.changed_at ? new Date(a.changed_at).getTime() : -Infinity
-      const tb = b.changed_at ? new Date(b.changed_at).getTime() : -Infinity
-      const cmpDate = ta - tb
-      return listSortAsc ? cmpDate : -cmpDate
+  const filteredList = useMemo(() => {
+    let rows = [...listRows]
+    if (filterName.trim()) {
+      rows = rows.filter(r =>
+        r.name.toLowerCase().includes(filterName.trim().toLowerCase())
+      )
     }
 
-    const av: any = (a as any)[col]
-    const bv: any = (b as any)[col]
+    const col = listSortCol
 
-    const va: number | string =
-      av == null ? '' : typeof av === 'number' ? av : String(av)
+    function trendCmp(a: ListRow, b: ListRow) {
+      const ap = a.pct ?? 0
+      const bp = b.pct ?? 0
+      const as = ap > 0 ? 1 : ap < 0 ? -1 : 0
+      const bs = bp > 0 ? 1 : bp < 0 ? -1 : 0
+      let cmp = as - bs
+      if (cmp === 0) {
+        cmp = Math.abs(bp) - Math.abs(ap)
+      }
+      return listSortAsc ? cmp : -cmp
+    }
 
-    const vb: number | string =
-      bv == null ? '' : typeof bv === 'number' ? bv : String(bv)
+    rows.sort((a, b) => {
+      if (col === 'trend') return trendCmp(a, b)
+      if (col === 'changed_at') {
+        const ta = a.changed_at ? new Date(a.changed_at).getTime() : -Infinity
+        const tb = b.changed_at ? new Date(b.changed_at).getTime() : -Infinity
+        const cmpDate = ta - tb
+        return listSortAsc ? cmpDate : -cmpDate
+      }
 
-    const cmp =
-      typeof va === 'number' && typeof vb === 'number'
-        ? (va as number) - (vb as number)
-        : String(va).localeCompare(String(vb), undefined, { numeric: true })
+      const av: any = (a as any)[col]
+      const bv: any = (b as any)[col]
 
-    return listSortAsc ? cmp : -cmp
-  })
+      const va: number | string =
+        av == null ? '' : typeof av === 'number' ? av : String(av)
 
-  return rows
-}, [listRows, filterName, listSortCol, listSortAsc])
+      const vb: number | string =
+        bv == null ? '' : typeof bv === 'number' ? bv : String(bv)
 
+      const cmp =
+        typeof va === 'number' && typeof vb === 'number'
+          ? (va as number) - (vb as number)
+          : String(va).localeCompare(String(vb), undefined, { numeric: true })
+
+      return listSortAsc ? cmp : -cmp
+    })
+
+    return rows
+  }, [listRows, filterName, listSortCol, listSortAsc])
 
   /* ────────────────────────────────────────
      🔗  NAV — click lista → dettaglio
@@ -428,26 +427,44 @@ const filteredList = useMemo(() => {
      ──────────────────────────────────────── */
   if (loading) return <CircularLoader />
 
-  /* ────────────────────────────────────────
-     🎨  RENDER
-     ──────────────────────────────────────── */
   return (
-    <div key={lang} lang={lang} className="max-w-5xl mx-auto p-4">
-      {/* ── TITOLO */}
-      <h1 className="text-3xl font-bold mb-4">{t('MaterialsHistory', lang)}</h1>
+    <div key={lang} lang={lang} className="max-w-5xl mx-auto p-4 text-gray-100">
+      {/* Header */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-2xl font-bold text-white sm:text-3xl tracking-tight leading-normal">
+            {t('MaterialsHistory', lang)}
+          </h1>
+          <p className="text-xs text-slate-400">
+            {lang === 'vi'
+              ? 'Lịch sử biến động đơn giá nguyên vật liệu đầu vào'
+              : 'Historical trend and changes of material unit costs'}
+          </p>
+        </div>
+      </div>
 
-      {/* ── TOGGLE VIEW + SEARCH */}
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="inline-flex rounded-2xl overflow-hidden border shrink-0">
+      {/* Tabs */}
+      <div className="flex border-b border-white/10 mb-4 gap-6 items-center justify-between">
+        <div className="flex gap-6">
           <button
+            aria-pressed={view === 'detail'}
+            className={`pb-2.5 text-sm font-semibold transition-all border-b-2 cursor-pointer ${
+              view === 'detail'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
             onClick={() => setView('detail')}
-            className={`px-4 py-2 font-semibold ${view === 'detail' ? 'bg-blue-700 text-white' : 'bg-white text-blue-700'}`}
           >
             {t('DetailTab', lang)}
           </button>
           <button
+            aria-pressed={view === 'list'}
+            className={`pb-2.5 text-sm font-semibold transition-all border-b-2 cursor-pointer ${
+              view === 'list'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
             onClick={() => setView('list')}
-            className={`px-4 py-2 font-semibold ${view === 'list' ? 'bg-blue-700 text-white' : 'bg-white text-blue-700'}`}
           >
             {t('ListTab', lang)}
           </button>
@@ -459,21 +476,21 @@ const filteredList = useMemo(() => {
             placeholder={t('Search', lang)}
             value={filterName}
             onChange={e => setFilterName(e.target.value)}
-            className="h-10 w-32 sm:w-48 md:w-60 lg:w-[260px] rounded-xl border border-blue-500 bg-transparent px-3 text-sm text-blue-700 placeholder-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+            className="mb-2 h-9 w-32 sm:w-48 md:w-60 lg:w-[260px] rounded-xl border border-white/20 bg-white/5 px-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500/60"
           />
         )}
       </div>
 
-      {/* ── BARRA CONTROLLI */}
-      <div className="bg-white rounded-2xl shadow p-3 mb-6">
+      {/* Control Bar */}
+      <div className="bg-white rounded-2xl shadow p-4 mb-6 text-gray-800">
         {view === 'detail' ? (
-          <div className="flex flex-col md:flex-row md:flex-nowrap md:items-end md:gap-3">
+          <div className="flex flex-col md:flex-row md:flex-nowrap md:items-end md:gap-3 gap-2">
             <label className="flex flex-col gap-1 md:min-w-[230px] md:flex-[1.2]">
-              <span className="text-sm text-gray-700">{t('MaterialLabel', lang)}</span>
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('MaterialLabel', lang)}</span>
               <select
                 value={selMat}
                 onChange={e => setSelMat(e.target.value)}
-                className="h-10 w-full p-2 border rounded-xl text-gray-900"
+                className="h-10 w-full px-3 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-sm"
               >
                 {mats.map(m => (
                   <option key={m.id} value={m.id}>
@@ -484,37 +501,37 @@ const filteredList = useMemo(() => {
             </label>
 
             <label className="flex flex-col gap-1 md:min-w-[150px] md:flex-1">
-              <span className="text-sm text-gray-700">{t('DateFrom', lang)}</span>
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('DateFrom', lang)}</span>
               <input
                 type="date"
                 lang={lang}
                 value={from}
                 max={to}
                 onChange={e => setFrom(e.target.value)}
-                className="h-10 w-full p-2 border rounded-xl text-gray-900"
+                className="h-10 w-full px-3 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-sm"
               />
             </label>
 
             <label className="flex flex-col gap-1 md:min-w-[150px] md:flex-1">
-              <span className="text-sm text-gray-700">{t('DateTo', lang)}</span>
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('DateTo', lang)}</span>
               <input
                 type="date"
                 lang={lang}
                 value={to}
                 min={from}
                 onChange={e => setTo(e.target.value)}
-                className="h-10 w-full p-2 border rounded-xl text-gray-900"
+                className="h-10 w-full px-3 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-sm"
               />
             </label>
 
-            <div className="mt-2 md:mt-0 md:ml-auto flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => {
                   const now = startOfDay(new Date())
                   setTo(toYMDLocal(now))
                   setFrom(toYMDLocal(addDays(now, -182)))
                 }}
-                className="px-3 py-3 rounded-xl text-sm font-medium border border-blue-200 text-blue-700 bg-white hover:bg-blue-50 transition"
+                className="px-3 h-10 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 transition cursor-pointer"
                 title={t('Last6Months', lang)}
               >
                 {t('Last6Months', lang)}
@@ -526,7 +543,7 @@ const filteredList = useMemo(() => {
                   setTo(toYMDLocal(now))
                   setFrom(toYMDLocal(addDays(now, -365)))
                 }}
-                className="px-3 py-3 rounded-xl text-sm font-medium border border-blue-200 text-blue-700 bg-white hover:bg-blue-50 transition"
+                className="px-3 h-10 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 transition cursor-pointer"
                 title={t('Last12Months', lang)}
               >
                 {t('Last12Months', lang)}
@@ -538,7 +555,7 @@ const filteredList = useMemo(() => {
                   setTo(toYMDLocal(now))
                   setFrom(toYMDLocal(addDays(now, -547)))
                 }}
-                className="px-3 py-3 rounded-xl text-sm font-medium border border-blue-200 text-blue-700 bg-white hover:bg-blue-50 transition"
+                className="px-3 h-10 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 transition cursor-pointer"
                 title={t('Last18Months', lang)}
               >
                 {t('Last18Months', lang)}
@@ -546,39 +563,39 @@ const filteredList = useMemo(() => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <label className="flex flex-col gap-1">
-              <span className="text-sm text-gray-700">{t('DateFrom', lang)}</span>
+          <div className="flex flex-col md:flex-row md:items-end gap-3">
+            <label className="flex flex-col gap-1 md:flex-1">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('DateFrom', lang)}</span>
               <input
                 type="date"
                 lang={lang}
                 value={from}
                 max={to}
                 onChange={e => setFrom(e.target.value)}
-                className="p-2 border rounded-xl text-gray-900"
+                className="h-10 w-full px-3 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-sm"
               />
             </label>
 
-            <label className="flex flex-col gap-1">
-              <span className="text-sm text-gray-700">{t('DateTo', lang)}</span>
+            <label className="flex flex-col gap-1 md:flex-1">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('DateTo', lang)}</span>
               <input
                 type="date"
                 lang={lang}
                 value={to}
                 min={from}
                 onChange={e => setTo(e.target.value)}
-                className="p-2 border rounded-xl text-gray-900"
+                className="h-10 w-full px-3 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-sm"
               />
             </label>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => {
                   const now = startOfDay(new Date())
                   setTo(toYMDLocal(now))
                   setFrom(toYMDLocal(addDays(now, -182)))
                 }}
-                className="px-3 py-3 rounded-xl text-sm font-medium border border-blue-200 text-blue-700 bg-white hover:bg-blue-50 transition"
+                className="px-3 h-10 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 transition cursor-pointer"
                 title={t('Last6Months', lang)}
               >
                 {t('Last6Months', lang)}
@@ -589,7 +606,7 @@ const filteredList = useMemo(() => {
                   setTo(toYMDLocal(now))
                   setFrom(toYMDLocal(addDays(now, -365)))
                 }}
-                className="px-3 py-3 rounded-xl text-sm font-medium border border-blue-200 text-blue-700 bg-white hover:bg-blue-50 transition"
+                className="px-3 h-10 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 transition cursor-pointer"
                 title={t('Last12Months', lang)}
               >
                 {t('Last12Months', lang)}
@@ -600,7 +617,7 @@ const filteredList = useMemo(() => {
                   setTo(toYMDLocal(now))
                   setFrom(toYMDLocal(addDays(now, -547)))
                 }}
-                className="px-3 py-3 rounded-xl text-sm font-medium border border-blue-200 text-blue-700 bg-white hover:bg-blue-50 transition"
+                className="px-3 h-10 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 transition cursor-pointer"
                 title={t('Last18Months', lang)}
               >
                 {t('Last18Months', lang)}
@@ -612,14 +629,14 @@ const filteredList = useMemo(() => {
 
       {view === 'detail' ? (
         <>
-          {/* ── GRAFICO UNIT COST (con dominio auto-focus) */}
-          <div className="bg-white rounded-2xl shadow p-3 mb-6">
-            <h2 className="text-xl font-bold mb-3 text-blue-800">{t('TrendUnitCost', lang)}</h2>
+          {/* Chart */}
+          <div className="bg-white rounded-2xl shadow p-4 mb-6 text-gray-900">
+            <h2 className="text-base font-bold mb-3 text-gray-800">{t('TrendUnitCost', lang)}</h2>
             <div className="h-72">
               {loadingRows ? (
                 <div className="h-full flex items-center justify-center"><CircularLoader /></div>
               ) : chartData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-gray-600">{t('NoDataInRange', lang)}</div>
+                <div className="h-full flex items-center justify-center text-gray-500 text-sm">{t('NoDataInRange', lang)}</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
@@ -633,63 +650,74 @@ const filteredList = useMemo(() => {
                       tickFormatter={(ms: number) => fmtDMY(new Date(ms))}
                       minTickGap={24}
                       tickMargin={8}
+                      style={{ fontSize: '11px', fill: '#6B7280' }}
                     />
                     <YAxis
                       width={54}
                       tickMargin={8}
                       allowDecimals
                       tickFormatter={(v: number) => Number(v).toLocaleString()}
+                      style={{ fontSize: '11px', fill: '#6B7280' }}
                     />
                     <Tooltip
                       labelFormatter={(ms: any) => fmtDMY(new Date(Number(ms)))}
                       formatter={(v: any) => [Number(v).toLocaleString(), t('UnitCost', lang)]}
                     />
-                    <Line type="monotone" dataKey="unit_cost" dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                    <Line type="monotone" dataKey="unit_cost" stroke="#2563EB" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
 
-          {/* ── TABELLA DETTAGLIO CAMBI */}
-          <div className="bg-white rounded-2xl shadow p-3">
-            <h2 className="text-xl font-bold mb-3 text-blue-800">{t('Changes', lang)}</h2>
+          {/* Details Table */}
+          <div className="bg-white rounded-2xl shadow p-4 text-gray-900">
+            <h2 className="text-base font-bold mb-3 text-gray-800">{t('Changes', lang)}</h2>
             <div className="overflow-x-auto">
-              <table className="min-w-full table-fixed text-sm text-gray-900">
+              <table className="w-full table-auto text-sm text-gray-900">
                 <thead>
-                  <tr className="bg-blue-50 text-gray-800">
-                    <th className="p-2 text-left">{t('Date', lang)}</th>
-                    <th className="p-2 text-right">{t('OldPackPrice', lang)}</th>
-                    <th className="p-2 text-right">{t('NewPackPrice', lang)}</th>
-                    <th className="p-2 text-right">{t('OldPackSize', lang)}</th>
-                    <th className="p-2 text-right">{t('NewPackSize', lang)}</th>
-                    <th className="p-2 text-right">{t('OldUnit', lang)}</th>
-                    <th className="p-2 text-right">{t('NewUnit', lang)}</th>
-                    <th className="p-2 text-right">{t('DeltaUnit', lang)}</th>
-                    <th className="p-2 text-right">{t('PctUnit', lang)}</th>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+                    <th className="px-3 py-2 text-left">{t('Date', lang)}</th>
+                    <th className="px-3 py-2 text-right">{t('OldPackPrice', lang)}</th>
+                    <th className="px-3 py-2 text-right">{t('NewPackPrice', lang)}</th>
+                    <th className="px-3 py-2 text-right">{t('OldPackSize', lang)}</th>
+                    <th className="px-3 py-2 text-right">{t('NewPackSize', lang)}</th>
+                    <th className="px-3 py-2 text-right">{t('OldUnit', lang)}</th>
+                    <th className="px-3 py-2 text-right">{t('NewUnit', lang)}</th>
+                    <th className="px-3 py-2 text-right">{t('DeltaUnit', lang)}</th>
+                    <th className="px-3 py-2 text-right">{t('PctUnit', lang)}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loadingRows ? (
-                    <tr><td colSpan={9} className="p-4"><CircularLoader /></td></tr>
+                    <tr><td colSpan={9} className="px-3 py-4"><CircularLoader /></td></tr>
                   ) : tableRowsDetail.length === 0 ? (
-                    <tr><td colSpan={9} className="p-4 text-center text-gray-600">{t('NoChanges', lang)}</td></tr>
+                    <tr><td colSpan={9} className="px-3 py-4 text-center text-gray-500">{t('NoChanges', lang)}</td></tr>
                   ) : (
-                    tableRowsDetail.map(r => (
-                      <tr key={r.id} className="border-t hover:bg-blue-50/40">
-                        <td className="p-2">{fmtDMY(r.changed_at)}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{r.old_package_price != null ? Number(r.old_package_price).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{r.new_package_price != null ? Number(r.new_package_price).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{r.old_packaging_size != null ? Number(r.old_packaging_size).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{r.new_packaging_size != null ? Number(r.new_packaging_size).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{r.old_unit_cost != null ? Number(r.old_unit_cost).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{r.new_unit_cost != null ? Number(r.new_unit_cost).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number((r as any).diffUnit ?? 0).toLocaleString()}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">
-                          {(r as any).pct == null ? '-' : `${(r as any).pct >= 0 ? '+' : ''}${(r as any).pct.toFixed(1)}%`}
-                        </td>
-                      </tr>
-                    ))
+                    tableRowsDetail.map((r, idx) => {
+                      const up = (r as any).pct > 0
+                      const down = (r as any).pct < 0
+                      return (
+                        <tr
+                          key={r.id}
+                          className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer ${
+                            idx % 2 === 0 ? 'bg-gray-50/30' : ''
+                          }`}
+                        >
+                          <td className="px-3 py-2.5 text-xs text-gray-600 font-mono">{fmtDMY(r.changed_at)}</td>
+                          <td className="px-3 py-2.5 text-xs text-right font-mono text-gray-900 whitespace-nowrap">{r.old_package_price != null ? Number(r.old_package_price).toLocaleString() : '-'}</td>
+                          <td className="px-3 py-2.5 text-xs text-right font-mono text-gray-900 whitespace-nowrap">{r.new_package_price != null ? Number(r.new_package_price).toLocaleString() : '-'}</td>
+                          <td className="px-3 py-2.5 text-xs text-right font-mono text-gray-600 whitespace-nowrap">{r.old_packaging_size != null ? Number(r.old_packaging_size).toLocaleString() : '-'}</td>
+                          <td className="px-3 py-2.5 text-xs text-right font-mono text-gray-600 whitespace-nowrap">{r.new_packaging_size != null ? Number(r.new_packaging_size).toLocaleString() : '-'}</td>
+                          <td className="px-3 py-2.5 text-xs text-right font-mono text-gray-900 whitespace-nowrap">{r.old_unit_cost != null ? Number(r.old_unit_cost).toLocaleString() : '-'}</td>
+                          <td className="px-3 py-2.5 text-xs text-right font-mono text-gray-900 whitespace-nowrap">{r.new_unit_cost != null ? Number(r.new_unit_cost).toLocaleString() : '-'}</td>
+                          <td className={`px-3 py-2.5 text-xs text-right font-mono whitespace-nowrap font-semibold ${up ? 'text-red-600' : down ? 'text-green-600' : 'text-gray-500'}`}>{Number((r as any).diffUnit ?? 0).toLocaleString()}</td>
+                          <td className={`px-3 py-2.5 text-xs text-right font-mono whitespace-nowrap font-semibold ${up ? 'text-red-600' : down ? 'text-green-600' : 'text-gray-500'}`}>
+                            {(r as any).pct == null ? '-' : `${(r as any).pct >= 0 ? '+' : ''}${(r as any).pct.toFixed(1)}%`}
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -697,100 +725,52 @@ const filteredList = useMemo(() => {
           </div>
         </>
       ) : (
-        /* ── LIST VIEW: ultimo cambio per materiale */
-        <div className="bg-white rounded-2xl shadow p-3">
-          <h2 className="text-xl font-bold mb-3 text-blue-800">{t('LastChangePerMaterial', lang)}</h2>
+        /* List view */
+        <div className="bg-white rounded-2xl shadow p-4 text-gray-900">
+          <h2 className="text-base font-bold mb-3 text-gray-800">{t('LastChangePerMaterial', lang)}</h2>
           <div className="overflow-x-auto">
-            <table className="min-w-full table-fixed text-sm text-gray-900">
-              <colgroup>
-                <col className="w-[22rem]" />
-                <col className="w-[10rem]" />
-                <col className="w-[9rem]" />
-                <col className="w-[9rem]" />
-                <col className="w-[9rem]" />
-                <col className="w-[7rem]" />
-              </colgroup>
+            <table className="w-full table-auto text-sm text-gray-900">
               <thead>
-                <tr className="bg-blue-50 text-gray-800">
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleListSort('name')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t('MaterialLabel', lang)}</span>
-                        <SortIcon active={listSortCol==='name'} asc={listSortAsc} />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleListSort('changed_at')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t('ChangedAt', lang)}</span>
-                        <SortIcon active={listSortCol==='changed_at'} asc={listSortAsc} />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleListSort('old_unit_cost')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={listSortCol==='old_unit_cost'} asc={listSortAsc} />
-                        <span>{t('OldUnit', lang)}</span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleListSort('new_unit_cost')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={listSortCol==='new_unit_cost'} asc={listSortAsc} />
-                        <span>{t('NewUnit', lang)}</span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleListSort('pct')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={listSortCol==='pct'} asc={listSortAsc} />
-                        <span>{t('PctChange', lang)}</span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleListSort('trend')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-center font-semibold">
-                        <span>{t('Trend', lang)}</span>
-                        <SortIcon active={listSortCol==='trend'} asc={listSortAsc} />
-                      </div>
-                    </button>
-                  </th>
+                <tr className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+                  <th className="px-3 py-2 text-left">{t('MaterialLabel', lang)}</th>
+                  <th className="px-3 py-2 text-left">{t('ChangedAt', lang)}</th>
+                  <th className="px-3 py-2 text-right">{t('OldUnit', lang)}</th>
+                  <th className="px-3 py-2 text-right">{t('NewUnit', lang)}</th>
+                  <th className="px-3 py-2 text-right">{t('PctChange', lang)}</th>
+                  <th className="px-3 py-2 text-center">{t('Trend', lang)}</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingRows ? (
-                  <tr><td colSpan={6} className="p-4"><CircularLoader /></td></tr>
+                  <tr><td colSpan={6} className="px-3 py-4"><CircularLoader /></td></tr>
                 ) : filteredList.length === 0 ? (
-                  <tr><td colSpan={6} className="p-4 text-center text-gray-600">{t('NoChangesInRange', lang)}</td></tr>
+                  <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-500">{t('NoChangesInRange', lang)}</td></tr>
                 ) : (
-                  filteredList.map(r => {
+                  filteredList.map((r, idx) => {
                     const up = (r.pct ?? 0) > 0
                     const down = (r.pct ?? 0) < 0
                     return (
                       <tr
                         key={r.material_id}
-                        className="border-t hover:bg-blue-50/40 cursor-pointer"
+                        className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer ${
+                          idx % 2 === 0 ? 'bg-gray-50/30' : ''
+                        }`}
                         onClick={() => gotoDetailFromList(r.material_id)}
                         title={t('OpenDetail', lang)}
                       >
-                        <td className="p-2">
+                        <td className="px-3 py-2.5 text-xs text-gray-900 font-semibold truncate max-w-[22rem]">
                           {r.name}{r.brand ? ` · ${r.brand}` : ''}
                         </td>
-                        <td className="p-2">{r.changed_at ? fmtDMY(r.changed_at) : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{r.old_unit_cost != null ? Number(r.old_unit_cost).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">{r.new_unit_cost != null ? Number(r.new_unit_cost).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-right tabular-nums whitespace-nowrap">
+                        <td className="px-3 py-2.5 text-xs text-gray-600 font-mono">{r.changed_at ? fmtDMY(r.changed_at) : '-'}</td>
+                        <td className="px-3 py-2.5 text-xs text-right font-mono text-gray-900 whitespace-nowrap">{r.old_unit_cost != null ? Number(r.old_unit_cost).toLocaleString() : '-'}</td>
+                        <td className="px-3 py-2.5 text-xs text-right font-mono text-gray-900 whitespace-nowrap">{r.new_unit_cost != null ? Number(r.new_unit_cost).toLocaleString() : '-'}</td>
+                        <td className={`px-3 py-2.5 text-xs text-right font-mono whitespace-nowrap font-semibold ${up ? 'text-red-600' : down ? 'text-green-600' : 'text-gray-500'}`}>
                           {r.pct == null ? '-' : `${r.pct >= 0 ? '+' : ''}${r.pct.toFixed(1)}%`}
                         </td>
-                        <td className="p-2 text-center">
-                          {up && <ChevronUpIcon className="w-5 h-5 text-red-600 inline-block" />}
-                          {down && <ChevronDownIcon className="w-5 h-5 text-green-600 inline-block" />}
-                          {!up && !down && <span className="text-gray-500">=</span>}
+                        <td className="px-3 py-2.5 text-center">
+                          {up && <ChevronUpIcon className="w-4 h-4 text-red-600 inline-block" />}
+                          {down && <ChevronDownIcon className="w-4 h-4 text-green-600 inline-block" />}
+                          {!up && !down && <span className="text-gray-500 font-semibold">=</span>}
                         </td>
                       </tr>
                     )

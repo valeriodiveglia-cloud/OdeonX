@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type Role = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor' | 'accountant'
+type Role = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor' | 'accountant' | 'hr manager'
 type UpsertBody = {
   id?: number | string | null
   email?: string
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     }
 
     let role: Role = (String(body?.role ?? 'staff').trim().toLowerCase() as Role)
-    if (!['owner', 'admin', 'staff', 'manager', 'sale advisor', 'accountant'].includes(role)) {
+    if (!['owner', 'admin', 'staff', 'manager', 'sale advisor', 'accountant', 'hr manager'].includes(role)) {
       role = 'staff'
     }
 
@@ -97,10 +97,10 @@ export async function POST(req: Request) {
 
 
 
-    // Regola: un admin (non owner) può gestire solo account 'staff', 'manager', 'sale advisor', 'accountant'
+    // Regola: un admin (non owner) può gestire solo account 'staff', 'manager', 'sale advisor', 'accountant', 'hr manager'
     if (isAdmin && !isOwner) {
-      if (payload.role !== 'staff' && payload.role !== 'manager' && payload.role !== 'sale advisor' && payload.role !== 'accountant') {
-        return NextResponse.json({ error: 'Admins can set role to staff, manager, sale advisor, or accountant only' }, { status: 403 })
+      if (payload.role !== 'staff' && payload.role !== 'manager' && payload.role !== 'sale advisor' && payload.role !== 'accountant' && payload.role !== 'hr manager') {
+        return NextResponse.json({ error: 'Admins can set role to staff, manager, sale advisor, accountant, or hr manager only' }, { status: 403 })
       }
       if (idPresent) {
         const { data: target, error: tErr } = await supabase
@@ -110,8 +110,8 @@ export async function POST(req: Request) {
           .maybeSingle()
         if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 })
         if (!target) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
-        if (String(target.role).toLowerCase() !== 'staff' && String(target.role).toLowerCase() !== 'manager' && String(target.role).toLowerCase() !== 'sale advisor' && String(target.role).toLowerCase() !== 'accountant') {
-          return NextResponse.json({ error: 'Admins can modify staff, manager, sale advisor, or accountant only' }, { status: 403 })
+        if (String(target.role).toLowerCase() !== 'staff' && String(target.role).toLowerCase() !== 'manager' && String(target.role).toLowerCase() !== 'sale advisor' && String(target.role).toLowerCase() !== 'accountant' && String(target.role).toLowerCase() !== 'hr manager') {
+          return NextResponse.json({ error: 'Admins can modify staff, manager, sale advisor, accountant, or hr manager only' }, { status: 403 })
         }
       }
     }

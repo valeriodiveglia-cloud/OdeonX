@@ -55,7 +55,9 @@ export default function LeftNavAssetInventory() {
         const root = document.documentElement
         const width = open ? `${EXP_W_REM}rem` : `${COLL_W_REM}rem`
         root.style.setProperty('--leftnav-w', width)
-        return () => root.style.setProperty('--leftnav-w', `${COLL_W_REM}rem`)
+        return () => {
+            root.style.removeProperty('--leftnav-w')
+        }
     }, [open])
 
     // Simple hover handling
@@ -68,7 +70,7 @@ export default function LeftNavAssetInventory() {
     return (
         <div
             className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
-                  ${open ? 'w-64' : 'w-14'} bg-slate-900 border-r border-white/10`}
+                  ${open ? 'w-64' : 'w-14'} bg-gradient-to-b from-slate-800 to-slate-900 border-r border-white/10`}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >
@@ -120,7 +122,16 @@ export default function LeftNavAssetInventory() {
                     onClick={toggleLang}
                     className="w-8 h-8 rounded-full overflow-hidden border border-white/20 hover:bg-white/10 flex items-center justify-center p-0"
                 >
-                    <ReactCountryFlag countryCode={isEN ? 'GB' : 'VN'} svg style={{ width: '1.2em', height: '1.2em' }} />
+                    <ReactCountryFlag
+                        countryCode={isEN ? 'GB' : 'VN'}
+                        svg
+                        style={{
+                            width: '110%',
+                            height: '110%',
+                            objectFit: 'cover',
+                            display: 'block',
+                        }}
+                    />
                 </button>
                 <div className="text-xs text-slate-500">v1.0</div>
             </div>

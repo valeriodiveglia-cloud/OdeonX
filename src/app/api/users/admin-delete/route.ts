@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-type Role = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor' | 'accountant'
+type Role = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor' | 'accountant' | 'hr manager'
 type DeleteBody = {
   accountId?: string | number | null
   userId?: string | null
@@ -103,8 +103,8 @@ export async function POST(req: Request) {
       if (target.user_id && target.user_id === meAuth.user.id) {
         return NextResponse.json({ error: 'Cannot delete your own account via this endpoint' }, { status: 400 })
       }
-      if (myRole === 'admin' && target.role !== 'staff' && target.role !== 'manager' && target.role !== 'sale advisor' && target.role !== 'accountant') {
-        return NextResponse.json({ error: 'Admins can delete staff, manager, sale advisor, or accountant only' }, { status: 403 })
+      if (myRole === 'admin' && target.role !== 'staff' && target.role !== 'manager' && target.role !== 'sale advisor' && target.role !== 'accountant' && target.role !== 'hr manager') {
+        return NextResponse.json({ error: 'Admins can delete staff, manager, sale advisor, accountant, or hr manager only' }, { status: 403 })
       }
       if (target.role === 'owner') {
         const { count: ownersCount, error: cntErr } = await db

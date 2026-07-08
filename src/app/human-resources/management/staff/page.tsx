@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRStaffMember, EmploymentType, SalaryType, StaffStatus, HRDepartment, HRPosition, HRAlertSetting, HRRatingCategory } from '@/types/human-resources'
+import { HRStaffMember, EmploymentType, SalaryType, StaffStatus, HRDepartment, HRPosition, HRRatingCategory } from '@/types/human-resources'
 import CircularLoader from '@/components/CircularLoader'
 import {
     Users, UserPlus, Search, X, Pencil, Trash2,
@@ -19,6 +19,15 @@ import { useSettings } from '@/contexts/SettingsContext'
 /* ─── Helpers ─── */
 const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n)
+
+const getEmploymentLabel = (type: EmploymentType, language: 'en' | 'vi') => {
+    const labels: Record<EmploymentType, { en: string; vi: string }> = {
+        full_time: { en: 'Full-time', vi: 'Toàn thời gian' },
+        part_time: { en: 'Part-time', vi: 'Bán thời gian' },
+        outsourced: { en: 'Outsourced', vi: 'Thuê ngoài' },
+    }
+    return labels[type]?.[language] || type
+}
 
 const EMPLOYMENT_LABEL: Record<EmploymentType, string> = {
     full_time: 'Full-time',
@@ -77,21 +86,28 @@ const BranchCell = ({ branchNames }: { branchNames: string[] }) => {
 function DeleteConfirm({ name, onConfirm, onCancel, deleting }: {
     name: string; onConfirm: () => void; onCancel: () => void; deleting: boolean
 }) {
+    const { language } = useSettings()
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Staff Member</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {language === 'vi' ? 'Xóa Nhân Viên' : 'Delete Staff Member'}
+                </h3>
                 <p className="text-sm text-gray-600 mb-6">
-                    Are you sure you want to delete <strong>{name}</strong>? This action cannot be undone.
+                    {language === 'vi' ? (
+                        <>Bạn có chắc chắn muốn xóa <strong>{name}</strong>? Hành động này không thể hoàn tác.</>
+                    ) : (
+                        <>Are you sure you want to delete <strong>{name}</strong>? This action cannot be undone.</>
+                    )}
                 </p>
                 <div className="flex justify-end gap-3">
                     <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                        Cancel
+                        {language === 'vi' ? 'Hủy' : 'Cancel'}
                     </button>
                     <button onClick={onConfirm} disabled={deleting}
                         className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2">
                         {deleting && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                        Delete
+                        {language === 'vi' ? 'Xóa' : 'Delete'}
                     </button>
                 </div>
             </div>
@@ -102,13 +118,13 @@ function DeleteConfirm({ name, onConfirm, onCancel, deleting }: {
 /* ─── Main Page ─── */
 
 export default function StaffListPage() {
+    const { language } = useSettings()
     const [loading, setLoading]       = useState(true)
     const [staff, setStaff]           = useState<HRStaffMember[]>([])
     const [branches, setBranches]     = useState<{ id: string; name: string }[]>([])
     const [branchMap, setBranchMap]   = useState<Record<string, string>>({})
     const [departments, setDepartments] = useState<HRDepartment[]>([])
     const [positions, setPositions]     = useState<HRPosition[]>([])
-    const [alertsConfig, setAlertsConfig] = useState<HRAlertSetting[]>([])
     const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
     const router = useRouter()
 
@@ -116,7 +132,7 @@ export default function StaffListPage() {
     const [search, setSearch]         = useState('')
 
     // Column Header state
-    type SortKey = 'name' | 'department' | 'position' | 'branch' | 'type' | 'status' | 'salary' | 'alerts' | 'skill';
+    type SortKey = 'name' | 'department' | 'position' | 'branch' | 'type' | 'status' | 'salary' | 'skill';
     const [sortKey, setSortKey] = useState<SortKey>('name')
     const [sortAsc, setSortAsc] = useState(true)
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
@@ -151,15 +167,33 @@ export default function StaffListPage() {
     const [dismissalStaffId, setDismissalStaffId] = useState<string | null>(null)
     const [dismissalSaving, setDismissalSaving] = useState(false)
 
+    // Tanca & Skill Level Prompt for onboarded staff
+    const [pendingStaff, setPendingStaff] = useState<HRStaffMember[]>([])
+    const [showWarningPopup, setShowWarningPopup] = useState(false)
+    const [showConfigModal, setShowConfigModal] = useState(false)
+    const [remindLater, setRemindLater] = useState(false)
+    const [savingPending, setSavingPending] = useState(false)
+    const [configUpdates, setConfigUpdates] = useState<{ id: string; name: string; staff_code: string; skill_level: number }[]>([])
+
+    useEffect(() => {
+        if (showConfigModal && pendingStaff.length > 0) {
+            setConfigUpdates(pendingStaff.map(s => ({
+                id: s.id,
+                name: s.full_name,
+                staff_code: s.staff_code || '',
+                skill_level: s.skill_level || 1
+            })))
+        }
+    }, [showConfigModal, pendingStaff])
+
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            const [branchRes, staffRes, deptRes, posRes, alertsRes, catRes] = await Promise.all([
-                supabase.from('provider_branches').select('id, name').order('name'),
+            const [branchRes, staffRes, deptRes, posRes, catRes] = await Promise.all([
+                supabase.from('provider_branches').select('id, name, city').order('name'),
                 supabase.from('hr_staff').select('*, hr_staff_branches(*), hr_staff_contracts(*), hr_staff_performance(period)').eq('status', 'active').order('full_name'),
                 supabase.from('hr_departments').select('*').order('sort_order'),
                 supabase.from('hr_positions').select('*').order('sort_order'),
-                supabase.from('hr_alert_settings').select('*'),
                 supabase.from('hr_rating_categories').select('*').order('sort_order')
             ])
 
@@ -170,10 +204,19 @@ export default function StaffListPage() {
                 setBranchMap(map)
             }
 
-            if (staffRes.data) setStaff(staffRes.data as HRStaffMember[])
+            if (staffRes.data) {
+                const staffList = staffRes.data as HRStaffMember[]
+                setStaff(staffList)
+                
+                // Identify active staff missing staff_code or skill_level (null/0)
+                const incomplete = staffList.filter(s => 
+                    s.status === 'active' && 
+                    (!s.staff_code || s.staff_code.trim() === '' || s.skill_level === null || s.skill_level === 0)
+                )
+                setPendingStaff(incomplete)
+            }
             if (deptRes.data) setDepartments(deptRes.data as HRDepartment[])
             if (posRes.data) setPositions(posRes.data as HRPosition[])
-            if (alertsRes.data) setAlertsConfig(alertsRes.data as HRAlertSetting[])
             if (catRes.data) setAllCategories(catRes.data as HRRatingCategory[])
         } catch (err) {
             console.error('Error fetching staff data:', err)
@@ -182,6 +225,14 @@ export default function StaffListPage() {
     }, [])
 
     useEffect(() => { fetchAll() }, [fetchAll])
+
+    useEffect(() => {
+        if (pendingStaff.length > 0 && !remindLater) {
+            setShowWarningPopup(true)
+        } else {
+            setShowWarningPopup(false)
+        }
+    }, [pendingStaff, remindLater])
 
     /* ─── Filtered list ─── */
     const displayValue = useCallback((s: HRStaffMember, key: SortKey): string | string[] => {
@@ -273,10 +324,38 @@ export default function StaffListPage() {
     const isFiltered = filtered.length !== staff.length;
 
     const summaryCards = [
-        { label: isFiltered ? 'Staff (Filtered)' : 'Total Staff',   value: filtered.length,  icon: Users,     color: 'text-blue-600',    bg: 'bg-blue-50' },
-        { label: isFiltered ? 'FT Salary (Filtered)' : 'Total FT Salary',value: `${fmt(totalFTSalary)} VND`, icon: Briefcase, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { label: isFiltered ? 'Full-time' : 'Full-time',     value: totalFT,        icon: Briefcase, color: 'text-indigo-600',  bg: 'bg-indigo-50' },
-        { label: isFiltered ? 'PT/Outsourced' : 'PT/Outsourced',     value: totalPT + totalOS,        icon: Clock,     color: 'text-amber-600',   bg: 'bg-amber-50' },
+        { 
+            label: isFiltered 
+                ? (language === 'vi' ? 'Nhân viên (Bộ lọc)' : 'Staff (Filtered)') 
+                : (language === 'vi' ? 'Tổng Nhân viên' : 'Total Staff'),   
+            value: filtered.length,  
+            icon: Users,     
+            color: 'text-blue-600',    
+            bg: 'bg-blue-50' 
+        },
+        { 
+            label: isFiltered 
+                ? (language === 'vi' ? 'Lương FT (Bộ lọc)' : 'FT Salary (Filtered)') 
+                : (language === 'vi' ? 'Tổng Lương FT' : 'Total FT Salary'),
+            value: `${fmt(totalFTSalary)} VND`, 
+            icon: Briefcase, 
+            color: 'text-emerald-600', 
+            bg: 'bg-emerald-50' 
+        },
+        { 
+            label: language === 'vi' ? 'Toàn thời gian' : 'Full-time',     
+            value: totalFT,        
+            icon: Briefcase, 
+            color: 'text-indigo-600',  
+            bg: 'bg-indigo-50' 
+        },
+        { 
+            label: language === 'vi' ? 'Bán thời gian/Thuê ngoài' : 'PT/Outsourced',     
+            value: totalPT + totalOS,        
+            icon: Clock,     
+            color: 'text-amber-600',   
+            bg: 'bg-amber-50' 
+        },
     ]
 
     /* ─── Save handler ─── */
@@ -323,6 +402,79 @@ export default function StaffListPage() {
             alert('Failed to save staff member')
         }
         setSaving(false)
+    }
+
+    const handleSavePendingStaff = async (updates: { id: string; staff_code: string; skill_level: number }[]) => {
+        setSavingPending(true)
+        try {
+            const tancaCodes = updates.map(u => u.staff_code.trim()).filter(Boolean)
+            if (tancaCodes.length > 0) {
+                const duplicatesInInput = tancaCodes.filter((item, index) => tancaCodes.indexOf(item) !== index)
+                if (duplicatesInInput.length > 0) {
+                    alert(language === 'vi' 
+                        ? `Trùng lặp mã nhân viên Tanca trong danh sách nhập: ${duplicatesInInput.join(', ')}` 
+                        : `Duplicate Tanca staff codes in input list: ${duplicatesInInput.join(', ')}`)
+                    setSavingPending(false)
+                    return
+                }
+
+                const { data: dbDup, error: dbDupErr } = await supabase
+                    .from('hr_staff')
+                    .select('id, full_name, staff_code')
+                    .in('staff_code', tancaCodes)
+                
+                if (!dbDupErr && dbDup && dbDup.length > 0) {
+                    const actualDups = dbDup.filter(d => !updates.some(u => u.id === d.id && u.staff_code.trim() === d.staff_code))
+                    if (actualDups.length > 0) {
+                        const dupNames = actualDups.map(d => `"${d.full_name}" (${d.staff_code})`).join(', ')
+                        alert(language === 'vi'
+                            ? `Mã Tanca đã được sử dụng bởi: ${dupNames}`
+                            : `Tanca codes already in use by: ${dupNames}`)
+                        setSavingPending(false)
+                        return
+                    }
+                }
+            }
+
+            const successfulUpdates: { id: string; original_code: string | null; original_level: number | null }[] = []
+            
+            for (const u of updates) {
+                const orig = staff.find(s => s.id === u.id)
+                const original_code = orig ? (orig.staff_code || null) : null
+                const original_level = orig ? (orig.skill_level || null) : null
+                
+                const { error } = await supabase
+                    .from('hr_staff')
+                    .update({
+                        staff_code: u.staff_code.trim() || null,
+                        skill_level: u.skill_level
+                    })
+                    .eq('id', u.id)
+                
+                if (error) {
+                    for (const su of successfulUpdates) {
+                        await supabase
+                            .from('hr_staff')
+                            .update({
+                                staff_code: su.original_code,
+                                skill_level: su.original_level
+                            })
+                            .eq('id', su.id)
+                    }
+                    throw new Error(`Failed to update ${orig?.full_name || u.id}: ${error.message}`)
+                } else {
+                    successfulUpdates.push({ id: u.id, original_code, original_level })
+                }
+            }
+
+            setShowConfigModal(false)
+            await fetchAll()
+            alert(language === 'vi' ? 'Cập nhật thành công!' : 'Updates saved successfully!')
+        } catch (err: any) {
+            console.error('Error saving pending staff:', err)
+            alert(language === 'vi' ? `Lỗi khi lưu: ${err.message}` : `Error saving: ${err.message}`)
+        }
+        setSavingPending(false)
     }
 
     /* ─── Delete handler ─── */
@@ -467,8 +619,12 @@ export default function StaffListPage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Staff Management</h1>
-                        <p className="text-sm text-slate-400 mt-1">Manage staff members, positions, salaries and branch assignments.</p>
+                        <h1 className="text-2xl font-bold text-white">
+                            {language === 'vi' ? 'Quản Lý Nhân Viên' : 'Staff Management'}
+                        </h1>
+                        <p className="text-sm text-slate-400 mt-1">
+                            {language === 'vi' ? 'Quản lý nhân viên, vị trí, lương và phân công chi nhánh.' : 'Manage staff members, positions, salaries and branch assignments.'}
+                        </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <button
@@ -476,14 +632,14 @@ export default function StaffListPage() {
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 border border-white/10 text-sm font-medium text-white hover:bg-slate-700 transition shadow hover:shadow-lg"
                         >
                             <FileDown className="w-4 h-4" />
-                            Export
+                            {language === 'vi' ? 'Xuất' : 'Export'}
                         </button>
                         <button
                             onClick={() => { setEditingStaff(null); setModalOpen(true) }}
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg"
                         >
                             <UserPlus className="w-4 h-4" />
-                            Add Staff
+                            {language === 'vi' ? 'Thêm Nhân Viên' : 'Add Staff'}
                         </button>
                     </div>
                 </div>
@@ -510,7 +666,7 @@ export default function StaffListPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
                             type="text"
-                            placeholder="Search name, position…"
+                            placeholder={language === 'vi' ? 'Tìm kiếm tên, vị trí...' : 'Search name, position…'}
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none"
@@ -522,14 +678,16 @@ export default function StaffListPage() {
                         )}
                     </div>
 
-                    <span className="text-xs text-slate-500 ml-auto mr-2">{filtered.length} of {staff.length} shown</span>
+                    <span className="text-xs text-slate-500 ml-auto mr-2">
+                        {filtered.length} {language === 'vi' ? 'trên' : 'of'} {staff.length} {language === 'vi' ? 'được hiển thị' : 'shown'}
+                    </span>
                     <button
                         onClick={() => router.push('/human-resources/management/staff-archive')}
                         className="text-sm font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5 shrink-0 border-l border-white/10 pl-4"
-                        title="View Dismissed & Resigned Staff"
+                        title={language === 'vi' ? 'Xem Nhân viên Đã Nghỉ việc / Cho thôi việc' : 'View Dismissed & Resigned Staff'}
                     >
                         <Folders className="w-4 h-4" />
-                        Archive
+                        {language === 'vi' ? 'Lưu trữ' : 'Archive'}
                     </button>
                 </div>
 
@@ -541,13 +699,13 @@ export default function StaffListPage() {
                                 <tr className="bg-gray-50 border-b border-gray-200">
                                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">#</th>
                                     {([
-                                        ['name', 'Name'], 
-                                        ['department', 'Department'], 
-                                        ['position', 'Position'], 
-                                        ['branch', 'Branch(es)'], 
-                                        ['type', 'Type', true], 
-                                        ['skill', 'Skill', true],
-                                        ['salary', 'Salary (VND)', false, true]
+                                        ['name', language === 'vi' ? 'Họ & Tên' : 'Name'], 
+                                        ['department', language === 'vi' ? 'Bộ phận' : 'Department'], 
+                                        ['position', language === 'vi' ? 'Vị trí' : 'Position'], 
+                                        ['branch', language === 'vi' ? 'Chi nhánh' : 'Branch(es)'], 
+                                        ['type', language === 'vi' ? 'Loại' : 'Type', true], 
+                                        ['skill', language === 'vi' ? 'Kỹ năng' : 'Skill', true],
+                                        ['salary', language === 'vi' ? 'Mức lương (VND)' : 'Salary (VND)', false, true]
                                     ] as [SortKey, string, boolean?, boolean?][]).map(([k, lbl, center, right]) => (
                                         <ColumnHeader
                                             key={k} colKey={k} label={lbl}
@@ -555,11 +713,24 @@ export default function StaffListPage() {
                                             values={columnValues[k] || []} activeFilter={columnFilters[k] || null}
                                             onFilter={(s) => applyColumnFilter(k, s)} onClear={() => clearColumnFilter(k)}
                                             open={openMenu === k} onToggle={() => setOpenMenu(openMenu === k ? null : k)} onClose={() => setOpenMenu(null)}
-                                            dict={{ sortAsc: 'Sort Ascending', sortDesc: 'Sort Descending', selectAll: 'Select All', deselectAll: 'Deselect All', filterPlaceholder: 'Filter...', clearFilters: 'Clear Filters' }}
+                                            dict={language === 'vi' ? {
+                                                sortAsc: 'Sắp xếp tăng dần',
+                                                sortDesc: 'Sắp xếp giảm dần',
+                                                selectAll: 'Chọn tất cả',
+                                                deselectAll: 'Bỏ chọn tất cả',
+                                                filterPlaceholder: 'Lọc...',
+                                                clearFilters: 'Xóa bộ lọc'
+                                            } : {
+                                                sortAsc: 'Sort Ascending',
+                                                sortDesc: 'Sort Descending',
+                                                selectAll: 'Select All',
+                                                deselectAll: 'Deselect All',
+                                                filterPlaceholder: 'Filter...',
+                                                clearFilters: 'Clear Filters'
+                                            }}
                                             center={center} right={right} className="text-xs uppercase tracking-wider text-gray-500"
                                         />
                                     ))}
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Alerts</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -597,7 +768,7 @@ export default function StaffListPage() {
                                                         : 'bg-amber-50 text-amber-700 border-amber-100'
                                                     }`}
                                                 >
-                                                    {EMPLOYMENT_LABEL[s.employment_type]}
+                                                    {getEmploymentLabel(s.employment_type, language)}
                                                 </span>
                                             </td>
                                             {/* Status column removed */}
@@ -613,95 +784,9 @@ export default function StaffListPage() {
                                             </td>
                                             <td className="px-4 py-3 text-right text-xs font-mono whitespace-nowrap">
                                                 <span className="text-gray-900 font-bold">{fmt(s.salary_amount)}</span>
-                                                <span className="text-gray-400 text-[10px] ml-1">{SALARY_LABEL[s.salary_type]}</span>
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                {(() => {
-                                                    const alerts: {type: string, text: string}[] = [];
-
-                                                    alertsConfig.forEach(cfg => {
-                                                        // Check scope
-                                                        let matchesScope = false;
-                                                        if (cfg.scope === 'global') matchesScope = true;
-                                                        else if (cfg.scope === 'department' && s.department_id === cfg.scope_id) matchesScope = true;
-                                                        else if (cfg.scope === 'position' && s.position_id === cfg.scope_id) matchesScope = true;
-
-                                                        if (!matchesScope) return;
-
-                                                        let targetDateStr: string | null | undefined = null;
-                                                        const contracts = s.hr_staff_contracts || [];
-                                                        const latestContract = contracts.length > 0 
-                                                            ? contracts.reduce((prev, curr) => (prev.version > curr.version) ? prev : curr) 
-                                                            : null;
-
-                                                        if (cfg.target_field === 'start_date') targetDateStr = s.start_date;
-                                                        else if (cfg.target_field === 'probation_end_date') targetDateStr = s.probation_end_date;
-                                                        else if (cfg.target_field === 'contract_expiration_date') targetDateStr = latestContract?.expiration_date;
-                                                        else if (cfg.target_field === 'contract_signing_date') targetDateStr = latestContract?.signing_date;
-                                                        else if (cfg.target_field === 'last_status_change') targetDateStr = s.updated_at;
-
-                                                        if (!targetDateStr) return;
-
-                                                        const tDate = new Date(targetDateStr).getTime();
-                                                        const diffDays = (tDate - Date.now()) / (1000 * 3600 * 24);
-                                                        const daysThreshold = cfg.days || 0;
-
-                                                        let shouldTrigger = false;
-                                                        let alertStartDate = 0;
-                                                        if (cfg.condition_type === 'before') {
-                                                            shouldTrigger = diffDays <= daysThreshold;
-                                                            alertStartDate = tDate - (daysThreshold * 1000 * 3600 * 24);
-                                                        } else if (cfg.condition_type === 'after') {
-                                                            shouldTrigger = (-diffDays) >= daysThreshold;
-                                                            alertStartDate = tDate + (daysThreshold * 1000 * 3600 * 24);
-                                                        }
-
-                                                        if (shouldTrigger && cfg.deactivate_trigger) {
-                                                            let deactDateStr: string | null | undefined = null;
-                                                            if (cfg.deactivate_trigger === 'start_date') deactDateStr = s.start_date;
-                                                            else if (cfg.deactivate_trigger === 'probation_end_date') deactDateStr = s.probation_end_date;
-                                                            else if (cfg.deactivate_trigger === 'contract_expiration_date') deactDateStr = latestContract?.expiration_date;
-                                                            else if (cfg.deactivate_trigger === 'contract_signing_date') deactDateStr = latestContract?.signing_date;
-                                                            else if (cfg.deactivate_trigger === 'last_status_change') deactDateStr = s.updated_at;
-
-                                                            if (deactDateStr) {
-                                                                const dDate = new Date(deactDateStr).getTime();
-                                                                // If the trigger field was updated at/after the alert started, deactivate the alert.
-                                                                if (dDate >= alertStartDate) {
-                                                                    shouldTrigger = false;
-                                                                }
-                                                            }
-                                                        }
-                                                        
-                                                        if (shouldTrigger) {
-                                                            let type = 'warning';
-                                                            if (diffDays < 0 && (cfg.target_field === 'probation_end_date' || cfg.target_field === 'contract_expiration_date')) {
-                                                                type = cfg.target_field === 'contract_expiration_date' ? 'danger' : 'info';
-                                                            } else if (cfg.target_field === 'start_date' || cfg.target_field === 'last_status_change') {
-                                                                type = 'info';
-                                                            }
-                                                            alerts.push({ type, text: cfg.label });
-                                                        }
-                                                    });
-
-                                                    if (alerts.length === 0) {
-                                                        return <span className="text-gray-400 italic text-xs">—</span>;
-                                                    }
-
-                                                    return (
-                                                        <div className="flex flex-col gap-1 items-center">
-                                                            {alerts.map((a, i) => (
-                                                                <span key={i} className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap
-                                                                    ${a.type === 'danger' ? 'bg-red-50 text-red-700' : ''}
-                                                                    ${a.type === 'warning' ? 'bg-amber-50 text-amber-700' : ''}
-                                                                    ${a.type === 'info' ? 'bg-blue-50 text-blue-700' : ''}
-                                                                `}>
-                                                                    {a.text}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    );
-                                                })()}
+                                                <span className="text-gray-400 text-[10px] ml-1">
+                                                    {s.salary_type === 'fixed' ? (language === 'vi' ? '/tháng' : '/month') : (language === 'vi' ? '/giờ' : '/hour')}
+                                                </span>
                                             </td>
                                             {/* Actions column removed */}
                                         </tr>
@@ -709,17 +794,19 @@ export default function StaffListPage() {
                                 })}
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan={9} className="px-4 py-16 text-center">
+                                        <td colSpan={8} className="px-4 py-16 text-center">
                                             <Users className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                                             <p className="text-gray-500 text-sm font-medium">
-                                                {staff.length === 0 ? 'No staff members yet' : 'No results match your filters'}
+                                                {staff.length === 0 
+                                                    ? (language === 'vi' ? 'Chưa có nhân viên nào' : 'No staff members yet') 
+                                                    : (language === 'vi' ? 'Không có kết quả nào phù hợp con bộ lọc' : 'No results match your filters')}
                                             </p>
                                             {staff.length === 0 && (
                                                 <button
                                                     onClick={() => { setEditingStaff(null); setModalOpen(true) }}
                                                     className="mt-3 text-sm text-blue-600 hover:text-blue-700 font-medium"
                                                 >
-                                                    + Add your first staff member
+                                                    {language === 'vi' ? '+ Thêm nhân viên đầu tiên của bạn' : '+ Add your first staff member'}
                                                 </button>
                                             )}
                                         </td>
@@ -778,6 +865,178 @@ export default function StaffListPage() {
                 preselectedStaffId={dismissalStaffId || ''}
                 isProbationRejection={true}
             />
+
+            {showWarningPopup && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 text-gray-900 border border-gray-100">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-3 bg-amber-50 rounded-xl text-amber-600">
+                                <Users className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900">
+                                {language === 'vi' ? 'Cấu hình Nhân viên mới' : 'New Staff Configuration'}
+                            </h3>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                            {language === 'vi' 
+                                ? `Có ${pendingStaff.length} nhân viên đã nhận việc (onboarded) nhưng chưa có Mã nhân viên (Tanca) hoặc Trình độ kỹ năng vận hành. Vui lòng thiết lập ngay.` 
+                                : `There are ${pendingStaff.length} onboarded staff members who do not have a Tanca Staff Code and/or Operational Skill Level configured. Please configure them now.`}
+                        </p>
+                        <div className="bg-slate-50 rounded-xl p-3 max-h-32 overflow-y-auto mb-6 border border-gray-100">
+                            <ul className="text-xs text-slate-700 space-y-1.5 font-semibold">
+                                {pendingStaff.map(s => (
+                                    <li key={s.id} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-0">
+                                        <span>{s.full_name}</span>
+                                        <span className="text-[10px] text-slate-400 font-medium">
+                                            {s.position}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="flex justify-end gap-3">
+                            <button 
+                                type="button" 
+                                onClick={() => setRemindLater(true)}
+                                className="px-4 py-2 text-sm font-semibold text-slate-500 bg-slate-50 rounded-xl border border-slate-200 hover:bg-slate-100 transition cursor-pointer"
+                            >
+                                {language === 'vi' ? 'Nhắc tôi sau' : 'Remind me later'}
+                            </button>
+                            <button 
+                                type="button" 
+                                onClick={() => {
+                                    setShowWarningPopup(false)
+                                    setShowConfigModal(true)
+                                }}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition cursor-pointer shadow-md shadow-blue-500/10"
+                            >
+                                {language === 'vi' ? 'Đồng ý' : 'OK'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showConfigModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 text-gray-900 border border-gray-100">
+                        <div className="flex items-center justify-between border-b border-gray-150 pb-4 mb-4">
+                            <h3 className="text-lg font-bold text-gray-900">
+                                {language === 'vi' ? 'Cấu hình Mã Tanca & Trình độ Kỹ năng' : 'Configure Tanca Code & Skill Level'}
+                            </h3>
+                            <button 
+                                onClick={() => setShowConfigModal(false)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                            {language === 'vi' 
+                                ? 'Vui lòng nhập Mã nhân viên Tanca và chọn Trình độ kỹ năng vận hành cho các nhân viên dưới đây để hoàn tất:' 
+                                : 'Please enter the Tanca Staff Code and select the Operational Skill Level for the staff members below to complete onboarding:'}
+                        </p>
+                        
+                        <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-1">
+                            {configUpdates.map((item, idx) => {
+                                const orig = pendingStaff.find(s => s.id === item.id)
+                                const isMissingCode = !orig?.staff_code || orig.staff_code.trim() === ''
+                                const isMissingSkill = !orig?.skill_level || orig.skill_level === 0
+                                const spanClass = (isMissingCode && isMissingSkill) ? 'sm:col-span-4' : 'sm:col-span-8'
+
+                                return (
+                                    <div key={item.id} className="p-4 bg-slate-50 border border-gray-200 rounded-2xl grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                                        <div className="sm:col-span-4">
+                                            <div className="font-bold text-gray-900 text-sm">{item.name}</div>
+                                            <div className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                                                {orig?.position || ''}
+                                            </div>
+                                        </div>
+                                        {isMissingCode && (
+                                            <div className={spanClass}>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                                    {language === 'vi' ? 'Mã NV Tanca *' : 'Tanca Staff Code *'}
+                                                </label>
+                                                <input 
+                                                    required
+                                                    value={item.staff_code} 
+                                                    onChange={e => {
+                                                        const next = [...configUpdates]
+                                                        next[idx] = { ...item, staff_code: e.target.value }
+                                                        setConfigUpdates(next)
+                                                    }}
+                                                    placeholder={language === 'vi' ? 'Ví dụ: TC001' : 'e.g. TC001'}
+                                                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-semibold h-10" 
+                                                />
+                                            </div>
+                                        )}
+                                        {isMissingSkill && (
+                                            <div className={spanClass}>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                                    {language === 'vi' ? 'Trình độ Kỹ năng *' : 'Skill Level *'}
+                                                </label>
+                                                <div className="flex items-center gap-1 h-10">
+                                                    {[1, 2, 3, 4, 5].map(i => (
+                                                        <button
+                                                            type="button"
+                                                            key={i}
+                                                            onClick={() => {
+                                                                const next = [...configUpdates]
+                                                                next[idx] = { ...item, skill_level: i }
+                                                                setConfigUpdates(next)
+                                                            }}
+                                                            className="p-1 rounded-lg hover:bg-slate-50 transition-all active:scale-95 cursor-pointer"
+                                                        >
+                                                            <Star 
+                                                                className={`w-5 h-5 transition-colors ${
+                                                                    i <= item.skill_level 
+                                                                        ? 'text-indigo-500 fill-indigo-500' 
+                                                                        : 'text-gray-200 hover:text-indigo-300'
+                                                                }`} 
+                                                            />
+                                                        </button>
+                                                    ))}
+                                                    <span className="text-[11px] font-semibold text-slate-500 ml-1.5 whitespace-nowrap">
+                                                        {item.skill_level === 1 && (language === 'vi' ? 'Cơ bản' : 'Basic')}
+                                                        {item.skill_level === 2 && 'Lv 2'}
+                                                        {item.skill_level === 3 && 'Lv 3'}
+                                                        {item.skill_level === 4 && 'Lv 4'}
+                                                        {item.skill_level === 5 && (language === 'vi' ? 'Chuyên gia' : 'Expert')}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                            <button 
+                                type="button" 
+                                onClick={() => setShowConfigModal(false)}
+                                className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-105 rounded-xl hover:bg-gray-200 border border-gray-200 transition cursor-pointer"
+                            >
+                                {language === 'vi' ? 'Hủy' : 'Cancel'}
+                            </button>
+                            <button 
+                                type="button" 
+                                disabled={savingPending || configUpdates.some(u => {
+                                    const orig = pendingStaff.find(s => s.id === u.id)
+                                    if (!orig) return false
+                                    const isMissingCode = !orig.staff_code || orig.staff_code.trim() === ''
+                                    return isMissingCode && !u.staff_code.trim()
+                                })}
+                                onClick={() => handleSavePendingStaff(configUpdates)}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer shadow-md shadow-blue-500/10"
+                            >
+                                {savingPending && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                                {language === 'vi' ? 'Lưu cấu hình' : 'Save Configuration'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

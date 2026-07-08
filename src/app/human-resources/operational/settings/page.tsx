@@ -229,28 +229,39 @@ export default function HROperationalSettingsPage() {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex overflow-x-auto no-scrollbar gap-1 bg-slate-800 rounded-xl p-1 mb-6 border border-white/5 w-fit">
-                    <button onClick={() => setActiveTab('shifts')}
-                        className={`min-w-[120px] flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                            activeTab === 'shifts' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }`}>
-                        <Briefcase className="w-4 h-4" />
-                        {language === 'vi' ? 'Ca làm việc' : 'Shifts'}
-                    </button>
-                    <button onClick={() => setActiveTab('overtime')}
-                        className={`min-w-[120px] flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                            activeTab === 'overtime' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }`}>
-                        <Clock className="w-4 h-4" />
-                        {language === 'vi' ? 'Tăng ca' : 'Overtime'}
-                    </button>
-                    <button onClick={() => setActiveTab('auto-schedule')}
-                        className={`min-w-[150px] flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                            activeTab === 'auto-schedule' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }`}>
-                        <Target className="w-4 h-4" />
-                        {language === 'vi' ? 'Mục tiêu Tự động Sắp ca' : 'Auto-Schedule Targets'}
-                    </button>
+                <div className="border-b border-white/10 mb-6">
+                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                        <button onClick={() => setActiveTab('shifts')}
+                            className={`
+                                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-all cursor-pointer
+                                ${activeTab === 'shifts'
+                                    ? 'border-blue-500 text-blue-500'
+                                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}
+                            `}
+                        >
+                            {language === 'vi' ? 'Ca làm việc' : 'Shifts'}
+                        </button>
+                        <button onClick={() => setActiveTab('overtime')}
+                            className={`
+                                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-all cursor-pointer
+                                ${activeTab === 'overtime'
+                                    ? 'border-blue-500 text-blue-500'
+                                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}
+                            `}
+                        >
+                            {language === 'vi' ? 'Tăng ca' : 'Overtime'}
+                        </button>
+                        <button onClick={() => setActiveTab('auto-schedule')}
+                            className={`
+                                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-all cursor-pointer
+                                ${activeTab === 'auto-schedule'
+                                    ? 'border-blue-500 text-blue-500'
+                                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}
+                            `}
+                        >
+                            {language === 'vi' ? 'Mục tiêu Tự động Sắp ca' : 'Auto-Schedule Targets'}
+                        </button>
+                    </nav>
                 </div>
 
                 {activeTab === 'shifts' && (

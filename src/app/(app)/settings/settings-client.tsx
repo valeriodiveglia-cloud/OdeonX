@@ -45,7 +45,7 @@ type AppSettingsRow = AppSettingsUI & { id: 'singleton'; updated_at?: string | n
 const TBL_APP = 'app_settings'
 
 const TBL_ACCOUNTS = 'app_accounts'
-type AccountRole = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor' | 'accountant'
+type AccountRole = 'owner' | 'admin' | 'staff' | 'manager' | 'sale advisor' | 'accountant' | 'hr manager'
 type AccountRow = {
   id: string
   user_id?: string | null
@@ -581,7 +581,11 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   async function addAccount(): Promise<AccountRow | null> {
     const email = formAdd.email.trim().toLowerCase()
     if (!isValidEmail(email)) { showAccErr(t('InvalidEmail', lang) || 'Invalid email'); return null }
-    const roleToSet: AccountRole = myRole === 'admin' ? (formAdd.role === 'manager' ? 'manager' : formAdd.role === 'sale advisor' ? 'sale advisor' : formAdd.role === 'accountant' ? 'accountant' : 'staff') : formAdd.role
+    if (!formAdd.branches || formAdd.branches.length === 0) {
+      showAccErr(lang === 'vi' ? 'Phải chọn ít nhất một chi nhánh.' : 'At least one branch must be assigned.');
+      return null;
+    }
+    const roleToSet: AccountRole = myRole === 'admin' ? (formAdd.role === 'manager' ? 'manager' : formAdd.role === 'sale advisor' ? 'sale advisor' : formAdd.role === 'accountant' ? 'accountant' : formAdd.role === 'hr manager' ? 'hr manager' : 'staff') : formAdd.role
     const res = await authFetch('/api/users/admin-upsert', {
       method: 'POST',
       body: JSON.stringify({
@@ -610,7 +614,11 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
 
   async function saveEdit() {
     if (!formEdit) return
-    const intendedRole: AccountRole = myRole === 'admin' ? (formEdit.role === 'manager' ? 'manager' : formEdit.role === 'sale advisor' ? 'sale advisor' : formEdit.role === 'accountant' ? 'accountant' : 'staff') : formEdit.role
+    if (!formEdit.branches || formEdit.branches.length === 0) {
+      showAccErr(lang === 'vi' ? 'Phải chọn ít nhất một chi nhánh.' : 'At least one branch must be assigned.');
+      return;
+    }
+    const intendedRole: AccountRole = myRole === 'admin' ? (formEdit.role === 'manager' ? 'manager' : formEdit.role === 'sale advisor' ? 'sale advisor' : formEdit.role === 'accountant' ? 'accountant' : formEdit.role === 'hr manager' ? 'hr manager' : 'staff') : formEdit.role
     const res = await authFetch('/api/users/admin-upsert', {
       method: 'POST',
       body: JSON.stringify({
@@ -725,7 +733,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
   async function deleteAccount(id: string) {
     const u = acc.find(x => x.id === id)
     if (!u) return
-    const canDeleteRow = myRole === 'owner' ? true : myRole === 'admin' ? (u.role === 'staff' || u.role === 'manager' || u.role === 'sale advisor' || u.role === 'accountant') : false
+    const canDeleteRow = myRole === 'owner' ? true : myRole === 'admin' ? (u.role === 'staff' || u.role === 'manager' || u.role === 'sale advisor' || u.role === 'accountant' || u.role === 'hr manager') : false
     if (!canDeleteRow) { showAccErr(t('NotAllowed', lang) || 'Not allowed'); return }
     const old = acc
     setAcc(list => list.filter(x => x.id !== id))
@@ -1367,9 +1375,9 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                         const newRole = e.target.value as AccountRole;
                         setFormAdd(v => {
                           let newBranches = v.branches;
-                          if (newRole === 'admin' || newRole === 'owner') {
+                          if (newRole === 'admin' || newRole === 'owner' || newRole === 'hr manager') {
                             newBranches = providerBranches.map(b => b.id);
-                          } else if (v.role === 'admin' || v.role === 'owner') {
+                          } else if (v.role === 'admin' || v.role === 'owner' || v.role === 'hr manager') {
                             newBranches = [];
                           }
                           return { ...v, role: newRole, branches: newBranches };
@@ -1380,6 +1388,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                       <option value="sale advisor">Sale Advisor</option>
                       <option value="manager">Manager</option>
                       <option value="accountant">Accountant</option>
+                      <option value="hr manager">HR Manager</option>
                       <option value="admin" disabled={myRole === 'admin'}>Admin</option>
                       <option value="owner" disabled={myRole !== 'owner'}>Owner</option>
                     </select>
@@ -1522,6 +1531,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                         u.role === 'admin' ? 'bg-rose-100 text-rose-700 border-rose-200' :
                         u.role === 'manager' ? 'bg-blue-100 text-blue-700 border-blue-200' :
                         u.role === 'accountant' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                        u.role === 'hr manager' ? 'bg-purple-100 text-purple-700 border-purple-200' :
                         u.role === 'sale advisor' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' :
                         'bg-gray-100 text-gray-700 border-gray-200'
                       }`}>
@@ -1668,9 +1678,9 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                           setFormEdit(v => {
                             if (!v) return v;
                             let newBranches = v.branches;
-                            if (newRole === 'admin' || newRole === 'owner') {
+                            if (newRole === 'admin' || newRole === 'owner' || newRole === 'hr manager') {
                               newBranches = providerBranches.map(b => b.id);
-                            } else if (v.role === 'admin' || v.role === 'owner') {
+                            } else if (v.role === 'admin' || v.role === 'owner' || v.role === 'hr manager') {
                               newBranches = [];
                             }
                             return { ...v, role: newRole, branches: newBranches };
@@ -1681,6 +1691,7 @@ export default function SettingsClient({ initial }: { initial: AppSettingsUI }) 
                         <option value="sale advisor">Sale Advisor</option>
                         <option value="manager">Manager</option>
                         <option value="accountant">Accountant</option>
+                        <option value="hr manager">HR Manager</option>
                         <option value="admin" disabled={myRole === 'admin'}>Admin</option>
                         <option value="owner" disabled={myRole !== 'owner'}>Owner</option>
                       </select>

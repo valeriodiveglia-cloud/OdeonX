@@ -12,12 +12,228 @@ import {
   ArrowDownTrayIcon,
   EllipsisVerticalIcon,
   CheckCircleIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline'
 import ExcelJS from 'exceljs'
 
 // i18n + settings
 import { t } from '@/lib/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
+
+interface ColumnHeaderProps {
+  colKey: string
+  label: string
+  sortCol: string
+  sortAsc: boolean
+  onSort: (key: any, asc: boolean) => void
+  values: string[]
+  activeFilter: Set<string> | null
+  onFilter: (vals: Set<string> | null) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  dict: {
+    sortAsc: string
+    sortDesc: string
+    selectAll: string
+    deselectAll: string
+    filterPlaceholder: string
+    clearFilters: string
+  }
+  right?: boolean
+  center?: boolean
+  className?: string
+}
+
+function ColumnHeader({
+  colKey,
+  label,
+  sortCol,
+  sortAsc,
+  onSort,
+  values,
+  activeFilter,
+  onFilter,
+  onClear,
+  open,
+  onToggle,
+  onClose,
+  dict,
+  right,
+  center,
+  className = '',
+}: ColumnHeaderProps) {
+  const ref = useRef<HTMLTableCellElement>(null)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+  useEffect(() => {
+    if (open) {
+      setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+      setFilterSearch('')
+    }
+  }, [open, values, activeFilter])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open, onClose])
+
+  const isActive = sortCol === colKey
+  const hasFilter = !!activeFilter
+  const dropdownStyle = useMemo(() => {
+    if (!open || !ref.current) return undefined
+    const rect = ref.current.getBoundingClientRect()
+    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+  }, [open, right])
+
+  const filteredValues = filterSearch
+    ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+    : values
+
+  const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+  function toggleAll() {
+    const next = new Set(localChecked)
+    if (allVisibleChecked) {
+      filteredValues.forEach(v => next.delete(v))
+    } else {
+      filteredValues.forEach(v => next.add(v))
+    }
+    setLocalChecked(next)
+  }
+
+  function toggleOne(v: string) {
+    const next = new Set(localChecked)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    setLocalChecked(next)
+  }
+
+  function handleApply() {
+    let finalChecked = localChecked
+    if (filterSearch) {
+      finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+    }
+    if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+  }
+
+  return (
+    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <span className="select-none">{label}</span>
+        {isActive && (
+          sortAsc ? (
+            <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          ) : (
+            <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          )
+        )}
+        {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation()
+            onToggle()
+          }}
+          className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+          aria-label={`Menu ${label}`}
+        >
+          <EllipsisVerticalIcon className="w-3.5 h-3.5 text-gray-500" />
+        </button>
+      </div>
+
+      {open && dropdownStyle && (
+        <div
+          className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case"
+          style={dropdownStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 space-y-1">
+            <button
+              type="button"
+              onClick={() => onSort(colKey, true)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowUpIcon className="w-4 h-4" />
+              {dict.sortAsc}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSort(colKey, false)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowDownIcon className="w-4 h-4" />
+              {dict.sortDesc}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              value={filterSearch}
+              onChange={e => setFilterSearch(e.target.value)}
+              placeholder={dict.filterPlaceholder}
+              className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+            >
+              {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+            </button>
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+              {filteredValues.map(v => (
+                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localChecked.has(v)}
+                    onChange={() => toggleOne(v)}
+                    className="accent-blue-600 rounded"
+                  />
+                  <span className="truncate text-xs">{v || '(Empty)'}</span>
+                </label>
+              ))}
+              {filteredValues.length === 0 && (
+                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+            >
+              {dict.clearFilters}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+    </th>
+  )
+}
 
 /* ---------- DB: views and tables ---------- */
 const VW_PREP_LIST = 'prep_list_with_uom_vw'
@@ -1564,15 +1780,33 @@ export default function Page() {
   // Mappa tags per final_id
   const [finalTagsMap, setFinalTagsMap] = useState<Record<string, string[]>>({})
 
-  // Filtri Dishes
-  const [filterFinalName, setFilterFinalName] = useState('')
-  const [filterFinalCat, setFilterFinalCat] = useState('')
-  const [filterFinalType, setFilterFinalType] = useState<'food' | 'beverage' | ''>('')
+  // Column checklist filters for Dishes
+  const [columnFiltersDish, setColumnFiltersDish] = useState<Record<string, Set<string> | null>>({})
+  const [openMenuDish, setOpenMenuDish] = useState<string | null>(null)
 
-  // Filtri Preps
-  const [filterPrepName, setFilterPrepName] = useState('')
-  const [filterPrepCat, setFilterPrepCat] = useState('')
-  const [filterPrepType, setFilterPrepType] = useState<'food' | 'beverage' | ''>('')
+  // Column checklist filters for Preps
+  const [columnFiltersPrep, setColumnFiltersPrep] = useState<Record<string, Set<string> | null>>({})
+  const [openMenuPrep, setOpenMenuPrep] = useState<string | null>(null)
+
+  const hasActiveFiltersDish = Object.values(columnFiltersDish).some(vals => vals !== null)
+  function clearAllColumnFiltersDish() {
+    setColumnFiltersDish({})
+  }
+
+  const hasActiveFiltersPrep = Object.values(columnFiltersPrep).some(vals => vals !== null)
+  function clearAllColumnFiltersPrep() {
+    setColumnFiltersPrep({})
+  }
+
+  function applyColumnFilterDish(col: string, vals: Set<string> | null) {
+    setColumnFiltersDish(prev => ({ ...prev, [col]: vals }))
+    setOpenMenuDish(null)
+  }
+
+  function applyColumnFilterPrep(col: string, vals: Set<string> | null) {
+    setColumnFiltersPrep(prev => ({ ...prev, [col]: vals }))
+    setOpenMenuPrep(null)
+  }
 
   const [sortColFinal, setSortColFinal] = useState<keyof FinalRow>('name')
   const [sortAscFinal, setSortAscFinal] = useState(true)
@@ -1600,6 +1834,52 @@ export default function Page() {
   const [showSelectPrep, setShowSelectPrep] = useState(false)
   const [selectedDishIds, setSelectedDishIds] = useState<Set<string>>(new Set())
   const [selectedPrepIds, setSelectedPrepIds] = useState<Set<string>>(new Set())
+
+  function getDishColValue(r: FinalRow, k: string) {
+    switch (k) {
+      case 'name':
+        return r.name || ''
+      case 'category':
+        return r.category || ''
+      case 'type':
+        return r.type ? t(r.type === 'food' ? 'Food' : 'Drink', language) : ''
+      case 'cost_unit_vnd':
+        return r.cost_unit_vnd != null ? fmtInt(r.cost_unit_vnd) : ''
+      case 'price_vnd':
+        return r.price_vnd != null ? fmtInt(r.price_vnd) : ''
+      case 'cost_ratio':
+        return r.cost_ratio != null ? `${(r.cost_ratio * 100).toFixed(1)}%` : ''
+      case 'suggested_price_vnd':
+        return r.suggested_price_vnd != null ? fmtInt(r.suggested_price_vnd) : ''
+      case 'last_update':
+        return fmtDate(r.last_update)
+      default:
+        return ''
+    }
+  }
+
+  function getPrepColValue(r: PrepRow, k: string) {
+    switch (k) {
+      case 'name':
+        return r.name || ''
+      case 'category':
+        return r.category || ''
+      case 'type':
+        return r.type ? t(r.type === 'food' ? 'Food' : 'Drink', language) : ''
+      case 'yield_qty':
+        return r.yield_qty != null ? fmtNum(r.yield_qty) : ''
+      case 'uom_name':
+        return r.uom_name || ''
+      case 'waste_pct':
+        return r.waste_pct != null ? `${r.waste_pct.toFixed(1)}%` : ''
+      case 'cost_unit_vnd':
+        return r.cost_unit_vnd != null ? fmtInt(r.cost_unit_vnd) : ''
+      case 'last_update':
+        return fmtDate(r.last_update)
+      default:
+        return ''
+    }
+  }
 
   // Kebab menu
   const [menuOpen, setMenuOpen] = useState(false)
@@ -2075,23 +2355,18 @@ export default function Page() {
   /* --------- VIEW LISTS with filters + sorting --------- */
 
   const viewFinals = useMemo(() => {
-    const q = filterFinalName.toLowerCase().trim()
-    const cat = filterFinalCat.toLowerCase().trim()
-    const type = filterFinalType
+    let rows = [...finals]
 
-    const f = finals.filter(r => {
-      const tags = finalTagsMap[r.id] || []
-      const matchNameOrTag = q
-        ? r.name.toLowerCase().includes(q) || tags.some(tg => tg.toLowerCase().includes(q))
-        : true
-
-      const matchCat = cat ? (r.category ?? '').toLowerCase() === cat : true
-      const matchType = type ? r.type === type : true
-
-      return matchNameOrTag && matchCat && matchType
+    // Apply column checklist filters
+    Object.entries(columnFiltersDish).forEach(([col, vals]) => {
+      if (!vals) return
+      rows = rows.filter(r => {
+        const v = getDishColValue(r, col)
+        return vals.has(v)
+      })
     })
 
-    return [...f].sort((a, b) => {
+    return rows.sort((a, b) => {
       const col = sortColFinal
       const av = (a as any)[col]
       const bv = (b as any)[col]
@@ -2110,22 +2385,22 @@ export default function Page() {
         ? as.localeCompare(bs, undefined, { numeric: true })
         : bs.localeCompare(as, undefined, { numeric: true })
     })
-  }, [finals, filterFinalName, filterFinalCat, filterFinalType, sortColFinal, sortAscFinal, finalTagsMap])
+  }, [finals, columnFiltersDish, sortColFinal, sortAscFinal])
 
 
   const viewPreps = useMemo(() => {
-    const name = filterPrepName.toLowerCase().trim()
-    const cat = filterPrepCat.toLowerCase().trim()
-    const type = filterPrepType
+    let rows = [...preps]
 
-    const f = preps.filter(r => {
-      const matchName = name ? r.name.toLowerCase().includes(name) : true
-      const matchCat = cat ? (r.category ?? '').toLowerCase() === cat : true
-      const matchType = type ? r.type === type : true
-      return matchName && matchCat && matchType
+    // Apply column checklist filters
+    Object.entries(columnFiltersPrep).forEach(([col, vals]) => {
+      if (!vals) return
+      rows = rows.filter(r => {
+        const v = getPrepColValue(r, col)
+        return vals.has(v)
+      })
     })
 
-    return [...f].sort((a, b) => {
+    return rows.sort((a, b) => {
       const col = sortColPrep || 'name'
       const av = (a as any)[col]
       const bv = (b as any)[col]
@@ -2144,7 +2419,7 @@ export default function Page() {
         ? as.localeCompare(bs, undefined, { numeric: true })
         : bs.localeCompare(as, undefined, { numeric: true })
     })
-  }, [preps, filterPrepName, filterPrepCat, filterPrepType, sortColPrep, sortAscPrep])
+  }, [preps, columnFiltersPrep, sortColPrep, sortAscPrep])
 
   function handlePrepCategoryCreated(c: Category) {
     setPrepCats(prev => (prev.some(x => x.id === c.id) ? prev : [...prev, c]))
@@ -2359,62 +2634,190 @@ export default function Page() {
     }
   }, [tab, viewFinals, viewPreps, selectedDishIds, selectedPrepIds])
 
-  // JSX
-  return (
-    <div className="max-w-7xl mx-auto p-4 text-gray-100">
-      {/* Title row with kebab menu on the LEFT of the title */}
-      <div className="flex items-center mb-4">
-        {((tab === 'Dish' && showSelectDish) || (tab === 'Prep' && showSelectPrep)) && (
-          <div className="relative mr-2" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen(v => !v)}
-              className="p-2 rounded-lg hover:bg-white/10 focus:outline-none"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              aria-label={t('Actions', language)}
-            >
-              <EllipsisVerticalIcon className="w-6 h-6 text-white" />
-            </button>
+  function handleSortFinal(col: keyof FinalRow, asc: boolean) {
+    setSortColFinal(col)
+    setSortAscFinal(asc)
+  }
 
-            {menuOpen && (
-              <div
-                role="menu"
-                className="absolute left-0 mt-2 w-48 rounded-xl border bg-white text-gray-900 shadow-lg z-10"
-              >
+  function handleSortPrep(col: keyof PrepRow, asc: boolean) {
+    setSortColPrep(col)
+    setSortAscPrep(asc)
+  }
+
+  // JSX
+  const columnHeaderDict = {
+    sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
+    sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort Descending',
+    selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select All',
+    deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect All',
+    filterPlaceholder: language === 'vi' ? 'Lọc...' : 'Filter...',
+    clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters',
+  }
+
+  return (
+    <div className="max-w-none mx-auto p-4 text-gray-100">
+      {/* Header */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            {((tab === 'Dish' && showSelectDish) || (tab === 'Prep' && showSelectPrep)) && (
+              <div className="relative" ref={menuRef}>
                 <button
-                  role="menuitem"
-                  className="w-full text-left px-3 py-2 hover:bg-gray-50"
-                  onClick={actionMoveToTrash}
+                  onClick={() => setMenuOpen(v => !v)}
+                  className="p-2 rounded-lg hover:bg-white/10 focus:outline-none"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-label={t('Actions', language)}
                 >
-                  {t('MoveToTrash', language)}
+                  <EllipsisVerticalIcon className="w-6 h-6 text-white" />
                 </button>
-                <button
-                  role="menuitem"
-                  className="w-full text-left px-3 py-2 hover:bg-gray-50"
-                  onClick={actionArchive}
-                >
-                  {t('Archive', language)}
-                </button>
+                {menuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 mt-2 w-48 rounded-xl border bg-white text-gray-900 shadow-lg z-10"
+                  >
+                    <button
+                      role="menuitem"
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                      onClick={actionMoveToTrash}
+                    >
+                      {t('MoveToTrash', language)}
+                    </button>
+                    <button
+                      role="menuitem"
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                      onClick={actionArchive}
+                    >
+                      {t('Archive', language)}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
+            <h1 className="text-2xl font-bold text-white sm:text-3xl tracking-tight leading-normal">{t('Recipes', language)}</h1>
+            {tab === 'Dish' && selectedDishIds.size > 0 && (
+              <span className="text-sm text-blue-200">({selectedDishIds.size} {t('Selected', language)})</span>
+            )}
+            {tab === 'Prep' && selectedPrepIds.size > 0 && (
+              <span className="text-sm text-blue-200">({selectedPrepIds.size} {t('Selected', language)})</span>
+            )}
           </div>
-        )}
+          <p className="text-xs text-slate-400">
+            {language === 'vi'
+              ? 'Quản lý món ăn, công thức chế biến và tính toán chi phí nguyên liệu'
+              : 'Manage dishes, prep recipes, and calculate food costs'}
+          </p>
+        </div>
 
-        <h1 className="text-2xl font-bold">{t('Recipes', language)}</h1>
+        {/* Header Actions */}
+        <div className="flex items-center gap-2">
+          {tab === 'Dish' && hasActiveFiltersDish && (
+            <button
+              type="button"
+              onClick={clearAllColumnFiltersDish}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-200 border border-red-500/20 text-sm font-medium cursor-pointer"
+            >
+              <XMarkIcon className="w-4 h-4" />
+              {language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters'}
+            </button>
+          )}
+          {tab === 'Prep' && hasActiveFiltersPrep && (
+            <button
+              type="button"
+              onClick={clearAllColumnFiltersPrep}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-200 border border-red-500/20 text-sm font-medium cursor-pointer"
+            >
+              <XMarkIcon className="w-4 h-4" />
+              {language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters'}
+            </button>
+          )}
+
+          {tab === 'Dish' ? (
+            <>
+              <button
+                onClick={exportDishes}
+                className="inline-flex items-center gap-2 px-3 h-9 rounded-lg border bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30 text-sm font-medium cursor-pointer"
+                title={t('ExportDishesTitle', language)}
+              >
+                <ArrowDownTrayIcon className="w-5 h-5" />
+                {t('Export', language)}
+              </button>
+              <button
+                onClick={toggleSelectMode}
+                className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium cursor-pointer ${showSelectDish
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                  }`}
+                title={t('EnableSelectionTitle', language)}
+              >
+                <CheckCircleIcon className="w-5 h-5" />
+                <span>{showSelectDish ? t('Selecting', language) : t('Select', language)}</span>
+              </button>
+              {role && role !== 'accountant' && (
+                <button
+                  onClick={openCreateFinal}
+                  className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white text-sm font-medium cursor-pointer hover:opacity-80"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  {t('NewDish', language)}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={exportPreps}
+                className="inline-flex items-center gap-2 px-3 h-9 rounded-lg border bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30 text-sm font-medium cursor-pointer"
+                title={t('ExportPrepsTitle', language)}
+              >
+                <ArrowDownTrayIcon className="w-5 h-5" />
+                {t('Export', language)}
+              </button>
+              <button
+                onClick={toggleSelectMode}
+                className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium cursor-pointer ${showSelectPrep
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
+                  }`}
+                title={t('EnableSelectionTitle', language)}
+              >
+                <CheckCircleIcon className="w-5 h-5" />
+                <span>{showSelectPrep ? t('Selecting', language) : t('Select', language)}</span>
+              </button>
+              {role && role !== 'accountant' && (
+                <button
+                  onClick={openCreatePrep}
+                  className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white text-sm font-medium cursor-pointer hover:opacity-80"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  {t('NewPrep', language)}
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="inline-flex rounded-xl border overflow-hidden mb-4">
+      <div className="flex border-b border-white/10 mb-4 gap-6">
         <button
           aria-pressed={tab === 'Dish'}
-          className={`px-4 py-2 font-medium transition ${tab === 'Dish' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 hover:bg-blue-50'}`}
+          className={`pb-2.5 text-sm font-semibold transition-all border-b-2 cursor-pointer ${
+            tab === 'Dish'
+              ? 'border-blue-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
           onClick={() => setTab('Dish')}
         >
           {t('Dish', language)}
         </button>
         <button
           aria-pressed={tab === 'Prep'}
-          className={`px-4 py-2 font-medium transition ${tab === 'Prep' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 hover:bg-blue-50'}`}
+          className={`pb-2.5 text-sm font-semibold transition-all border-b-2 cursor-pointer ${
+            tab === 'Prep'
+              ? 'border-blue-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
           onClick={() => setTab('Prep')}
         >
           {t('Prep', language)}
@@ -2423,419 +2826,428 @@ export default function Page() {
 
       {/* Dish list */}
       {tab === 'Dish' && (
-        <div className="bg-white rounded-2xl shadow p-3">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 flex-1">
-              <input
-                value={filterFinalName}
-                onChange={e => setFilterFinalName(e.target.value)}
-                placeholder={`${t('FilterByName', language)} / tag`}
-                className="border rounded-lg px-2 py-1 h-10 text-gray-900 placeholder-gray-600"
-              />
-
-              <select
-                value={filterFinalCat}
-                onChange={e => setFilterFinalCat(e.target.value)}
-                className="border rounded-lg px-2 py-1 h-10 bg-white text-gray-900"
-              >
-                <option value="">{t('AllCategories', language)}</option>
-                {dishCats.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-              <select
-                value={filterFinalType}
-                onChange={e => setFilterFinalType(e.target.value as any)}
-                className="border rounded-lg px-2 py-1 h-10 bg-white text-gray-900"
-              >
-                <option value="">{t('AllTypes', language)}</option>
-                <option value="food">{t('Food', language)}</option>
-                <option value="beverage">{t('Drink', language)}</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={exportDishes}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-blue-700 hover:bg-blue-50"
-                title={t('ExportDishesTitle', language)}
-              >
-                <ArrowDownTrayIcon className="w-5 h-5" />
-                {t('Export', language)}
-              </button>
-              <button
-                onClick={toggleSelectMode}
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${showSelectDish
-                  ? 'border-blue-600 text-blue-700 bg-blue-100'
-                  : 'text-blue-700 hover:bg-blue-50 border-gray-300'
-                  }`}
-                title={t('EnableSelectionTitle', language)}
-              >
-                <CheckCircleIcon className="w-5 h-5" />
-                <span>{showSelectDish ? t('Selecting', language) : t('Select', language)}</span>
-              </button>
-
-              {role && role !== 'accountant' && (
-                <button
-                  onClick={openCreateFinal}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white"
-                >
-                  <PlusIcon className="w-5 h-5" />
-                  {t('NewDish', language)}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-fixed text-sm text-gray-900">
-              <colgroup>
-                {showSelectDish && <col className="w-[3rem]" />}
-                {[
-                  <col key="d-name" className="w-[18rem]" />,
-                  <col key="d-cat" className="w-[12rem]" />,
-                  <col key="d-type" className="w-[7rem]" />,
-                  <col key="d-uc" className="w-[9rem]" />,
-                  <col key="d-price" className="w-[9rem]" />,
-                  <col key="d-fc" className="w-[9rem]" />,
-                  <col key="d-sug" className="w-[11rem]" />,
-                  <col key="d-upd" className="w-[12rem]" />,
-                ]}
-              </colgroup>
-
-              <thead>
-                <tr className="bg-blue-50 text-gray-800">
-                  {showSelectDish && (
-                    <th className="p-2">
-                      <input
-                        type="checkbox"
-                        aria-label={t('SelectAllDishesAria', language)}
-                        className="w-4 h-4"
-                        checked={allChecked}
-                        onChange={e => toggleSelectAll(e.target.checked)}
-                      />
-                    </th>
-                  )}
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortFinal('name')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t('Name', language)}</span>
-                        <SortIcon active={sortColFinal === 'name'} asc={sortAscFinal} />
-                      </div>
-                    </button>
+        <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
+          <table className="w-full table-auto text-sm text-gray-900">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+                {showSelectDish && (
+                  <th className="p-2 w-7">
+                    <input
+                      type="checkbox"
+                      aria-label={t('SelectAllDishesAria', language)}
+                      className="w-4 h-4"
+                      checked={allChecked}
+                      onChange={e => toggleSelectAll(e.target.checked)}
+                    />
                   </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortFinal('category')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t('Category', language)}</span>
-                        <SortIcon active={sortColFinal === 'category'} asc={sortAscFinal} />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortFinal('type')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t('Type', language)}</span>
-                        <SortIcon active={sortColFinal === 'type'} asc={sortAscFinal} />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortFinal('cost_unit_vnd')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColFinal === 'cost_unit_vnd'} asc={sortAscFinal} />
-                        <span className="block text-right leading-tight">
-                          {t('UnitCost', language)}<br />({currency})
-                        </span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortFinal('price_vnd')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColFinal === 'price_vnd'} asc={sortAscFinal} />
-                        <span>{t('Price', language)} ({currency})</span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortFinal('cost_ratio')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColFinal === 'cost_ratio'} asc={sortAscFinal} />
-                        <span>{t('FoodCostPct', language)}</span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2 hidden md:table-cell">
-                    <button type="button" onClick={() => toggleSortFinal('suggested_price_vnd')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColFinal === 'suggested_price_vnd'} asc={sortAscFinal} />
-                        <span className="block text-right leading-tight">
-                          {t('SuggestedPrice', language)}<br />({currency})
-                        </span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2 hidden md:table-cell">
-                    <button type="button" onClick={() => toggleSortFinal('last_update')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColFinal === 'last_update'} asc={sortAscFinal} />
-                        <span>{t('UpdatedShort', language)}</span>
-                      </div>
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {viewFinals.map(r => {
-                  const checked = selectedDishIds.has(r.id)
-                  return (
-                    <tr
-                      key={r.id}
-                      className={`border-t ${showSelectDish ? '' : 'hover:bg-blue-50/40 cursor-pointer'}`}
-                      onClick={() => { if (!showSelectDish) openViewFinal(r.id) }}
-                    >
-                      {showSelectDish && (
-                        <td className="p-2 text-center">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4"
-                            checked={checked}
-                            onChange={e => setRowSelected(r.id, e.target.checked)}
-                          />
-                        </td>
-                      )}
-                      <td className="p-2 truncate">
-                        <span className="inline-block max-w-[17rem] truncate">{r.name}</span>
-                      </td>
-                      <td className="p-2 truncate">
-                        <span className="inline-block max-w-[11rem] truncate">{r.category ?? ''}</span>
-                      </td>
-                      <td className="p-2">{typeLabel(r.type, language)}</td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap">{fmtNum(r.cost_unit_vnd)}</td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap">{fmtNum(r.price_vnd)}</td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap">
-                        {r.cost_ratio == null ? '' : `${(Number(r.cost_ratio) * 100).toFixed(1)}%`}
-                      </td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap hidden md:table-cell">
-                        {fmtNum(r.suggested_price_vnd ?? null)}
-                      </td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap hidden md:table-cell">
-                        {fmtDate(r.last_update)}
-                      </td>
-                    </tr>
-                  )
-                })}
-
-                {viewFinals.length === 0 && (
-                  <tr><td className="p-3 text-gray-500" colSpan={showSelectDish ? 9 : 8}>{t('NoDishes', language)}</td></tr>
                 )}
-              </tbody>
-            </table>
-          </div>
+                <ColumnHeader
+                  colKey="name"
+                  label={t('Name', language)}
+                  sortCol={sortColFinal}
+                  sortAsc={sortAscFinal}
+                  onSort={handleSortFinal}
+                  values={Array.from(new Set(finals.map(r => getDishColValue(r, 'name')))).sort()}
+                  activeFilter={columnFiltersDish.name || null}
+                  onFilter={vals => applyColumnFilterDish('name', vals)}
+                  onClear={() => applyColumnFilterDish('name', null)}
+                  open={openMenuDish === 'name'}
+                  onToggle={() => setOpenMenuDish(openMenuDish === 'name' ? null : 'name')}
+                  onClose={() => setOpenMenuDish(null)}
+                  dict={columnHeaderDict}
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="category"
+                  label={t('Category', language)}
+                  sortCol={sortColFinal}
+                  sortAsc={sortAscFinal}
+                  onSort={handleSortFinal}
+                  values={Array.from(new Set(finals.map(r => getDishColValue(r, 'category')))).sort()}
+                  activeFilter={columnFiltersDish.category || null}
+                  onFilter={vals => applyColumnFilterDish('category', vals)}
+                  onClear={() => applyColumnFilterDish('category', null)}
+                  open={openMenuDish === 'category'}
+                  onToggle={() => setOpenMenuDish(openMenuDish === 'category' ? null : 'category')}
+                  onClose={() => setOpenMenuDish(null)}
+                  dict={columnHeaderDict}
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="type"
+                  label={t('Type', language)}
+                  sortCol={sortColFinal}
+                  sortAsc={sortAscFinal}
+                  onSort={handleSortFinal}
+                  values={Array.from(new Set(finals.map(r => getDishColValue(r, 'type')))).sort()}
+                  activeFilter={columnFiltersDish.type || null}
+                  onFilter={vals => applyColumnFilterDish('type', vals)}
+                  onClear={() => applyColumnFilterDish('type', null)}
+                  open={openMenuDish === 'type'}
+                  onToggle={() => setOpenMenuDish(openMenuDish === 'type' ? null : 'type')}
+                  onClose={() => setOpenMenuDish(null)}
+                  dict={columnHeaderDict}
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="cost_unit_vnd"
+                  label={`${t('UnitCost', language)} (${currency})`}
+                  sortCol={sortColFinal}
+                  sortAsc={sortAscFinal}
+                  onSort={handleSortFinal}
+                  values={Array.from(new Set(finals.map(r => getDishColValue(r, 'cost_unit_vnd')))).sort()}
+                  activeFilter={columnFiltersDish.cost_unit_vnd || null}
+                  onFilter={vals => applyColumnFilterDish('cost_unit_vnd', vals)}
+                  onClear={() => applyColumnFilterDish('cost_unit_vnd', null)}
+                  open={openMenuDish === 'cost_unit_vnd'}
+                  onToggle={() => setOpenMenuDish(openMenuDish === 'cost_unit_vnd' ? null : 'cost_unit_vnd')}
+                  onClose={() => setOpenMenuDish(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="price_vnd"
+                  label={`${t('Price', language)} (${currency})`}
+                  sortCol={sortColFinal}
+                  sortAsc={sortAscFinal}
+                  onSort={handleSortFinal}
+                  values={Array.from(new Set(finals.map(r => getDishColValue(r, 'price_vnd')))).sort()}
+                  activeFilter={columnFiltersDish.price_vnd || null}
+                  onFilter={vals => applyColumnFilterDish('price_vnd', vals)}
+                  onClear={() => applyColumnFilterDish('price_vnd', null)}
+                  open={openMenuDish === 'price_vnd'}
+                  onToggle={() => setOpenMenuDish(openMenuDish === 'price_vnd' ? null : 'price_vnd')}
+                  onClose={() => setOpenMenuDish(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="cost_ratio"
+                  label={t('FoodCostPct', language)}
+                  sortCol={sortColFinal}
+                  sortAsc={sortAscFinal}
+                  onSort={handleSortFinal}
+                  values={Array.from(new Set(finals.map(r => getDishColValue(r, 'cost_ratio')))).sort()}
+                  activeFilter={columnFiltersDish.cost_ratio || null}
+                  onFilter={vals => applyColumnFilterDish('cost_ratio', vals)}
+                  onClear={() => applyColumnFilterDish('cost_ratio', null)}
+                  open={openMenuDish === 'cost_ratio'}
+                  onToggle={() => setOpenMenuDish(openMenuDish === 'cost_ratio' ? null : 'cost_ratio')}
+                  onClose={() => setOpenMenuDish(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="suggested_price_vnd"
+                  label={`${t('SuggestedPrice', language)} (${currency})`}
+                  sortCol={sortColFinal}
+                  sortAsc={sortAscFinal}
+                  onSort={handleSortFinal}
+                  values={Array.from(new Set(finals.map(r => getDishColValue(r, 'suggested_price_vnd')))).sort()}
+                  activeFilter={columnFiltersDish.suggested_price_vnd || null}
+                  onFilter={vals => applyColumnFilterDish('suggested_price_vnd', vals)}
+                  onClear={() => applyColumnFilterDish('suggested_price_vnd', null)}
+                  open={openMenuDish === 'suggested_price_vnd'}
+                  onToggle={() => setOpenMenuDish(openMenuDish === 'suggested_price_vnd' ? null : 'suggested_price_vnd')}
+                  onClose={() => setOpenMenuDish(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px] hidden md:table-cell"
+                />
+                <ColumnHeader
+                  colKey="last_update"
+                  label={t('UpdatedShort', language)}
+                  sortCol={sortColFinal}
+                  sortAsc={sortAscFinal}
+                  onSort={handleSortFinal}
+                  values={Array.from(new Set(finals.map(r => getDishColValue(r, 'last_update')))).sort()}
+                  activeFilter={columnFiltersDish.last_update || null}
+                  onFilter={vals => applyColumnFilterDish('last_update', vals)}
+                  onClear={() => applyColumnFilterDish('last_update', null)}
+                  open={openMenuDish === 'last_update'}
+                  onToggle={() => setOpenMenuDish(openMenuDish === 'last_update' ? null : 'last_update')}
+                  onClose={() => setOpenMenuDish(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px] hidden md:table-cell"
+                />
+              </tr>
+            </thead>
+
+            <tbody>
+              {viewFinals.map((r, idx) => {
+                const checked = selectedDishIds.has(r.id)
+                return (
+                  <tr
+                    key={r.id}
+                    className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer ${
+                      idx % 2 === 0 ? 'bg-gray-50/30' : ''
+                    }`}
+                    onClick={() => { if (!showSelectDish) openViewFinal(r.id) }}
+                  >
+                    {showSelectDish && (
+                      <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4"
+                          checked={checked}
+                          onChange={e => setRowSelected(r.id, e.target.checked)}
+                        />
+                      </td>
+                    )}
+                    <td className="px-3 py-2.5 text-xs text-gray-900 font-semibold truncate max-w-[18rem]">
+                      {r.name}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[12rem]">
+                      {r.category ?? ''}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">
+                      {typeLabel(r.type, language)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-900 whitespace-nowrap">
+                      {fmtNum(r.cost_unit_vnd)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-900 whitespace-nowrap">
+                      {fmtNum(r.price_vnd)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-900 whitespace-nowrap">
+                      {r.cost_ratio == null ? '' : `${(Number(r.cost_ratio) * 100).toFixed(1)}%`}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-500 whitespace-nowrap hidden md:table-cell">
+                      {fmtNum(r.suggested_price_vnd ?? null)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-500 whitespace-nowrap hidden md:table-cell">
+                      {fmtDate(r.last_update)}
+                    </td>
+                  </tr>
+                )
+              })}
+
+              {viewFinals.length === 0 && (
+                <tr>
+                  <td className="px-3 py-4 text-center text-gray-500" colSpan={showSelectDish ? 9 : 8}>
+                    {t('NoDishes', language)}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 
       {/* Prep list */}
       {tab === 'Prep' && (
-        <div className="bg-white rounded-2xl shadow p-3">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 flex-1">
-              <input
-                value={filterPrepName}
-                onChange={e => setFilterPrepName(e.target.value)}
-                placeholder={t('FilterByName', language)}
-                className="border rounded-lg px-2 py-1 h-10 text-gray-900 placeholder-gray-600"
-              />
-              <select
-                value={filterPrepCat}
-                onChange={e => setFilterPrepCat(e.target.value)}
-                className="border rounded-lg px-2 py-1 h-10 bg-white text-gray-900"
-              >
-                <option value="">{t('AllCategories', language)}</option>
-                {prepCats.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-              <select
-                value={filterPrepType}
-                onChange={e => setFilterPrepType(e.target.value as any)}
-                className="border rounded-lg px-2 py-1 h-10 bg-white text-gray-900"
-              >
-                <option value="">{t('AllTypes', language)}</option>
-                <option value="food">{t('Food', language)}</option>
-                <option value="beverage">{t('Drink', language)}</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={exportPreps}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-blue-700 hover:bg-blue-50"
-                title={t('ExportPrepsTitle', language)}
-              >
-                <ArrowDownTrayIcon className="w-5 h-5" />
-                {t('Export', language)}
-              </button>
-              <button
-                onClick={toggleSelectMode}
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${showSelectPrep
-                  ? 'border-blue-600 text-blue-700 bg-blue-100'
-                  : 'text-blue-700 hover:bg-blue-50 border-gray-300'
-                  }`}
-                title={t('EnableSelectionTitle', language)}
-              >
-                <CheckCircleIcon className="w-5 h-5" />
-                <span>{showSelectPrep ? t('Selecting', language) : t('Select', language)}</span>
-              </button>
-
-              {role && role !== 'accountant' && (
-                <button
-                  onClick={openCreatePrep}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white"
-                >
-                  <PlusIcon className="w-5 h-5" />
-                  {t('NewPrep', language)}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-fixed text-sm text-gray-900">
-              <colgroup>
-                {showSelectPrep && <col className="w-[3rem]" />}
-                {[
-                  <col key="p-name" className="w-[18rem]" />,
-                  <col key="p-cat" className="w-[12rem]" />,
-                  <col key="p-type" className="w-[7rem]" />,
-                  <col key="p-yq" className="w-[8rem]" />,
-                  <col key="p-uom" className="w-[7rem]" />,
-                  <col key="p-wst" className="w-[8rem]" />,
-                  <col key="p-uc" className="w-[10rem]" />,
-                  <col key="p-upd" className="w-[12rem]" />,
-                ]}
-              </colgroup>
-
-              <thead>
-                <tr className="bg-blue-50 text-gray-800">
-                  {showSelectPrep && (
-                    <th className="p-2">
-                      <input
-                        type="checkbox"
-                        aria-label={t('SelectAllPrepsAria', language)}
-                        className="w-4 h-4"
-                        checked={allChecked}
-                        onChange={e => toggleSelectAll(e.target.checked)}
-                      />
-                    </th>
-                  )}
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortPrep('name')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t('Name', language)}</span>
-                        <SortIcon active={sortColPrep === 'name'} asc={sortAscPrep} />
-                      </div>
-                    </button>
+        <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
+          <table className="w-full table-auto text-sm text-gray-900">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+                {showSelectPrep && (
+                  <th className="p-2 w-7">
+                    <input
+                      type="checkbox"
+                      aria-label={t('SelectAllPrepsAria', language)}
+                      className="w-4 h-4"
+                      checked={allChecked}
+                      onChange={e => toggleSelectAll(e.target.checked)}
+                    />
                   </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortPrep('category')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t('Category', language)}</span>
-                        <SortIcon active={sortColPrep === 'category'} asc={sortAscPrep} />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortPrep('type')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-start font-semibold">
-                        <span>{t('Type', language)}</span>
-                        <SortIcon active={sortColPrep === 'type'} asc={sortAscPrep} />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortPrep('yield_qty')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColPrep === 'yield_qty'} asc={sortAscPrep} />
-                        <span>{t('YieldQty', language)}</span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <div className="flex items-center gap-1 justify-start font-semibold">
-                      <span>{t('Uom', language)}</span>
-                    </div>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortPrep('waste_pct')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColPrep === 'waste_pct'} asc={sortAscPrep} />
-                        <span>{t('WastePct', language)}</span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortPrep('cost_unit_vnd')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColPrep === 'cost_unit_vnd'} asc={sortAscPrep} />
-                        <span>{t('UnitCost', language)} ({currency})</span>
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-2">
-                    <button type="button" onClick={() => toggleSortPrep('last_update')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortColPrep === 'last_update'} asc={sortAscPrep} />
-                        <span>{t('UpdatedShort', language)}</span>
-                      </div>
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {viewPreps.map(r => {
-                  const checked = selectedPrepIds.has(r.id)
-                  return (
-                    <tr
-                      key={r.id}
-                      className={`border-t ${showSelectPrep ? '' : 'hover:bg-blue-50/40 cursor-pointer'}`}
-                      onClick={() => { if (!showSelectPrep) openViewPrep(r.id) }}
-                    >
-                      {showSelectPrep && (
-                        <td className="p-2 text-center">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4"
-                            checked={checked}
-                            onChange={e => setRowSelected(r.id, e.target.checked)}
-                          />
-                        </td>
-                      )}
-                      <td className="p-2 truncate">
-                        <span className="inline-block max-w-[17rem] truncate">{r.name}</span>
-                      </td>
-                      <td className="p-2 truncate">
-                        <span className="inline-block max-w-[11rem] truncate">{r.category ?? ''}</span>
-                      </td>
-                      <td className="p-2">{typeLabel(r.type, language)}</td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap">{fmtInt(r.yield_qty)}</td>
-                      <td className="p-2">{r.uom_name ?? ''}</td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap">{pct(r.waste_pct)}</td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap">{fmtNum(r.cost_unit_vnd)}</td>
-                      <td className="p-2 text-right tabular-nums whitespace-nowrap hidden md:table-cell">{fmtDate(r.last_update)}</td>
-                    </tr>
-                  )
-                })}
-
-                {viewPreps.length === 0 && (
-                  <tr><td className="p-3 text-gray-500" colSpan={showSelectPrep ? 9 : 8}>{t('NoPreps', language)}</td></tr>
                 )}
-              </tbody>
-            </table>
-          </div>
+                <ColumnHeader
+                  colKey="name"
+                  label={t('Name', language)}
+                  sortCol={sortColPrep}
+                  sortAsc={sortAscPrep}
+                  onSort={handleSortPrep}
+                  values={Array.from(new Set(preps.map(r => getPrepColValue(r, 'name')))).sort()}
+                  activeFilter={columnFiltersPrep.name || null}
+                  onFilter={vals => applyColumnFilterPrep('name', vals)}
+                  onClear={() => applyColumnFilterPrep('name', null)}
+                  open={openMenuPrep === 'name'}
+                  onToggle={() => setOpenMenuPrep(openMenuPrep === 'name' ? null : 'name')}
+                  onClose={() => setOpenMenuPrep(null)}
+                  dict={columnHeaderDict}
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="category"
+                  label={t('Category', language)}
+                  sortCol={sortColPrep}
+                  sortAsc={sortAscPrep}
+                  onSort={handleSortPrep}
+                  values={Array.from(new Set(preps.map(r => getPrepColValue(r, 'category')))).sort()}
+                  activeFilter={columnFiltersPrep.category || null}
+                  onFilter={vals => applyColumnFilterPrep('category', vals)}
+                  onClear={() => applyColumnFilterPrep('category', null)}
+                  open={openMenuPrep === 'category'}
+                  onToggle={() => setOpenMenuPrep(openMenuPrep === 'category' ? null : 'category')}
+                  onClose={() => setOpenMenuPrep(null)}
+                  dict={columnHeaderDict}
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="type"
+                  label={t('Type', language)}
+                  sortCol={sortColPrep}
+                  sortAsc={sortAscPrep}
+                  onSort={handleSortPrep}
+                  values={Array.from(new Set(preps.map(r => getPrepColValue(r, 'type')))).sort()}
+                  activeFilter={columnFiltersPrep.type || null}
+                  onFilter={vals => applyColumnFilterPrep('type', vals)}
+                  onClear={() => applyColumnFilterPrep('type', null)}
+                  open={openMenuPrep === 'type'}
+                  onToggle={() => setOpenMenuPrep(openMenuPrep === 'type' ? null : 'type')}
+                  onClose={() => setOpenMenuPrep(null)}
+                  dict={columnHeaderDict}
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="yield_qty"
+                  label={t('YieldQty', language)}
+                  sortCol={sortColPrep}
+                  sortAsc={sortAscPrep}
+                  onSort={handleSortPrep}
+                  values={Array.from(new Set(preps.map(r => getPrepColValue(r, 'yield_qty')))).sort()}
+                  activeFilter={columnFiltersPrep.yield_qty || null}
+                  onFilter={vals => applyColumnFilterPrep('yield_qty', vals)}
+                  onClear={() => applyColumnFilterPrep('yield_qty', null)}
+                  open={openMenuPrep === 'yield_qty'}
+                  onToggle={() => setOpenMenuPrep(openMenuPrep === 'yield_qty' ? null : 'yield_qty')}
+                  onClose={() => setOpenMenuPrep(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="uom_name"
+                  label={t('Uom', language)}
+                  sortCol={sortColPrep}
+                  sortAsc={sortAscPrep}
+                  onSort={handleSortPrep}
+                  values={Array.from(new Set(preps.map(r => getPrepColValue(r, 'uom_name')))).sort()}
+                  activeFilter={columnFiltersPrep.uom_name || null}
+                  onFilter={vals => applyColumnFilterPrep('uom_name', vals)}
+                  onClear={() => applyColumnFilterPrep('uom_name', null)}
+                  open={openMenuPrep === 'uom_name'}
+                  onToggle={() => setOpenMenuPrep(openMenuPrep === 'uom_name' ? null : 'uom_name')}
+                  onClose={() => setOpenMenuPrep(null)}
+                  dict={columnHeaderDict}
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="waste_pct"
+                  label={t('WastePct', language)}
+                  sortCol={sortColPrep}
+                  sortAsc={sortAscPrep}
+                  onSort={handleSortPrep}
+                  values={Array.from(new Set(preps.map(r => getPrepColValue(r, 'waste_pct')))).sort()}
+                  activeFilter={columnFiltersPrep.waste_pct || null}
+                  onFilter={vals => applyColumnFilterPrep('waste_pct', vals)}
+                  onClear={() => applyColumnFilterPrep('waste_pct', null)}
+                  open={openMenuPrep === 'waste_pct'}
+                  onToggle={() => setOpenMenuPrep(openMenuPrep === 'waste_pct' ? null : 'waste_pct')}
+                  onClose={() => setOpenMenuPrep(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="cost_unit_vnd"
+                  label={`${t('UnitCost', language)} (${currency})`}
+                  sortCol={sortColPrep}
+                  sortAsc={sortAscPrep}
+                  onSort={handleSortPrep}
+                  values={Array.from(new Set(preps.map(r => getPrepColValue(r, 'cost_unit_vnd')))).sort()}
+                  activeFilter={columnFiltersPrep.cost_unit_vnd || null}
+                  onFilter={vals => applyColumnFilterPrep('cost_unit_vnd', vals)}
+                  onClear={() => applyColumnFilterPrep('cost_unit_vnd', null)}
+                  open={openMenuPrep === 'cost_unit_vnd'}
+                  onToggle={() => setOpenMenuPrep(openMenuPrep === 'cost_unit_vnd' ? null : 'cost_unit_vnd')}
+                  onClose={() => setOpenMenuPrep(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px]"
+                />
+                <ColumnHeader
+                  colKey="last_update"
+                  label={t('UpdatedShort', language)}
+                  sortCol={sortColPrep}
+                  sortAsc={sortAscPrep}
+                  onSort={handleSortPrep}
+                  values={Array.from(new Set(preps.map(r => getPrepColValue(r, 'last_update')))).sort()}
+                  activeFilter={columnFiltersPrep.last_update || null}
+                  onFilter={vals => applyColumnFilterPrep('last_update', vals)}
+                  onClear={() => applyColumnFilterPrep('last_update', null)}
+                  open={openMenuPrep === 'last_update'}
+                  onToggle={() => setOpenMenuPrep(openMenuPrep === 'last_update' ? null : 'last_update')}
+                  onClose={() => setOpenMenuPrep(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px] hidden md:table-cell"
+                />
+              </tr>
+            </thead>
+
+            <tbody>
+              {viewPreps.map((r, idx) => {
+                const checked = selectedPrepIds.has(r.id)
+                return (
+                  <tr
+                    key={r.id}
+                    className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer ${
+                      idx % 2 === 0 ? 'bg-gray-50/30' : ''
+                    }`}
+                    onClick={() => { if (!showSelectPrep) openViewPrep(r.id) }}
+                  >
+                    {showSelectPrep && (
+                      <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4"
+                          checked={checked}
+                          onChange={e => setRowSelected(r.id, e.target.checked)}
+                        />
+                      </td>
+                    )}
+                    <td className="px-3 py-2.5 text-xs text-gray-900 font-semibold truncate max-w-[18rem]">
+                      {r.name}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[12rem]">
+                      {r.category ?? ''}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">
+                      {typeLabel(r.type, language)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-900 whitespace-nowrap">
+                      {fmtInt(r.yield_qty)}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">
+                      {r.uom_name ?? ''}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-900 whitespace-nowrap">
+                      {pct(r.waste_pct)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-900 whitespace-nowrap">
+                      {fmtNum(r.cost_unit_vnd)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-500 whitespace-nowrap hidden md:table-cell">
+                      {fmtDate(r.last_update)}
+                    </td>
+                  </tr>
+                )
+              })}
+
+              {viewPreps.length === 0 && (
+                <tr>
+                  <td className="px-3 py-4 text-center text-gray-500" colSpan={showSelectPrep ? 9 : 8}>
+                    {t('NoPreps', language)}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 

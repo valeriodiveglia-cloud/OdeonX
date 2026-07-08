@@ -1,27 +1,221 @@
-'use client'
-
-import { useState, Fragment } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react'
 import { XMarkIcon, PaperClipIcon } from '@heroicons/react/24/outline'
 import { supabase } from '@/lib/supabase_shim'
-import { HiringRequest } from '@/types/human-resources'
+import { HiringRequest, RecruitmentPosting, Candidate } from '@/types/human-resources'
+import { useSettings } from '@/contexts/SettingsContext'
+import { CandidateWorkflowModal } from './CandidateWorkflowModal'
 
 interface AddCandidateModalProps {
-    hiringRequest: HiringRequest
+    hiringRequest: HiringRequest | null
+    candidateToEdit?: Candidate | null
     onClose: () => void
     onSuccess: () => void
 }
 
-export function AddCandidateModal({ hiringRequest, onClose, onSuccess }: AddCandidateModalProps) {
+export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClose, onSuccess }: AddCandidateModalProps) {
+    const { language } = useSettings()
+    const isVI = language === 'vi'
     const [submitting, setSubmitting] = useState(false)
+    const [lastName, setLastName] = useState('')
+    const [middleName, setMiddleName] = useState('')
+    const [firstName, setFirstName] = useState('')
     const [formData, setFormData] = useState({
-        full_name: '',
         email: '',
         phone: '',
+        document_type: 'id_card',
+        document_number: '',
         source: 'Referral',
         notes: ''
     })
     const [file, setFile] = useState<File | null>(null)
+    const [currentCvUrl, setCurrentCvUrl] = useState<string | null>(null)
+    const [shouldRemoveCv, setShouldRemoveCv] = useState(false)
+    const [postings, setPostings] = useState<RecruitmentPosting[]>([])
+    const [selectedPostingId, setSelectedPostingId] = useState<string>('')
+    const [activeRequests, setActiveRequests] = useState<HiringRequest[]>([])
+    const [selectedRequestId, setSelectedRequestId] = useState<string>('')
+
+    // Duplicate check states
+    const [duplicateCandidate, setDuplicateCandidate] = useState<any>(null)
+    const [duplicateStaff, setDuplicateStaff] = useState<any>(null)
+    const [isNotEligible, setIsNotEligible] = useState(false)
+    const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+    const [openWorkflowId, setOpenWorkflowId] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (candidateToEdit) {
+            // Split full name
+            const parts = (candidateToEdit.full_name || '').split(' ').filter(Boolean)
+            if (parts.length === 1) {
+                setLastName(parts[0])
+                setMiddleName('')
+                setFirstName('')
+            } else if (parts.length === 2) {
+                setLastName(parts[0])
+                setMiddleName('')
+                setFirstName(parts[1])
+            } else if (parts.length > 2) {
+                setLastName(parts[0])
+                setFirstName(parts[parts.length - 1])
+                setMiddleName(parts.slice(1, parts.length - 1).join(' '))
+            }
+
+            setFormData({
+                email: candidateToEdit.email || '',
+                phone: candidateToEdit.phone || '',
+                document_type: candidateToEdit.document_type || 'id_card',
+                document_number: candidateToEdit.document_number || '',
+                source: candidateToEdit.source || 'Referral',
+                notes: candidateToEdit.notes || ''
+            })
+            setSelectedPostingId(candidateToEdit.recruitment_posting_id || '')
+            setSelectedRequestId(candidateToEdit.hiring_request_id || '')
+            setCurrentCvUrl(candidateToEdit.cv_url || null)
+            setShouldRemoveCv(false)
+        } else {
+            setLastName('')
+            setMiddleName('')
+            setFirstName('')
+            setFormData({
+                email: '',
+                phone: '',
+                document_type: 'id_card',
+                document_number: '',
+                source: 'Referral',
+                notes: ''
+            })
+            setSelectedPostingId('')
+            setSelectedRequestId('')
+            setCurrentCvUrl(null)
+            setShouldRemoveCv(false)
+        }
+        setDuplicateCandidate(null)
+        setDuplicateStaff(null)
+    }, [candidateToEdit])
+
+    useEffect(() => {
+        const fetchActivePostings = async () => {
+            const hrId = hiringRequest ? hiringRequest.id : selectedRequestId
+            if (!hrId) {
+                setPostings([])
+                return
+            }
+            try {
+                const { data, error } = await supabase
+                    .from('recruitment_postings')
+                    .select('*')
+                    .eq('hiring_request_id', hrId)
+                    .eq('status', 'active')
+
+                if (error) throw error
+
+                // Filter out expired postings client-side
+                const active = (data || []).filter((p: any) => {
+                    if (!p.expires_at) return true
+                    return new Date(p.expires_at) > new Date()
+                })
+                setPostings(active)
+            } catch (error) {
+                console.error('Error fetching postings in AddCandidate:', error)
+            }
+        }
+        fetchActivePostings()
+    }, [hiringRequest?.id, selectedRequestId])
+
+    useEffect(() => {
+        if (!hiringRequest) {
+            const fetchRequests = async () => {
+                const { data } = await supabase
+                    .from('hiring_requests')
+                    .select('id, position_title, department, status')
+                    .eq('status', 'active')
+                    .order('position_title')
+                if (data) {
+                    setActiveRequests(data as HiringRequest[])
+                }
+            }
+            fetchRequests()
+        }
+    }, [hiringRequest])
+
+    useEffect(() => {
+        const checkContactDuplicates = async () => {
+            const phoneVal = formData.phone.trim()
+            const emailVal = formData.email.trim()
+            const docNumVal = formData.document_number?.trim()
+
+            if (!phoneVal && !emailVal && !docNumVal) {
+                setDuplicateCandidate(null)
+                setDuplicateStaff(null)
+                return
+            }
+
+            setCheckingDuplicates(true)
+            setIsNotEligible(false)
+            try {
+                // 1. Check candidates table
+                let candidateQuery = supabase.from('candidates').select('id, full_name, stage, phone, email, document_number, rehire_eligible')
+                
+                let orParts: string[] = []
+                if (phoneVal) orParts.push(`phone.eq."${phoneVal}"`)
+                if (emailVal) orParts.push(`email.ilike."${emailVal}"`)
+                if (docNumVal) orParts.push(`document_number.eq."${docNumVal}"`)
+                
+                if (orParts.length > 0) {
+                    const { data: candData, error: candErr } = await candidateQuery.or(orParts.join(','))
+                    if (!candErr && candData && candData.length > 0) {
+                        const blockedCand = candData.find(c => c.rehire_eligible === false)
+                        if (blockedCand) {
+                            setIsNotEligible(true)
+                        }
+                        const filtered = candData.filter(c => !candidateToEdit || c.id !== candidateToEdit.id)
+                        if (filtered.length > 0) {
+                            setDuplicateCandidate(filtered[0])
+                        } else {
+                            setDuplicateCandidate(null)
+                        }
+                    } else {
+                        setDuplicateCandidate(null)
+                    }
+                } else {
+                    setDuplicateCandidate(null)
+                }
+
+                // 2. Check hr_staff table
+                let staffQuery = supabase.from('hr_staff').select('id, full_name, status, phone, email, document_number, rehire_eligible')
+                let staffOrParts: string[] = []
+                if (phoneVal) staffOrParts.push(`phone.eq."${phoneVal}"`)
+                if (emailVal) staffOrParts.push(`email.ilike."${emailVal}"`)
+                if (docNumVal) staffOrParts.push(`document_number.eq."${docNumVal}"`)
+
+                if (staffOrParts.length > 0) {
+                    const { data: staffData, error: staffErr } = await staffQuery.or(staffOrParts.join(','))
+                    if (!staffErr && staffData && staffData.length > 0) {
+                        const blockedStaff = staffData.find(s => s.rehire_eligible === false)
+                        if (blockedStaff) {
+                            setIsNotEligible(true)
+                        }
+                        setDuplicateStaff(staffData[0])
+                    } else {
+                        setDuplicateStaff(null)
+                    }
+                } else {
+                    setDuplicateStaff(null)
+                }
+            } catch (err) {
+                console.error('Error checking contact duplicates:', err)
+            } finally {
+                setCheckingDuplicates(false)
+            }
+        }
+
+        const delayDebounce = setTimeout(() => {
+            checkContactDuplicates()
+        }, 500)
+
+        return () => clearTimeout(delayDebounce)
+    }, [formData.phone, formData.email, formData.document_number, candidateToEdit])
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target
@@ -31,19 +225,37 @@ export function AddCandidateModal({ hiringRequest, onClose, onSuccess }: AddCand
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setFile(e.target.files[0])
+            setShouldRemoveCv(false)
         }
+    }
+
+    const handleRemoveCurrentCv = () => {
+        setShouldRemoveCv(true)
+        setCurrentCvUrl(null)
+        setFile(null)
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (isNotEligible) {
+            alert(language === 'vi' 
+                ? 'Không thể lưu ứng viên: Người này đã được đánh dấu là Không đủ điều kiện tuyển dụng lại.' 
+                : 'Cannot save candidate: This person has been marked as Not Eligible for rehire.')
+            return
+        }
         setSubmitting(true)
 
         try {
-            let cv_url = null
+            let cv_url = candidateToEdit ? candidateToEdit.cv_url : null
+
+            if (shouldRemoveCv) {
+                cv_url = null
+            }
 
             if (file) {
                 const fileExt = file.name.split('.').pop()
-                const fileName = `${hiringRequest.id}/${Math.random().toString(36).substring(2)}.${fileExt}`
+                const folderId = hiringRequest ? hiringRequest.id : (selectedRequestId || 'global')
+                const fileName = `${folderId}/${Math.random().toString(36).substring(2)}.${fileExt}`
                 const filePath = `${fileName}`
 
                 const { error: uploadError } = await supabase.storage
@@ -55,9 +267,6 @@ export function AddCandidateModal({ hiringRequest, onClose, onSuccess }: AddCand
                     throw new Error('Failed to upload CV: ' + uploadError.message)
                 }
 
-                // Get public URL (or signed URL depending on bucket privacy)
-                // Assuming 'hr-documents' is public for this MVP or we use signed urls later.
-                // For now, let's construct access URL.
                 const { data: urlData } = supabase.storage
                     .from('hr-documents')
                     .getPublicUrl(filePath)
@@ -65,33 +274,73 @@ export function AddCandidateModal({ hiringRequest, onClose, onSuccess }: AddCand
                 cv_url = urlData.publicUrl
             }
 
-            const { error } = await supabase
-                .from('candidates')
-                .insert([{
-                    hiring_request_id: hiringRequest.id,
-                    full_name: formData.full_name,
-                    email: formData.email,
-                    phone: formData.phone,
-                    source: formData.source,
-                    notes: formData.notes,
-                    cv_url: cv_url,
-                    stage: 'new'
+            const buildFullName = [lastName.trim(), middleName.trim(), firstName.trim()]
+                .filter(Boolean)
+                .join(' ')
+
+            if (candidateToEdit) {
+                const { error } = await supabase
+                    .from('candidates')
+                    .update({
+                        recruitment_posting_id: selectedPostingId || null,
+                        full_name: buildFullName,
+                        email: formData.email || null,
+                        phone: formData.phone || null,
+                        document_type: formData.document_type || null,
+                        document_number: formData.document_number || null,
+                        related_staff_id: duplicateStaff ? duplicateStaff.id : (candidateToEdit.related_staff_id || null),
+                        source: formData.source,
+                        notes: formData.notes || null,
+                        cv_url: cv_url,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', candidateToEdit.id)
+
+                if (error) throw error
+
+                // Log Activity
+                const activityMessage = `Updated candidate ${buildFullName} details / Đã cập nhật thông tin ứng viên ${buildFullName}`
+
+                await supabase.from('hr_activity_log').insert([{
+                    hiring_request_id: hiringRequest ? hiringRequest.id : (selectedRequestId || null),
+                    action_type: 'candidate_updated',
+                    message: activityMessage
                 }])
+            } else {
+                const { error } = await supabase
+                    .from('candidates')
+                    .insert([{
+                        hiring_request_id: hiringRequest ? hiringRequest.id : (selectedRequestId || null),
+                        recruitment_posting_id: selectedPostingId || null,
+                        full_name: buildFullName,
+                        email: formData.email || null,
+                        phone: formData.phone || null,
+                        document_type: formData.document_type || null,
+                        document_number: formData.document_number || null,
+                        related_staff_id: duplicateStaff ? duplicateStaff.id : null,
+                        source: formData.source,
+                        notes: formData.notes || null,
+                        cv_url: cv_url,
+                        stage: 'new'
+                    }])
 
-            if (error) throw error
+                if (error) throw error
 
-            // Log Activity
-            await supabase.from('hr_activity_log').insert([{
-                hiring_request_id: hiringRequest.id,
-                action_type: 'candidate_added',
-                message: `Added candidate ${formData.full_name} from ${formData.source}`
-            }])
+                // Log Activity
+                const activityMessage = `Added candidate ${buildFullName} from ${formData.source} / Đã thêm ứng viên ${buildFullName} từ ${formData.source}`
+
+                await supabase.from('hr_activity_log').insert([{
+                    hiring_request_id: hiringRequest ? hiringRequest.id : (selectedRequestId || null),
+                    action_type: 'candidate_added',
+                    message: activityMessage
+                }])
+            }
 
             onSuccess()
             onClose()
         } catch (error: any) {
-            console.error('Error adding candidate:', error)
-            alert(error.message || 'Failed to add candidate')
+            console.error('Error saving candidate:', error)
+            alert(error.message || 'Failed to save candidate')
         } finally {
             setSubmitting(false)
         }
@@ -109,7 +358,7 @@ export function AddCandidateModal({ hiringRequest, onClose, onSuccess }: AddCand
                     leaveFrom="opacity-100"
                     leaveTo="opacity-0"
                 >
-                    <div className="fixed inset-0 bg-black/25" />
+                    <div className="fixed inset-0 bg-black/25 backdrop-blur-sm" />
                 </TransitionChild>
 
                 <div className="fixed inset-0 overflow-y-auto">
@@ -123,119 +372,345 @@ export function AddCandidateModal({ hiringRequest, onClose, onSuccess }: AddCand
                             leaveFrom="opacity-100 scale-100"
                             leaveTo="opacity-0 scale-95"
                         >
-                            <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
-                                <div className="flex items-center justify-between mb-5">
-                                    <DialogTitle as="h3" className="text-lg font-medium leading-6 text-gray-900">
-                                        Add Candidate
+                            <DialogPanel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl border border-gray-100 transition-all text-gray-900">
+                                <div className="flex items-center justify-between mb-5 pb-3 border-b border-gray-100">
+                                    <DialogTitle as="h3" className="text-lg font-bold text-slate-800">
+                                        {candidateToEdit ? (isVI ? 'Cập nhật thông tin ứng viên' : 'Edit Candidate Details') : (isVI ? 'Thêm ứng viên' : 'Add Candidate')}
                                     </DialogTitle>
-                                    <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100">
-                                        <XMarkIcon className="h-5 w-5 text-gray-500" />
+                                    <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 transition cursor-pointer">
+                                        <XMarkIcon className="h-5 w-5 text-slate-400" />
                                     </button>
                                 </div>
 
-                                <form onSubmit={handleSubmit} className="space-y-4">
-                                    <div>
-                                        <label htmlFor="full_name" className="block text-sm font-medium text-gray-700">Full Name</label>
-                                        <input
-                                            type="text"
-                                            name="full_name"
-                                            id="full_name"
-                                            required
-                                            value={formData.full_name}
-                                            onChange={handleChange}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
+                                <form onSubmit={handleSubmit} className="space-y-5">
+                                    {/* Hiring Request Selector (only when global/null) */}
+                                    {!hiringRequest && (
                                         <div>
-                                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+                                            <label htmlFor="hiring_request_select" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Yêu cầu tuyển dụng / Vị trí' : 'Hiring Request / Position'}
+                                            </label>
+                                            <select
+                                                id="hiring_request_select"
+                                                value={selectedRequestId}
+                                                onChange={e => {
+                                                    const val = e.target.value
+                                                    setSelectedRequestId(val)
+                                                    if (!val) {
+                                                        setFormData(prev => ({ ...prev, source: 'Other' }))
+                                                    }
+                                                }}
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold cursor-pointer"
+                                            >
+                                                <option value="">{isVI ? 'Ứng tuyển tự do' : 'Spontaneous Application'}</option>
+                                                {activeRequests.map(req => (
+                                                    <option key={req.id} value={req.id}>
+                                                        {req.position_title} ({req.department})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Row 1: Name Parts */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div>
+                                            <label htmlFor="last_name" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Họ *' : 'Last Name *'}
+                                            </label>
                                             <input
-                                                type="email"
-                                                name="email"
-                                                id="email"
-                                                value={formData.email}
-                                                onChange={handleChange}
-                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"
+                                                type="text"
+                                                id="last_name"
+                                                required
+                                                value={lastName}
+                                                onChange={e => setLastName(e.target.value)}
+                                                placeholder={isVI ? 'Họ' : 'Last Name'}
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
                                             />
                                         </div>
                                         <div>
-                                            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone</label>
+                                            <label htmlFor="middle_name" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Tên đệm' : 'Middle Name'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                id="middle_name"
+                                                value={middleName}
+                                                onChange={e => setMiddleName(e.target.value)}
+                                                placeholder={isVI ? 'Tên đệm' : 'Middle Name'}
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="first_name" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Tên *' : 'First Name *'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                id="first_name"
+                                                required
+                                                value={firstName}
+                                                onChange={e => setFirstName(e.target.value)}
+                                                placeholder={isVI ? 'Tên' : 'First Name'}
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Row 2: Contact Info */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label htmlFor="phone" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Số điện thoại' : 'Phone'}
+                                            </label>
                                             <input
                                                 type="text"
                                                 name="phone"
                                                 id="phone"
                                                 value={formData.phone}
                                                 onChange={handleChange}
-                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"
+                                                placeholder="0901234567"
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="email" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Email' : 'Email'}
+                                            </label>
+                                            <input
+                                                type="email"
+                                                name="email"
+                                                id="email"
+                                                value={formData.email}
+                                                onChange={handleChange}
+                                                placeholder="example@mail.com"
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
                                             />
                                         </div>
                                     </div>
 
+                                    {/* Row 2.5: Document Info */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label htmlFor="document_type" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Loại giấy tờ' : 'Document Type'}
+                                            </label>
+                                            <select
+                                                name="document_type"
+                                                id="document_type"
+                                                value={formData.document_type}
+                                                onChange={handleChange}
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold cursor-pointer"
+                                            >
+                                                <option value="id_card">{isVI ? 'CCCD / CMND' : 'ID Card'}</option>
+                                                <option value="passport">{isVI ? 'Hộ chiếu' : 'Passport'}</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="document_number" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Số giấy tờ' : 'Document Number'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="document_number"
+                                                id="document_number"
+                                                value={formData.document_number}
+                                                onChange={handleChange}
+                                                placeholder="012345678901"
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Row 3: Source */}
                                     <div>
-                                        <label htmlFor="source" className="block text-sm font-medium text-gray-700">Source</label>
+                                        <label htmlFor="source_select" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                            {isVI ? 'Nguồn ứng viên' : 'Candidate Source'} <span className="text-red-500">*</span>
+                                        </label>
                                         <select
-                                            name="source"
-                                            id="source"
-                                            value={formData.source}
-                                            onChange={handleChange}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"
+                                            id="source_select"
+                                            value={selectedPostingId ? `post:${selectedPostingId}` : `manual:${formData.source}`}
+                                            onChange={e => {
+                                                const val = e.target.value
+                                                if (val.startsWith('post:')) {
+                                                    const pId = val.substring(5)
+                                                    setSelectedPostingId(pId)
+                                                    const matched = postings.find(p => p.id === pId)
+                                                    setFormData(prev => ({ ...prev, source: matched ? matched.platform : 'Other' }))
+                                                } else {
+                                                    const src = val.substring(7)
+                                                    setSelectedPostingId('')
+                                                    setFormData(prev => ({ ...prev, source: src }))
+                                                }
+                                            }}
+                                            className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold cursor-pointer"
                                         >
-                                            <option value="Referral">Referral</option>
-                                            <option value="Facebook">Facebook</option>
-                                            <option value="Zalo">Zalo</option>
-                                            <option value="Walk-in">Walk-in</option>
-                                            <option value="Other">Other</option>
+                                            <optgroup label={isVI ? 'Kênh thủ công' : 'Manual Channels'}>
+                                                <option value="manual:Referral">{isVI ? 'Giới thiệu (Referral)' : 'Referral'}</option>
+                                                <option value="manual:Walk-in">{isVI ? 'Khách tự đến (Walk-in)' : 'Walk-in'}</option>
+                                                <option value="manual:Other">{isVI ? 'Khác (Other)' : 'Other'}</option>
+                                            </optgroup>
+                                            {postings.length > 0 && (
+                                                <optgroup label={isVI ? 'Bài đăng hoạt động' : 'Active Postings'}>
+                                                     {postings.map(p => (
+                                                         <option key={p.id} value={`post:${p.id}`}>
+                                                             {p.platform} {p.package_name ? `(${p.package_name})` : ''}
+                                                         </option>
+                                                     ))}
+                                                </optgroup>
+                                            )}
                                         </select>
                                     </div>
 
-                                    <div>
-                                        <label htmlFor="cv" className="block text-sm font-medium text-gray-700">CV (PDF/Image)</label>
-                                        <div className="mt-1 flex justify-center rounded-md border-2 border-dashed border-gray-300 px-6 pt-5 pb-6">
-                                            <div className="space-y-1 text-center">
-                                                <PaperClipIcon className="mx-auto h-12 w-12 text-gray-400" />
-                                                <div className="flex text-sm text-gray-600">
-                                                    <label
-                                                        htmlFor="file-upload"
-                                                        className="relative cursor-pointer rounded-md bg-white font-medium text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 hover:text-blue-500"
-                                                    >
-                                                        <span>Upload a file</span>
-                                                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" />
-                                                    </label>
-                                                    <p className="pl-1">or drag and drop</p>
+                                    {/* Row 4: CV Upload & Notes */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label htmlFor="cv" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Hồ sơ ứng viên (CV)' : 'Candidate CV'}
+                                            </label>
+                                            <div className="mt-1 flex justify-center rounded-xl border-2 border-dashed border-slate-350 hover:border-blue-400 hover:bg-slate-50/50 transition-all px-4 py-5 cursor-pointer relative h-[142px] items-center">
+                                                <div className="space-y-1.5 text-center">
+                                                    <PaperClipIcon className="mx-auto h-8 w-8 text-blue-500/80" />
+                                                    <div className="flex flex-col items-center justify-center text-xs text-slate-700 font-medium">
+                                                        <label
+                                                            htmlFor="file-upload"
+                                                            className="relative cursor-pointer rounded-md bg-transparent font-bold text-blue-600 hover:text-blue-700 hover:underline focus-within:outline-none"
+                                                        >
+                                                            <span>{isVI ? 'Tải tệp lên' : 'Upload a file'}</span>
+                                                            <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" />
+                                                        </label>
+                                                        <span className="text-slate-500 mt-0.5">{isVI ? 'hoặc kéo thả vào đây' : 'or drag and drop'}</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-550 font-semibold">
+                                                        {isVI ? 'PDF, DOC, PNG, JPG tối đa 10MB' : 'PDF, DOC, PNG, JPG up to 10MB'}
+                                                    </p>
                                                 </div>
-                                                <p className="text-xs text-gray-500">PDF, DOC, PNG, JPG up to 10MB</p>
                                             </div>
+                                            {file && (
+                                                <div className="mt-2 flex items-center justify-between p-1.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                        <span className="font-semibold shrink-0">{isVI ? 'Đã chọn:' : 'Selected:'}</span>
+                                                        <span className="truncate font-mono">{file.name}</span>
+                                                    </div>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setFile(null)}
+                                                        className="text-slate-500 hover:text-slate-700 font-bold px-1 shrink-0 ml-1"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {!file && currentCvUrl && (
+                                                <div className="mt-2 flex items-center justify-between p-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-semibold">{isVI ? 'CV hiện tại:' : 'Current CV:'}</span>
+                                                        <a href={currentCvUrl} target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-blue-800 flex items-center gap-1">
+                                                            <span>{isVI ? 'Xem CV' : 'View CV'}</span>
+                                                            <span className="text-[10px]">↗</span>
+                                                        </a>
+                                                    </div>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={handleRemoveCurrentCv}
+                                                        className="text-red-500 hover:text-red-700 font-extrabold px-1 text-sm transition-colors"
+                                                        title={isVI ? 'Xóa CV hiện tại' : 'Remove current CV'}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {shouldRemoveCv && (
+                                                <div className="mt-2 p-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 font-semibold">
+                                                    {isVI ? 'CV hiện tại sẽ bị xóa sau khi lưu.' : 'Current CV will be removed upon saving.'}
+                                                </div>
+                                            )}
                                         </div>
-                                        {file && <p className="mt-2 text-sm text-green-600">Selected: {file.name}</p>}
+
+                                        <div>
+                                            <label htmlFor="notes" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                                                {isVI ? 'Ghi chú' : 'Notes'}
+                                            </label>
+                                            <textarea
+                                                name="notes"
+                                                id="notes"
+                                                rows={5}
+                                                value={formData.notes}
+                                                onChange={handleChange}
+                                                placeholder={isVI ? 'Nhập ghi chú thêm về ứng viên...' : 'Enter any notes about the candidate...'}
+                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-gray-900 font-semibold h-[142px] resize-none"
+                                            />
+                                        </div>
                                     </div>
 
-                                    <div>
-                                        <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
-                                        <textarea
-                                            name="notes"
-                                            id="notes"
-                                            rows={2}
-                                            value={formData.notes}
-                                            onChange={handleChange}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"
-                                        />
-                                    </div>
+                                    {/* Duplicate Warnings */}
+                                    {isNotEligible ? (
+                                        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 space-y-1">
+                                            <div className="font-bold">
+                                                {isVI 
+                                                    ? `❌ Nhân sự/ứng viên này không đủ điều kiện ứng tuyển lại`
+                                                    : `❌ This person is not eligible for rehire`}
+                                            </div>
+                                            <p className="text-xs text-red-700 leading-relaxed">
+                                                {isVI 
+                                                    ? 'Hồ sơ này đã được đánh dấu là không đủ điều kiện tuyển dụng/ứng tuyển trong danh sách lưu trữ. Bạn không thể tạo hoặc cập nhật ứng viên này.'
+                                                    : 'This contact profile has been marked as NOT eligible for rehire/application in archives. You cannot save or update this candidate.'}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {duplicateCandidate && (
+                                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 space-y-2">
+                                                    <div className="font-semibold">
+                                                        {isVI 
+                                                            ? `⚠️ Ứng viên này đã tồn tại: ${duplicateCandidate.full_name} (Trạng thái: ${duplicateCandidate.stage})`
+                                                            : `⚠️ This candidate already exists: ${duplicateCandidate.full_name} (Stage: ${duplicateCandidate.stage})`}
+                                                    </div>
+                                                    <p className="text-xs text-amber-700">
+                                                        {isVI 
+                                                            ? 'Không thể tạo hồ sơ mới. Bạn có thể mở hồ sơ của họ per vedere i dettagli o ripristinarlo per ricominciare il processo.'
+                                                            : 'Cannot create a new duplicate profile. You can open their profile to view details or restore/restart the recruitment process.'}
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOpenWorkflowId(duplicateCandidate.id)}
+                                                        className="inline-flex items-center px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+                                                    >
+                                                        {isVI ? 'Mở hồ sơ ứng viên' : 'Open Candidate Profile'}
+                                                    </button>
+                                                </div>
+                                            )}
 
-                                    <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:flow-row-dense">
-                                        <button
-                                            type="submit"
-                                            disabled={submitting}
-                                            className="inline-flex w-full justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none sm:col-start-2 sm:text-sm disabled:opacity-50"
-                                        >
-                                            {submitting ? 'Saving...' : 'Add Candidate'}
-                                        </button>
+                                            {duplicateStaff && (
+                                                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 space-y-1">
+                                                    <div className="font-semibold">
+                                                        {isVI 
+                                                            ? `ℹ️ Thông tin liên hệ thuộc về nhân sự: ${duplicateStaff.full_name} (Trạng thái: ${duplicateStaff.status === 'terminated' ? 'Đã nghỉ việc' : duplicateStaff.status === 'inactive' ? 'Ngừng hoạt động' : 'Đang làm việc'})`
+                                                            : `ℹ️ This contact belongs to staff: ${duplicateStaff.full_name} (Status: ${duplicateStaff.status})`}
+                                                    </div>
+                                                    <p className="text-xs text-blue-700">
+                                                        {isVI 
+                                                            ? 'Hồ sơ tuyển dụng này sarà collegato al profilo staff esistente per riutilizzare documenti e dati storici.'
+                                                            : 'This candidate application will automatically link to their existing/previous staff record to reuse documents.'}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+
+                                    <div className="flex justify-end gap-3 pt-4 mt-5 border-t border-gray-100">
                                         <button
                                             type="button"
-                                            className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none sm:col-start-1 sm:mt-0 sm:text-sm"
                                             onClick={onClose}
+                                            className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-550 hover:bg-slate-105 transition cursor-pointer h-10 flex items-center justify-center"
                                         >
-                                            Cancel
+                                            {isVI ? 'Hủy' : 'Cancel'}
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={submitting || !lastName.trim() || !firstName.trim() || !!duplicateCandidate || checkingDuplicates}
+                                            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-all cursor-pointer h-10 flex items-center justify-center disabled:opacity-40"
+                                        >
+                                            {submitting ? (isVI ? 'Đang lưu...' : 'Saving...') : candidateToEdit ? (isVI ? 'Lưu thay đổi' : 'Save Changes') : (isVI ? 'Thêm ứng viên' : 'Add Candidate')}
                                         </button>
                                     </div>
                                 </form>
@@ -243,6 +718,19 @@ export function AddCandidateModal({ hiringRequest, onClose, onSuccess }: AddCand
                         </TransitionChild>
                     </div>
                 </div>
+                {openWorkflowId && (
+                    <CandidateWorkflowModal
+                        candidateId={openWorkflowId}
+                        onClose={() => {
+                            setOpenWorkflowId(null)
+                            onClose()
+                        }}
+                        onSuccess={() => {
+                            setOpenWorkflowId(null)
+                            onSuccess()
+                        }}
+                    />
+                )}
             </Dialog>
         </Transition>
     )

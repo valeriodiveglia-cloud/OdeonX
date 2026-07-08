@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, Fragment } from 'react'
+import { useState, useEffect, useMemo, useCallback, Fragment, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffPerformance, HRStaffMember, HRRatingCategory, HRReviewPeriod } from '@/types/human-resources'
 import { saveAs } from 'file-saver'
@@ -21,7 +21,7 @@ import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import {
     Star, Plus, Search, X, Pencil, Trash2,
-    TrendingUp, TrendingDown, User, ChevronLeft, ChevronRight, FileDown
+    TrendingUp, TrendingDown, User, ChevronLeft, ChevronRight, FileDown, MoreVertical, Building2
 } from 'lucide-react'
 
 /* ═══════════════════════════════════════════════════════════
@@ -438,6 +438,47 @@ function getPeriodDates(periodType: string, dateStr: string, offset: number): { 
     return { start: d, end: d };
 }
 
+const BranchCell = ({ branchNames }: { branchNames: string[] }) => {
+    const { language } = useSettings()
+    const [isExpanded, setIsExpanded] = useState(false)
+    if (branchNames.length === 0) return <span className="text-[11px] text-slate-400 italic">—</span>
+    
+    if (branchNames.length <= 2 || isExpanded) {
+        return (
+            <div className="flex flex-wrap gap-1">
+                {branchNames.map((name, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200/80 bg-slate-50 text-[10px] font-semibold text-slate-500">
+                        <Building2 className="w-2.5 h-2.5 text-slate-400" />
+                        {name}
+                    </span>
+                ))}
+                {isExpanded && branchNames.length > 2 && (
+                    <button onClick={(e) => { e.stopPropagation(); setIsExpanded(false) }} className="text-[9px] font-bold text-blue-600 hover:text-blue-700 ml-1">
+                        {language === 'vi' ? 'Thu gọn' : 'Show less'}
+                    </button>
+                )}
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex flex-wrap gap-1 items-center">
+            {branchNames.slice(0, 2).map((name, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200/80 bg-slate-50 text-[10px] font-semibold text-slate-500">
+                    <Building2 className="w-2.5 h-2.5 text-slate-400" />
+                    {name}
+                </span>
+            ))}
+            <button 
+                onClick={(e) => { e.stopPropagation(); setIsExpanded(true) }}
+                className="inline-flex items-center px-1.5 py-0.5 rounded border border-blue-200/80 bg-blue-50 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
+            >
+                +{branchNames.length - 2} {language === 'vi' ? 'thêm' : 'more'}
+            </button>
+        </div>
+    )
+}
+
 /* ═══════════════════════════════════════════════════════
    Main Page
    ═══════════════════════════════════════════════════════ */
@@ -446,9 +487,10 @@ export default function PerformancePage() {
     
     const [loading, setLoading]       = useState(true)
     const [reviews, setReviews]       = useState<(HRStaffPerformance & { hr_staff: HRStaffMember })[]>([])
-    const [staffList, setStaffList]   = useState<(HRStaffMember & { termination_date?: string | null })[]>([])
+    const [staffList, setStaffList]   = useState<(HRStaffMember & { termination_date?: string | null; hr_staff_branches?: any[] })[]>([])
     const [accountList, setAccountList] = useState<AppAccount[]>([])
     const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
+    const [branchMap, setBranchMap]   = useState<Record<string, string>>({})
     
     const [periodOffset, setPeriodOffset] = useState(0)
     const today = new Date().toISOString().slice(0, 10)
@@ -466,6 +508,22 @@ export default function PerformancePage() {
 
     const [isAssignSelectOpen, setAssignSelectOpen] = useState(false)
     const [assigningForId, setAssigningForId] = useState<string | null>(null)
+
+    const [filterBranch, setFilterBranch] = useState<'all' | string>('all')
+    const [filterDate, setFilterDate] = useState<string>('')
+    const [filterReviewer, setFilterReviewer] = useState<string>('all')
+    const [activeHeaderFilter, setActiveHeaderFilter] = useState<'staff' | 'branch' | 'rating' | 'date' | 'reviewer' | null>(null)
+    const headerFilterRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (headerFilterRef.current && !headerFilterRef.current.contains(event.target as Node)) {
+                setActiveHeaderFilter(null)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
 
     const [deletingId, setDeletingId]     = useState<string | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
@@ -494,13 +552,21 @@ export default function PerformancePage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            const [staffRes, reviewRes, catRes, accRes, historyRes] = await Promise.all([
-                supabase.from('hr_staff').select('*').order('full_name'),
+            const [staffRes, reviewRes, catRes, accRes, historyRes, branchRes] = await Promise.all([
+                supabase.from('hr_staff').select('*, hr_staff_branches(*)').order('full_name'),
                 supabase.from('hr_staff_performance').select('*, hr_staff(*)').order('review_date', { ascending: false }),
                 supabase.from('hr_rating_categories').select('*').order('sort_order'),
                 supabase.from('app_accounts').select('*').order('name'),
-                supabase.from('hr_staff_role_history').select('*').order('effective_date', { ascending: false }).order('created_at', { ascending: false })
+                supabase.from('hr_staff_role_history').select('*').order('effective_date', { ascending: false }).order('created_at', { ascending: false }),
+                supabase.from('provider_branches').select('id, name')
             ])
+            if (branchRes.data) {
+                const map: Record<string, string> = {}
+                branchRes.data.forEach((b: any) => {
+                    map[b.id] = b.name
+                })
+                setBranchMap(map)
+            }
             if (staffRes.data) {
                 const staffWithDeparture = staffRes.data.map(s => {
                     let termination_date = null
@@ -550,12 +616,21 @@ export default function PerformancePage() {
                 const q = search.toLowerCase()
                 if (!s.full_name?.toLowerCase().includes(q) && !s.position?.toLowerCase().includes(q)) return false
             }
+            if (filterBranch !== 'all') {
+                if (!(s.hr_staff_branches || []).some((b: any) => b.branch_id === filterBranch)) return false
+            }
+            if (filterDate) {
+                if (!review || review.review_date !== filterDate) return false
+            }
+            if (filterReviewer !== 'all') {
+                if (!review || (review.reviewer_name !== filterReviewer && review.assigned_reviewer_id !== filterReviewer)) return false
+            }
             if (filterRating !== 'all') {
                 if (!review || String(review.rating) !== filterRating) return false
             }
             return true
         })
-    }, [staffList, search, filterRating, reviews, activePeriodLabel, periodEndStr])
+    }, [staffList, search, filterBranch, filterDate, filterReviewer, filterRating, reviews, activePeriodLabel, periodEndStr])
 
     const eligibleForNewReview = useMemo(() => {
         return staffList.filter(s => 
@@ -726,7 +801,7 @@ export default function PerformancePage() {
         <div className="min-h-screen text-gray-100 p-6">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-white">
                             {language === 'vi' ? 'Đánh giá hiệu quả công việc' : 'Performance Reviews'}
@@ -735,17 +810,17 @@ export default function PerformancePage() {
                             {language === 'vi' ? 'Đánh giá đa danh mục với điểm trung bình chung.' : 'Multi-category evaluations with overall average rating.'}
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <button 
                             onClick={handleExport}
                             disabled={exportLoading}
-                            className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shadow hover:shadow-lg disabled:opacity-50"
+                            className="inline-flex items-center gap-2 bg-slate-850 hover:bg-slate-800 border border-white/10 text-slate-200 h-9 px-4 rounded-lg text-sm font-medium transition-all whitespace-nowrap shadow disabled:opacity-50"
                         >
                             {exportLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FileDown className="w-4 h-4" />} 
                             {language === 'vi' ? 'Xuất ZIP' : 'Export ZIP'}
                         </button>
                         <button onClick={() => { setEditingReview(null); setPreselectedStaffForNew(null); setStaffSelectOpen(true) }}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow hover:shadow-lg whitespace-nowrap">
+                            className="inline-flex items-center gap-2 px-4 h-9 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition shadow whitespace-nowrap">
                             <Plus className="w-4 h-4" />
                             {language === 'vi' ? 'Đánh giá mới' : 'New Review'}
                         </button>
@@ -763,24 +838,6 @@ export default function PerformancePage() {
                             <div className={`text-2xl font-bold ${c.color}`}>{c.value}</div>
                         </div>
                     ))}
-                </div>
-
-                {/* Filters */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-                    <div className="relative flex-1 max-w-xs">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input type="text" placeholder={language === 'vi' ? 'Tìm kiếm tên, chức vụ…' : 'Search name, position…'} value={search} onChange={e => setSearch(e.target.value)}
-                            className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none" />
-                        {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"><X className="w-3 h-3 text-slate-400" /></button>}
-                    </div>
-                    <select value={filterRating} onChange={e => setFilterRating(e.target.value)}
-                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                        <option value="all">{language === 'vi' ? 'Tất cả điểm số' : 'All Ratings'}</option>
-                        {[5, 4, 3, 2, 1].map(r => <option key={r} value={String(r)}>{r} — {getOverallLabelTranslated(r, language)}</option>)}
-                    </select>
-                    <span className="text-xs text-slate-500 ml-auto">
-                        {language === 'vi' ? `Hiển thị ${filteredStaff.length}` : `${filteredStaff.length} shown`}
-                    </span>
                 </div>
 
                 {/* Header Nav */}
@@ -806,18 +863,165 @@ export default function PerformancePage() {
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-200">
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Nhân viên' : 'Staff Member'}
+                                    {/* Staff Member Header */}
+                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[200px]">
+                                        <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'staff' ? headerFilterRef : null}>
+                                            <span>{language === 'vi' ? 'Nhân viên' : 'Staff Member'}</span>
+                                            <button 
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'staff' ? null : 'staff') }}
+                                                className={`p-1 rounded hover:bg-gray-200 transition ${search ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
+                                            >
+                                                <MoreVertical className="w-3.5 h-3.5" />
+                                            </button>
+                                            
+                                            {activeHeaderFilter === 'staff' && (
+                                                <div className="absolute left-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                                        <input 
+                                                            type="text" 
+                                                            autoFocus
+                                                            placeholder={language === 'vi' ? 'Tìm tên…' : 'Search name…'} 
+                                                            value={search} 
+                                                            onChange={e => setSearch(e.target.value)}
+                                                            className="w-full pl-8 pr-7 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 outline-none bg-white text-gray-900" 
+                                                        />
+                                                        {search && (
+                                                            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-100">
+                                                                <X className="w-3 h-3 text-gray-400" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Ngày đánh giá' : 'Review Date'}
+
+                                     {/* Branches Header */}
+                                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[150px]">
+                                         <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'branch' ? headerFilterRef : null}>
+                                             <span>{language === 'vi' ? 'Chi nhánh' : 'Branch(es)'}</span>
+                                             <button 
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'branch' ? null : 'branch') }}
+                                                className={`p-1 rounded hover:bg-gray-200 transition ${filterBranch !== 'all' ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
+                                            >
+                                                <MoreVertical className="w-3.5 h-3.5" />
+                                            </button>
+                                            
+                                            {activeHeaderFilter === 'branch' && (
+                                                <div className="absolute left-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800">
+                                                    <select 
+                                                        autoFocus
+                                                        value={filterBranch} 
+                                                        onChange={e => setFilterBranch(e.target.value)}
+                                                        className="w-full border border-gray-300 rounded-lg text-xs py-1.5 px-2 bg-white text-gray-900 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                    >
+                                                        <option value="all">{language === 'vi' ? 'Tất cả chi nhánh' : 'All Branches'}</option>
+                                                        {Object.entries(branchMap).map(([id, name]) => (
+                                                            <option key={id} value={id}>{name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
                                     </th>
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Trạng thái & Đánh giá chung' : 'Status & Overall'}
+
+                                    {/* Review Date Header */}
+                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[140px]">
+                                        <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'date' ? headerFilterRef : null}>
+                                            <span>{language === 'vi' ? 'Ngày đánh giá' : 'Review Date'}</span>
+                                            <button 
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'date' ? null : 'date') }}
+                                                className={`p-1 rounded hover:bg-gray-200 transition ${filterDate ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
+                                            >
+                                                <MoreVertical className="w-3.5 h-3.5" />
+                                            </button>
+                                            
+                                            {activeHeaderFilter === 'date' && (
+                                                <div className="absolute left-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800">
+                                                    <div className="relative flex items-center gap-1">
+                                                        <input 
+                                                            type="date" 
+                                                            autoFocus
+                                                            value={filterDate} 
+                                                            onChange={e => setFilterDate(e.target.value)}
+                                                            className="w-full border border-gray-300 rounded-lg text-xs py-1.5 px-2 bg-white text-gray-900 focus:ring-1 focus:ring-blue-500 outline-none" 
+                                                        />
+                                                        {filterDate && (
+                                                            <button onClick={() => setFilterDate('')} className="p-1 rounded hover:bg-gray-100 shrink-0">
+                                                                <X className="w-3 h-3 text-gray-400" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </th>
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Người đánh giá' : 'Reviewer'}
+
+                                    {/* Status & Overall Header */}
+                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[180px]">
+                                        <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'rating' ? headerFilterRef : null}>
+                                            <span className="mx-auto">{language === 'vi' ? 'Trạng thái & Đánh giá' : 'Status & Overall'}</span>
+                                            <button 
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'rating' ? null : 'rating') }}
+                                                className={`p-1 rounded hover:bg-gray-200 transition ${filterRating !== 'all' ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
+                                            >
+                                                <MoreVertical className="w-3.5 h-3.5" />
+                                            </button>
+                                            
+                                            {activeHeaderFilter === 'rating' && (
+                                                <div className="absolute right-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800 text-left">
+                                                    <select 
+                                                        autoFocus
+                                                        value={filterRating} 
+                                                        onChange={e => setFilterRating(e.target.value)}
+                                                        className="w-full border border-gray-300 rounded-lg text-xs py-1.5 px-2 bg-white text-gray-900 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                    >
+                                                        <option value="all">{language === 'vi' ? 'Tất cả điểm số' : 'All Ratings'}</option>
+                                                        {[5, 4, 3, 2, 1].map(r => (
+                                                            <option key={r} value={String(r)}>{r} — {getOverallLabelTranslated(r, language)}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
                                     </th>
+
+                                    {/* Reviewer Header */}
+                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[150px]">
+                                        <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'reviewer' ? headerFilterRef : null}>
+                                            <span>{language === 'vi' ? 'Người đánh giá' : 'Reviewer'}</span>
+                                            <button 
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'reviewer' ? null : 'reviewer') }}
+                                                className={`p-1 rounded hover:bg-gray-200 transition ${filterReviewer !== 'all' ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
+                                            >
+                                                <MoreVertical className="w-3.5 h-3.5" />
+                                            </button>
+                                            
+                                            {activeHeaderFilter === 'reviewer' && (
+                                                <div className="absolute left-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800">
+                                                    <select 
+                                                        autoFocus
+                                                        value={filterReviewer} 
+                                                        onChange={e => setFilterReviewer(e.target.value)}
+                                                        className="w-full border border-gray-300 rounded-lg text-xs py-1.5 px-2 bg-white text-gray-900 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                    >
+                                                        <option value="all">{language === 'vi' ? 'Tất cả người đánh giá' : 'All Reviewers'}</option>
+                                                        {Array.from(new Set(reviews.map(r => r.reviewer_name).filter(Boolean))).map(name => (
+                                                             <option key={name} value={name || ''}>{name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </th>
+
+                                    {/* Actions Header */}
                                     <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
                                         {language === 'vi' ? 'Hành động' : 'Actions'}
                                     </th>
@@ -853,6 +1057,13 @@ export default function PerformancePage() {
                                                             <span className="text-xs text-gray-400 block">{staff.position}</span>
                                                         </div>
                                                     </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <BranchCell 
+                                                        branchNames={(staff.hr_staff_branches || [])
+                                                            .map((br: any) => branchMap[br.branch_id])
+                                                            .filter(Boolean)} 
+                                                    />
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-600">
                                                     {r ? new Intl.DateTimeFormat(language === 'vi' ? 'vi-VN' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(r.review_date)) : <span className="text-slate-400">—</span>}
@@ -891,7 +1102,7 @@ export default function PerformancePage() {
                                 })}
                                 {filteredStaff.length === 0 && (
                                     <tr>
-                                        <td colSpan={5} className="px-4 py-16 text-center">
+                                        <td colSpan={6} className="px-4 py-16 text-center">
                                             <User className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                                             <p className="text-gray-500 text-sm font-medium">
                                                 {language === 'vi' ? 'Không có kết quả nào khớp với bộ lọc của bạn' : 'No results match your filters'}
@@ -922,9 +1133,60 @@ export default function PerformancePage() {
                 title={language === 'vi' ? 'Giao việc đánh giá cho' : 'Assign Review To'}
                 subtitle={language === 'vi' ? `Chọn một người dùng ứng dụng để xử lý việc đánh giá cho ${staffList.find(s => s.id === assigningForId)?.full_name}.` : `Select an app user to handle the review for ${staffList.find(s => s.id === assigningForId)?.full_name}.`}
                 accountList={accountList}
-                onSelect={(id, name) => {
-                    alert(language === 'vi' ? `Đã giao việc đánh giá cho ${name}!\nHành động trực quan này hoạt động. Lưu dữ liệu sẽ được mở khóa hoàn toàn khi Kiểm soát truy cập ứng dụng được tích hợp sau.` : `Review assigned to ${name}!\nThis visual action works. Data-saving will be fully unlocked when Application Access Control is integrated later.`);
-                    setAssignSelectOpen(false);
+                onSelect={async (id, name) => {
+                    const targetStaff = staffList.find(s => s.id === assigningForId);
+                    if (!targetStaff) return;
+                    
+                    try {
+                        const existing = reviews.find(r => r.staff_id === assigningForId && r.period === activePeriodLabel);
+                        if (existing) {
+                            const { error: updErr } = await supabase
+                                .from('hr_staff_performance')
+                                .update({
+                                    reviewer_name: name,
+                                    assigned_reviewer_id: id
+                                })
+                                .eq('id', existing.id);
+                            if (updErr) throw updErr;
+                        } else {
+                            const { error: insErr } = await supabase
+                                .from('hr_staff_performance')
+                                .insert([{
+                                    staff_id: assigningForId,
+                                    review_date: today,
+                                    period: activePeriodLabel,
+                                    reviewer_name: name,
+                                    rating: 0,
+                                    category_ratings: {},
+                                    assigned_reviewer_id: id
+                                }]);
+                            if (insErr) throw insErr;
+                        }
+
+                        // Inseriamo la notifica centralizzata per l'assegnatario
+                        const { error: notifErr } = await supabase
+                            .from('app_notifications')
+                            .insert([{
+                                module: 'hr',
+                                title_en: 'Performance Review Assigned',
+                                title_vi: 'Giao việc đánh giá hiệu suất',
+                                message_en: `You have been assigned to conduct the performance review for ${targetStaff.full_name} for the period ${activePeriodLabel}.`,
+                                message_vi: `Bạn đã được giao thực hiện đánh giá hiệu suất cho ${targetStaff.full_name} cho chu kỳ ${localizePeriodLabel(activePeriodLabel, 'vi')}.`,
+                                target_user_id: id
+                            }]);
+                        if (notifErr) throw notifErr;
+
+                        // Rinfreschiamo i dati
+                        await fetchAll();
+                        
+                        // Notifichiamo la TopHeader
+                        window.dispatchEvent(new CustomEvent('performance-updated'));
+                        
+                        setAssignSelectOpen(false);
+                    } catch (err) {
+                        console.error('Error assigning review:', err);
+                        alert(language === 'vi' ? 'Giao việc thất bại' : 'Failed to assign review');
+                    }
                 }}
             />
 

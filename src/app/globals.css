@@ -659,3 +659,15 @@ body.ct-dragging {
     padding-right: 0 !important;
   }
 }
+
+/* -------------------------------------------------------
+   Layout con barra superiore ad L (TopHeader)
+-------------------------------------------------------- */
+.has-top-header main {
+  padding-top: 4rem !important; /* h-16 */
+}
+
+/* Evita che elementi sticky top-0 vengano coperti dalla barra superiore */
+.has-top-header main .sticky.top-0 {
+  top: 4rem !important;
+}

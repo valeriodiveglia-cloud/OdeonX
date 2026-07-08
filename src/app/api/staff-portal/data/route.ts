@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         if (doc.file_path) {
           try {
             const { data: signedData } = await supabaseAdmin.storage
-              .from('hr_documents')
+              .from('hr-documents')
               .createSignedUrl(doc.file_path, 3600) // 1 hour validity
             downloadUrl = signedData?.signedUrl || downloadUrl
           } catch (e) {
@@ -110,6 +110,22 @@ export async function POST(req: NextRequest) {
         infraction:hr_disciplinary_catalog(infraction_name)
       `)
       .eq('staff_id', staffId)
+      .neq('deduction_source', 'cash')
+      .order('date', { ascending: false })
+
+    // Fetch Warnings & Flags
+    const { data: warnings } = await supabaseAdmin
+      .from('hr_staff_warnings')
+      .select('*')
+      .eq('staff_id', staffId)
+      .order('date', { ascending: false })
+
+    // Fetch Awards
+    const { data: awards } = await supabaseAdmin
+      .from('hr_staff_awards')
+      .select('*')
+      .eq('staff_id', staffId)
+      .neq('deduction_source', 'cash')
       .order('date', { ascending: false })
 
     // 9. Fetch Service Charges and aggregate pools
@@ -214,6 +230,8 @@ export async function POST(req: NextRequest) {
       },
       performance: performance || [],
       disciplinary: fines || [],
+      warnings: warnings || [],
+      awards: awards || [],
       serviceCharges,
       publishedRosters,
       colleagues,

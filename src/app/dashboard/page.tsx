@@ -75,6 +75,7 @@ function loadProviderSnapshotFromLS(): ProviderBranch[] | null {
 export default function HomeDashboard() {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const { language } = useSettings()
@@ -93,12 +94,13 @@ export default function HomeDashboard() {
         if (data.user) {
           const { data: acc } = await supabase
             .from('app_accounts')
-            .select('role, preferences')
+            .select('role, preferences, name')
             .eq('user_id', data.user.id)
             .single()
 
           if (mounted) {
             setRole(acc?.role || null)
+            setUserName(acc?.name || null)
             // Two-way sync: Upgrade DB if local storage has data but DB is empty
             let prefs = acc?.preferences || {};
             let prefsUpdated = false;
@@ -138,6 +140,11 @@ export default function HomeDashboard() {
             if (acc?.role === 'sale advisor') {
               isRedirecting = true
               router.replace('/crm/partners')
+              return
+            }
+            if (acc?.role === 'hr manager') {
+              isRedirecting = true
+              router.replace('/human-resources/recruitment')
               return
             }
           }
@@ -354,7 +361,7 @@ export default function HomeDashboard() {
 
   const defaultModules = [
     // Column 1
-    { id: 'costing', href: '/materials', icon: CalculatorIcon, title: t(language, 'Costing') },
+    { id: 'costing', href: '/materials', icon: CalculatorIcon, title: t(language, 'Costing'), roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
     { id: 'crm', href: '/crm', icon: Handshake, title: t(language, 'CRMPartnerships') || 'CRM & Partnerships', roles: ['owner', 'admin', 'manager', 'accountant'] },
     { id: 'referrals', href: '/crm/referrals', icon: Target, title: t(language, 'RegisterReferral') || 'Register Referral', roles: ['owner', 'admin', 'manager', 'staff'] },
     
@@ -364,7 +371,7 @@ export default function HomeDashboard() {
     
     // Column 3
     { id: 'loyalty', href: '/loyalty-manager', icon: UserGroupIcon, title: t(language, 'LoyaltyManager') || 'Loyalty Manager', roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-    { id: 'asset-branch-picker', Component: AssetBranchPickerCTA, title: t(language, 'AssetInventory') || 'Asset Inventory', icon: Boxes },
+    { id: 'asset-branch-picker', Component: AssetBranchPickerCTA, title: t(language, 'AssetInventory') || 'Asset Inventory', icon: Boxes, roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
     
     // Column 4
     { id: 'branch-picker', Component: BranchPickerCTA, title: t(language, 'CheckInSystem') || 'Check In System', icon: MapPinIcon, roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
@@ -419,7 +426,7 @@ export default function HomeDashboard() {
 
   return (
     <div className="h-screen w-full flex flex-col bg-[#0B1537] overflow-hidden font-sans">
-      <Topbar userEmail={user?.email ?? ''} onLogout={handleLogout} />
+      <Topbar userDisplayName={userName || user?.email || ''} userRole={role} onLogout={handleLogout} />
 
       <main className="flex-1 w-full h-full min-h-0 relative flex justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto">
         <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden z-0">
@@ -1094,14 +1101,39 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+const formatRole = (role: string | null) => {
+  if (!role) return ''
+  return role.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
+
 /* ---------- Topbar ---------- */
-function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => void }) {
+function Topbar({ userDisplayName, userRole, onLogout }: { userDisplayName: string; userRole: string | null; onLogout: () => void }) {
   const { language, setLanguage } = useSettings()
-  const [showNotif, setShowNotif] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const isEN = language === 'en'
   const countryCode = isEN ? 'GB' : 'VN'
   const nextLang = isEN ? 'vi' : 'en'
   const label = isEN ? t(language, 'SwitchToVi') : t(language, 'SwitchToEn')
+
+  useEffect(() => {
+    const handleCountUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail && typeof detail.count === 'number') {
+        setUnreadCount(detail.count)
+      }
+    }
+    window.addEventListener('notifications-unread-count', handleCountUpdate)
+    // Richiedi un aggiornamento iniziale se TopHeader ha già caricato i dati
+    window.dispatchEvent(new CustomEvent('request-notifications-unread-count'))
+    
+    return () => {
+      window.removeEventListener('notifications-unread-count', handleCountUpdate)
+    }
+  }, [])
+
+  const handleBellClick = () => {
+    window.dispatchEvent(new CustomEvent('open-notifications-drawer'))
+  }
 
   return (
     <header className="bg-white/80 backdrop-blur-md shadow-[0_4px_30px_rgb(0,0,0,0.05)] border-b border-gray-100/50 sticky top-0 z-50 rounded-b-[2rem] mx-2">
@@ -1125,7 +1157,16 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
             />
           </button>
 
-          <span className="text-[13px] font-medium text-gray-600 hidden sm:block">{userEmail}</span>
+          <div className="flex flex-col items-end hidden sm:flex">
+            <span className="text-[13px] font-medium text-gray-800 leading-tight">
+              {userDisplayName}
+            </span>
+            {userRole && (
+              <span className="text-[10px] text-gray-500 font-semibold tracking-wider uppercase leading-none mt-0.5">
+                {formatRole(userRole)}
+              </span>
+            )}
+          </div>
           <button
             onClick={onLogout}
             className="flex items-center justify-center bg-gradient-to-b from-blue-400 to-blue-600 text-white px-5 py-2 rounded-full text-xs font-bold tracking-wide hover:from-blue-500 hover:to-blue-700 transition-all shadow-[0_2px_10px_rgba(37,99,235,0.3)]"
@@ -1137,26 +1178,18 @@ function Topbar({ userEmail, onLogout }: { userEmail: string; onLogout: () => vo
 
           <div className="relative">
             <button
-              onClick={() => setShowNotif(!showNotif)}
-              onBlur={() => setTimeout(() => setShowNotif(false), 200)}
-              className="relative p-2 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors focus:outline-none"
+              onClick={handleBellClick}
+              className="relative p-2 rounded-full text-gray-400 hover:text-blue-650 hover:bg-blue-50 transition-colors focus:outline-none cursor-pointer group hover:scale-105 active:scale-95"
               aria-label="Notifications"
+              title={language === 'vi' ? 'Thông báo' : 'Notifications'}
             >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border border-white"></span>
+              <Bell className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-red-500 border border-white flex items-center justify-center text-[9px] font-extrabold text-white animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
             </button>
-
-            {showNotif && (
-              <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-100 shadow-xl rounded-2xl p-4 z-[100] animate-in fade-in slide-in-from-top-2 origin-top-right">
-                <div className="flex justify-center mb-2">
-                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
-                    <Bell className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-sm font-bold text-gray-900 text-center">{t(language, 'Notifications') || 'Notifications'}</div>
-                <div className="text-xs text-gray-500 text-center mt-1">{t(language, 'ComingSoon') || 'Coming soon!'}</div>
-              </div>
-            )}
           </div>
         </div>
       </div>

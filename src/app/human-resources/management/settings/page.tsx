@@ -2,24 +2,25 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { HRDepartment, HRPosition, HRRatingCategory, RatingCategoryScope, HRDisciplinaryCategory, HRAlertSetting, AlertScope, AlertTargetField, HRDisciplinaryCatalog } from '@/types/human-resources'
+import { HRDepartment, HRPosition, HRRatingCategory, RatingCategoryScope, HRDisciplinaryCategory, HRDisciplinaryCatalog, HRAwardsCatalog, HRFlagRule } from '@/types/human-resources'
 import { useSettings } from '@/contexts/SettingsContext'
 import CircularLoader from '@/components/CircularLoader'
 import {
     Settings, Building2, Briefcase, Star, Plus, Pencil, Trash2, X,
-    Check, Globe, ChevronRight, Calendar, NotebookPen, AlertTriangle, Gift, Tag, Loader2
+    Check, Globe, ChevronRight, Calendar, NotebookPen, AlertTriangle, Gift, Tag, Loader2, Award, Flag
 } from 'lucide-react'
 
 /* ═══════════════════════════════════════════════
    Tab config
    ═══════════════════════════════════════════════ */
 const TABS = [
-    { key: 'departments' as const, label: 'Departments',        icon: Building2 },
-    { key: 'positions'   as const, label: 'Positions',          icon: Briefcase },
-    { key: 'alerts'      as const, label: 'Alerts',             icon: AlertTriangle },
+    { key: 'departments' as const, label: 'Departments', icon: Building2 },
+    { key: 'positions'   as const, label: 'Positions',   icon: Briefcase },
     { key: 'categories'  as const, label: 'Rating Categories',  icon: Star },
     { key: 'fines_categories' as const, label: 'Disciplinary Categories', icon: NotebookPen },
     { key: 'fines_table' as const, label: 'Fine Tables',        icon: Tag },
+    { key: 'awards_table' as const, label: 'Award Tables',      icon: Award },
+    { key: 'flag_rules'   as const, label: 'Flag Rules',        icon: Flag },
     { key: 'periods'     as const, label: 'Review Periods',     icon: Calendar },
     { key: 'bonus'       as const, label: 'Bonus Settings',     icon: Gift },
 ]
@@ -366,337 +367,7 @@ function PositionsTab({ departments, positions, onRefresh }: {
     )
 }
 
-/* ═══════════════════════════════════════════════════
-   ALERTS TAB
-   ═══════════════════════════════════════════════════ */
-function AlertsTab({ departments, positions, alerts, onRefresh }: {
-    departments: HRDepartment[]; positions: HRPosition[]; alerts: HRAlertSetting[]; onRefresh: () => void
-}) {
-    const { language } = useSettings()
-    const [modalOpen, setModalOpen] = useState(false)
-    const [editAlert, setEditAlert] = useState<HRAlertSetting | null>(null)
-    const [saving, setSaving]       = useState(false)
-    const [deleteId, setDeleteId]   = useState<string | null>(null)
-    const [deleting, setDeleting]   = useState(false)
 
-    // Form state
-    const [label, setLabel]         = useState('')
-    const [targetField, setTargetField] = useState<AlertTargetField>('probation_end_date')
-    const [deactivateTrigger, setDeactivateTrigger] = useState<AlertTargetField | ''>('')
-    const [conditionType, setConditionType] = useState<'before' | 'after'>('before')
-    const [days, setDays]           = useState<string>('30')
-    const [scope, setScope]         = useState<AlertScope>('global')
-    const [scopeId, setScopeId]     = useState<string>('')
-
-    const openAdd = () => { 
-        setEditAlert(null); setLabel(''); setTargetField('probation_end_date'); setDeactivateTrigger(''); setConditionType('before'); setDays('30'); 
-        setScope('global'); setScopeId(''); setModalOpen(true); 
-    }
-    const openEdit = (a: HRAlertSetting) => { 
-        setEditAlert(a); setLabel(a.label); setTargetField(a.target_field); setDeactivateTrigger(a.deactivate_trigger || ''); setConditionType(a.condition_type); setDays(a.days?.toString() || ''); 
-        setScope(a.scope); setScopeId(a.scope_id || ''); setModalOpen(true); 
-    }
-
-    const handleSave = async () => {
-        if (!label.trim()) return
-        setSaving(true)
-        const dbDays = parseInt(days) || 0
-        const data = {
-            label: label.trim(),
-            target_field: targetField,
-            deactivate_trigger: deactivateTrigger || null,
-            condition_type: conditionType,
-            days: dbDays,
-            scope,
-            scope_id: scope === 'global' ? null : (scopeId || null),
-        }
-        if (editAlert) {
-            await supabase.from('hr_alert_settings').update(data).eq('id', editAlert.id)
-        } else {
-            await supabase.from('hr_alert_settings').insert([data])
-        }
-        setModalOpen(false); setSaving(false); onRefresh()
-    }
-
-    const handleDelete = async () => {
-        if (!deleteId) return
-        setDeleting(true)
-        await supabase.from('hr_alert_settings').delete().eq('id', deleteId)
-        setDeleteId(null); setDeleting(false); onRefresh()
-    }
-
-    const deptMap: Record<string, string> = {}
-    departments.forEach(d => { deptMap[d.id] = d.name })
-    const posMap: Record<string, string> = {}
-    positions.forEach(p => { posMap[p.id] = p.name })
-
-    const scopeBadge = (cat: HRAlertSetting) => {
-        if (cat.scope === 'global') return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
-                <Globe className="w-3 h-3" /> {language === 'vi' ? 'Toàn cục' : 'Global'}
-            </span>
-        )
-        if (cat.scope === 'department') return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                <Building2 className="w-3 h-3" /> {cat.scope_id ? deptMap[cat.scope_id] || (language === 'vi' ? 'Không xác định' : 'Unknown') : '—'}
-            </span>
-        )
-        return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                <Briefcase className="w-3 h-3" /> {cat.scope_id ? posMap[cat.scope_id] || (language === 'vi' ? 'Không xác định' : 'Unknown') : '—'}
-            </span>
-        )
-    }
-
-    const targetLabel = (tf: AlertTargetField) => {
-        if (tf === 'start_date') return language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'
-        if (tf === 'probation_end_date') return language === 'vi' ? 'Hết hạn thử việc' : 'Probation End'
-        if (tf === 'contract_expiration_date') return language === 'vi' ? 'Hết hạn hợp đồng' : 'Contract Exp.'
-        if (tf === 'contract_signing_date') return language === 'vi' ? 'Ngày ký hợp đồng' : 'Contract Signing Date'
-        if (tf === 'last_status_change') return language === 'vi' ? 'Thay đổi trạng thái gần nhất' : 'Last Status Change'
-        return tf
-    }
-
-    return (
-        <div>
-            <div className="flex items-center justify-between mb-4">
-                <div>
-                    <h2 className="text-lg font-semibold text-white">
-                        {language === 'vi' ? 'Cảnh báo nhân viên' : 'Staff Alerts'}
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                        {language === 'vi' ? 'Cấu hình các quy tắc thông báo cho thời hạn của nhân viên (ví dụ: Hết hạn hợp đồng).' : 'Configure notification rules for staff deadlines (e.g. Contract expiration).'}
-                    </p>
-                </div>
-                <button onClick={openAdd}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition">
-                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm' : 'Add'}
-                </button>
-            </div>
-
-            <div className="rounded-xl bg-white shadow-md overflow-hidden">
-                <table className="w-full">
-                    <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200">
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-8">#</th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
-                                {language === 'vi' ? 'Tên cảnh báo' : 'Alert Name'}
-                            </th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
-                                {language === 'vi' ? 'Kích hoạt' : 'Trigger'}
-                            </th>
-                            <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
-                                {language === 'vi' ? 'Phạm vi' : 'Scope'}
-                            </th>
-                            <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">
-                                {language === 'vi' ? 'Hành động' : 'Actions'}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {alerts.map((a, idx) => (
-                            <tr key={a.id} className={`border-t border-gray-100 hover:bg-gray-50/80 transition ${idx % 2 === 0 ? 'bg-gray-50/30' : ''}`}>
-                                <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
-                                <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                        <AlertTriangle className="w-4 h-4 text-amber-500" />
-                                        <span className="text-sm font-medium text-gray-900">{a.label}</span>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm text-gray-800">{targetLabel(a.target_field)}</span>
-                                        <span className="text-xs text-gray-400">
-                                            {language === 'vi' ? `${a.days} ngày ${a.condition_type === 'before' ? 'trước' : 'sau'}` : `${a.days} days ${a.condition_type}`}
-                                        </span>
-                                        {a.deactivate_trigger && (
-                                            <span className="text-[10px] text-emerald-600 font-medium mt-0.5">
-                                                {language === 'vi' ? 'Tự động hủy khi:' : 'Deactivates on:'} {targetLabel(a.deactivate_trigger)}
-                                            </span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-4 py-3">{scopeBadge(a)}</td>
-                                <td className="px-4 py-3 text-center">
-                                    <div className="flex items-center justify-center gap-1">
-                                        <button onClick={() => openEdit(a)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition"><Pencil className="w-4 h-4" /></button>
-                                        <button onClick={() => setDeleteId(a.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition"><Trash2 className="w-4 h-4" /></button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                        {alerts.length === 0 && (
-                            <tr><td colSpan={5} className="px-4 py-12 text-center text-gray-400 text-sm">
-                                {language === 'vi' ? 'Chưa cấu hình cảnh báo nào. ' : 'No alerts configured. '}
-                                <button onClick={openAdd} className="text-blue-600 hover:text-blue-700 font-medium">
-                                    {language === 'vi' ? 'Thêm cảnh báo đầu tiên' : 'Add your first'}
-                                </button>
-                            </td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Alert modal */}
-            {modalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col">
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-                            <h3 className="text-lg font-semibold text-gray-900">
-                                {editAlert ? (language === 'vi' ? 'Sửa cảnh báo' : 'Edit Alert') : (language === 'vi' ? 'Cảnh báo mới' : 'New Alert')}
-                            </h3>
-                            <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-6 flex-1 overflow-y-auto max-h-[80vh]">
-                            {/* General Settings */}
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-900 mb-1">
-                                    {language === 'vi' ? 'Nhãn cảnh báo' : 'Alert Label'}
-                                </label>
-                                <p className="text-xs text-gray-500 mb-3">
-                                    {language === 'vi' ? 'Đặt tên rõ ràng và mô tả cho cảnh báo này.' : 'Give this alert a clear, descriptive name.'}
-                                </p>
-                                <input autoFocus value={label} onChange={e => setLabel(e.target.value)} placeholder={language === 'vi' ? 'vd. Gia hạn hợp đồng' : 'e.g. Renew Contract'}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" />
-                            </div>
-
-                            {/* Rule Configuration */}
-                            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-4">
-                                <div>
-                                    <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                                        {language === 'vi' ? 'Điều kiện kích hoạt' : 'Trigger Condition'}
-                                    </h4>
-                                    <p className="text-xs text-gray-500 mb-3">
-                                        {language === 'vi' ? 'Xác định chính xác thời điểm cảnh báo này xuất hiện.' : 'Define exactly when this alert should appear.'}
-                                    </p>
-                                </div>
-                                <div className="grid grid-cols-12 gap-3 items-end">
-                                    <div className="col-span-5">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            {language === 'vi' ? 'Trường mục tiêu' : 'Target Field'}
-                                        </label>
-                                        <select value={targetField} onChange={e => setTargetField(e.target.value as AlertTargetField)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                            <option value="start_date">{language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'}</option>
-                                            <option value="probation_end_date">{language === 'vi' ? 'Hết hạn thử việc' : 'Probation End'}</option>
-                                            <option value="contract_expiration_date">{language === 'vi' ? 'Hết hạn hợp đồng' : 'Contract Expiration'}</option>
-                                            <option value="last_status_change">{language === 'vi' ? 'Thay đổi trạng thái gần nhất' : 'Last Status Change'}</option>
-                                        </select>
-                                    </div>
-                                    <div className="col-span-4">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            {language === 'vi' ? 'Điều kiện' : 'Condition'}
-                                        </label>
-                                        <select value={conditionType} onChange={e => setConditionType(e.target.value as 'before' | 'after')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                            <option value="before">{language === 'vi' ? 'Trước' : 'Before'}</option>
-                                            <option value="after">{language === 'vi' ? 'Sau' : 'After'}</option>
-                                        </select>
-                                    </div>
-                                    <div className="col-span-3">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            {language === 'vi' ? 'Số ngày' : 'Days'}
-                                        </label>
-                                        <input type="number" min="0" value={days} onChange={e => setDays(e.target.value)}
-                                            placeholder="30"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1 mt-1">
-                                        {language === 'vi' ? 'Điều kiện hủy kích hoạt (Tùy chọn)' : 'Deactivation Trigger (Optional)'}
-                                    </label>
-                                    <p className="text-[11px] text-gray-500 mb-2">
-                                        {language === 'vi' ? 'Nếu được đặt, cảnh báo sẽ tự động biến mất khi trường này được cập nhật ngày sau ngày bắt đầu cảnh báo.' : 'If set, the alert disappears automatically once this field is updated to a date after the alert started.'}
-                                    </p>
-                                    <select value={deactivateTrigger} onChange={e => setDeactivateTrigger(e.target.value as any)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                        <option value="">{language === 'vi' ? 'Không (Giữ cho đến khi Ngày mục tiêu thay đổi)' : 'None (Stays until Target Date changes)'}</option>
-                                        <option value="start_date">{language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'}</option>
-                                        <option value="probation_end_date">{language === 'vi' ? 'Hết hạn thử việc' : 'Probation End'}</option>
-                                        <option value="contract_expiration_date">{language === 'vi' ? 'Hết hạn hợp đồng' : 'Contract Expiration'}</option>
-                                        <option value="contract_signing_date">{language === 'vi' ? 'Ngày ký hợp đồng' : 'Contract Signing Date'}</option>
-                                        <option value="last_status_change">{language === 'vi' ? 'Thay đổi trạng thái gần nhất' : 'Last Status Change'}</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Scope Configuration */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                                    {language === 'vi' ? 'Phạm vi cảnh báo' : 'Alert Scope'}
-                                </h4>
-                                <p className="text-xs text-gray-500 mb-3">
-                                    {language === 'vi' ? 'Cảnh báo này áp dụng cho ai?' : 'Who should this alert apply to?'}
-                                </p>
-                                <div className="flex gap-2 mb-4">
-                                    {(['global', 'department', 'position'] as AlertScope[]).map(s => (
-                                        <button key={s} type="button" onClick={() => { setScope(s); setScopeId('') }}
-                                            className={`flex-1 flex flex-col items-center justify-center p-3 rounded-xl border transition ${
-                                                scope === s
-                                                    ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-500'
-                                                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'
-                                            }`}>
-                                            {s === 'global' && <Globe className="w-5 h-5 mb-1.5" />}
-                                            {s === 'department' && <Building2 className="w-5 h-5 mb-1.5" />}
-                                            {s === 'position' && <Briefcase className="w-5 h-5 mb-1.5" />}
-                                            <span className="text-xs font-medium">
-                                                {s === 'global' ? (language === 'vi' ? 'Toàn cục' : 'Global') : s === 'department' ? (language === 'vi' ? 'Phòng ban' : 'Department') : (language === 'vi' ? 'Chức vụ' : 'Position')}
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {scope === 'department' && (
-                                    <div className="animate-in slide-in-from-top-1 fade-in duration-200">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            {language === 'vi' ? 'Chọn phòng ban' : 'Select Department'}
-                                        </label>
-                                        <select value={scopeId} onChange={e => setScopeId(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                            <option value="">{language === 'vi' ? 'Chọn phòng ban…' : 'Select department…'}</option>
-                                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                                        </select>
-                                    </div>
-                                )}
-                                {scope === 'position' && (
-                                    <div className="animate-in slide-in-from-top-1 fade-in duration-200">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            {language === 'vi' ? 'Chọn chức vụ' : 'Select Position'}
-                                        </label>
-                                        <select value={scopeId} onChange={e => setScopeId(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
-                                            <option value="">{language === 'vi' ? 'Chọn chức vụ…' : 'Select position…'}</option>
-                                            {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                        </select>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3">
-                            <button onClick={() => setModalOpen(false)}
-                                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition">
-                                {language === 'vi' ? 'Hủy' : 'Cancel'}
-                            </button>
-                            <button onClick={handleSave} disabled={saving || !label.trim() || (scope !== 'global' && !scopeId)}
-                                className="inline-flex items-center justify-center min-w-[100px] px-4 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
-                                {saving ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : (editAlert ? (language === 'vi' ? 'Cập nhật' : 'Update') : (language === 'vi' ? 'Tạo mới' : 'Create'))}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {deleteId && <DeleteConfirm label={alerts.find(c => c.id === deleteId)?.label || ''} onConfirm={handleDelete} onCancel={() => setDeleteId(null)} deleting={deleting} />}
-        </div>
-    )
-}
 
 /* ═══════════════════════════════════════════════════
    RATING CATEGORIES TAB
@@ -713,17 +384,19 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
 
     // Form state
     const [label, setLabel]         = useState('')
+    const [labelVi, setLabelVi]     = useState('')
     const [scope, setScope]         = useState<RatingCategoryScope>('global')
     const [scopeId, setScopeId]     = useState<string>('')
 
-    const openAdd = () => { setEditCat(null); setLabel(''); setScope('global'); setScopeId(''); setModalOpen(true) }
-    const openEdit = (c: HRRatingCategory) => { setEditCat(c); setLabel(c.label); setScope(c.scope); setScopeId(c.scope_id || ''); setModalOpen(true) }
+    const openAdd = () => { setEditCat(null); setLabel(''); setLabelVi(''); setScope('global'); setScopeId(''); setModalOpen(true) }
+    const openEdit = (c: HRRatingCategory) => { setEditCat(c); setLabel(c.label); setLabelVi(c.label_vi || ''); setScope(c.scope); setScopeId(c.scope_id || ''); setModalOpen(true) }
 
     const handleSave = async () => {
         if (!label.trim()) return
         setSaving(true)
         const data = {
             label: label.trim(),
+            label_vi: labelVi.trim() || null,
             scope,
             scope_id: scope === 'global' ? null : (scopeId || null),
         }
@@ -805,8 +478,11 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
                                 <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
                                 <td className="px-4 py-3">
                                     <div className="flex items-center gap-2">
-                                        <Star className="w-4 h-4 text-amber-500" />
-                                        <span className="text-sm font-medium text-gray-900">{c.label}</span>
+                                        <Star className="w-4 h-4 text-amber-500 font-medium shrink-0" />
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-medium text-gray-900">{c.label}</span>
+                                            {c.label_vi && <span className="text-xs text-gray-400">{c.label_vi}</span>}
+                                        </div>
                                     </div>
                                 </td>
                                 <td className="px-4 py-3">{scopeBadge(c)}</td>
@@ -840,9 +516,17 @@ function CategoriesTab({ departments, positions, categories, onRefresh }: {
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    {language === 'vi' ? 'Nhãn *' : 'Label *'}
+                                    {language === 'vi' ? 'Nhãn (Tiếng Anh) *' : 'Label (English) *'}
                                 </label>
-                                <input autoFocus value={label} onChange={e => setLabel(e.target.value)} placeholder={language === 'vi' ? 'vd. Kỹ năng dùng dao' : 'e.g. Knife Skills'}
+                                <input autoFocus value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Knife Skills"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {language === 'vi' ? 'Nhãn (Tiếng Việt)' : 'Label (Vietnamese)'}
+                                </label>
+                                <input value={labelVi} onChange={e => setLabelVi(e.target.value)} placeholder="vd. Kỹ năng dùng dao"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" />
                             </div>
 
@@ -2005,6 +1689,552 @@ function FormCatalog({
 }
 
 /* ═══════════════════════════════════════════════════
+   AWARDS TABLE TAB
+   ═══════════════════════════════════════════════════ */
+function AwardsTableTab({ departments, positions, categories }: {
+    departments: HRDepartment[];
+    positions: HRPosition[];
+    categories: HRDisciplinaryCategory[];
+}) {
+    const { language } = useSettings()
+    const [catalog, setCatalog] = useState<HRAwardsCatalog[]>([])
+    const [loading, setLoading] = useState(true)
+    const [modalOpen, setModalOpen] = useState(false)
+    const [editingNode, setEditingNode] = useState<HRAwardsCatalog | null>(null)
+
+    const fetchCatalog = useCallback(async () => {
+        setLoading(true)
+        try {
+            const { data, error } = await supabase.from('hr_awards_catalog').select('*, category:hr_disciplinary_categories(*)').order('award_name', { ascending: true })
+            if (error) throw error
+            setCatalog(data as HRAwardsCatalog[] || [])
+        } catch (err) {
+            console.error('Error fetching awards catalog', err)
+        } finally {
+            setLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        fetchCatalog()
+    }, [fetchCatalog])
+
+    async function handleSave(formData: Partial<HRAwardsCatalog>) {
+        try {
+            if (editingNode) {
+                const { error } = await supabase.from('hr_awards_catalog').update(formData).eq('id', editingNode.id)
+                if (error) throw error
+            } else {
+                const { error } = await supabase.from('hr_awards_catalog').insert([formData])
+                if (error) throw error
+            }
+            fetchCatalog()
+            setModalOpen(false)
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể lưu giải thưởng.' : 'Failed to save award.')
+        }
+    }
+
+    async function handleDelete(id: string) {
+        if (!window.confirm(language === 'vi' ? 'Xóa biểu mẫu giải thưởng này? Hành động này sẽ không xóa các khoản thưởng trong quá khứ, ma sẽ xóa biểu mẫu.' : 'Delete this award template? This will not remove past awards, but it will remove the template.')) return
+        try {
+            const { error } = await supabase.from('hr_awards_catalog').delete().eq('id', id)
+            if (error) throw error
+            fetchCatalog()
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể xóa giải thưởng.' : 'Failed to delete award.')
+        }
+    }
+
+    const fmt = (n: number | null) => {
+        if (n === null || isNaN(n)) return '0'
+        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n)
+    }
+
+    return (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h2 className="text-lg font-bold text-gray-900">
+                        {language === 'vi' ? 'Bảng tiền thưởng' : 'Award Tables'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'vi' ? 'Quản lý danh sách định nghĩa sẵn của các giải thưởng và số tiền thưởng mặc định.' : 'Manage the predefined list of awards and their default award amounts.'}
+                    </p>
+                </div>
+                <button 
+                    onClick={() => { setEditingNode(null); setModalOpen(true); }} 
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap"
+                >
+                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm giải thưởng' : 'Add Award'}
+                </button>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-2/5">
+                                    {language === 'vi' ? 'Tên giải thưởng / Lý do' : 'Award Name / Reason'}
+                                </th>
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-1/5">
+                                    {language === 'vi' ? 'Danh mục' : 'Category'}
+                                </th>
+                                <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-1/5">
+                                    {language === 'vi' ? 'Phạm vi áp dụng' : 'Applicability'}
+                                </th>
+                                <th className="text-right px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    {language === 'vi' ? 'Số tiền mặc định (VND)' : 'Default Amount (VND)'}
+                                </th>
+                                <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 w-32">
+                                    {language === 'vi' ? 'Hành động' : 'Actions'}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                        {loading ? (
+                            <tr><td colSpan={5} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></td></tr>
+                        ) : catalog.length === 0 ? (
+                            <tr>
+                                <td colSpan={5} className="text-center py-12 text-gray-400">
+                                    {language === 'vi' ? 'Không tìm thấy giải thưởng nào. Hãy thêm một giải thưởng.' : 'No awards found. Add one to build the awards catalog.'}
+                                </td>
+                            </tr>
+                        ) : (
+                            catalog.map(c => (
+                                <tr key={c.id} className="hover:bg-gray-50/80 transition-colors group">
+                                    <td className="px-6 py-4 text-gray-900 font-medium text-sm">
+                                        {c.award_name}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {c.category ? (
+                                            <span className="text-sm font-medium text-gray-900">
+                                                {c.category.name}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400 text-sm italic">—</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {c.applicability_type === 'global' && (
+                                            <div className="flex items-center gap-1.5 text-gray-600">
+                                                <Globe className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{language === 'vi' ? 'Toàn cục' : 'Global'}</span>
+                                            </div>
+                                        )}
+                                        {c.applicability_type === 'department' && (
+                                            <div className="flex items-center gap-1.5 text-blue-600">
+                                                <Building2 className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{departments.find(d => d.id === c.target_id)?.name || (language === 'vi' ? 'Phòng ban không xác định' : 'Unknown Department')}</span>
+                                            </div>
+                                        )}
+                                        {c.applicability_type === 'position' && (
+                                            <div className="flex items-center gap-1.5 text-purple-600">
+                                                <Briefcase className="w-3.5 h-3.5" /> <span className="text-sm font-medium">{positions.find(p => p.id === c.target_id)?.name || (language === 'vi' ? 'Chức vụ không xác định' : 'Unknown Position')}</span>
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right font-mono text-sm">
+                                        <span className="text-gray-900 font-semibold">{fmt(c.default_amount)}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => { setEditingNode(c); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={language === 'vi' ? 'Sửa' : 'Edit'}>
+                                                <Pencil className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(c.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={language === 'vi' ? 'Xóa' : 'Delete'}>
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal */}
+            {modalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-900">
+                                {editingNode ? (language === 'vi' ? 'Sửa giải thưởng' : 'Edit Award') : (language === 'vi' ? 'Thêm giải thưởng' : 'Add Award')}
+                            </h3>
+                            <button onClick={() => setModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-900 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            <FormAwardsCatalog 
+                                initialData={editingNode} 
+                                categories={categories}
+                                departments={departments}
+                                positions={positions}
+                                onSave={handleSave} 
+                                onCancel={() => setModalOpen(false)} 
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function FormAwardsCatalog({ 
+    initialData, 
+    categories, 
+    departments,
+    positions,
+    onSave, 
+    onCancel 
+}: { 
+    initialData: HRAwardsCatalog | null, 
+    categories: HRDisciplinaryCategory[], 
+    departments: HRDepartment[],
+    positions: HRPosition[],
+    onSave: (d: Partial<HRAwardsCatalog>) => void, 
+    onCancel: () => void 
+}) {
+    const { language } = useSettings()
+    const [name, setName] = useState(initialData?.award_name || '')
+    const [amount, setAmount] = useState(initialData?.default_amount || 0)
+    const [categoryId, setCategoryId] = useState(initialData?.category_id || '')
+    const [applicabilityType, setApplicabilityType] = useState<'global' | 'department' | 'position'>(initialData?.applicability_type || 'global')
+    const [targetId, setTargetId] = useState(initialData?.target_id || '')
+    const [displayAmount, setDisplayAmount] = useState(initialData?.default_amount ? Number(initialData.default_amount).toLocaleString('en-US') : '')
+    const [submitting, setSubmitting] = useState(false)
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!name || amount < 0) return
+        if (applicabilityType !== 'global' && !targetId) {
+            alert(language === 'vi' ? 'Vui lòng chọn phòng ban hoặc chức vụ mục tiêu.' : 'Please select a target department or position.')
+            return
+        }
+        setSubmitting(true)
+        onSave({
+            award_name: name,
+            default_amount: amount,
+            category_id: categoryId || null,
+            applicability_type: applicabilityType,
+            target_id: applicabilityType === 'global' ? null : targetId
+        })
+    }
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    {language === 'vi' ? 'Lý do / Tên giải thưởng' : 'Reason / Award Name'} <span className="text-red-500">*</span>
+                </label>
+                <input 
+                    type="text" 
+                    required 
+                    value={name} 
+                    onChange={e => setName(e.target.value)} 
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                    placeholder={language === 'vi' ? 'vd. Nhân viên xuất sắc' : 'e.g. Employee of the Month'} 
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {language === 'vi' ? 'Danh mục' : 'Category'}
+                    </label>
+                    <select 
+                        value={categoryId} 
+                        onChange={e => setCategoryId(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="">{language === 'vi' ? 'Không có danh mục' : 'No Category'}</option>
+                        {categories.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                        {language === 'vi' ? 'Số tiền thưởng mặc định (VND)' : 'Default Award Amount (VND)'} <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        required 
+                        value={displayAmount} 
+                        onChange={e => {
+                            let val = e.target.value.replace(/[^0-9]/g, '');
+                            if (val) {
+                                setDisplayAmount(parseInt(val, 10).toLocaleString('en-US'))
+                                setAmount(parseInt(val, 10))
+                            } else {
+                                setDisplayAmount('')
+                                setAmount(0)
+                            }
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" 
+                        placeholder="0" 
+                    />
+                </div>
+            </div>
+
+            <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-3">
+                        {language === 'vi' ? 'Phạm vi áp dụng' : 'Applicability Scope'}
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('global'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'global' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Globe className="w-4 h-4" /> {language === 'vi' ? 'Toàn cục' : 'Global'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('department'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'department' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Building2 className="w-4 h-4" /> {language === 'vi' ? 'Phòng ban' : 'Department'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setApplicabilityType('position'); setTargetId(''); }}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${applicabilityType === 'position' ? 'bg-white border-blue-200 text-blue-700 shadow-sm' : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-900'}`}
+                        >
+                            <Briefcase className="w-4 h-4" /> {language === 'vi' ? 'Chức vụ' : 'Position'}
+                        </button>
+                    </div>
+                </div>
+
+                {applicabilityType === 'department' && (
+                    <div className="animate-in fade-in slide-in-from-top-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {language === 'vi' ? 'Phòng ban mục tiêu' : 'Target Department'} <span className="text-red-500">*</span>
+                        </label>
+                        <select 
+                            required
+                            value={targetId} 
+                            onChange={e => setTargetId(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">{language === 'vi' ? 'Chọn phòng ban...' : 'Select Department...'}</option>
+                            {departments.map(d => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                {applicabilityType === 'position' && (
+                    <div className="animate-in fade-in slide-in-from-top-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                            {language === 'vi' ? 'Chức vụ mục tiêu' : 'Target Position'} <span className="text-red-500">*</span>
+                        </label>
+                        <select 
+                            required
+                            value={targetId} 
+                            onChange={e => setTargetId(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">{language === 'vi' ? 'Chọn chức vụ...' : 'Select Position...'}</option>
+                            {positions.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
+                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                    {language === 'vi' ? 'Hủy' : 'Cancel'}
+                </button>
+                <button type="submit" disabled={submitting || !name || amount < 0} className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    {submitting ? (language === 'vi' ? 'Đang lưu...' : 'Saving...') : (language === 'vi' ? 'Lưu' : 'Save')}
+                </button>
+            </div>
+        </form>
+    )
+}
+
+function FlagRulesTab() {
+    const { language } = useSettings()
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [ruleId, setRuleId] = useState<string | null>(null)
+    const [yellowLimit, setYellowLimit] = useState(2)
+    const [greenLimit, setGreenLimit] = useState(3)
+    const [awardCatalogId, setAwardCatalogId] = useState<string>('')
+    const [awardsCatalog, setAwardsCatalog] = useState<HRAwardsCatalog[]>([])
+
+    const fetchRules = useCallback(async () => {
+        setLoading(true)
+        try {
+            const [rulesRes, catalogRes] = await Promise.all([
+                supabase.from('hr_flag_rules').select('*').limit(1),
+                supabase.from('hr_awards_catalog').select('*').order('award_name')
+            ])
+
+            if (catalogRes.data) {
+                setAwardsCatalog(catalogRes.data as HRAwardsCatalog[])
+            }
+
+            if (rulesRes.data && rulesRes.data.length > 0) {
+                const rule = rulesRes.data[0]
+                setRuleId(rule.id)
+                setYellowLimit(rule.yellow_limit)
+                setGreenLimit(rule.green_limit)
+                setAwardCatalogId(rule.award_catalog_id || '')
+            }
+        } catch (err) {
+            console.error('Error fetching flag rules', err)
+        }
+        setLoading(false)
+    }, [])
+
+    useEffect(() => {
+        fetchRules()
+    }, [fetchRules])
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setSaving(true)
+        try {
+            const data = {
+                yellow_limit: yellowLimit,
+                green_limit: greenLimit,
+                award_catalog_id: awardCatalogId || null,
+                updated_at: new Date().toISOString()
+            }
+
+            let res
+            if (ruleId) {
+                res = await supabase.from('hr_flag_rules').update(data).eq('id', ruleId)
+            } else {
+                res = await supabase.from('hr_flag_rules').insert([data])
+            }
+
+            if (res.error) throw res.error
+
+            alert(language === 'vi' ? 'Lưu quy tắc flag thành công!' : 'Flag rules saved successfully!')
+            fetchRules()
+        } catch (err) {
+            console.error('Error saving flag rules', err)
+            alert(language === 'vi' ? 'Không thể lưu quy tắc' : 'Failed to save flag rules')
+        }
+        setSaving(false)
+    }
+
+    return (
+        <div>
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h2 className="text-lg font-semibold text-white">
+                        {language === 'vi' ? 'Cấu hình Quy tắc Flag' : 'Flag Rules Configuration'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                        {language === 'vi' 
+                            ? 'Cấu hình số lượng Flag cần thiết để tự động kích hoạt Warning hoặc Phần thưởng.' 
+                            : 'Configure the number of Flags required to automatically trigger a Warning or an Award.'}
+                    </p>
+                </div>
+            </div>
+
+            <div className="rounded-xl bg-white shadow-md p-6 max-w-3xl">
+                <form onSubmit={handleSave} className="space-y-6">
+                    {/* Yellow Flag Rule */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <span className="flex h-3 w-3 rounded-full bg-yellow-500" />
+                            <h3 className="text-sm font-semibold text-gray-900">
+                                {language === 'vi' ? 'Quy tắc Flag Vàng (Yellow Flag)' : 'Yellow Flag Rule'}
+                            </h3>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                            {language === 'vi'
+                                ? 'Số lượng Flag Vàng tích lũy trước khi hệ thống tự động tạo 1 Warning Đỏ.'
+                                : 'Number of Yellow Flags accumulated before the system automatically creates 1 Red Warning.'}
+                        </p>
+                        <div className="w-32">
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Giới hạn' : 'Limit'}</label>
+                            <input 
+                                type="number" 
+                                min="1" 
+                                required 
+                                value={yellowLimit} 
+                                onChange={e => setYellowLimit(parseInt(e.target.value) || 2)} 
+                                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Green Flag Rule */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <span className="flex h-3 w-3 rounded-full bg-green-500" />
+                            <h3 className="text-sm font-semibold text-gray-900">
+                                {language === 'vi' ? 'Quy tắc Flag Xanh (Green Flag)' : 'Green Flag Rule'}
+                            </h3>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                            {language === 'vi'
+                                ? 'Số lượng Flag Xanh tích lũy trước khi hệ thống tự động tạo 1 Khen thưởng.'
+                                : 'Number of Green Flags accumulated before the system automatically creates 1 Award.'}
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Giới hạn' : 'Limit'}</label>
+                                <input 
+                                    type="number" 
+                                    min="1" 
+                                    required 
+                                    value={greenLimit} 
+                                    onChange={e => setGreenLimit(parseInt(e.target.value) || 3)} 
+                                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Khen thưởng tương ứng' : 'Associated Award'}</label>
+                                <select 
+                                    value={awardCatalogId} 
+                                    onChange={e => setAwardCatalogId(e.target.value)} 
+                                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                >
+                                    <option value="">{language === 'vi' ? '-- Không kích hoạt thưởng --' : '-- No Auto Award --'}</option>
+                                    {awardsCatalog.map(aw => (
+                                        <option key={aw.id} value={aw.id}>
+                                            {aw.award_name} ({Number(aw.default_amount).toLocaleString('en-US')} VND)
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="pt-4 flex justify-end">
+                        <button 
+                            type="submit" 
+                            disabled={saving} 
+                            className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                        >
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            {saving ? (language === 'vi' ? 'Đang lưu...' : 'Saving...') : (language === 'vi' ? 'Lưu cấu hình' : 'Save Config')}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════
    MAIN SETTINGS PAGE
    ═══════════════════════════════════════════════════ */
 export default function HRManagementSettingsPage() {
@@ -2015,22 +2245,19 @@ export default function HRManagementSettingsPage() {
     const [positions, setPositions]     = useState<HRPosition[]>([])
     const [categories, setCategories]   = useState<HRRatingCategory[]>([])
     const [finesCategories, setFinesCategories] = useState<HRDisciplinaryCategory[]>([])
-    const [alerts, setAlerts]           = useState<HRAlertSetting[]>([])
 
     const fetchAll = useCallback(async () => {
         setLoading(true)
-        const [dRes, pRes, cRes, fRes, aRes] = await Promise.all([
+        const [dRes, pRes, cRes, fRes] = await Promise.all([
             supabase.from('hr_departments').select('*').order('sort_order'),
             supabase.from('hr_positions').select('*').order('sort_order'),
             supabase.from('hr_rating_categories').select('*').order('sort_order'),
-            supabase.from('hr_disciplinary_categories').select('*').order('name', { ascending: true }),
-            supabase.from('hr_alert_settings').select('*').order('created_at', { ascending: true })
+            supabase.from('hr_disciplinary_categories').select('*').order('name', { ascending: true })
         ])
         if (dRes.data) setDepartments(dRes.data as HRDepartment[])
         if (pRes.data) setPositions(pRes.data as HRPosition[])
         if (cRes.data) setCategories(cRes.data as HRRatingCategory[])
         if (fRes.data) setFinesCategories(fRes.data as HRDisciplinaryCategory[])
-        if (aRes.data) setAlerts(aRes.data as HRAlertSetting[])
         setLoading(false)
     }, [])
 
@@ -2043,8 +2270,7 @@ export default function HRManagementSettingsPage() {
             <div className="max-w-6xl mx-auto">
                 {/* Header */}
                 <div className="mb-8 border-b border-white/10 pb-6">
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <Settings className="w-6 h-6 text-slate-400" />
+                    <h1 className="text-2xl font-bold text-white">
                         {language === 'vi' ? 'Cài đặt quản trị nhân sự' : 'HR Management Settings'}
                     </h1>
                     <p className="text-sm text-slate-400 mt-1">
@@ -2071,10 +2297,11 @@ export default function HRManagementSettingsPage() {
                                     <span className="truncate">
                                         {tab.key === 'departments' ? (language === 'vi' ? 'Phòng ban' : 'Departments')
                                         : tab.key === 'positions' ? (language === 'vi' ? 'Chức vụ' : 'Positions')
-                                        : tab.key === 'alerts' ? (language === 'vi' ? 'Cảnh báo' : 'Alerts')
                                         : tab.key === 'categories' ? (language === 'vi' ? 'Danh mục đánh giá' : 'Rating Categories')
                                         : tab.key === 'fines_categories' ? (language === 'vi' ? 'Danh mục kỷ luật' : 'Disciplinary Categories')
                                         : tab.key === 'fines_table' ? (language === 'vi' ? 'Bảng tiền phạt' : 'Fine Tables')
+                                        : tab.key === 'awards_table' ? (language === 'vi' ? 'Bảng tiền thưởng' : 'Award Tables')
+                                        : tab.key === 'flag_rules' ? (language === 'vi' ? 'Quy tắc Flag' : 'Flag Rules')
                                         : tab.key === 'periods' ? (language === 'vi' ? 'Chu kỳ đánh giá' : 'Review Periods')
                                         : (language === 'vi' ? 'Cấu hình thưởng' : 'Bonus Settings')}
                                     </span>
@@ -2087,11 +2314,12 @@ export default function HRManagementSettingsPage() {
                     <div className="flex-1 min-w-0">
                         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                             {activeTab === 'departments' && <DepartmentsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
-                            {activeTab === 'positions'   && <PositionsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
-                            {activeTab === 'alerts'      && <AlertsTab departments={departments} positions={positions} alerts={alerts} onRefresh={fetchAll} />}
+                            {activeTab === 'positions' && <PositionsTab departments={departments} positions={positions} onRefresh={fetchAll} />}
                             {activeTab === 'categories'  && <CategoriesTab departments={departments} positions={positions} categories={categories} onRefresh={fetchAll} />}
                             {activeTab === 'fines_categories' && <DisciplinaryCategoriesTab categories={finesCategories} onRefresh={fetchAll} />}
                             {activeTab === 'fines_table' && <FinesTableTab departments={departments} positions={positions} categories={finesCategories} />}
+                            {activeTab === 'awards_table' && <AwardsTableTab departments={departments} positions={positions} categories={finesCategories} />}
+                            {activeTab === 'flag_rules'   && <FlagRulesTab />}
                             {activeTab === 'periods'     && <ReviewPeriodsTab />}
                             {activeTab === 'bonus'       && <BonusTab />}
                         </div>

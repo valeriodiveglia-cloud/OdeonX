@@ -6,6 +6,7 @@ import React from 'react'
 import { Briefcase, Activity, Users, Settings, Home, CalendarDays, Clock } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
+import { supabase } from '@/lib/supabase_shim'
 
 // Reusing style constants
 const EXP_W_REM = 16
@@ -17,13 +18,37 @@ export default function LeftNavHR() {
     const pathname = usePathname()
     const { language, setLanguage } = useSettings()
     const [open, setOpen] = React.useState(false)
+    const [userRole, setUserRole] = React.useState<string | null>(null)
+
+    React.useEffect(() => {
+        const fetchUserRole = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) {
+                    const { data } = await supabase
+                        .from('app_accounts')
+                        .select('role')
+                        .eq('user_id', user.id)
+                        .single()
+                    if (data) {
+                        setUserRole(data.role)
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching role in LeftNavHR:', err)
+            }
+        }
+        fetchUserRole()
+    }, [])
 
     // Layout handling for overlay
     React.useEffect(() => {
         const root = document.documentElement
         const width = open ? `${EXP_W_REM}rem` : `${COLL_W_REM}rem`
         root.style.setProperty('--leftnav-w', width)
-        return () => root.style.setProperty('--leftnav-w', `${COLL_W_REM}rem`)
+        return () => {
+            root.style.removeProperty('--leftnav-w')
+        }
     }, [open])
 
     const handleMouseEnter = () => setOpen(true)
@@ -37,17 +62,20 @@ export default function LeftNavHR() {
     const NAV = [
         { href: '/human-resources', label: language === 'vi' ? 'Bảng điều khiển' : 'Dashboard', icon: Home, exact: true },
         { href: '/human-resources/recruitment', label: language === 'vi' ? 'Tuyển dụng' : 'Recruitment', icon: Briefcase },
-        { href: '/human-resources/activity', label: language === 'vi' ? 'Hoạt động' : 'Activity', icon: Activity },
         { href: '/human-resources/candidates', label: language === 'vi' ? 'Ứng viên' : 'Candidates', icon: Users },
-        { href: '/human-resources/operational', label: language === 'vi' ? 'Vận hành HR' : 'HR Operational', icon: CalendarDays },
-        { href: '/human-resources/time-keeping', label: language === 'vi' ? 'Chấm công' : 'Time Keeping', icon: Clock },
+        { href: '/human-resources/activity', label: language === 'vi' ? 'Hoạt động' : 'Activity', icon: Activity },
         { href: '/human-resources/settings', label: language === 'vi' ? 'Cài đặt' : 'Settings', icon: Settings },
-    ]
+    ].filter(item => {
+        if (userRole === 'manager' && item.href === '/human-resources/settings') {
+            return false
+        }
+        return true
+    })
 
     return (
         <div
             className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
-                  ${open ? 'w-64' : 'w-14'} bg-slate-900 border-r border-white/10`}
+                  ${open ? 'w-64' : 'w-14'} bg-gradient-to-b from-slate-800 to-slate-900 border-r border-white/10`}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >

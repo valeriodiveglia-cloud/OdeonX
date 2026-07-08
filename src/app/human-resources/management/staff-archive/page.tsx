@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffMember, HRStaffSalaryHistory, HRDepartment, HRPosition } from '@/types/human-resources'
 import { StaffModal } from '@/components/human-resources/StaffModal'
 import CircularLoader from '@/components/CircularLoader'
 import {
-    Users, Search, X, TrendingDown, ArrowLeft, Building2, Folders, UserPlus, Undo2, Ban
+    Users, Search, X, TrendingDown, ArrowLeft, Building2, Folders, UserPlus, Undo2, Ban,
+    ArrowUp, ArrowDown, Filter, MoreVertical, UserX, UserCheck
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -17,7 +18,10 @@ export default function StaffArchivePage() {
     const [loading, setLoading] = useState(true)
     const [archivedStaff, setArchivedStaff] = useState<(HRStaffMember & { departureRecord?: HRStaffSalaryHistory })[]>([])
     const [search, setSearch] = useState('')
-    const [filterType, setFilterType] = useState('all')
+    const [sortKey, setSortKey] = useState<string>('name')
+    const [sortAsc, setSortAsc] = useState<boolean>(true)
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+    const [openMenu, setOpenMenu] = useState<string | null>(null)
     const router = useRouter()
 
     const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
@@ -74,7 +78,7 @@ export default function StaffArchivePage() {
                 setArchivedStaff(merged as any)
             }
 
-            const { data: bData } = await supabase.from('provider_branches').select('id, name')
+            const { data: bData } = await supabase.from('provider_branches').select('id, name, city')
             if (bData) setBranches(bData)
             const { data: dData } = await supabase.from('hr_departments').select('*')
             if (dData) setDepartments(dData)
@@ -146,22 +150,33 @@ export default function StaffArchivePage() {
         }
     }
 
-    const filtered = useMemo(() => {
-        return archivedStaff.filter(s => {
-            if (search) {
-                const q = search.toLowerCase()
-                if (!s.full_name.toLowerCase().includes(q) && !(s.position || '').toLowerCase().includes(q)) return false
-            }
-            if (filterType !== 'all') {
-                if (!s.departureRecord || s.departureRecord.record_type !== filterType) return false
-            }
-            return true
-        })
-    }, [archivedStaff, search, filterType])
+    const handleToggleEligibility = async (staffId: string, currentStatus: boolean | null | undefined) => {
+        const nextStatus = currentStatus === false
+        const confirmText = nextStatus
+            ? (language === 'vi' 
+                ? 'Bạn có chắc chắn muốn khôi phục quyền tuyển dụng lại cho nhân sự này không?' 
+                : 'Are you sure you want to mark this staff member as eligible for rehire?')
+            : (language === 'vi'
+                ? 'Bạn có chắc chắn muốn đánh dấu nhân sự này là Không đủ điều kiện tuyển dụng lại? Họ sẽ bị chặn ứng tuyển trong tương lai.'
+                : 'Are you sure you want to mark this staff member as not eligible for rehire? Future applications from them will be blocked.')
+                
+        if (!confirm(confirmText)) return
+        
+        try {
+            const { error } = await supabase
+                .from('hr_staff')
+                .update({ rehire_eligible: nextStatus })
+                .eq('id', staffId)
+                
+            if (error) throw error
+            await fetchAll()
+        } catch (err: any) {
+            console.error('Error toggling eligibility:', err)
+            alert(language === 'vi' ? 'Không thể cập nhật quyền tuyển dụng lại' : 'Failed to update rehire eligibility')
+        }
+    }
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
-
-    const getDepartureTypeLabel = (type: string) => {
+    const getDepartureTypeLabel = useCallback((type: string) => {
         if (language === 'vi') {
             if (type === 'resignation') return 'Xin thôi việc'
             if (type === 'rejection') return 'Từ chối thử việc'
@@ -170,7 +185,101 @@ export default function StaffArchivePage() {
         if (type === 'resignation') return 'Resignation'
         if (type === 'rejection') return 'Probation Rejected'
         return 'Dismissal'
+    }, [language])
+
+    const displayValue = useCallback((s: any, colKey: string): string => {
+        switch(colKey) {
+            case 'name': return s.full_name || '';
+            case 'position': return s.position || '';
+            case 'departure_date': 
+                return s.departureRecord ? new Date(s.departureRecord.effective_date).toLocaleDateString('en-GB') : '';
+            case 'type': 
+                return s.departureRecord ? getDepartureTypeLabel(s.departureRecord.record_type) : '';
+            case 'reason': return s.departureRecord?.reason || '';
+            default: return '';
+        }
+    }, [getDepartureTypeLabel])
+
+    const columnValues = useMemo(() => {
+        const map: Record<string, string[]> = {}
+        const keys: string[] = ['name', 'position', 'departure_date', 'type', 'reason']
+        keys.forEach(k => {
+            const set = new Set<string>()
+            archivedStaff.forEach(s => { 
+                const v = displayValue(s, k)
+                if (v) set.add(v)
+            })
+            map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        })
+        return map
+    }, [archivedStaff, displayValue])
+
+    const applySort = (col: string, asc: boolean) => {
+        setSortKey(col)
+        setSortAsc(asc)
+        setOpenMenu(null)
     }
+
+    const applyColumnFilter = (col: string, vals: Set<string> | null) => {
+        setColumnFilters(prev => ({ ...prev, [col]: vals }))
+        setOpenMenu(null)
+    }
+
+    const clearColumnFilter = (col: string) => {
+        setColumnFilters(prev => {
+            const n = { ...prev }
+            delete n[col]
+            return n
+        })
+        setOpenMenu(null)
+    }
+
+    const filtered = useMemo(() => {
+        let out = archivedStaff.slice()
+        if (search) {
+            const q = search.toLowerCase()
+            out = out.filter(s =>
+                (s.full_name || '').toLowerCase().includes(q) ||
+                (s.position || '').toLowerCase().includes(q)
+            )
+        }
+        
+        // Applica i filtri delle colonne (kebab)
+        for (const [col, allowed] of Object.entries(columnFilters)) {
+            if (!allowed) continue
+            out = out.filter(s => {
+                const v = displayValue(s, col)
+                return allowed.has(v)
+            })
+        }
+
+        // Applica l'ordinamento
+        out.sort((a, b) => {
+            let av: any, bv: any
+            switch(sortKey) {
+                case 'name': av = a.full_name || ''; bv = b.full_name || ''; break;
+                case 'position': av = a.position || ''; bv = b.position || ''; break;
+                case 'departure_date': 
+                    av = a.departureRecord?.effective_date || ''; 
+                    bv = b.departureRecord?.effective_date || ''; 
+                    break;
+                case 'type': 
+                    av = a.departureRecord ? getDepartureTypeLabel(a.departureRecord.record_type) : '';
+                    bv = b.departureRecord ? getDepartureTypeLabel(b.departureRecord.record_type) : '';
+                    break;
+                case 'reason': 
+                    av = a.departureRecord?.reason || ''; 
+                    bv = b.departureRecord?.reason || ''; 
+                    break;
+                default: av = ''; bv = '';
+            }
+            let cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
+            return sortAsc ? cmp : -cmp
+        })
+        return out
+    }, [archivedStaff, search, sortKey, sortAsc, columnFilters, displayValue, getDepartureTypeLabel])
+
+    if (loading) return <div className="min-h-screen flex items-center justify-center"><CircularLoader /></div>
 
     return (
         <div className="min-h-screen text-gray-100 p-6 animate-in fade-in duration-300">
@@ -204,13 +313,6 @@ export default function StaffArchivePage() {
                             className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none" />
                         {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"><X className="w-3 h-3 text-slate-400" /></button>}
                     </div>
-                    <select value={filterType} onChange={e => setFilterType(e.target.value)}
-                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none">
-                        <option value="all">{language === 'vi' ? 'Tất cả hình thức' : 'All Types'}</option>
-                        <option value="resignation">{language === 'vi' ? 'Xin thôi việc' : 'Resignations'}</option>
-                        <option value="dismissal">{language === 'vi' ? 'Sa thải' : 'Dismissals'}</option>
-                        <option value="rejection">{language === 'vi' ? 'Từ chối thử việc' : 'Probation Rejections'}</option>
-                    </select>
                     <span className="text-xs text-slate-500 ml-auto">
                         {language === 'vi' 
                             ? `Hiển thị ${filtered.length} trên ${archivedStaff.length}` 
@@ -224,21 +326,37 @@ export default function StaffArchivePage() {
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Nhân viên' : 'Staff Member'}
-                                    </th>
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Chức vụ' : 'Position'}
-                                    </th>
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Ngày nghỉ việc' : 'Departure Date'}
-                                    </th>
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Hình thức' : 'Type'}
-                                    </th>
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Lý do' : 'Reason'}
-                                    </th>
+                                    {([
+                                        ['name', language === 'vi' ? 'Nhân viên' : 'Staff Member'],
+                                        ['position', language === 'vi' ? 'Chức vụ' : 'Position'],
+                                        ['departure_date', language === 'vi' ? 'Ngày nghỉ việc' : 'Departure Date'],
+                                        ['type', language === 'vi' ? 'Hình thức' : 'Type'],
+                                        ['reason', language === 'vi' ? 'Lý do' : 'Reason']
+                                    ] as [string, string][]).map(([k, lbl]) => (
+                                        <ColumnHeader
+                                            key={k} colKey={k} label={lbl}
+                                            sortKey={sortKey} sortAsc={sortAsc} onSort={applySort}
+                                            values={columnValues[k] || []} activeFilter={columnFilters[k] || null}
+                                            onFilter={(s) => applyColumnFilter(k, s)} onClear={() => clearColumnFilter(k)}
+                                            open={openMenu === k} onToggle={() => setOpenMenu(openMenu === k ? null : k)} onClose={() => setOpenMenu(null)}
+                                            dict={language === 'vi' ? {
+                                                sortAsc: 'Sắp xếp tăng dần',
+                                                sortDesc: 'Sắp xếp giảm dần',
+                                                selectAll: 'Chọn tất cả',
+                                                deselectAll: 'Bỏ chọn tất cả',
+                                                filterPlaceholder: 'Lọc...',
+                                                clearFilters: 'Xóa bộ lọc'
+                                            } : {
+                                                sortAsc: 'Sort Ascending',
+                                                sortDesc: 'Sort Descending',
+                                                selectAll: 'Select All',
+                                                deselectAll: 'Deselect All',
+                                                filterPlaceholder: 'Filter...',
+                                                clearFilters: 'Clear Filters'
+                                            }}
+                                            className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500"
+                                        />
+                                    ))}
                                     <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                         {language === 'vi' ? 'Thao tác' : 'Actions'}
                                     </th>
@@ -262,7 +380,14 @@ export default function StaffArchivePage() {
                                                         {(s.full_name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <span className="text-sm font-bold text-gray-900 block truncate">{s.full_name}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-bold text-gray-900 block truncate">{s.full_name}</span>
+                                                            {s.rehire_eligible === false && (
+                                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-red-50 text-red-700 uppercase tracking-wider border border-red-100 shrink-0">
+                                                                    {language === 'vi' ? 'Không đủ điều kiện' : 'Not Eligible'}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <span className="text-xs text-gray-400 block">{s.email || s.phone || (language === 'vi' ? 'Không có liên hệ' : 'No contact info')}</span>
                                                     </div>
                                                 </div>
@@ -329,26 +454,46 @@ export default function StaffArchivePage() {
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation()
+                                                            if (s.rehire_eligible === false) {
+                                                                alert(language === 'vi' 
+                                                                    ? 'Nhân sự này được đánh dấu là Không đủ điều kiện tuyển dụng lại. Vui lòng khôi phục quyền tuyển dụng để tiếp tục.' 
+                                                                    : 'This staff member is marked as Not Eligible for rehire. Please enable their rehire eligibility to continue.')
+                                                                return
+                                                            }
                                                             setRehireStaff(s)
                                                             setRehireModalOpen(true)
                                                         }}
                                                         title={language === 'vi' ? 'Tuyển dụng lại' : 'Re-Hire'}
-                                                        className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 transition-colors relative z-10"
+                                                        className={`p-1.5 rounded-lg transition-colors relative z-10 ${
+                                                            s.rehire_eligible === false 
+                                                                ? 'bg-gray-100 text-gray-400 opacity-50 cursor-not-allowed' 
+                                                                : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700'
+                                                        }`}
                                                     >
                                                         <UserPlus className="w-4 h-4" />
                                                     </button>
 
-                                                    {/* Blacklist placeholder */}
+                                                    {/* Toggle Eligibility button */}
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation()
-                                                            const blacklistText = language === 'vi' ? 'Tính năng Danh sách đen sắp ra mắt.' : 'Blacklist feature coming soon.'
-                                                            alert(blacklistText)
+                                                            handleToggleEligibility(s.id, s.rehire_eligible)
                                                         }}
-                                                        title={language === 'vi' ? 'Danh sách đen' : 'Blacklist'}
-                                                        className="p-1.5 rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors relative z-10"
+                                                        title={s.rehire_eligible === false 
+                                                            ? (language === 'vi' ? 'Khôi phục Đủ điều kiện' : 'Mark as Eligible') 
+                                                            : (language === 'vi' ? 'Không đủ điều kiện' : 'Mark as Not Eligible')
+                                                        }
+                                                        className={`p-1.5 rounded-lg transition-colors relative z-10 ${
+                                                            s.rehire_eligible === false 
+                                                                ? 'bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700' 
+                                                                : 'bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700'
+                                                        }`}
                                                     >
-                                                        <Ban className="w-4 h-4" />
+                                                        {s.rehire_eligible === false ? (
+                                                            <UserCheck className="w-4 h-4" />
+                                                        ) : (
+                                                            <UserX className="w-4 h-4" />
+                                                        )}
                                                     </button>
                                                 </div>
                                             </td>
@@ -390,5 +535,179 @@ export default function StaffArchivePage() {
                 isRehire={true}
             />
         </div>
+    )
+}
+
+/* --- Column Header Component --- */
+type ColumnHeaderProps = {
+    colKey: string
+    label: string
+    sortKey: string
+    sortAsc: boolean
+    onSort: (k: any, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (s: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+    right?: boolean
+    center?: boolean
+    className?: string
+}
+
+function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '' }: ColumnHeaderProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+        ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+        : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) { filteredValues.forEach(v => next.delete(v)) }
+        else { filteredValues.forEach(v => next.add(v)) }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        let finalChecked = localChecked;
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)));
+        }
+        if (finalChecked.size >= values.length) onFilter(null); 
+        else onFilter(finalChecked);
+    }
+
+    return (
+        <th className={`px-6 py-4 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
+            <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+                <span className="select-none">{label}</span>
+                {isActive && (
+                    sortAsc
+                        ? <ArrowUp className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        : <ArrowDown className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                )}
+                {hasFilter && <Filter className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onToggle() }}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+                    aria-label={`Menu ${label}`}
+                >
+                    <MoreVertical className="w-4 h-4 text-gray-500" />
+                </button>
+            </div>
+
+            {open && dropdownStyle && (
+                <div
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case"
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button
+                            onClick={() => onSort(colKey, true)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowUp className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button
+                            onClick={() => onSort(colKey, false)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowDown className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input
+                            type="text"
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                            placeholder={dict.filterPlaceholder}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+                        <button
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+
+                        <div className="max-h-[160px] overflow-y-auto space-y-1.5 mt-1 border-t border-gray-100 pt-2">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 text-xs text-gray-600 hover:bg-gray-50 px-1 py-0.5 rounded cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                                    />
+                                    <span className="truncate">{v}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 text-center py-2">No results</div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-between items-center gap-2 mt-3 pt-2 border-t border-gray-100">
+                            <button
+                                onClick={onClear}
+                                className="text-xs text-gray-550 hover:text-gray-700 cursor-pointer font-medium"
+                            >
+                                {dict.clearFilters}
+                            </button>
+                            <button
+                                onClick={handleApply}
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                            >
+                                Apply
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </th>
     )
 }

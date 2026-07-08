@@ -1,17 +1,15 @@
 'use client'
 
-import { PlusIcon, Cog6ToothIcon, ClockIcon, BellIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, Cog6ToothIcon, ClockIcon } from '@heroicons/react/24/outline'
 import Link from 'next/link'
 
 type Props = {
     onNewAsset: () => void
     onViewLog: () => void
-    onViewNotifications: () => void
-    notificationCount: number
     userRole?: string | null
 }
 
-export default function AssetHeader({ onNewAsset, onViewLog, onViewNotifications, notificationCount, userRole }: Props) {
+export default function AssetHeader({ onNewAsset, onViewLog, userRole }: Props) {
     return (
         <div className="flex items-center justify-between mb-8">
             <div>
@@ -19,18 +17,6 @@ export default function AssetHeader({ onNewAsset, onViewLog, onViewNotifications
                 <p className="text-slate-400 text-sm">Track and manage your fixed assets and smallware</p>
             </div>
             <div className="flex items-center gap-3">
-                <button
-                    onClick={onViewNotifications}
-                    className="relative p-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all"
-                    title="Notifications"
-                >
-                    <BellIcon className="w-5 h-5" />
-                    {notificationCount > 0 && (
-                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                            {notificationCount}
-                        </span>
-                    )}
-                </button>
                 <button
                     onClick={onViewLog}
                     className="p-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all"

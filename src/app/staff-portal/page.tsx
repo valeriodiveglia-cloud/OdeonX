@@ -33,7 +33,11 @@ import {
   Star,
   Bell,
   BellRing,
-  CheckCircle2
+  CheckCircle2,
+  CreditCard,
+  Landmark,
+  Flag,
+  Award
 } from 'lucide-react'
 import MonthPicker from '@/components/MonthPicker'
 import { supabase } from '@/lib/supabase'
@@ -51,6 +55,12 @@ type HRStaffMember = {
   start_date: string | null
   probation_end_date: string | null
   notes: string | null
+  salary_amount?: number | null
+  bank_name?: string | null
+  bank_account_number?: string | null
+  bank_account_name?: string | null
+  city?: string | null
+  address?: string | null
 }
 
 type Branch = {
@@ -95,8 +105,10 @@ type Asset = {
   serial_number: string | null
   status: 'assigned' | 'returned' | 'damaged' | 'lost'
   quantity: number
-  assigned_at: string | null
-  returned_at: string | null
+  assigned_date: string | null
+  return_date: string | null
+  initial_condition: string | null
+  return_condition: string | null
   notes: string | null
   hr_staff_asset_history?: AssetHistory[]
 }
@@ -143,6 +155,24 @@ type DisciplinaryFine = {
   status: string
   deduction_source: string | null
   infraction: { infraction_name: string } | null
+}
+
+type StaffWarning = {
+  id: string
+  date: string
+  flag_type: 'green' | 'yellow' | 'red'
+  reason: string
+  notified_by: string | null
+}
+
+type StaffAward = {
+  id: string
+  date: string
+  award_name: string
+  amount: number
+  status: string
+  deduction_source: string | null
+  notified_by: string | null
 }
 
 type ServiceChargeRecord = {
@@ -197,13 +227,15 @@ type PortalData = {
   }
   performance: PerformanceReview[]
   disciplinary: DisciplinaryFine[]
+  warnings: StaffWarning[]
+  awards: StaffAward[]
   serviceCharges: ServiceChargeRecord[]
   publishedRosters: RosterAssignmentSnapshot[]
   colleagues: Record<string, { id: string; name: string; position: string }>
   notifications: StaffNotification[]
 }
 
-type ViewState = 'loading' | 'login' | 'setup' | 'dashboard'
+type ViewState = 'loading' | 'login' | 'setup' | 'dashboard' | 'change-password'
 type Lang = 'en' | 'vi'
 
 /* ────────────────────── TRANSLATIONS ────────────────────── */
@@ -217,6 +249,9 @@ const STAFF_PORTAL_DICT = {
     Hide: 'Hide',
     SignIn: 'Sign In',
     LoginHint: 'If this is your first login, use your Email or Phone. You will be prompted to set a password.',
+    AccountAlreadyActive: 'Account already active. Please log in.',
+    InvalidEnrollLink: 'Invalid or expired activation link',
+    LoadInviteErr: 'Failed to load activation details',
     SetupWelcome: 'Welcome, {name}!',
     SetupSubtitle: 'Set a password for your future logins',
     NewPassword: 'New Password',
@@ -273,6 +308,15 @@ const STAFF_PORTAL_DICT = {
     NoContracts: 'No contract files found',
     NoDocuments: 'No uploaded HR documents',
     UploadDate: 'Upload Date',
+    ChangePassword: 'Change Password',
+    CurrentPassword: 'Current Password',
+    NewPasswordConfirm: 'Confirm New Password',
+    UpdatePasswordBtn: 'Update Password',
+    PasswordChangedSuccess: 'Password updated successfully!',
+    BankName: 'Bank Name',
+    BankAccountNumber: 'Bank Account Number',
+    BankAccountName: 'Account Holder Name',
+    GrossSalary: 'Gross Salary',
     DocName: 'Document Name',
     DocType: 'Type',
     Action: 'Action',
@@ -282,6 +326,8 @@ const STAFF_PORTAL_DICT = {
     Qty: 'Qty',
     AssignedAt: 'Assigned At',
     ReturnedAt: 'Returned At',
+    InitialCondition: 'Initial Condition',
+    ReturnCondition: 'Return Condition',
     AssetHistory: 'Asset Status Logs',
     NoAssets: 'No assets assigned yet',
     Date: 'Date',
@@ -304,6 +350,17 @@ const STAFF_PORTAL_DICT = {
     Infraction: 'Infraction',
     Source: 'Deduction Source',
     NoFines: 'No disciplinary logs',
+    WarningsHistory: 'Warnings & Flags',
+    NoWarnings: 'No warning flags recorded',
+    AwardsHistory: 'Awards & Recognitions',
+    NoAwards: 'No awards recorded',
+    Reason: 'Reason',
+    AwardName: 'Award Name',
+    CreditSource: 'Credit Source',
+    FlagLevel: 'Flag Level',
+    PositiveNote: 'Positive Note',
+    Caution: 'Caution',
+    Warning: 'Flag',
     Month: 'Month',
     HoursWorked: 'Hours Worked',
     TotalPool: 'Total Pool',
@@ -353,6 +410,9 @@ const STAFF_PORTAL_DICT = {
     Hide: 'Ẩn',
     SignIn: 'Đăng Nhập',
     LoginHint: 'Nếu đăng nhập lần đầu, nhập Email hoặc Số điện thoại. Bạn sẽ được yêu cầu tạo mật khẩu.',
+    AccountAlreadyActive: 'Tài khoản đã kích hoạt. Vui lòng đăng nhập.',
+    InvalidEnrollLink: 'Liên kết kích hoạt không hợp lệ hoặc đã hết hạn',
+    LoadInviteErr: 'Không thể tải thông tin kích hoạt tài khoản',
     SetupWelcome: 'Chào mừng, {name}!',
     SetupSubtitle: 'Đặt mật khẩu cho những lần truy cập tiếp theo',
     NewPassword: 'Mật khẩu mới',
@@ -409,6 +469,15 @@ const STAFF_PORTAL_DICT = {
     NoContracts: 'Không tìm thấy thông tin hợp đồng',
     NoDocuments: 'Không có tài liệu nhân sự',
     UploadDate: 'Ngày tải lên',
+    ChangePassword: 'Đổi Mật Khẩu',
+    CurrentPassword: 'Mật khẩu hiện tại',
+    NewPasswordConfirm: 'Xác nhận mật khẩu mới',
+    UpdatePasswordBtn: 'Cập nhật mật khẩu',
+    PasswordChangedSuccess: 'Đổi mật khẩu thành công!',
+    BankName: 'Tên ngân hàng',
+    BankAccountNumber: 'Số tài khoản',
+    BankAccountName: 'Tên chủ tài khoản',
+    GrossSalary: 'Lương gộp',
     DocName: 'Tên tài liệu',
     DocType: 'Loại',
     Action: 'Hành động',
@@ -418,6 +487,8 @@ const STAFF_PORTAL_DICT = {
     Qty: 'Số lượng',
     AssignedAt: 'Ngày cấp phát',
     ReturnedAt: 'Ngày thu hồi',
+    InitialCondition: 'Tình trạng ban đầu',
+    ReturnCondition: 'Tình trạng khi trả',
     AssetHistory: 'Lịch sử thay đổi trạng thái tài sản',
     NoAssets: 'Chưa được cấp phát tài sản nào',
     Date: 'Ngày',
@@ -435,11 +506,22 @@ const STAFF_PORTAL_DICT = {
     Score: 'Điểm số',
     Feedback: 'Nhận xét',
     NoReviews: 'Chưa có đánh giá hiệu suất nào',
-    DisciplinaryHistory: 'Lịch Sử Kỷ Luật & Phạt',
+    DisciplinaryHistory: 'Tiền phạt kỷ luật',
     Amount: 'Số tiền phạt',
     Infraction: 'Lỗi vi phạm',
     Source: 'Nguồn khấu trừ',
-    NoFines: 'Chưa có lỗi vi phạm kỷ luật',
+    NoFines: 'Chưa có vi phạm kỷ luật nào',
+    WarningsHistory: 'Cảnh Cáo & Thẻ',
+    NoWarnings: 'Chưa có thẻ phạt hay cảnh cáo nào được ghi nhận',
+    AwardsHistory: 'Khen Thưởng',
+    NoAwards: 'Chưa có khen thưởng nào',
+    Reason: 'Lý do',
+    AwardName: 'Tên khen thưởng',
+    CreditSource: 'Nguồn cộng tiền',
+    FlagLevel: 'Mức cảnh báo',
+    PositiveNote: 'Ghi nhận tích cực',
+    Caution: 'Nhắc nhở',
+    Warning: 'Cảnh Cáo',
     Month: 'Tháng',
     HoursWorked: 'Số giờ đã làm',
     TotalPool: 'Tổng quỹ phí dịch vụ',
@@ -623,7 +705,15 @@ export default function StaffPortalPage() {
   }, [lang])
   const [logoUrl, setLogoUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('oddsOffStaffLogo') || ''
+      const cached = localStorage.getItem('oddsOffStaffLogo')
+      const cachedTime = localStorage.getItem('oddsOffStaffLogoTime')
+      if (cached && cachedTime) {
+        const ageMs = Date.now() - parseInt(cachedTime, 10)
+        // Il signed URL dura 1 ora (3600000 ms), usiamo 50 minuti come limite di sicurezza
+        if (ageMs < 50 * 60 * 1000) {
+          return cached
+        }
+      }
     }
     return ''
   })
@@ -648,6 +738,15 @@ export default function StaffPortalPage() {
   // Portal data
   const [data, setData] = useState<PortalData | null>(null)
   const [activeTab, setActiveTab] = useState<'roster' | 'info' | 'docs' | 'assets' | 'career' | 'disciplinary' | 'service_charge'>('roster')
+  const [disciplinaryTab, setDisciplinaryTab] = useState<'fines' | 'warnings' | 'awards'>('fines')
+
+  // Password change states
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [changeNewPassword, setChangeNewPassword] = useState('')
+  const [changeConfirmPassword, setChangeConfirmPassword] = useState('')
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false)
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null)
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState(false)
 
   // Mobile menu/drawer state
   const [menuOpen, setMenuOpen] = useState(false)
@@ -666,6 +765,53 @@ export default function StaffPortalPage() {
   useEffect(() => {
     langRef.current = lang
   }, [lang])
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setChangePasswordError(null)
+    setChangePasswordSuccess(false)
+
+    if (!currentPassword) {
+      setChangePasswordError(lang === 'vi' ? 'Vui lòng nhập mật khẩu hiện tại' : 'Please enter your current password')
+      return
+    }
+    if (changeNewPassword.length < 6) {
+      setChangePasswordError(lang === 'vi' ? 'Mật khẩu mới phải từ 6 ký tự' : 'New password must be at least 6 characters')
+      return
+    }
+    if (changeNewPassword !== changeConfirmPassword) {
+      setChangePasswordError(lang === 'vi' ? 'Xác nhận mật khẩu mới không khớp' : 'New password confirmation does not match')
+      return
+    }
+
+    setChangePasswordLoading(true)
+    try {
+      const res = await fetch('/api/staff-portal/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staffId: data?.staff?.id,
+          currentPassword,
+          newPassword: changeNewPassword
+        })
+      })
+
+      const json = await res.json()
+      if (!res.ok) {
+        setChangePasswordError(json.error || (lang === 'vi' ? 'Đã xảy ra lỗi' : 'An error occurred'))
+      } else {
+        setChangePasswordSuccess(true)
+        setCurrentPassword('')
+        setChangeNewPassword('')
+        setChangeConfirmPassword('')
+      }
+    } catch (err) {
+      console.error(err)
+      setChangePasswordError(lang === 'vi' ? 'Lỗi kết nối' : 'Connection error')
+    } finally {
+      setChangePasswordLoading(false)
+    }
+  }
 
   // Expanded reviews in career timeline
   const [expandedReviews, setExpandedReviews] = useState<Record<string, boolean>>({})
@@ -689,6 +835,7 @@ export default function StaffPortalPage() {
         if (j.url) {
           setLogoUrl(j.url)
           localStorage.setItem('oddsOffStaffLogo', j.url)
+          localStorage.setItem('oddsOffStaffLogoTime', String(Date.now()))
         }
       })
       .catch(() => {})
@@ -730,10 +877,32 @@ export default function StaffPortalPage() {
   const getLocalizedFineStatus = (status: string) => {
     const map: Record<string, string> = {
       pending: lang === 'vi' ? 'Chờ duyệt' : 'Pending',
+      paid: lang === 'vi' ? 'Đã thanh toán' : 'Paid',
+      waived: lang === 'vi' ? 'Được miễn' : 'Waived',
+      disputed: lang === 'vi' ? 'Khiếu nại' : 'Disputed',
       approved: lang === 'vi' ? 'Đã duyệt' : 'Approved',
       rejected: lang === 'vi' ? 'Từ chối' : 'Rejected'
     }
     return map[status] || status
+  }
+
+  const formatWarningReason = (reason: string) => {
+    if (!reason) return ''
+    const match = reason.match(/Automatic warning generated for accumulation of (\d+) yellow flags/i)
+    if (match) {
+      const count = match[1]
+      return lang === 'vi' 
+        ? `Cảnh cáo tự động được tạo do tích lũy ${count} thẻ vàng`
+        : `Automatic warning generated for accumulation of ${count} yellow flags`
+    }
+    const matchIt = reason.match(/Warning automatico generato per accumulo di (\d+) bandierine gialle/i)
+    if (matchIt) {
+      const count = matchIt[1]
+      return lang === 'vi'
+        ? `Cảnh cáo tự động được tạo do tích lũy ${count} thẻ vàng`
+        : `Automatic warning generated for accumulation of ${count} yellow flags`
+    }
+    return reason
   }
 
   /* ── Notification Handlers ── */
@@ -835,22 +1004,51 @@ export default function StaffPortalPage() {
     }
   }
 
-  // Restore session on mount
+  // Restore session or process enroll link on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedId = localStorage.getItem('oddsOffStaffId')
-      const savedName = localStorage.getItem('oddsOffStaffName')
-      if (savedId && savedName) {
-        setStaffId(savedId)
-        setStaffName(savedName)
+      const params = new URLSearchParams(window.location.search)
+      const enrollId = params.get('enroll')
+      
+      if (enrollId) {
         setLoading(true)
-        fetchData(savedId)
+        fetch(`/api/staff-portal/enroll-info?id=${enrollId}`)
+          .then(async res => {
+            const json = await res.json()
+            if (!res.ok) {
+              setError(json.error || sT(lang, 'InvalidEnrollLink'))
+              setView('login')
+              return
+            }
+            if (json.hasPassword) {
+              setError(sT(lang, 'AccountAlreadyActive'))
+              setView('login')
+              return
+            }
+            setStaffId(json.id)
+            setStaffName(json.full_name)
+            setView('setup')
+          })
           .catch(() => {
+            setError(sT(lang, 'LoadInviteErr'))
             setView('login')
           })
           .finally(() => setLoading(false))
       } else {
-        setView('login')
+        const savedId = localStorage.getItem('oddsOffStaffId')
+        const savedName = localStorage.getItem('oddsOffStaffName')
+        if (savedId && savedName) {
+          setStaffId(savedId)
+          setStaffName(savedName)
+          setLoading(true)
+          fetchData(savedId)
+            .catch(() => {
+              setView('login')
+            })
+            .finally(() => setLoading(false))
+        } else {
+          setView('login')
+        }
       }
     }
   }, [])
@@ -1294,7 +1492,16 @@ export default function StaffPortalPage() {
       <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-screen bg-slate-50 text-slate-800">
         <div className="flex flex-col items-center gap-4">
           {logoUrl ? (
-            <img src={logoUrl} alt="Logo" className="h-20 w-auto object-contain animate-pulse" />
+            <img 
+              src={logoUrl} 
+              alt="Logo" 
+              className="h-20 w-auto object-contain animate-pulse" 
+              onError={() => {
+                setLogoUrl('')
+                localStorage.removeItem('oddsOffStaffLogo')
+                localStorage.removeItem('oddsOffStaffLogoTime')
+              }}
+            />
           ) : (
             <div className="h-20" />
           )}
@@ -1314,7 +1521,16 @@ export default function StaffPortalPage() {
         {/* Logo */}
         <div className="mb-8 select-none">
           {logoUrl ? (
-            <img src={logoUrl} alt="Logo" className="h-20 w-auto object-contain drop-shadow-sm" />
+            <img 
+              src={logoUrl} 
+              alt="Logo" 
+              className="h-20 w-auto object-contain drop-shadow-sm" 
+              onError={() => {
+                setLogoUrl('')
+                localStorage.removeItem('oddsOffStaffLogo')
+                localStorage.removeItem('oddsOffStaffLogoTime')
+              }}
+            />
           ) : (
             <div className="text-3xl font-extrabold tracking-wider text-blue-600">ODDSOFF</div>
           )}
@@ -1466,10 +1682,112 @@ export default function StaffPortalPage() {
     )
   }
 
+  if (view === 'change-password') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-screen bg-slate-50 text-slate-800">
+        <LanguageSwitcher />
+
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-10 w-full max-w-sm animate-in fade-in duration-300">
+          
+          <button
+            onClick={() => {
+              setView('dashboard')
+              setChangePasswordError(null)
+              setChangePasswordSuccess(false)
+            }}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 font-bold mb-6 cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            {lang === 'vi' ? 'Quay lại' : 'Back'}
+          </button>
+
+          <h2 className="text-xl font-bold mb-2 text-slate-900 text-center">{sT(lang, 'ChangePassword')}</h2>
+          <p className="text-sm text-slate-500 text-center mb-6">
+            {lang === 'vi' ? 'Vui lòng điền thông tin bên dưới để đổi mật khẩu.' : 'Please fill in the details below to change your password.'}
+          </p>
+
+          <form onSubmit={handleChangePassword} className="flex flex-col gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                {sT(lang, 'CurrentPassword')}
+              </label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="••••••"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-800 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-12"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                {lang === 'vi' ? 'Mật khẩu mới' : 'New Password'}
+              </label>
+              <input
+                type="password"
+                value={changeNewPassword}
+                onChange={(e) => setChangeNewPassword(e.target.value)}
+                placeholder="••••••"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-800 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-12"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                {sT(lang, 'NewPasswordConfirm')}
+              </label>
+              <input
+                type="password"
+                value={changeConfirmPassword}
+                onChange={(e) => setChangeConfirmPassword(e.target.value)}
+                placeholder="••••••"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-800 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-12"
+                required
+              />
+            </div>
+
+            {changePasswordError && (
+              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 border border-red-200">
+                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-700 font-medium">{changePasswordError}</p>
+              </div>
+            )}
+
+            {changePasswordSuccess && (
+              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-green-50 border border-green-200">
+                <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-green-700 font-medium">{sT(lang, 'PasswordChangedSuccess')}</p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={changePasswordLoading}
+              className="w-full bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-2 cursor-pointer h-12 active:scale-95 text-sm"
+            >
+              {changePasswordLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : sT(lang, 'UpdatePasswordBtn')}
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
   // Dashboard view
   if (!data) return null
 
   const { staff } = data
+  const showProbation = (() => {
+    if (!staff.probation_end_date) return false
+    const probDate = new Date(staff.probation_end_date)
+    probDate.setHours(0, 0, 0, 0)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return probDate >= today
+  })()
 
   // Navigation Items
   const navItems = [
@@ -2062,13 +2380,16 @@ export default function StaffPortalPage() {
               <div className="space-y-4 text-xs">
                 {[
                   { label: sT(lang, 'FullName'), value: staff.full_name, style: 'font-bold text-slate-900' },
-                  { label: sT(lang, 'Email'), value: staff.email || '—' },
                   { label: sT(lang, 'Phone'), value: staff.phone || '—' },
-                  { label: sT(lang, 'Role'), value: staff.position || '—' },
+                  { label: sT(lang, 'Email'), value: staff.email || '—' },
+                  { label: lang === 'vi' ? 'Thành phố' : 'City', value: staff.city || '—' },
+                  { label: lang === 'vi' ? 'Địa chỉ' : 'Address', value: staff.address || '—' },
                   { label: sT(lang, 'Department'), value: staff.department || '—' },
-                  { label: sT(lang, 'EmploymentType'), value: staff.employment_type || '—', style: 'capitalize text-blue-600 font-bold' },
+                  { label: sT(lang, 'Role'), value: staff.position || '—' },
                   { label: sT(lang, 'StartDate'), value: fmtDate(staff.start_date) },
-                  { label: sT(lang, 'ProbationEnd'), value: fmtDate(staff.probation_end_date) }
+                  ...(showProbation ? [{ label: sT(lang, 'ProbationEnd'), value: fmtDate(staff.probation_end_date), style: 'text-amber-600 font-bold' }] : []),
+                  { label: sT(lang, 'EmploymentType'), value: staff.employment_type || '—', style: 'capitalize text-blue-600 font-bold' },
+                  { label: sT(lang, 'GrossSalary'), value: staff.salary_amount ? `${fmtVnd(staff.salary_amount)}${staff.employment_type === 'full_time' ? ` /${lang === 'vi' ? 'tháng' : 'month'}` : ` /${lang === 'vi' ? 'giờ' : 'hour'}`}` : '—', style: 'font-bold text-slate-850' }
                 ].map((item, idx) => (
                   <div key={idx} className="flex justify-between items-start gap-4">
                     <span className="text-slate-550 font-semibold">{item.label}</span>
@@ -2078,63 +2399,27 @@ export default function StaffPortalPage() {
               </div>
             </div>
 
-            {/* Phone Push Notifications Card */}
+            {/* Bank Details Card (Bank Details goes before Contract History) */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
-                <Bell className="w-4 h-4 text-blue-600" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">{sT(lang, 'PushSettings')}</h3>
+                <CreditCard className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">{lang === 'vi' ? 'Thông Tin Ngân Hàng' : 'Bank Details'}</h3>
               </div>
-              <div className="text-xs space-y-3">
-                <p className="text-slate-500 font-semibold leading-relaxed">
-                  {sT(lang, 'PushPrompt')}
-                </p>
-
-                <div className="pt-2">
-                  {pushStatus === 'supported' || pushStatus === 'prompt' ? (
-                    <button
-                      onClick={handleEnablePush}
-                      disabled={pushLoading}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer transition-all active:scale-[0.98] shadow-md shadow-blue-500/10 disabled:opacity-50"
-                    >
-                      <BellRing className="w-4 h-4" />
-                      {pushLoading ? sT(lang, 'Connecting') : sT(lang, 'PushEnableBtn')}
-                    </button>
-                  ) : pushStatus === 'granted' ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl text-green-700 font-bold">
-                        <span className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                          {sT(lang, 'PushEnabled')}
-                        </span>
-                      </div>
-                      <button
-                        onClick={handleSendTestPush}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer transition-all active:scale-[0.98]"
-                      >
-                        <Bell className="w-4 h-4" />
-                        {sT(lang, 'PushTestBtn')}
-                      </button>
-                    </div>
-                  ) : pushStatus === 'denied' ? (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 space-y-1">
-                      <div className="flex items-center gap-1.5 font-bold">
-                        <AlertTriangle className="w-4 h-4 text-red-600" />
-                        {sT(lang, 'PushDisabled')}
-                      </div>
-                      <p className="text-[10px] text-red-650 font-semibold leading-relaxed">
-                        {sT(lang, 'PushDeniedInstructions')}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 font-semibold text-center">
-                      {sT(lang, 'PushUnsupported')}
-                    </div>
-                  )}
-                </div>
+              <div className="space-y-4 text-xs">
+                {[
+                  { label: sT(lang, 'BankName'), value: staff.bank_name || '—', style: 'font-semibold text-slate-850' },
+                  { label: sT(lang, 'BankAccountNumber'), value: staff.bank_account_number || '—', style: 'font-bold text-slate-900' },
+                  { label: sT(lang, 'BankAccountName'), value: staff.bank_account_name || '—', style: 'capitalize text-slate-800' }
+                ].map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-start gap-4">
+                    <span className="text-slate-550 font-semibold">{item.label}</span>
+                    <span className={`text-slate-800 text-right ${item.style || ''}`}>{item.value}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Contracts Card */}
+            {/* Contracts Card (Contract History) */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
                 <FileSignature className="w-4 h-4 text-blue-600" />
@@ -2196,6 +2481,79 @@ export default function StaffPortalPage() {
                 </div>
               )}
             </div>
+
+            {/* Phone Push Notifications Card */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                <Bell className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">{sT(lang, 'PushSettings')}</h3>
+              </div>
+              <div className="text-xs space-y-3">
+                <p className="text-slate-500 font-semibold leading-relaxed">
+                  {sT(lang, 'PushPrompt')}
+                </p>
+
+                <div className="pt-2">
+                  {pushStatus === 'supported' || pushStatus === 'prompt' ? (
+                    <button
+                      onClick={handleEnablePush}
+                      disabled={pushLoading}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer transition-all active:scale-[0.98] shadow-md shadow-blue-500/10 disabled:opacity-50"
+                    >
+                      <BellRing className="w-4 h-4" />
+                      {pushLoading ? sT(lang, 'Connecting') : sT(lang, 'PushEnableBtn')}
+                    </button>
+                  ) : pushStatus === 'granted' ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl text-green-700 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          {sT(lang, 'PushEnabled')}
+                        </span>
+                      </div>
+                      <button
+                        onClick={handleSendTestPush}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer transition-all active:scale-[0.98]"
+                      >
+                        <Bell className="w-4 h-4" />
+                        {sT(lang, 'PushTestBtn')}
+                      </button>
+                    </div>
+                  ) : pushStatus === 'denied' ? (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <AlertTriangle className="w-4 h-4 text-red-650" />
+                        {sT(lang, 'PushDisabled')}
+                      </div>
+                      <p className="text-[10px] text-red-650 font-semibold leading-relaxed">
+                        {sT(lang, 'PushDeniedInstructions')}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 font-semibold text-center">
+                      {sT(lang, 'PushUnsupported')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Change Password Button Card */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-blue-600" />
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">{sT(lang, 'ChangePassword')}</span>
+                </div>
+                <button
+                  onClick={() => setView('change-password')}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer transition-all active:scale-[0.98] text-xs border border-slate-200 shadow-sm"
+                >
+                  {lang === 'vi' ? 'Đổi mật khẩu' : 'Change Password'} &nbsp;→
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -2278,16 +2636,41 @@ export default function StaffPortalPage() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-slate-200">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs pt-2 border-t border-slate-200">
                         <div>
                           <span className="text-slate-500 font-semibold">{sT(lang, 'AssignedAt')}</span>
-                          <p className="text-slate-800 font-bold mt-0.5">{fmtDate(asset.assigned_at)}</p>
+                          <p className="text-slate-800 font-bold mt-0.5">{fmtDate(asset.assigned_date)}</p>
                         </div>
                         <div>
                           <span className="text-slate-500 font-semibold">{sT(lang, 'Qty')}</span>
                           <p className="text-slate-800 font-bold mt-0.5">{asset.quantity}</p>
                         </div>
+                        {asset.initial_condition && (
+                          <div>
+                            <span className="text-slate-500 font-semibold">{sT(lang, 'InitialCondition')}</span>
+                            <p className="text-slate-800 font-bold mt-0.5 capitalize">{asset.initial_condition}</p>
+                          </div>
+                        )}
+                        {asset.return_date && (
+                          <div>
+                            <span className="text-slate-500 font-semibold">{sT(lang, 'ReturnedAt')}</span>
+                            <p className="text-slate-800 font-bold mt-0.5">{fmtDate(asset.return_date)}</p>
+                          </div>
+                        )}
+                        {asset.return_condition && (
+                          <div>
+                            <span className="text-slate-500 font-semibold">{sT(lang, 'ReturnCondition')}</span>
+                            <p className="text-slate-800 font-bold mt-0.5 capitalize">{asset.return_condition}</p>
+                          </div>
+                        )}
                       </div>
+
+                      {asset.notes && (
+                        <div className="text-xs bg-slate-100/50 p-2 rounded-lg border border-slate-200/50 text-slate-600">
+                          <span className="font-semibold text-slate-700 block mb-0.5">{lang === 'vi' ? 'Ghi chú' : 'Notes'}:</span>
+                          <p className="margin-0 italic">{asset.notes}</p>
+                        </div>
+                      )}
 
                       {/* Log history of asset status */}
                       {asset.hr_staff_asset_history && asset.hr_staff_asset_history.length > 0 && (
@@ -2428,22 +2811,33 @@ export default function StaffPortalPage() {
                                   </div>
                                 )}
 
-                                {item.raw.category_ratings && (
-                                  <div className="space-y-1.5">
-                                    <span className="font-extrabold text-[8px] text-slate-400 uppercase tracking-wide block">{sT(lang, 'CategoryRatings')}</span>
-                                    <div className="grid grid-cols-2 gap-2 bg-white p-2.5 rounded-xl border border-slate-200 animate-in fade-in duration-250">
-                                      {Object.entries(item.raw.category_ratings).map(([catKey, val]) => {
-                                        const catName = CATEGORY_NAMES[lang]?.[catKey] || catKey
-                                        return (
-                                          <div key={catKey} className="flex justify-between items-center text-slate-600 font-medium">
-                                            <span className="truncate mr-1.5">{catName}</span>
-                                            <span className="font-bold text-slate-850 shrink-0">{String(val)}/5</span>
+                                {item.raw.category_ratings && (() => {
+                                  const ratings = Object.values(item.raw.category_ratings).map(Number).filter(v => !isNaN(v) && v > 0)
+                                  const average = ratings.length > 0 ? (ratings.reduce((sum, val) => sum + val, 0) / ratings.length).toFixed(2) : null
+                                  
+                                  return (
+                                    <div className="space-y-1.5">
+                                      <span className="font-extrabold text-[8px] text-slate-400 uppercase tracking-wide block">{sT(lang, 'CategoryRatings')}</span>
+                                      <div className="grid grid-cols-1 gap-2 bg-white p-2.5 rounded-xl border border-slate-200 animate-in fade-in duration-250">
+                                        {Object.entries(item.raw.category_ratings).map(([catKey, val]) => {
+                                          const catName = CATEGORY_NAMES[lang]?.[catKey] || catKey
+                                          return (
+                                            <div key={catKey} className="flex justify-between items-center text-slate-600 font-medium">
+                                              <span className="truncate mr-1.5">{catName}</span>
+                                              <span className="font-bold text-slate-850 shrink-0">{String(val)}/5</span>
+                                            </div>
+                                          )
+                                        })}
+                                        {average !== null && (
+                                          <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-100 text-xs font-bold text-slate-900">
+                                            <span>{lang === 'vi' ? 'Điểm trung bình' : 'Average Score'}</span>
+                                            <span className="text-blue-600 font-black">{average}/5</span>
                                           </div>
-                                        )
-                                      })}
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
+                                  )
+                                })()}
 
                                 {item.raw.notes && (
                                   <p className="text-[10px] text-slate-400 italic">
@@ -2481,64 +2875,202 @@ export default function StaffPortalPage() {
           </div>
         )}
 
-        {/* TAB 6: DISCIPLINARY sanzioni */}
+        {/* TAB 6: DISCIPLINARY sanzioni, warnings e premi */}
         {activeTab === 'disciplinary' && (
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <AlertTriangle className="w-4 h-4 text-amber-500" />
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">{sT(lang, 'DisciplinaryHistory')}</h3>
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">{sT(lang, 'Disciplinary')}</h3>
+            </div>
+
+            {/* Sotto-tab minimaliste */}
+            <div className="flex border-b border-slate-150 gap-4 mb-2">
+              <button 
+                onClick={() => setDisciplinaryTab('fines')}
+                className={`pb-2.5 text-xs font-bold border-b-2 transition-all ${disciplinaryTab === 'fines' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
+              >
+                {sT(lang, 'DisciplinaryHistory')}
+              </button>
+              <button 
+                onClick={() => setDisciplinaryTab('warnings')}
+                className={`pb-2.5 text-xs font-bold border-b-2 transition-all ${disciplinaryTab === 'warnings' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
+              >
+                {sT(lang, 'WarningsHistory')}
+              </button>
+              <button 
+                onClick={() => setDisciplinaryTab('awards')}
+                className={`pb-2.5 text-xs font-bold border-b-2 transition-all ${disciplinaryTab === 'awards' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
+              >
+                {sT(lang, 'AwardsHistory')}
+              </button>
             </div>
             
-            {data.disciplinary.length === 0 ? (
-              <div className="text-center py-10 text-slate-400 text-xs font-semibold">
-                {sT(lang, 'NoFines')}
-              </div>
-            ) : (
-              <div className="space-y-3.5">
-                {data.disciplinary.map((fine) => {
-                  const statusMap: Record<string, string> = {
-                    pending: 'bg-amber-550/10 text-amber-700 border-amber-200/50',
-                    approved: 'bg-green-550/10 text-green-700 border-green-200/50',
-                    rejected: 'bg-red-550/10 text-red-750 border-red-200/50'
-                  }
-                  const statusClass = statusMap[fine.status] || 'bg-slate-100 text-slate-650'
+            {/* FINES */}
+            {disciplinaryTab === 'fines' && (
+              data.disciplinary.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-xs font-semibold">
+                  {sT(lang, 'NoFines')}
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {data.disciplinary.map((fine) => {
+                    const statusMap: Record<string, string> = {
+                      pending: 'bg-amber-550/10 text-amber-700 border-amber-200/50',
+                      paid: 'bg-emerald-550/10 text-emerald-700 border-emerald-200/50',
+                      waived: 'bg-slate-100 text-slate-600 border-slate-200',
+                      disputed: 'bg-red-550/10 text-red-750 border-red-200/50'
+                    }
+                    const statusClass = statusMap[fine.status] || 'bg-slate-100 text-slate-650'
 
-                  return (
-                    <div key={fine.id} className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 space-y-3">
-                      <div className="flex justify-between items-start gap-3">
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-900">
-                            {fine.infraction?.infraction_name || '—'}
-                          </h4>
-                          <span className="text-[10px] text-slate-500 font-semibold mt-0.5 block">{fmtDate(fine.date)}</span>
+                    return (
+                      <div key={fine.id} className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 space-y-3">
+                        <div className="flex justify-between items-start gap-3">
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900">
+                              {fine.infraction?.infraction_name || (typeof fine.infraction === 'string' ? fine.infraction : '—')}
+                            </h4>
+                            <span className="text-[10px] text-slate-500 font-semibold mt-0.5 block">{fmtDate(fine.date)}</span>
+                          </div>
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${statusClass}`}>
+                            {getLocalizedFineStatus(fine.status)}
+                          </span>
                         </div>
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${statusClass}`}>
-                          {getLocalizedFineStatus(fine.status)}
-                        </span>
+
+                        <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-200/60">
+                          <div>
+                            <span className="text-slate-500 font-semibold block text-[9px] uppercase tracking-wide">{sT(lang, 'Amount')}</span>
+                            <span className="text-red-650 font-black mt-0.5">-{fmtVnd(fine.amount)}</span>
+                          </div>
+                          {fine.deduction_source && (
+                            <div className="text-right">
+                              <span className="text-slate-500 font-semibold block text-[9px] uppercase tracking-wide">{sT(lang, 'Source')}</span>
+                              <span className="text-slate-700 capitalize font-bold mt-0.5 block">{fine.deduction_source.replace('_', ' ')}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {fine.notes && (
+                          <p className="text-[10px] text-slate-500 italic bg-white p-2.5 rounded-lg border border-slate-200">
+                            * {fine.notes}
+                          </p>
+                        )}
                       </div>
+                    )
+                  })}
+                </div>
+              )
+            )}
 
-                      <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-200/60">
-                        <div>
-                          <span className="text-slate-500 font-semibold block text-[9px] uppercase tracking-wide">{sT(lang, 'Amount')}</span>
-                          <span className="text-red-650 font-black mt-0.5">{fmtVnd(fine.amount)}</span>
+            {/* WARNINGS */}
+            {disciplinaryTab === 'warnings' && (
+              (data.warnings || []).length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-xs font-semibold">
+                  {sT(lang, 'NoWarnings')}
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {(data.warnings || []).map((warning) => {
+                    const flagColors = {
+                      green: 'bg-emerald-50 text-emerald-700 border-emerald-200/50',
+                      yellow: 'bg-amber-50 text-amber-700 border-amber-200/50',
+                      red: 'bg-red-50 text-red-700 border-red-200/50'
+                    }
+                    const flagLabels = {
+                      green: sT(lang, 'PositiveNote'),
+                      yellow: sT(lang, 'Caution'),
+                      red: sT(lang, 'Warning')
+                    }
+                    const flagClass = flagColors[warning.flag_type] || 'bg-slate-50 text-slate-750'
+                    const flagLabel = flagLabels[warning.flag_type] || warning.flag_type
+
+                    return (
+                      <div key={warning.id} className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 space-y-3">
+                        <div className="flex justify-between items-start gap-3">
+                          <div>
+                            <span className="text-[10px] text-slate-500 font-semibold block">{fmtDate(warning.date)}</span>
+                          </div>
+                          <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase px-2.5 py-0.5 rounded border ${flagClass}`}>
+                            <Flag className={`w-2.5 h-2.5 ${warning.flag_type === 'green' ? 'fill-emerald-500 text-emerald-500' : warning.flag_type === 'yellow' ? 'fill-amber-500 text-amber-500' : 'fill-red-500 text-red-500'}`} />
+                            {flagLabel}
+                          </span>
                         </div>
-                        {fine.deduction_source && (
-                          <div className="text-right">
-                            <span className="text-slate-500 font-semibold block text-[9px] uppercase tracking-wide">{sT(lang, 'Source')}</span>
-                            <span className="text-slate-700 capitalize font-bold mt-0.5 block">{fine.deduction_source.replace('_', ' ')}</span>
+
+                        <div className="text-xs pt-2 border-t border-slate-200/60">
+                          <span className="text-slate-500 font-semibold block text-[9px] uppercase tracking-wide">{sT(lang, 'Reason')}</span>
+                          <p className="text-slate-700 font-medium mt-1 leading-relaxed bg-white p-2.5 rounded-lg border border-slate-200">
+                            {formatWarningReason(warning.reason)}
+                          </p>
+                        </div>
+
+                        {warning.notified_by && (
+                          <div className="flex justify-end text-[9px] text-slate-400 font-semibold">
+                            By: {warning.notified_by}
                           </div>
                         )}
                       </div>
+                    )
+                  })}
+                </div>
+              )
+            )}
 
-                      {fine.notes && (
-                        <p className="text-[10px] text-slate-500 italic bg-white p-2.5 rounded-lg border border-slate-200">
-                          * {fine.notes}
-                        </p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+            {/* AWARDS */}
+            {disciplinaryTab === 'awards' && (
+              (data.awards || []).length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-xs font-semibold">
+                  {sT(lang, 'NoAwards')}
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {(data.awards || []).map((award) => {
+                    const statusMap: Record<string, string> = {
+                      pending: 'bg-amber-550/10 text-amber-700 border-amber-200/50',
+                      paid: 'bg-emerald-550/10 text-emerald-700 border-emerald-200/50',
+                      waived: 'bg-slate-100 text-slate-650 border-slate-200',
+                      disputed: 'bg-red-550/10 text-red-750 border-red-200/50'
+                    }
+                    const statusClass = statusMap[award.status] || 'bg-slate-100 text-slate-650'
+
+                    return (
+                      <div key={award.id} className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 space-y-3">
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex items-center gap-1.5">
+                            <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <div>
+                              <h4 className="text-xs font-bold text-slate-900">
+                                {award.award_name}
+                              </h4>
+                              <span className="text-[10px] text-slate-500 font-semibold mt-0.5 block">{fmtDate(award.date)}</span>
+                            </div>
+                          </div>
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${statusClass}`}>
+                            {getLocalizedFineStatus(award.status)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-200/60">
+                          <div>
+                            <span className="text-slate-500 font-semibold block text-[9px] uppercase tracking-wide">{sT(lang, 'Amount')}</span>
+                            <span className="text-emerald-650 font-black mt-0.5">+{fmtVnd(award.amount)}</span>
+                          </div>
+                          {award.deduction_source && (
+                            <div className="text-right">
+                              <span className="text-slate-500 font-semibold block text-[9px] uppercase tracking-wide">{sT(lang, 'CreditSource')}</span>
+                              <span className="text-slate-700 capitalize font-bold mt-0.5 block">{award.deduction_source.replace('_', ' ')}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {award.notified_by && (
+                          <div className="flex justify-end text-[9px] text-slate-400 font-semibold">
+                            Enforced by: {award.notified_by}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
             )}
           </div>
         )}

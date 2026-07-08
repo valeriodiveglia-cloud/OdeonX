@@ -8,18 +8,38 @@ import CircularLoader from '@/components/CircularLoader'
 import {
     ArrowLeft, User, FileText, Activity, TrendingUp, Save, UploadCloud, ExternalLink,
     Calendar, Building2, Briefcase, Plus, Loader2, Trash2, BadgeCheck, Lock, Unlock,
-    ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen, FileDown, Star, Package, ChevronDown, RefreshCw
+    ChevronLeft, ChevronRight, Pencil, AlertTriangle, CalendarDays, X, CheckCircle, Clock, AlertCircle, Settings, NotebookPen, FileDown, Star, Package, ChevronDown, RefreshCw, Mail, Key, Flag, Award
 } from 'lucide-react'
-import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog, HRStaffDocument, HRStaffContract, HRStaffAsset, HRStaffAssetStatus, HRStaffAssetHistory } from '@/types/human-resources'
+import { HRStaffMember, HRDepartment, HRPosition, HRStaffRoleHistory, HRStaffPerformance, HRStaffSalaryHistory, EmploymentType, SalaryType, StaffStatus, HRRatingCategory, HRStaffFine, HRDisciplinaryCatalog, HRStaffDocument, HRStaffContract, HRStaffAsset, HRStaffAssetStatus, HRStaffAssetHistory, HRAwardsCatalog, HRStaffAward, HRStaffWarning, WarningFlagType } from '@/types/human-resources'
 import PerformanceModal, { computePeriodLabel, OVERALL_LABELS } from '@/components/human-resources/PerformanceModal'
 import SalaryModal from '@/components/human-resources/SalaryModal'
 import { saveAs } from 'file-saver'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getVietnamBanks, VietnamBank } from '@/lib/vietnamBanks'
 
 // === HELPERS ===
 const fmtVND = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
 const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '-'
+
+const formatWarningReason = (reason: string, language: 'en' | 'vi') => {
+    if (!reason) return ''
+    const match = reason.match(/Automatic warning generated for accumulation of (\d+) yellow flags/i)
+    if (match) {
+        const count = match[1]
+        return language === 'vi' 
+            ? `Cảnh cáo tự động được tạo do tích lũy ${count} thẻ vàng`
+            : `Automatic warning generated for accumulation of ${count} yellow flags`
+    }
+    const matchIt = reason.match(/Warning automatico generato per accumulo di (\d+) bandierine gialle/i)
+    if (matchIt) {
+        const count = matchIt[1]
+        return language === 'vi'
+            ? `Cảnh cáo tự động được tạo do tích lũy ${count} thẻ vàng`
+            : `Automatic warning generated for accumulation of ${count} yellow flags`
+    }
+    return reason
+}
 
 // === TABS CONFIG ===
 const TABS = [
@@ -258,8 +278,10 @@ export default function StaffDetailPage() {
     if (!staff) {
         return (
             <div className="min-h-screen p-8 text-center text-white">
-                <p>Staff member not found.</p>
-                <Link href="/human-resources/management/staff" className="mt-4 text-blue-400 hover:underline">Go back</Link>
+                <p>{language === 'vi' ? 'Không tìm thấy nhân viên.' : 'Staff member not found.'}</p>
+                <Link href="/human-resources/management/staff" className="mt-4 text-blue-400 hover:underline">
+                    {language === 'vi' ? 'Quay lại' : 'Go back'}
+                </Link>
             </div>
         )
     }
@@ -281,7 +303,7 @@ export default function StaffDetailPage() {
                             <div className="flex flex-wrap items-center gap-2 mt-1">
                                 <span className="inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md border border-white/5">
                                     <Briefcase className="w-3 h-3" />
-                                    {staff.position || 'No Position'}
+                                    {staff.position || (language === 'vi' ? 'Chưa có vị trí' : 'No Position')}
                                 </span>
                                 {(staff as any).hr_departments?.name && (
                                     <span className="inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md border border-white/5">
@@ -293,7 +315,7 @@ export default function StaffDetailPage() {
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border
                                         ${staff.status === 'inactive' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
                                           'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                                        {staff.status.toUpperCase()}
+                                        {staff.status === 'inactive' ? (language === 'vi' ? 'NGỪNG HOẠT ĐỘNG' : 'INACTIVE') : (language === 'vi' ? 'ĐÃ THÔI VIỆC' : 'TERMINATED')}
                                     </span>
                                 ) : staff.probation_end_date && new Date(staff.probation_end_date).getTime() > Date.now() ? (() => {
                                     const isConfirmed = performances.some(p => p.period === 'Probation Confirmed');
@@ -306,12 +328,14 @@ export default function StaffDetailPage() {
                                                 : 'bg-orange-500/10 text-orange-400 border-orange-500/20 hover:bg-orange-500/20'
                                             }`}
                                         >
-                                            {isConfirmed ? 'PROBATION CONFIRMED' : 'PROBATION'}
+                                            {isConfirmed 
+                                                ? (language === 'vi' ? 'ĐÃ XÁC NHẬN THỬ VIỆC' : 'PROBATION CONFIRMED') 
+                                                : (language === 'vi' ? 'THỬ VIỆC' : 'PROBATION')}
                                         </button>
                                     )
                                 })() : (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                                        ACTIVE
+                                        {language === 'vi' ? 'ĐANG HOẠT ĐỘNG' : 'ACTIVE'}
                                     </span>
                                 )}
                             </div>
@@ -333,7 +357,15 @@ export default function StaffDetailPage() {
                                     `}
                                 >
                                     <tab.icon className="w-4 h-4" />
-                                    {tab.label}
+                                    {language === 'vi' ? (
+                                        tab.id === 'profile' ? 'Hồ sơ' :
+                                        tab.id === 'contract' ? 'Hợp đồng' :
+                                        tab.id === 'documents' ? 'Tài liệu' :
+                                        tab.id === 'assets' ? 'Tài sản' :
+                                        tab.id === 'timeline' ? 'Lịch sử công việc' :
+                                        tab.id === 'performance' ? 'Hiệu suất' :
+                                        'Kỷ luật & Thưởng'
+                                    ) : tab.label}
                                 </button>
                             ))}
                         </nav>
@@ -415,14 +447,46 @@ export default function StaffDetailPage() {
 // TAB: Profile & Contract
 // ==========================================
 function TabProfile({ staff, departments, positions, branches, onUpdate }: { staff: HRStaffMember, departments: HRDepartment[], positions: HRPosition[], branches: any[], onUpdate: () => void }) {
+    const { language } = useSettings()
     const [formData, setFormData] = useState<Partial<HRStaffMember>>({})
     const [selectedBranches, setSelectedBranches] = useState<string[]>([])
     const [displaySalary, setDisplaySalary] = useState<string>('')
     const [saving, setSaving] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
+    const [enrollLoading, setEnrollLoading] = useState(false)
+
+    const handleEnroll = async (action: 'enroll' | 'reset') => {
+        if (!staff.email) {
+            alert(language === 'vi' ? 'Nhân viên không có địa chỉ email hợp lệ.' : 'Staff member does not have a valid email address.')
+            return
+        }
+        setEnrollLoading(true)
+        try {
+            const res = await fetch('/api/staff-portal/enroll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ staffId: staff.id, action })
+            })
+            const json = await res.json()
+            if (!res.ok) {
+                throw new Error(json.error || 'Failed to process request')
+            }
+            alert(language === 'vi' 
+                ? (action === 'enroll' ? 'Gửi email kích hoạt thành công!' : 'Gửi email đặt lại mật khẩu thành công!')
+                : (action === 'enroll' ? 'Activation email sent successfully!' : 'Password reset email sent successfully!')
+            )
+            onUpdate()
+        } catch (err: any) {
+            console.error(err)
+            alert(`Error: ${err.message}`)
+        } finally {
+            setEnrollLoading(false)
+        }
+    }
     
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [deleteLoading, setDeleteLoading]         = useState(false)
+    const [vietnamBanks, setVietnamBanks] = useState<VietnamBank[]>([])
     const router = useRouter()
 
     const handleDelete = async () => {
@@ -439,6 +503,10 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
     }
 
     useEffect(() => {
+        getVietnamBanks().then(setVietnamBanks)
+    }, [])
+
+    useEffect(() => {
         setFormData({ ...staff })
         setSelectedBranches((staff as any).hr_staff_branches?.map((b: any) => b.branch_id) || [])
         
@@ -448,6 +516,17 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
             setDisplaySalary('')
         }
     }, [staff])
+
+    useEffect(() => {
+        if (formData.bank_same_as_staff) {
+            setFormData(p => {
+                if (p.bank_account_name !== p.full_name) {
+                    return { ...p, bank_account_name: p.full_name };
+                }
+                return p;
+            });
+        }
+    }, [formData.full_name, formData.bank_same_as_staff])
 
     const handleChange = (field: keyof HRStaffMember | 'salary_amount', val: any) => {
         setFormData(p => {
@@ -497,6 +576,21 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
             nullifyIfEmpty('probation_end_date');
             nullifyIfEmpty('department_id');
             nullifyIfEmpty('position_id');
+            nullifyIfEmpty('bank_name');
+            nullifyIfEmpty('bank_account_number');
+            nullifyIfEmpty('bank_account_name');
+            nullifyIfEmpty('date_of_birth');
+            nullifyIfEmpty('document_issue_date');
+            nullifyIfEmpty('gender');
+            nullifyIfEmpty('marital_status');
+            nullifyIfEmpty('bank_branch');
+            nullifyIfEmpty('emergency_contact_name');
+            nullifyIfEmpty('emergency_contact_relationship');
+            nullifyIfEmpty('emergency_contact_phone');
+            nullifyIfEmpty('document_type');
+            nullifyIfEmpty('document_number');
+            nullifyIfEmpty('document_issue_place');
+            nullifyIfEmpty('staff_code');
 
             const { error } = await supabase.from('hr_staff').update(updateData).eq('id', staff.id)
             if (error) throw error
@@ -520,8 +614,12 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="flex items-start justify-between">
                 <div>
-                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">General Information</h2>
-                    <p className="text-sm text-gray-500 mt-1">Basic contact and position details.</p>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">
+                        {language === 'vi' ? 'Thông tin chung' : 'General Information'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'vi' ? 'Chi tiết liên hệ cơ bản và vị trí.' : 'Basic contact and position details.'}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button 
@@ -536,18 +634,17 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                             setIsEditing(!isEditing)
                         }} 
                         className={`p-2 rounded-xl border transition-all ${isEditing ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-                        title={isEditing ? "Cancel Editing" : "Enable Editing"}
+                        title={isEditing ? (language === 'vi' ? 'Hủy chỉnh sửa' : 'Cancel Editing') : (language === 'vi' ? 'Chỉnh sửa' : 'Enable Editing')}
                     >
                         {isEditing ? <X className="w-5 h-5" /> : <Pencil className="w-5 h-5" />}
                     </button>
-                    {!isEditing && (
+                    {isEditing && (
                         <button 
                             type="button"
                             onClick={() => setShowDeleteConfirm(true)} 
-                            className="p-2 rounded-xl border border-red-100 bg-red-50 text-red-500 hover:text-red-700 hover:bg-red-100 hover:border-red-200 transition-all"
-                            title="Delete Staff Member"
+                            className="text-xs font-semibold text-red-500 hover:text-red-700 hover:underline px-3 py-2 cursor-pointer transition-colors"
                         >
-                            <Trash2 className="w-5 h-5" />
+                            {language === 'vi' ? 'Xóa nhân viên' : 'Delete staff'}
                         </button>
                     )}
                 </div>
@@ -555,57 +652,92 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Họ & Tên' : 'Full Name'}</label>
                     <input disabled={!isEditing} value={formData.full_name || ''} onChange={e => handleChange('full_name', e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Address</label>
-                    <input disabled={!isEditing} value={formData.address || ''} onChange={e => handleChange('address', e.target.value)}
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Số điện thoại' : 'Phone'}</label>
+                    <input disabled={!isEditing} value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">City</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Email' : 'Email'}</label>
+                    <input disabled={!isEditing} type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Thành phố' : 'City'}</label>
                     <select 
                         disabled={!isEditing} 
                         value={formData.city || ''} 
                         onChange={e => handleChange('city', e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                        <option value="">None</option>
+                        <option value="">{language === 'vi' ? 'Không' : 'None'}</option>
                         {Array.from(new Set(branches.map(b => b.city).filter(Boolean))).sort().map((city: any) => (
                             <option key={city} value={city}>{city}</option>
                         ))}
                     </select>
                 </div>
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Phone</label>
-                    <input disabled={!isEditing} value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Địa chỉ' : 'Address'}</label>
+                    <input 
+                        disabled={!isEditing} 
+                        value={formData.address || ''} 
+                        onChange={e => handleChange('address', e.target.value)}
+                        autoComplete="one-time-code"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" 
+                    />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
-                    <input disabled={!isEditing} type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Ngày sinh' : 'Date of Birth'}</label>
+                    <input disabled={!isEditing} type="date" value={formData.date_of_birth || ''} onChange={e => handleChange('date_of_birth', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Department</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Giới tính' : 'Gender'}</label>
+                    <select disabled={!isEditing} value={formData.gender || 'Nam'} onChange={e => handleChange('gender', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10">
+                        <option value="Nam">{language === 'vi' ? 'Nam' : 'Male'}</option>
+                        <option value="Nữ">{language === 'vi' ? 'Nữ' : 'Female'}</option>
+                        <option value="Khác">{language === 'vi' ? 'Khác' : 'Other'}</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Tình trạng hôn nhân' : 'Marital Status'}</label>
+                    <select disabled={!isEditing} value={formData.marital_status || 'Độc thân'} onChange={e => handleChange('marital_status', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10">
+                        <option value="Độc thân">{language === 'vi' ? 'Độc thân' : 'Single'}</option>
+                        <option value="Đã kết hôn">{language === 'vi' ? 'Đã kết hôn' : 'Married'}</option>
+                        <option value="Ly hôn">{language === 'vi' ? 'Ly hôn' : 'Divorced'}</option>
+                        <option value="Góa phụ">{language === 'vi' ? 'Góa phụ' : 'Widowed'}</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Mã NV (Tanca)' : 'Tanca Staff Code'}</label>
+                    <input disabled={!isEditing} value={formData.staff_code || ''} onChange={e => handleChange('staff_code', e.target.value)}
+                        placeholder={language === 'vi' ? 'Ví dụ: TC001' : 'e.g. TC001'}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Bộ phận' : 'Department'}</label>
                     <select disabled={!isEditing} value={formData.department_id || ''} onChange={e => handleChange('department_id', e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed">
-                        <option value="">None</option>
+                        <option value="">{language === 'vi' ? 'Không' : 'None'}</option>
                         {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Position</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Vị trí' : 'Position'}</label>
                     <select disabled={!isEditing} value={formData.position_id || ''} onChange={e => handleChange('position_id', e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed">
-                        <option value="">None</option>
+                        <option value="">{language === 'vi' ? 'Không' : 'None'}</option>
                         {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Start Date</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'}</label>
                     <input disabled={!isEditing} type="date" value={formData.start_date || ''} onChange={e => {
                         const newDate = e.target.value;
                         handleChange('start_date', newDate);
@@ -619,7 +751,7 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Probation Time (Months)</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Thời gian thử việc (Tháng)' : 'Probation Time (Months)'}</label>
                     <input disabled={!isEditing} type="number" min="0" value={formData.probation_months ?? ''} onChange={e => {
                         const m = parseInt(e.target.value);
                         handleChange('probation_months', isNaN(m) ? 0 : m);
@@ -633,12 +765,12 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Probation End Date</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Ngày kết thúc thử việc' : 'Probation End Date'}</label>
                     <input disabled={!isEditing} type="date" value={formData.probation_end_date || ''} onChange={e => handleChange('probation_end_date', e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Probation Salary (%)</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Lương thử việc (%)' : 'Probation Salary (%)'}</label>
                     <div className="relative">
                         <input disabled={!isEditing} type="number" min="0" max="100" value={formData.probation_salary_pct ?? ''} onChange={e => handleChange('probation_salary_pct', parseFloat(e.target.value) || 100)}
                             className="w-full px-3 py-2 pr-8 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
@@ -646,16 +778,16 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                     </div>
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Employment Type</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Loại nhân viên' : 'Employment Type'}</label>
                     <select disabled={!isEditing} value={formData.employment_type || 'full_time'} onChange={e => handleChange('employment_type', e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed">
-                        <option value="full_time">Full-time</option>
-                        <option value="part_time">Part-time</option>
+                        <option value="full_time">{language === 'vi' ? 'Toàn thời gian' : 'Full-time'}</option>
+                        <option value="part_time">{language === 'vi' ? 'Bán thời gian' : 'Part-time'}</option>
                     </select>
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                        Gross Salary (VND) <span className="lowercase text-gray-400">{formData.employment_type === 'full_time' ? '/month' : '/hour'}</span>
+                        {language === 'vi' ? 'Lương gộp (VND)' : 'Gross Salary (VND)'} <span className="lowercase text-gray-400">{formData.employment_type === 'full_time' ? (language === 'vi' ? '/tháng' : '/month') : (language === 'vi' ? '/giờ' : '/hour')}</span>
                     </label>
                     <input type="text" disabled={!isEditing} value={displaySalary} 
                         onChange={e => {
@@ -673,15 +805,81 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                             const rawFloat = parseFloat(val);
                             handleChange('salary_amount', isNaN(rawFloat) ? null : rawFloat);
                         }}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:bg-gray-100 disabled:cursor-not-allowed text-right font-medium text-slate-800" />
                 </div>
             </div>
 
             <hr className="border-gray-100" />
 
+            {/* Document Details */}
+            <div>
+                <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                        {language === 'vi' ? 'Giấy tờ tùy thân' : 'Identity Documents'}
+                    </h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Loại giấy tờ' : 'Document Type'}
+                        </label>
+                        <select 
+                            disabled={!isEditing} 
+                            value={formData.document_type || 'id_card'} 
+                            onChange={e => handleChange('document_type', e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10"
+                        >
+                            <option value="id_card">{language === 'vi' ? 'Căn cước công dân (ID Card)' : 'ID Card'}</option>
+                            <option value="passport">{language === 'vi' ? 'Hộ chiếu (Passport)' : 'Passport'}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Số giấy tờ' : 'Document Number'}
+                        </label>
+                        <input 
+                            disabled={!isEditing} 
+                            value={formData.document_number || ''} 
+                            onChange={e => handleChange('document_number', e.target.value)}
+                            placeholder={formData.document_type === 'passport' ? (language === 'vi' ? 'Nhập số hộ chiếu...' : 'Enter passport number...') : (language === 'vi' ? 'Nhập số CCCD...' : 'Enter ID number...')}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10" 
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Ngày cấp' : 'Document Issue Date'}
+                        </label>
+                        <input 
+                            disabled={!isEditing} 
+                            type="date"
+                            value={formData.document_issue_date || ''} 
+                            onChange={e => handleChange('document_issue_date', e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10" 
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Nơi cấp' : 'Document Place of Issue'}
+                        </label>
+                        <input 
+                            disabled={!isEditing} 
+                            value={formData.document_issue_place || ''} 
+                            onChange={e => handleChange('document_issue_place', e.target.value)}
+                            placeholder={language === 'vi' ? 'Ví dụ: Cục Cảnh sát QLHC về TTXH' : 'e.g. Police Department'}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10" 
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Assigned Branches */}
             <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
-                    <h3 className="text-sm font-semibold text-gray-900">Assigned Branches</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">
+                        {language === 'vi' ? 'Chi nhánh phân công' : 'Assigned Branches'}
+                    </h3>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     {branches.filter(b => !formData.city || b.city === formData.city).map(branch => {
@@ -706,8 +904,208 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                         )
                     })}
                     {branches.filter(b => !formData.city || b.city === formData.city).length === 0 && (
-                        <span className="text-sm text-gray-400 italic">No branches available for the selected city.</span>
+                        <span className="text-sm text-gray-400 italic">
+                            {language === 'vi' ? 'Không có chi nhánh nào cho thành phố đã chọn.' : 'No branches available for the selected city.'}
+                        </span>
                     )}
+                </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Bank Details */}
+            <div>
+                <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                        {language === 'vi' ? 'Thông tin ngân hàng' : 'Bank Details'}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                        {language === 'vi' ? 'Cấu hình thanh toán và tài khoản ngân hàng của nhân viên.' : "Staff member's payment and bank account settings."}
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                {language === 'vi' ? 'Tên chủ tài khoản' : 'Account Holder Name'}
+                            </label>
+                            {isEditing && (
+                                <label className="flex items-center gap-1.5 text-xs text-blue-600 font-medium cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={formData.bank_same_as_staff || false} 
+                                        onChange={e => handleChange('bank_same_as_staff', e.target.checked)}
+                                        className="rounded text-blue-600 focus:ring-blue-500 border-gray-300 w-3.5 h-3.5" 
+                                    />
+                                    {language === 'vi' ? 'Trùng tên nhân viên' : 'Same as staff'}
+                                </label>
+                            )}
+                        </div>
+                        <input 
+                            disabled={!isEditing || formData.bank_same_as_staff} 
+                            value={formData.bank_account_name || ''} 
+                            onChange={e => handleChange('bank_account_name', e.target.value)}
+                            placeholder={language === 'vi' ? 'Ví dụ: NGUYEN VAN A' : 'e.g. NGUYEN VAN A'}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed uppercase" 
+                        />
+                    </div>
+                    
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Tên ngân hàng' : 'Bank Name'}
+                        </label>
+                        <input 
+                            type="text"
+                            list="detail-banks-list"
+                            disabled={!isEditing} 
+                            value={formData.bank_name || ''} 
+                            onChange={e => handleChange('bank_name', e.target.value)}
+                            placeholder={language === 'vi' ? 'Chọn hoặc nhập tên ngân hàng...' : 'Select or type bank name...'}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed"
+                        />
+                        <datalist id="detail-banks-list">
+                            {vietnamBanks.map(b => (
+                                <option key={b.bin} value={b.shortName}>
+                                    {b.name} ({b.code})
+                                </option>
+                            ))}
+                        </datalist>
+                    </div>
+
+                    <div className="sm:col-span-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Số tài khoản' : 'Bank Account Number'}
+                        </label>
+                        <input 
+                            disabled={!isEditing} 
+                            value={formData.bank_account_number || ''} 
+                            onChange={e => handleChange('bank_account_number', e.target.value)}
+                            placeholder={language === 'vi' ? 'Ví dụ: 1234567890' : 'e.g. 1234567890'}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" 
+                        />
+                    </div>
+
+                    <div className="sm:col-span-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Chi nhánh ngân hàng' : 'Bank Branch'}
+                        </label>
+                        <input 
+                            disabled={!isEditing} 
+                            value={formData.bank_branch || ''} 
+                            onChange={e => handleChange('bank_branch', e.target.value)}
+                            placeholder={language === 'vi' ? 'Ví dụ: Chi nhánh Bến Thành' : 'e.g. Ben Thanh Branch'}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" 
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Emergency Contact */}
+            <div>
+                <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                        {language === 'vi' ? 'Liên hệ khẩn cấp' : 'Emergency Contact'}
+                    </h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Người liên hệ' : 'Contact Person'}
+                        </label>
+                        <input 
+                            disabled={!isEditing} 
+                            value={formData.emergency_contact_name || ''} 
+                            onChange={e => handleChange('emergency_contact_name', e.target.value)}
+                            placeholder={language === 'vi' ? 'Ví dụ: Nguyễn Văn A' : 'e.g. John Doe'}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10" 
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Quan hệ' : 'Relationship'}
+                        </label>
+                        <input 
+                            disabled={!isEditing} 
+                            value={formData.emergency_contact_relationship || ''} 
+                            onChange={e => handleChange('emergency_contact_relationship', e.target.value)}
+                            placeholder={language === 'vi' ? 'Ví dụ: Bố, Mẹ, Vợ, Chồng...' : 'e.g. Father, Mother, Spouse...'}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10" 
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            {language === 'vi' ? 'Số điện thoại khẩn cấp' : 'Emergency Phone'}
+                        </label>
+                        <input 
+                            disabled={!isEditing} 
+                            value={formData.emergency_contact_phone || ''} 
+                            onChange={e => handleChange('emergency_contact_phone', e.target.value)}
+                            placeholder={language === 'vi' ? 'Ví dụ: 0912345678' : 'e.g. 0912345678'}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed h-10" 
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Portal Access */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-4 mt-6">
+                <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wider">
+                    {language === 'vi' ? 'Quyền truy cập cổng thông tin' : 'Portal Access'}
+                </h3>
+                
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <p className="text-sm text-gray-600">
+                            {language === 'vi' 
+                                ? 'Cổng nhân viên cho phép xem lịch làm việc, chấm công và phiếu lương.' 
+                                : 'The staff portal allows employees to view their rosters, attendance, and payslips.'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                            <span className="text-xs font-semibold text-gray-500 uppercase">
+                                {language === 'vi' ? 'Trạng thái:' : 'Status:'}
+                            </span>
+                            {staff.portal_password_hash ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                    {language === 'vi' ? 'Đang hoạt động' : 'Active'}
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                    {language === 'vi' ? 'Chưa cấu hình' : 'Not Configured'}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {enrollLoading ? (
+                            <button disabled className="inline-flex items-center gap-2 bg-gray-100 text-gray-400 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 cursor-not-allowed">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                {language === 'vi' ? 'Đang xử lý...' : 'Processing...'}
+                            </button>
+                        ) : !staff.portal_password_hash ? (
+                            <button 
+                                type="button"
+                                onClick={() => handleEnroll('enroll')}
+                                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-md shadow-blue-500/10 transition-all"
+                            >
+                                <Mail className="w-3.5 h-3.5" />
+                                {language === 'vi' ? 'Đăng ký (Gửi email chào mừng)' : 'Enroll Staff (Welcome Email)'}
+                            </button>
+                        ) : (
+                            <button 
+                                type="button"
+                                onClick={() => handleEnroll('reset')}
+                                className="inline-flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 shadow-sm transition-all"
+                            >
+                                <Key className="w-3.5 h-3.5" />
+                                {language === 'vi' ? 'Gửi liên kết đặt lại mật khẩu' : 'Send Password Reset Link'}
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -715,7 +1113,7 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                 <div className="pt-4 flex justify-end">
                     <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        Save Changes
+                        {language === 'vi' ? 'Lưu thay đổi' : 'Save Changes'}
                     </button>
                 </div>
             )}
@@ -735,6 +1133,7 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
 // TAB: Contract
 // ==========================================
 function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () => void }) {
+    const { language } = useSettings()
     const contracts = [...(staff.hr_staff_contracts || [])].sort((a, b) => a.version - b.version);
     
     const [selectedIdx, setSelectedIdx] = useState<number>(Math.max(0, contracts.length - 1));
@@ -746,12 +1145,12 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
     const [isEditing, setIsEditing] = useState(false)
 
     const breakdownFields = [
-        { key: 'basic_salary', label: 'Basic Salary' },
-        { key: 'uniforms_allowance', label: 'Uniforms Allowance' },
-        { key: 'lunch_allowance', label: 'Lunch Allowance' },
-        { key: 'phone_allowance', label: 'Phone Allowance' },
-        { key: 'fuel_allowance', label: 'Fuel Allowance' },
-        { key: 'home_support_allowance', label: 'Home Support' },
+        { key: 'basic_salary', labelEn: 'Basic Salary', labelVi: 'Lương cơ bản' },
+        { key: 'uniforms_allowance', labelEn: 'Uniforms Allowance', labelVi: 'Phụ cấp đồng phục' },
+        { key: 'lunch_allowance', labelEn: 'Lunch Allowance', labelVi: 'Phụ cấp ăn trưa' },
+        { key: 'phone_allowance', labelEn: 'Phone Allowance', labelVi: 'Phụ cấp điện thoại' },
+        { key: 'fuel_allowance', labelEn: 'Fuel Allowance', labelVi: 'Phụ cấp xăng xe' },
+        { key: 'home_support_allowance', labelEn: 'Home Support', labelVi: 'Hỗ trợ nhà ở' },
     ] as const;
 
     // When the selected tab changes, populate form
@@ -792,7 +1191,7 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
             const signDate = new Date(formData.signing_date).getTime();
             const expDate = new Date(formData.expiration_date).getTime();
             if (expDate < signDate) {
-                alert("Contract Expiration Date cannot be before the Contract Signing Date.");
+                alert(language === 'vi' ? "Ngày hết hạn hợp đồng không thể trước ngày ký hợp đồng." : "Contract Expiration Date cannot be before the Contract Signing Date.");
                 return;
             }
         }
@@ -826,7 +1225,7 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
             onUpdate() // Refresh data
         } catch (err) {
             console.error(err)
-            alert('Failed to save contract')
+            alert(language === 'vi' ? 'Không thể lưu hợp đồng' : 'Failed to save contract')
         }
         setSaving(false)
     }
@@ -840,15 +1239,19 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="flex items-start justify-between">
                 <div>
-                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Contract History</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage employment contracts and salary breakdowns.</p>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">
+                        {language === 'vi' ? 'Lịch sử hợp đồng' : 'Contract History'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'vi' ? 'Quản lý hợp đồng lao động và phân tích tiền lương.' : 'Manage employment contracts and salary breakdowns.'}
+                    </p>
                 </div>
                 {!isAddingNew && (
                     <button 
                         onClick={() => setIsAddingNew(true)} 
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition shadow hover:shadow-lg"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition shadow hover:shadow-lg"
                     >
-                        <Plus className="w-4 h-4" /> Renew Contract
+                        <Plus className="w-4 h-4" /> {language === 'vi' ? 'Gia hạn hợp đồng' : 'Renew Contract'}
                     </button>
                 )}
             </div>
@@ -865,12 +1268,12 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         }`}
                     >
-                        {i === 0 ? 'Initial Contract' : `Renewal #${i}`}
+                        {i === 0 ? (language === 'vi' ? 'Hợp đồng đầu tiên' : 'Initial Contract') : (language === 'vi' ? `Gia hạn #${i}` : `Renewal #${i}`)}
                     </button>
                 ))}
                 {isAddingNew && (
                     <div className="py-3 px-1 border-b-2 font-medium text-sm border-blue-600 text-blue-600">
-                        New Renewal
+                        {language === 'vi' ? 'Gia hạn mới' : 'New Renewal'}
                     </div>
                 )}
             </div>
@@ -880,42 +1283,46 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
                     <button 
                         onClick={() => setIsEditing(!isEditing)} 
                         className={`absolute top-4 right-4 p-2 rounded-xl border transition-all ${isEditing ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-                        title={isEditing ? "Cancel Editing" : "Enable Editing"}
+                        title={isEditing ? (language === 'vi' ? 'Hủy chỉnh sửa' : 'Cancel Editing') : (language === 'vi' ? 'Chỉnh sửa' : 'Enable Editing')}
                     >
                         {isEditing ? <X className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
                     </button>
                 )}
 
                 <h3 className="text-lg font-semibold text-gray-900 mb-5">
-                    {isAddingNew ? 'Drafting New Contract' : (selectedIdx === 0 ? 'Initial Contract Details' : `Renewal #${selectedIdx} Details`)}
+                    {isAddingNew 
+                        ? (language === 'vi' ? 'Soạn hợp đồng mới' : 'Drafting New Contract') 
+                        : (selectedIdx === 0 
+                            ? (language === 'vi' ? 'Chi tiết hợp đồng đầu tiên' : 'Initial Contract Details') 
+                            : (language === 'vi' ? `Chi tiết gia hạn #${selectedIdx}` : `Renewal #${selectedIdx} Details`))}
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Contract Signing Date</label>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Ngày ký hợp đồng' : 'Contract Signing Date'}</label>
                         <input disabled={!isEditing} type="date" value={formData.signing_date || ''} onChange={e => handleChange('signing_date', e.target.value)}
                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Contract Expiration Date</label>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Ngày hết hạn hợp đồng' : 'Contract Expiration Date'}</label>
                         <input disabled={!isEditing} type="date" value={formData.expiration_date || ''} onChange={e => handleChange('expiration_date', e.target.value)}
                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
                     </div>
                 </div>
 
                 <div className="mt-5">
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Notes</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Ghi chú' : 'Notes'}</label>
                     <textarea disabled={!isEditing} rows={2} value={formData.notes || ''} onChange={e => handleChange('notes', e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" placeholder="Internal notes..."></textarea>
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" placeholder={language === 'vi' ? 'Ghi chú nội bộ...' : 'Internal notes...'}></textarea>
                 </div>
 
                 <hr className="border-gray-100 my-6" />
 
                 <div>
                     <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-gray-900">Salary Breakdown</h3>
+                        <h3 className="text-sm font-semibold text-gray-900">{language === 'vi' ? 'Phân tích tiền lương' : 'Salary Breakdown'}</h3>
                         <div className="text-sm">
-                            <span className="text-gray-500">Gross Salary (from Profile): </span>
+                            <span className="text-gray-500">{language === 'vi' ? 'Lương gộp (từ Hồ sơ): ' : 'Gross Salary (from Profile): '}</span>
                             <span className="font-bold text-gray-900">{fmtVND(grossSalary)}</span>
                         </div>
                     </div>
@@ -926,7 +1333,7 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
                             const pct = grossSalary > 0 ? ((val / grossSalary) * 100).toFixed(1) : '0.0';
                             return (
                                 <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                                    <label className="w-full sm:w-48 text-sm font-medium text-gray-700">{field.label}</label>
+                                    <label className="w-full sm:w-48 text-sm font-medium text-gray-700">{language === 'vi' ? field.labelVi : field.labelEn}</label>
                                     <div className="flex-1 relative">
                                         <input 
                                             disabled={!isEditing} 
@@ -945,11 +1352,11 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
                         })}
 
                         <div className={`pt-4 mt-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-medium text-sm ${!isMatching ? 'text-red-600' : 'text-emerald-600'}`}>
-                            <span>Total Breakdown: {fmtVND(currentTotal)}</span>
+                            <span>{language === 'vi' ? 'Tổng phân tích: ' : 'Total Breakdown: '}{fmtVND(currentTotal)}</span>
                             {!isMatching ? (
-                                <span className="flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Difference: {fmtVND(Math.abs(difference))}</span>
+                                <span className="flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> {language === 'vi' ? 'Chênh lệch: ' : 'Difference: '}{fmtVND(Math.abs(difference))}</span>
                             ) : (
-                                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4" /> Matches Gross Salary</span>
+                                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4" /> {language === 'vi' ? 'Khớp với lương gộp' : 'Matches Gross Salary'}</span>
                             )}
                         </div>
                     </div>
@@ -959,12 +1366,14 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
                     <div className="pt-6 flex justify-end gap-3">
                         {isAddingNew && (
                             <button onClick={() => setIsAddingNew(false)} disabled={saving} className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition">
-                                Cancel
+                                {language === 'vi' ? 'Hủy' : 'Cancel'}
                             </button>
                         )}
                         <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {isAddingNew ? 'Save New Contract' : 'Update Contract'}
+                            {isAddingNew 
+                                ? (language === 'vi' ? 'Lưu hợp đồng mới' : 'Save New Contract') 
+                                : (language === 'vi' ? 'Cập nhật hợp đồng' : 'Update Contract')}
                         </button>
                     </div>
                 )}
@@ -979,20 +1388,21 @@ function TabContract({ staff, onUpdate }: { staff: HRStaffMember, onUpdate: () =
 import DocumentUploadModal from '@/components/human-resources/DocumentUploadModal'
 
 function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, documents: HRStaffDocument[], onUpdate: () => void }) {
+    const { language } = useSettings()
     const [uploadModalOpen, setUploadModalOpen] = useState(false)
 
     const handleDelete = async (docId: string, fileUrl: string) => {
-        if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) return
+        if (!confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa tài liệu này không? Hành động này không thể hoàn tác.' : 'Are you sure you want to delete this document? This action cannot be undone.')) return
         
         try {
             // Delete from storage
             const urlPath = new URL(fileUrl).pathname
             const segments = urlPath.split('/')
-            // The file path is everything after hr_documents bucket name
-            const bucketIndex = segments.indexOf('hr_documents')
+            // The file path is everything after hr-documents bucket name
+            const bucketIndex = segments.indexOf('hr-documents')
             if (bucketIndex !== -1) {
                 const filePath = segments.slice(bucketIndex + 1).join('/')
-                await supabase.storage.from('hr_documents').remove([filePath])
+                await supabase.storage.from('hr-documents').remove([filePath])
             }
 
             // Delete from DB
@@ -1002,8 +1412,20 @@ function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, do
             onUpdate()
         } catch (err) {
             console.error('Error deleting document', err)
-            alert('Failed to delete document')
+            alert(language === 'vi' ? 'Không thể xóa tài liệu' : 'Failed to delete document')
         }
+    }
+
+    const getCategoryLabel = (category: string) => {
+        const labels: Record<string, string> = {
+            'CV': 'CV',
+            'ID Card': language === 'vi' ? 'CCCD / CMND' : 'ID Card',
+            'Contract': language === 'vi' ? 'Hợp đồng' : 'Contract',
+            'Medical': language === 'vi' ? 'Y tế' : 'Medical',
+            'Certification': language === 'vi' ? 'Chứng chỉ' : 'Certification',
+            'Other': language === 'vi' ? 'Khác' : 'Other',
+        }
+        return labels[category] || category
     }
 
     const getCategoryColor = (category: string) => {
@@ -1022,11 +1444,15 @@ function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, do
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Official Documents</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage physical files relevant to the employee's tenure.</p>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">
+                        {language === 'vi' ? 'Tài liệu chính thức' : 'Official Documents'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'vi' ? 'Quản lý các tệp tài liệu liên quan đến quá trình làm việc của nhân viên.' : "Manage physical files relevant to the employee's tenure."}
+                    </p>
                 </div>
                 <button onClick={() => setUploadModalOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition shadow hover:shadow-lg">
-                    <Plus className="w-4 h-4" /> Add Document
+                    <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm tài liệu' : 'Add Document'}
                 </button>
             </div>
             
@@ -1035,10 +1461,12 @@ function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, do
                     <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
                         <FileText className="w-8 h-8 text-gray-400" />
                     </div>
-                    <h3 className="text-gray-900 font-medium text-lg">No documents found</h3>
-                    <p className="text-gray-500 text-sm mt-1 max-w-sm mx-auto">Upload contracts, ID cards, medical checkups, and other important files here.</p>
+                    <h3 className="text-gray-900 font-medium text-lg">{language === 'vi' ? 'Không tìm thấy tài liệu nào' : 'No documents found'}</h3>
+                    <p className="text-gray-500 text-sm mt-1 max-w-sm mx-auto">
+                        {language === 'vi' ? 'Tải lên hợp đồng, thẻ căn cước, giấy khám sức khỏe và các tài liệu quan trọng khác tại đây.' : 'Upload contracts, ID cards, medical checkups, and other important files here.'}
+                    </p>
                     <button onClick={() => setUploadModalOpen(true)} className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition">
-                        <UploadCloud className="w-4 h-4" /> Upload First Document
+                        <UploadCloud className="w-4 h-4" /> {language === 'vi' ? 'Tải lên tài liệu đầu tiên' : 'Upload First Document'}
                     </button>
                 </div>
             ) : (
@@ -1056,7 +1484,7 @@ function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, do
                                 <div>
                                     <h3 className="font-semibold text-gray-900 leading-tight pr-6 line-clamp-2">{doc.document_name}</h3>
                                     <span className={`inline-flex mt-2 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${getCategoryColor(doc.document_category)}`}>
-                                        {doc.document_category}
+                                        {getCategoryLabel(doc.document_category)}
                                     </span>
                                 </div>
                             </div>
@@ -1067,7 +1495,7 @@ function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, do
                                     {fmtDate(doc.uploaded_at)}
                                 </span>
                                 <a href={doc.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-xs font-medium transition">
-                                    <ExternalLink className="w-3.5 h-3.5" /> View
+                                    <ExternalLink className="w-3.5 h-3.5" /> {language === 'vi' ? 'Xem' : 'View'}
                                 </a>
                             </div>
                         </div>
@@ -1089,19 +1517,161 @@ function TabDocuments({ staff, documents, onUpdate }: { staff: HRStaffMember, do
 // TAB: Career Journey (Timeline)
 // ==========================================
 function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments, loggedUserName, onUpdate, onResign }: { staff: HRStaffMember, roleHistory: HRStaffRoleHistory[], salaryHistory: HRStaffSalaryHistory[], positions: HRPosition[], departments: HRDepartment[], loggedUserName: string, onUpdate: () => void, onResign: (data: any) => Promise<void> }) {
-    
+    const { language } = useSettings()
     const [modalOpen, setModalOpen] = useState(false)
     const [saving, setSaving] = useState(false)
+
+    // Dynamic translator for timeline DB values
+    const formatTimelineText = (text: string | null | undefined): string => {
+        if (!text) return '';
+        if (language !== 'vi') return text;
+        
+        const lower = text.trim().toLowerCase();
+        
+        const exactTranslations: Record<string, string> = {
+            're-hired with new contract': 'Được tuyển dụng lại với hợp đồng mới',
+            'rehired with new contract': 'Được tuyển dụng lại với hợp đồng mới',
+            'personal reasons (during probation)': 'Lý do cá nhân trong thời gian thử việc',
+            'personal reasons during probation': 'Lý do cá nhân trong thời gian thử việc',
+            'personal reason during probation': 'Lý do cá nhân trong thời gian thử việc',
+            'personal reason': 'Lý do cá nhân',
+            'personal reasons': 'Lý do cá nhân',
+            'better opportunity': 'Cơ hội tốt hơn',
+            'health issues': 'Vấn đề sức khỏe',
+            'relocation': 'Chuyển nơi ở',
+            'end of contract': 'Hết hạn hợp đồng',
+            'performance issues': 'Vấn đề hiệu suất',
+            'policy violation': 'Vi phạm chính sách',
+            'attendance issues': 'Vấn đề chuyên cần',
+            'started employment': 'Bắt đầu làm việc',
+            'started employment at the company.': 'Bắt đầu làm việc tại công ty.',
+            'promotion': 'Thăng chức',
+            'gross salary change': 'Thay đổi lương gộp',
+            'promotion logged via salary/role change': 'Thăng chức được ghi nhận qua thay đổi Lương/Vai trò'
+        };
+
+        if (exactTranslations[lower]) {
+            return exactTranslations[lower];
+        }
+        
+        // 1. Re-hired as [type] [position]
+        // Example: "Re-hired as Outsourced - Waiter/ress" -> "Tuyển dụng lại với tư cách là Waitress thuê ngoài"
+        const rehireMatch = text.match(/Re-?hired\s+as\s*(outsourced|full-time|part-time|full_time|part_time)?\s*[-\s]*\s*(.*)/i);
+        if (rehireMatch) {
+            const type = (rehireMatch[1] || '').toLowerCase().replace('_', '-');
+            let pos = (rehireMatch[2] || '').trim();
+            // Rimuove eventuali trattini o spazi superflui all'inizio
+            if (pos.startsWith('-')) {
+                pos = pos.substring(1).trim();
+            }
+            
+            let typeVi = 'toàn thời gian';
+            if (type === 'part-time') typeVi = 'bán thời gian';
+            else if (type === 'outsourced') typeVi = 'thuê ngoài';
+            
+            return `Tuyển dụng lại với tư cách là ${pos} ${typeVi}`;
+        }
+        
+        // 2. Rehired with basic salary [amount] VND
+        const salaryRehireMatch = text.match(/Re-?hired\s+with\s+basic\s+salary\s+(.*)\s+VND/i);
+        if (salaryRehireMatch) {
+            const amt = salaryRehireMatch[1];
+            return `Được tuyển dụng lại với mức lương cơ bản là ${amt} VND`;
+        }
+
+        return text;
+    }
 
     // Merge both histories into a unified timeline
     const timeline = useMemo(() => {
         const events: any[] = []
-        roleHistory.forEach(r => events.push({ type: 'role', date: r.effective_date, data: r }))
-        salaryHistory.forEach(s => events.push({ type: 'salary', date: s.effective_date, data: s }))
+        const mergedSalaryIds = new Set<string>()
+
+        roleHistory.forEach(r => {
+            const isRehire = r.reason?.toUpperCase().startsWith('[RE-HIRED]')
+            const isResignation = r.reason?.toUpperCase().startsWith('[RESIGNATION]')
+            const isDismissal = r.reason?.toUpperCase().startsWith('[DISMISSAL]')
+            const isRejection = r.reason?.toUpperCase().startsWith('[REJECTION]')
+
+            // A resignation, dismissal, or rejection role event does NOT have a matching salary event
+            if (isResignation || isDismissal || isRejection) {
+                events.push({
+                    type: 'role',
+                    date: r.effective_date,
+                    created_at: r.created_at,
+                    data: r
+                })
+                return
+            }
+
+            // Find a salary event on the same effective_date
+            const matchingSalary = salaryHistory.find(s => 
+                s.effective_date === r.effective_date && 
+                !mergedSalaryIds.has(s.id)
+            )
+
+            if (matchingSalary) {
+                mergedSalaryIds.add(matchingSalary.id)
+                if (isRehire) {
+                    events.push({
+                        type: 're-hired',
+                        date: r.effective_date,
+                        created_at: r.created_at,
+                        data: {
+                            role: r,
+                            salary: matchingSalary
+                        }
+                    })
+                } else {
+                    events.push({
+                        type: 'promotion',
+                        date: r.effective_date,
+                        created_at: r.created_at,
+                        data: {
+                            role: r,
+                            salary: matchingSalary
+                        }
+                    })
+                }
+            } else {
+                events.push({
+                    type: 'role',
+                    date: r.effective_date,
+                    created_at: r.created_at,
+                    data: r
+                })
+            }
+        })
+
+        salaryHistory.forEach(s => {
+            if (!mergedSalaryIds.has(s.id)) {
+                events.push({
+                    type: 'salary',
+                    date: s.effective_date,
+                    created_at: s.created_at,
+                    data: s
+                })
+            }
+        })
+
         // Add start date as first event
-        if (staff.start_date) events.push({ type: 'start', date: staff.start_date, data: { text: 'Started employment' } })
-        
-        return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        if (staff.start_date) {
+            const hasOverlappingStart = events.some(e => e.date === staff.start_date && (e.type === 're-hired' || e.type === 'start'))
+            if (!hasOverlappingStart) {
+                events.push({ type: 'start', date: staff.start_date, created_at: staff.start_date, data: { text: 'Started employment' } })
+            }
+        }
+
+        // Stable sort: by date descending, then by created_at descending
+        return events.sort((a, b) => {
+            const dateA = new Date(a.date).getTime()
+            const dateB = new Date(b.date).getTime()
+            if (dateA !== dateB) return dateB - dateA
+
+            const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
+            const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
+            return timeB - timeA
+        })
     }, [roleHistory, salaryHistory, staff.start_date])
 
     const handleSaveSalary = async (payload: Partial<HRStaffSalaryHistory>) => {
@@ -1144,22 +1714,32 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments
             onUpdate()
         } catch (err) {
             console.error('Error saving salary record:', err)
-            alert('Failed to save record.')
+            alert(language === 'vi' ? 'Không thể lưu bản ghi.' : 'Failed to save record.')
         } finally {
             setSaving(false)
         }
+    }
+
+    const getEmploymentTypeLabel = (type: string) => {
+        if (type === 'full_time') return language === 'vi' ? 'Toàn thời gian' : 'Full-Time';
+        if (type === 'part_time') return language === 'vi' ? 'Bán thời gian' : 'Part-Time';
+        return language === 'vi' ? 'Thuê ngoài' : 'Outsourced';
     }
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Career Journey</h2>
-                    <p className="text-sm text-gray-500 mt-1">Timeline of gross salary increases and role promotions.</p>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">
+                        {language === 'vi' ? 'Lịch sử công việc' : 'Career Journey'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'vi' ? 'Dòng thời gian tăng lương gộp và thăng chức vị trí.' : 'Timeline of gross salary increases and role promotions.'}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={() => setModalOpen(true)} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all whitespace-nowrap">
-                        <Plus className="w-4 h-4" /> Record Change
+                        <Plus className="w-4 h-4" /> {language === 'vi' ? 'Ghi nhận thay đổi' : 'Record Change'}
                     </button>
                 </div>
             </div>
@@ -1179,90 +1759,172 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments
             />
 
             <div className="relative pl-6 border-l-2 border-gray-100 space-y-8 mt-8">
-                {timeline.length === 0 && <p className="text-sm text-gray-400">No events recorded.</p>}
+                {timeline.length === 0 && <p className="text-sm text-gray-400">{language === 'vi' ? 'Chưa ghi nhận sự kiện nào.' : 'No events recorded.'}</p>}
                 
-                {timeline.map((event, i) => (
-                    <div key={i} className="relative">
-                        <div className={`absolute -left-[31px] w-4 h-4 rounded-full border-2 border-white flex items-center justify-center
-                            ${event.type === 'start' ? 'bg-emerald-500' : event.type === 'salary' ? 'bg-blue-500' : 'bg-blue-500'}`} 
-                        />
-                        <div className="bg-white border border-gray-100 shadow-sm rounded-xl p-4">
-                            <span className="text-xs font-semibold text-gray-400 bg-gray-50 px-2 py-1 rounded-md mb-2 inline-block">
-                                {fmtDate(event.date)}
-                            </span>
-                            {event.type === 'start' && (
-                                <p className="text-sm text-gray-900 font-medium">✨ Started employment at the company.</p>
-                            )}
-                            {event.type === 'salary' && (
-                                <div>
-                                    <p className="text-sm text-gray-900 font-medium tracking-tight">
-                                        {event.data.record_type === 'promotion' ? 'Promotion & Gross Salary Change' : 'Gross Salary Change'}
-                                        <span className="text-gray-400 font-normal ml-1">
-                                            ({event.data.previous_employment_type && event.data.previous_employment_type !== event.data.employment_type 
-                                                ? `${event.data.previous_employment_type === 'full_time' ? 'Full-Time' : event.data.previous_employment_type === 'part_time' ? 'Part-Time' : 'Outsourced'} → ${event.data.employment_type === 'full_time' ? 'Full-Time' : event.data.employment_type === 'part_time' ? 'Part-Time' : 'Outsourced'}` 
-                                                : (event.data.employment_type 
-                                                    ? (event.data.employment_type === 'full_time' ? 'Full-Time' : event.data.employment_type === 'part_time' ? 'Part-Time' : 'Outsourced')
-                                                    : (event.data.salary_type === 'fixed' ? 'Full-Time' : 'Part-Time'))})
-                                        </span>
-                                    </p>
-                                    {event.data.record_type === 'promotion' && (
-                                        <p className="text-xs text-blue-600 mt-1.5 mb-2.5 flex items-center gap-1.5 font-medium bg-blue-50 w-fit px-2.5 py-1 rounded-md border border-blue-100">
-                                            {event.data.previous_position?.name || 'Unknown'} 
-                                            <ArrowLeft className="w-3 h-3 rotate-180" />
-                                            {event.data.new_position?.name || 'Unknown'}
-                                        </p>
-                                    )}
-                                    <div className="flex items-center gap-3 mt-1.5 font-mono text-sm">
-                                        <span className="line-through text-gray-400">{fmtVND(event.data.previous_amount)}</span>
-                                        <ArrowLeft className="w-3 h-3 text-gray-300 rotate-180" />
-                                        <span className="text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-md">{fmtVND(event.data.new_amount)}</span>
-                                        {event.data.increase_type === 'percentage' && event.data.increase_value && (
-                                            <span className="text-xs text-green-700 bg-green-100 px-1.5 py-0.5 rounded">+{event.data.increase_value}%</span>
-                                        )}
-                                        {event.data.previous_salary_type && event.data.previous_salary_type !== event.data.salary_type && (
-                                            <span className="text-xs font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Type Changed</span>
-                                        )}
-                                    </div>
-                                    {event.data.reason && <p className="text-xs text-gray-500 mt-2 italic">"{event.data.reason}"</p>}
-                                </div>
-                            )}
-                            {event.type === 'role' && (() => {
-                                const match = event.data.reason?.match(/^\[(RESIGNATION|DISMISSAL|REJECTION|RE-HIRED|ACTIVE)\]\s*(.*)/i);
-                                if (match) {
-                                    const actionType = match[1].toUpperCase();
-                                    const text = match[2];
-                                    let badgeClass = "bg-gray-100 text-gray-700";
-                                    let label = "Status Change";
-                                    
-                                    if (actionType === 'REJECTION') { badgeClass = "bg-purple-100 text-purple-700"; label = "Probation Rejected"; }
-                                    else if (actionType === 'DISMISSAL') { badgeClass = "bg-red-100 text-red-700"; label = "Dismissed"; }
-                                    else if (actionType === 'RESIGNATION') { badgeClass = "bg-orange-100 text-orange-700"; label = "Resigned"; }
-                                    else if (actionType === 'RE-HIRED') { badgeClass = "bg-emerald-100 text-emerald-700"; label = "Re-Hired"; }
-                                    else if (actionType === 'ACTIVE') { badgeClass = "bg-blue-100 text-blue-700"; label = "Status Active"; }
+                {timeline.map((event, i) => {
+                    let dotColor = 'bg-blue-500';
+                    if (event.type === 'start') dotColor = 'bg-emerald-500';
+                    else if (event.type === 're-hired') dotColor = 'bg-emerald-500';
+                    else if (event.type === 'promotion') dotColor = 'bg-indigo-500';
 
+                    return (
+                        <div key={i} className="relative">
+                            <div className={`absolute -left-[31px] w-4 h-4 rounded-full border-2 border-white flex items-center justify-center ${dotColor}`} />
+                            <div className="bg-white border border-gray-100 shadow-sm rounded-xl p-4">
+                                <span className="text-xs font-semibold text-gray-400 bg-gray-50 px-2 py-1 rounded-md mb-2 inline-block">
+                                    {fmtDate(event.date)}
+                                </span>
+
+                                {event.type === 'start' && (
+                                    <p className="text-sm text-gray-900 font-medium">
+                                        ✨ {language === 'vi' ? 'Bắt đầu làm việc tại công ty.' : 'Started employment at the company.'}
+                                    </p>
+                                )}
+
+                                {event.type === 're-hired' && (() => {
+                                    const match = event.data.role.reason?.match(/^\[(RE-HIRED)\]\s*(.*)/i);
+                                    const text = match ? match[2] : event.data.role.reason;
                                     return (
                                         <div>
                                             <p className="text-sm text-gray-900 font-medium tracking-tight flex items-center gap-2">
-                                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${badgeClass}`}>{label}</span>
+                                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-700">
+                                                    {language === 'vi' ? 'Tuyển dụng lại' : 'Re-Hired'}
+                                                </span>
                                             </p>
-                                            {text && <p className="text-sm text-gray-600 mt-2">{text}</p>}
+                                            {text && <p className="text-sm text-gray-600 mt-2">{formatTimelineText(text)}</p>}
+                                            {event.data.role.notes && <p className="text-xs text-gray-500 mt-1 italic">"{formatTimelineText(event.data.role.notes)}"</p>}
+                                            
+                                            {event.data.salary && (
+                                                <div className="flex items-center gap-2 mt-3 font-mono text-sm pt-2 border-t border-gray-100">
+                                                    <span className="text-xs text-gray-400 font-sans mr-1">{language === 'vi' ? 'Lương:' : 'Salary:'}</span>
+                                                    <span className="text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-md">{fmtVND(event.data.salary.new_amount)}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+
+                                {event.type === 'promotion' && (
+                                    <div>
+                                        <p className="text-sm text-gray-900 font-medium tracking-tight">
+                                            {language === 'vi' ? 'Thăng chức & Thay đổi lương gộp' : 'Promotion & Gross Salary Change'}
+                                        </p>
+                                        {(event.data.role.old_position || event.data.role.new_position) && (
+                                            <p className="text-xs text-blue-600 mt-1.5 mb-2.5 flex items-center gap-1.5 font-medium bg-blue-50 w-fit px-2.5 py-1 rounded-md border border-blue-100">
+                                                {event.data.role.old_position?.name || (language === 'vi' ? 'Không rõ' : 'Unknown')} 
+                                                <ArrowLeft className="w-3 h-3 rotate-180" />
+                                                {event.data.role.new_position?.name || (language === 'vi' ? 'Không rõ' : 'Unknown')}
+                                            </p>
+                                        )}
+                                        <div className="flex items-center gap-3 mt-1.5 font-mono text-sm">
+                                            <span className="line-through text-gray-400">{fmtVND(event.data.salary.previous_amount)}</span>
+                                            <ArrowLeft className="w-3 h-3 text-gray-300 rotate-180" />
+                                            <span className="text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-md">{fmtVND(event.data.salary.new_amount)}</span>
+                                            {event.data.salary.increase_type === 'percentage' && event.data.salary.increase_value && (
+                                                <span className="text-xs text-green-700 bg-green-100 px-1.5 py-0.5 rounded">+{event.data.salary.increase_value}%</span>
+                                            )}
+                                        </div>
+                                        {event.data.role.reason && <p className="text-xs text-gray-500 mt-2 italic">"{formatTimelineText(event.data.role.reason)}"</p>}
+                                    </div>
+                                )}
+
+                                {event.type === 'salary' && (
+                                    <div>
+                                        <p className="text-sm text-gray-900 font-medium tracking-tight">
+                                            {event.data.record_type === 'promotion' 
+                                                ? (language === 'vi' ? 'Thăng chức & Thay đổi lương gộp' : 'Promotion & Gross Salary Change') 
+                                                : (language === 'vi' ? 'Thay đổi lương gộp' : 'Gross Salary Change')}
+                                            <span className="text-gray-400 font-normal ml-1">
+                                                ({event.data.previous_employment_type && event.data.previous_employment_type !== event.data.employment_type 
+                                                    ? `${getEmploymentTypeLabel(event.data.previous_employment_type)} → ${getEmploymentTypeLabel(event.data.employment_type)}` 
+                                                    : (event.data.employment_type 
+                                                        ? getEmploymentTypeLabel(event.data.employment_type)
+                                                        : (event.data.salary_type === 'fixed' ? (language === 'vi' ? 'Toàn thời gian' : 'Full-Time') : (language === 'vi' ? 'Bán thời gian' : 'Part-Time')))}
+                                                )
+                                            </span>
+                                        </p>
+                                        {event.data.record_type === 'promotion' && (event.data.previous_position || event.data.new_position) && (
+                                            <p className="text-xs text-blue-600 mt-1.5 mb-2.5 flex items-center gap-1.5 font-medium bg-blue-50 w-fit px-2.5 py-1 rounded-md border border-blue-100">
+                                                {event.data.previous_position?.name || (language === 'vi' ? 'Không rõ' : 'Unknown')} 
+                                                <ArrowLeft className="w-3 h-3 rotate-180" />
+                                                {event.data.new_position?.name || (language === 'vi' ? 'Không rõ' : 'Unknown')}
+                                            </p>
+                                        )}
+                                        <div className="flex items-center gap-3 mt-1.5 font-mono text-sm">
+                                            <span className="line-through text-gray-400">{fmtVND(event.data.previous_amount)}</span>
+                                            <ArrowLeft className="w-3 h-3 text-gray-300 rotate-180" />
+                                            <span className="text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-md">{fmtVND(event.data.new_amount)}</span>
+                                            {event.data.increase_type === 'percentage' && event.data.increase_value && (
+                                                <span className="text-xs text-green-700 bg-green-100 px-1.5 py-0.5 rounded">+{event.data.increase_value}%</span>
+                                            )}
+                                            {event.data.previous_salary_type && event.data.previous_salary_type !== event.data.salary_type && (
+                                                <span className="text-xs font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                                                    {language === 'vi' ? 'Thay đổi hình thức' : 'Type Changed'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {event.data.reason && <p className="text-xs text-gray-500 mt-2 italic">"{formatTimelineText(event.data.reason)}"</p>}
+                                    </div>
+                                )}
+
+                                {event.type === 'role' && (() => {
+                                    const match = event.data.reason?.match(/^\[(RESIGNATION|DISMISSAL|REJECTION|RE-HIRED|ACTIVE)\]\s*(.*)/i);
+                                    if (match) {
+                                        const actionType = match[1].toUpperCase();
+                                        const text = match[2];
+                                        let badgeClass = "bg-gray-100 text-gray-700";
+                                        let label = "Status Change";
+                                        
+                                        if (actionType === 'REJECTION') { 
+                                            badgeClass = "bg-purple-100 text-purple-700"; 
+                                            label = language === 'vi' ? 'Từ chối thử việc' : 'Probation Rejected'; 
+                                        } else if (actionType === 'DISMISSAL') { 
+                                            badgeClass = "bg-red-100 text-red-700"; 
+                                            label = language === 'vi' ? 'Đã sa thải' : 'Dismissed'; 
+                                        } else if (actionType === 'RESIGNATION') { 
+                                            badgeClass = "bg-orange-100 text-orange-700"; 
+                                            label = language === 'vi' ? 'Đã thôi việc' : 'Resigned'; 
+                                        } else if (actionType === 'RE-HIRED') { 
+                                            badgeClass = "bg-emerald-100 text-emerald-700"; 
+                                            label = language === 'vi' ? 'Tuyển dụng lại' : 'Re-Hired'; 
+                                        } else if (actionType === 'ACTIVE') { 
+                                            badgeClass = "bg-blue-100 text-blue-700"; 
+                                            label = language === 'vi' ? 'Trạng thái hoạt động' : 'Status Active'; 
+                                        } else {
+                                            label = language === 'vi' ? 'Thay đổi trạng thái' : 'Status Change';
+                                        }
+
+                                        return (
+                                            <div>
+                                                <p className="text-sm text-gray-900 font-medium tracking-tight flex items-center gap-2">
+                                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${badgeClass}`}>{label}</span>
+                                                </p>
+                                                {text && <p className="text-sm text-gray-600 mt-2">{formatTimelineText(text)}</p>}
+                                                {event.data.notes && <p className="text-xs text-gray-500 mt-1 italic">"{formatTimelineText(event.data.notes)}"</p>}
+                                            </div>
+                                        )
+                                    }
+
+                                    return (
+                                        <div>
+                                            <p className="text-sm text-gray-900 font-medium tracking-tight">
+                                                {language === 'vi' ? 'Điều chuyển vị trí' : 'Role Transfer'}
+                                            </p>
+                                            <p className="text-sm text-gray-600 mt-1">
+                                                {language === 'vi' ? (
+                                                    <>Điều chuyển từ <strong>{event.data.old_position?.name || 'Không rõ'}</strong> sang <strong className="text-blue-600">{event.data.new_position?.name || 'Không rõ'}</strong></>
+                                                ) : (
+                                                    <>Moved from <strong>{event.data.old_position?.name || 'Unknown'}</strong> to <strong className="text-blue-600">{event.data.new_position?.name || 'Unknown'}</strong></>
+                                                )}
+                                            </p>
+                                            {event.data.reason && <p className="text-xs text-gray-500 mt-2 italic">"{formatTimelineText(event.data.reason)}"</p>}
                                         </div>
                                     )
-                                }
-
-                                return (
-                                    <div>
-                                        <p className="text-sm text-gray-900 font-medium tracking-tight">Role Transfer</p>
-                                        <p className="text-sm text-gray-600 mt-1">
-                                            Moved from <strong>{event.data.old_position?.name || 'Unknown'}</strong> to <strong className="text-blue-600">{event.data.new_position?.name || 'Unknown'}</strong>
-                                        </p>
-                                        {event.data.reason && <p className="text-xs text-gray-500 mt-2 italic">"{event.data.reason}"</p>}
-                                    </div>
-                                )
-                            })()}
+                                })()}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     )
@@ -1272,6 +1934,7 @@ function TabTimeline({ staff, roleHistory, salaryHistory, positions, departments
 // TAB: Performance
 // ==========================================
 function TabPerformance({ staff, performances, onUpdate, allCategories }: { staff: HRStaffMember, performances: HRStaffPerformance[], onUpdate: () => void, allCategories: HRRatingCategory[] }) {
+    const { language } = useSettings()
     const [modalOpen, setModalOpen] = useState(false);
     const [editingReview, setEditingReview] = useState<HRStaffPerformance | null>(null);
     const [saving, setSaving] = useState(false);
@@ -1311,14 +1974,14 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
             setModalOpen(false);
         } catch (err) {
             console.error(err);
-            alert('Failed to save review');
+            alert(language === 'vi' ? 'Không thể lưu bản đánh giá' : 'Failed to save review');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDeleteReview = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this performance review?')) return;
+        if (!confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa bản đánh giá hiệu suất này không?' : 'Are you sure you want to delete this performance review?')) return;
         try {
             const { error } = await supabase.from('hr_staff_performance').delete().eq('id', id);
             if (error) throw error;
@@ -1326,7 +1989,7 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
             setModalOpen(false);
         } catch (err) {
             console.error(err);
-            alert('Failed to delete review');
+            alert(language === 'vi' ? 'Không thể xóa bản đánh giá' : 'Failed to delete review');
         }
     };
 
@@ -1337,7 +2000,7 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
             onUpdate();
         } catch (err: any) {
             console.error(err);
-            alert(`Failed to update skill level: ${err.message || JSON.stringify(err)}`);
+            alert(language === 'vi' ? `Không thể cập nhật trình độ kỹ năng: ${err.message || JSON.stringify(err)}` : `Failed to update skill level: ${err.message || JSON.stringify(err)}`);
         }
     };
 
@@ -1402,7 +2065,15 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
             
             for (const [key, val] of Object.entries(catsObj)) {
                 if (val === 0) continue;
-                const keyLabel = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                const dbCat = allCategories.find(c => c.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '') === key);
+                let keyLabel = '';
+                if (dbCat) {
+                    keyLabel = language === 'vi' 
+                        ? (dbCat.label_vi || (dbCat.label.toLowerCase().trim() === 'quality of work' ? 'Chất lượng công việc' : dbCat.label)) 
+                        : dbCat.label; // fallback rapido per evitare import dinamici pesanti se non necessari, oppure copriamo i più comuni
+                } else {
+                    keyLabel = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                }
                 addDataRow(keyLabel, `${val} / 5`);
             }
 
@@ -1424,7 +2095,7 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
             saveAs(new Blob([buffer]), `Review_${safeName}_${safePeriod}.xlsx`);
         } catch (err) {
             console.error('Export error', err);
-            alert('Failed to export review');
+            alert(language === 'vi' ? 'Không thể xuất bản đánh giá' : 'Failed to export review');
         }
         setExportingId(null);
     };
@@ -1437,10 +2108,10 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                     <div>
                         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                             <BadgeCheck className="w-5 h-5 text-indigo-600" />
-                            Operational Skill Level
+                            {language === 'vi' ? 'Trình độ kỹ năng vận hành' : 'Operational Skill Level'}
                         </h3>
                         <p className="text-sm text-gray-500 mt-1">
-                            Set the base capability level for auto-scheduling requirements.
+                            {language === 'vi' ? 'Thiết lập mức năng lực cơ bản cho các yêu cầu tự động sắp xếp lịch làm việc.' : 'Set the base capability level for auto-scheduling requirements.'}
                         </p>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -1453,7 +2124,7 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                                     ? 'text-indigo-600' 
                                     : 'text-gray-200 hover:text-indigo-300'
                                 }`}
-                                title={`Level ${level}`}
+                                title={language === 'vi' ? `Cấp độ ${level}` : `Level ${level}`}
                             >
                                 <Star className={`w-8 h-8 ${ (staff.skill_level || 1) >= level ? 'fill-indigo-600' : ''}`} />
                             </button>
@@ -1464,12 +2135,16 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Performance Tracking</h2>
-                    <p className="text-sm text-gray-500 mt-1">Monitor growth, past reviews and key goals.</p>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">
+                        {language === 'vi' ? 'Theo dõi hiệu suất' : 'Performance Tracking'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'vi' ? 'Giám sát sự phát triển, các đánh giá trước đây và các mục tiêu chính.' : 'Monitor growth, past reviews and key goals.'}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={() => { setEditingReview(null); setModalOpen(true); }} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all whitespace-nowrap">
-                        <Plus className="w-4 h-4" /> Add Review
+                        <Plus className="w-4 h-4" /> {language === 'vi' ? 'Thêm đánh giá' : 'Add Review'}
                     </button>
                 </div>
             </div>
@@ -1528,7 +2203,9 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                 </div>
             ) : (
                 <div className="bg-gray-50 border border-gray-100 border-dashed rounded-2xl p-8 text-center">
-                    <p className="text-sm text-gray-400">Not enough data to display trend chart. Add a review!</p>
+                    <p className="text-sm text-gray-400">
+                        {language === 'vi' ? 'Không có đủ dữ liệu để hiển thị biểu đồ xu hướng. Hãy thêm đánh giá!' : 'Not enough data to display trend chart. Add a review!'}
+                    </p>
                 </div>
             )}
 
@@ -1543,7 +2220,7 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                                     <h4 className="text-sm font-bold text-gray-900 group-hover:text-emerald-700 transition-colors">
                                         {fmtDate(p.review_date)} <span className="text-xs font-normal text-gray-400 ml-1">({p.period})</span>
                                     </h4>
-                                    <p className="text-xs text-gray-500">By {p.reviewer_name || 'System'}</p>
+                                    <p className="text-xs text-gray-500">{language === 'vi' ? 'Bởi' : 'By'} {p.reviewer_name || 'System'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1551,7 +2228,7 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                                     onClick={(e) => handleExportReview(e, p)}
                                     disabled={exportingId === p.id}
                                     className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                    title="Export Review as Excel"
+                                    title={language === 'vi' ? 'Xuất đánh giá sang Excel' : 'Export Review as Excel'}
                                 >
                                     {exportingId === p.id ? <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" /> : <FileDown className="w-4 h-4" />}
                                 </button>
@@ -1559,7 +2236,7 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
                             </div>
                         </div>
                         <p className="text-sm text-gray-700 leading-relaxed italic border-l-2 border-emerald-200 pl-3">
-                            "{p.notes || 'No specific notes provided for this review segment.'}"
+                            "{p.notes || (language === 'vi' ? 'Không có ghi chú cụ thể cho phần đánh giá này.' : 'No specific notes provided for this review segment.')}"
                         </p>
                     </div>
                 ))}
@@ -1573,11 +2250,27 @@ function TabPerformance({ staff, performances, onUpdate, allCategories }: { staf
 // ==========================================
 
 function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
+    const { language } = useSettings()
+    const [activeTab, setActiveTab] = useState<'fines' | 'warnings' | 'awards'>('fines')
+    
+    // States for Fines
     const [fines, setFines] = useState<HRStaffFine[]>([])
     const [catalog, setCatalog] = useState<HRDisciplinaryCatalog[]>([])
+    
+    // States for Warnings
+    const [warnings, setWarnings] = useState<HRStaffWarning[]>([])
+    
+    // States for Awards
+    const [awards, setAwards] = useState<HRStaffAward[]>([])
+    const [awardsCatalog, setAwardsCatalog] = useState<HRAwardsCatalog[]>([])
+
     const [loading, setLoading] = useState(false)
     const [modalOpen, setModalOpen] = useState(false)
-    const [editingNode, setEditingNode] = useState<HRStaffFine | null>(null)
+    
+    // Editing Node States
+    const [editingFine, setEditingFine] = useState<HRStaffFine | null>(null)
+    const [editingWarning, setEditingWarning] = useState<HRStaffWarning | null>(null)
+    const [editingAward, setEditingAward] = useState<HRStaffAward | null>(null)
     
     const now = new Date()
     const [year, setYear] = useState<number>(now.getFullYear())
@@ -1599,29 +2292,52 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
         return () => { isMounted = false }
     }, [])
 
-    const monthLabel = new Date(year, month).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    const monthLabel = new Date(year, month).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' })
     const monthInputValue = `${year}-${String(month + 1).padStart(2, '0')}`
 
-    const fetchFines = useCallback(async () => {
+    const fetchAll = useCallback(async () => {
         setLoading(true)
         const endDate = new Date(year, month + 1, 0) // last day
         
         try {
-            const [finesRes, catRes] = await Promise.all([
+            const [finesRes, catRes, warningsRes, awardsRes, awardsCatRes] = await Promise.all([
                 supabase.from('hr_staff_fines')
                     .select('*')
                     .eq('staff_id', staff.id)
+                    .neq('deduction_source', 'cash')
                     .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
                     .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`)
                     .order('date', { ascending: false }),
                 supabase.from('hr_disciplinary_catalog')
                     .select('*')
-                    .order('infraction_name', { ascending: true })
+                    .order('infraction_name', { ascending: true }),
+                supabase.from('hr_staff_warnings')
+                    .select('*')
+                    .eq('staff_id', staff.id)
+                    .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
+                    .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`)
+                    .order('date', { ascending: false }),
+                supabase.from('hr_staff_awards')
+                    .select('*')
+                    .eq('staff_id', staff.id)
+                    .neq('deduction_source', 'cash')
+                    .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
+                    .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`)
+                    .order('date', { ascending: false }),
+                supabase.from('hr_awards_catalog')
+                    .select('*')
+                    .order('award_name', { ascending: true })
             ])
                 
             if (finesRes.error) throw finesRes.error
             if (catRes.error) throw catRes.error
+            if (warningsRes.error) throw warningsRes.error
+            if (awardsRes.error) throw awardsRes.error
+            if (awardsCatRes.error) throw awardsCatRes.error
+            
             setFines(finesRes.data || [])
+            setWarnings(warningsRes.data || [])
+            setAwards(awardsRes.data || [])
             
             // Filter catalog based on applicability
             const allCatalog = (catRes.data as HRDisciplinaryCatalog[]) || []
@@ -1631,18 +2347,27 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
                 if (c.applicability_type === 'position' && c.target_id === staff.position_id) return true;
                 return false;
             })
-            
             setCatalog(filteredCatalog)
+
+            // Filter awards catalog
+            const allAwardsCatalog = (awardsCatRes.data as HRAwardsCatalog[]) || []
+            const filteredAwardsCatalog = allAwardsCatalog.filter(c => {
+                if (!c.applicability_type || c.applicability_type === 'global') return true;
+                if (c.applicability_type === 'department' && c.target_id === staff.department_id) return true;
+                if (c.applicability_type === 'position' && c.target_id === staff.position_id) return true;
+                return false;
+            })
+            setAwardsCatalog(filteredAwardsCatalog)
         } catch (err) {
-            console.error('Error fetching fines/catalog', err)
+            console.error('Error fetching data', err)
         } finally {
             setLoading(false)
         }
-    }, [staff.id, year, month])
+    }, [staff.id, staff.department_id, staff.position_id, year, month])
 
     useEffect(() => {
-        fetchFines()
-    }, [fetchFines])
+        fetchAll()
+    }, [fetchAll])
 
     function prevMonth() {
         setMonth(m => {
@@ -1663,10 +2388,11 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
         }
     }
 
-    async function handleSave(formData: Partial<HRStaffFine>) {
+    // SAVING LOGIC
+    async function handleSaveFine(formData: Partial<HRStaffFine>) {
         try {
-            if (editingNode) {
-                const { error } = await supabase.from('hr_staff_fines').update(formData).eq('id', editingNode.id)
+            if (editingFine) {
+                const { error } = await supabase.from('hr_staff_fines').update(formData).eq('id', editingFine.id)
                 if (error) throw error
             } else {
                 const { error } = await supabase.from('hr_staff_fines').insert([{
@@ -1675,39 +2401,121 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
                 }])
                 if (error) throw error
             }
-            fetchFines()
+            fetchAll()
             setModalOpen(false)
         } catch (err) {
             console.error(err)
-            alert('Failed to save fine')
-        }
-    }
-    
-    async function handleDelete(id: string) {
-        if (!window.confirm('Are you sure you want to delete this fine?')) return
-        try {
-            const { error } = await supabase.from('hr_staff_fines').delete().eq('id', id)
-            if (error) throw error
-            fetchFines()
-        } catch (err) {
-            console.error(err)
-            alert('Failed to delete fine')
+            alert(language === 'vi' ? 'Không thể lưu quyết định kỷ luật' : 'Failed to save fine')
+            throw err
         }
     }
 
-    async function handleStatusChange(id: string, newStatus: string) {
+    async function handleSaveWarning(formData: Partial<HRStaffWarning>) {
+        try {
+            if (editingWarning) {
+                const { error } = await supabase.from('hr_staff_warnings').update(formData).eq('id', editingWarning.id)
+                if (error) throw error
+            } else {
+                const { error } = await supabase.from('hr_staff_warnings').insert([{
+                    ...formData,
+                    staff_id: staff.id
+                }])
+                if (error) throw error
+            }
+            fetchAll()
+            setModalOpen(false)
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể lưu cảnh cáo' : 'Failed to save flag')
+            throw err
+        }
+    }
+
+    async function handleSaveAward(formData: Partial<HRStaffAward>) {
+        try {
+            if (editingAward) {
+                const { error } = await supabase.from('hr_staff_awards').update(formData).eq('id', editingAward.id)
+                if (error) throw error
+            } else {
+                const { error } = await supabase.from('hr_staff_awards').insert([{
+                    ...formData,
+                    staff_id: staff.id
+                }])
+                if (error) throw error
+            }
+            fetchAll()
+            setModalOpen(false)
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể lưu khen thưởng' : 'Failed to save award')
+            throw err
+        }
+    }
+    
+    // DELETION LOGIC
+    async function handleDeleteFine(id: string) {
+        if (!window.confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa tiền phạt này không?' : 'Are you sure you want to delete this fine?')) return
+        try {
+            const { error } = await supabase.from('hr_staff_fines').delete().eq('id', id)
+            if (error) throw error
+            fetchAll()
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể xóa tiền phạt' : 'Failed to delete fine')
+        }
+    }
+
+    async function handleDeleteWarning(id: string) {
+        if (!window.confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa cảnh cáo này không?' : 'Are you sure you want to delete this flag?')) return
+        try {
+            const { error } = await supabase.from('hr_staff_warnings').delete().eq('id', id)
+            if (error) throw error
+            fetchAll()
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể xóa cảnh cáo' : 'Failed to delete flag')
+        }
+    }
+
+    async function handleDeleteAward(id: string) {
+        if (!window.confirm(language === 'vi' ? 'Bạn có chắc chắn muốn xóa khen thưởng này không?' : 'Are you sure you want to delete this award?')) return
+        try {
+            const { error } = await supabase.from('hr_staff_awards').delete().eq('id', id)
+            if (error) throw error
+            fetchAll()
+        } catch (err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể xóa khen thưởng' : 'Failed to delete award')
+        }
+    }
+
+    // STATUS CHANGES
+    async function handleFineStatusChange(id: string, newStatus: string) {
         try {
             setFines(prev => prev.map(f => f.id === id ? { ...f, status: newStatus as any } : f))
             const { error } = await supabase.from('hr_staff_fines').update({ status: newStatus }).eq('id', id)
             if (error) throw error
         } catch(err) {
             console.error(err)
-            alert('Failed to update status')
-            fetchFines()
+            alert(language === 'vi' ? 'Không thể cập nhật trạng thái' : 'Failed to update status')
+            fetchAll()
         }
     }
 
-    const totalAmount = fines.reduce((sum, f) => sum + Number(f.amount || 0), 0)
+    async function handleAwardStatusChange(id: string, newStatus: string) {
+        try {
+            setAwards(prev => prev.map(a => a.id === id ? { ...a, status: newStatus as any } : a))
+            const { error } = await supabase.from('hr_staff_awards').update({ status: newStatus }).eq('id', id)
+            if (error) throw error
+        } catch(err) {
+            console.error(err)
+            alert(language === 'vi' ? 'Không thể cập nhật trạng thái' : 'Failed to update status')
+            fetchAll()
+        }
+    }
+
+    const totalFinesAmount = fines.reduce((sum, f) => sum + Number(f.amount || 0), 0)
+    const totalAwardsAmount = awards.reduce((sum, a) => sum + Number(a.amount || 0), 0)
 
     const baseBtn = 'flex items-center gap-1 text-gray-500 hover:text-gray-900 transition'
 
@@ -1715,20 +2523,57 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">Disciplinary Actions & Fines</h2>
-                    <p className="text-sm text-gray-500 mt-1">Record infractions and associated deductions.</p>
+                    <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500">
+                        {language === 'vi' ? 'Kỷ Luật, Cảnh Báo & Thưởng' : 'Disciplinary Actions, Warnings & Awards'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'vi' ? 'Hồ sơ kỷ luật, cảnh cáo và khen thưởng của nhân viên.' : 'Record infractions, warning flags and awards for this staff.'}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => { setEditingNode(null); setModalOpen(true); }} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all whitespace-nowrap">
-                        <Plus className="w-4 h-4" /> Add Disciplinary Action
+                    <button 
+                        onClick={() => { 
+                            setEditingFine(null); 
+                            setEditingWarning(null); 
+                            setEditingAward(null);
+                            setModalOpen(true); 
+                        }} 
+                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all whitespace-nowrap"
+                    >
+                        <Plus className="w-4 h-4" /> 
+                        {activeTab === 'fines' ? (language === 'vi' ? 'Thêm Kỷ Luật' : 'Add Fine') :
+                         activeTab === 'warnings' ? (language === 'vi' ? 'Thêm Cảnh Cáo' : 'Add Flag') :
+                         (language === 'vi' ? 'Thêm Khen Thưởng' : 'Add Award')}
                     </button>
                 </div>
+            </div>
+
+            {/* TAB MINIMALISTE */}
+            <div className="flex border-b border-gray-200 mb-6 gap-6 px-2">
+                <button 
+                    onClick={() => setActiveTab('fines')}
+                    className={`pb-3 text-sm font-bold border-b-2 transition-all ${activeTab === 'fines' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+                >
+                    {language === 'vi' ? 'Tiền Phạt' : 'Fines'}
+                </button>
+                <button 
+                    onClick={() => setActiveTab('warnings')}
+                    className={`pb-3 text-sm font-bold border-b-2 transition-all ${activeTab === 'warnings' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+                >
+                    {language === 'vi' ? 'Cảnh Cáo & Thẻ' : 'Warnings & Flags'}
+                </button>
+                <button 
+                    onClick={() => setActiveTab('awards')}
+                    className={`pb-3 text-sm font-bold border-b-2 transition-all ${activeTab === 'awards' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+                >
+                    {language === 'vi' ? 'Khen Thưởng' : 'Awards'}
+                </button>
             </div>
 
             {/* Month Nav */}
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center justify-between">
                 <button type="button" onClick={prevMonth} className={baseBtn}>
-                    <ChevronLeft className="w-4 h-4" /> <span>Previous</span>
+                    <ChevronLeft className="w-4 h-4" /> <span>{language === 'vi' ? 'Trước' : 'Previous'}</span>
                 </button>
                 <div className="flex items-center gap-2 font-semibold text-gray-900">
                     <span>{monthLabel}</span>
@@ -1738,77 +2583,213 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
                     </div>
                 </div>
                 <button type="button" onClick={nextMonth} className={baseBtn}>
-                    <span>Next</span> <ChevronRight className="w-4 h-4" />
+                    <span>{language === 'vi' ? 'Sau' : 'Next'}</span> <ChevronRight className="w-4 h-4" />
                 </button>
             </div>
 
-            {/* Table */}
+            {/* Tables */}
             <div className="border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
-                            <tr>
-                                <th className="px-4 py-3 border-r border-gray-100">Date</th>
-                                <th className="px-4 py-3 border-r border-gray-100">Infraction</th>
-                                <th className="px-4 py-3 border-r border-gray-100">Notified By</th>
-                                <th className="px-4 py-3 border-r border-gray-100">Source</th>
-                                <th className="px-4 py-3 border-r border-gray-100 text-center">Status</th>
-                                <th className="px-4 py-3 border-r border-gray-100 text-right">Amount (VND)</th>
-                                <th className="px-4 py-3 text-center">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {loading ? (
-                                <tr><td colSpan={7} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin text-blue-500 mx-auto" /></td></tr>
-                            ) : fines.length === 0 ? (
-                                <tr><td colSpan={7} className="text-center py-8 text-gray-400">No disciplinary actions recorded for this month.</td></tr>
-                            ) : (
-                                fines.map(f => (
-                                    <tr key={f.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">{fmtDate(f.date)}</td>
-                                        <td className="px-4 py-3 border-r border-gray-100 max-w-xs truncate" title={f.infraction}>{f.infraction}</td>
-                                        <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-600">{f.notified_by || '-'}</td>
-                                        <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-600 capitalize">{(f.deduction_source || '-').replace('_', ' ')}</td>
-                                        <td className="px-4 py-3 border-r border-gray-100 text-center">
-                                            <select 
-                                                value={f.status} 
-                                                onChange={(e) => handleStatusChange(f.id, e.target.value)}
-                                                className={`text-[10px] font-bold tracking-wider uppercase cursor-pointer rounded-full border px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-transparent hover:bg-white
-                                                    ${f.status === 'paid' ? 'text-emerald-600 border-emerald-200' : 
-                                                      f.status === 'waived' ? 'text-gray-600 border-gray-200' :
-                                                      f.status === 'disputed' ? 'text-red-600 border-red-200' :
-                                                      'text-amber-600 border-amber-200'}
-                                                `}
-                                            >
-                                                <option value="pending">PENDING</option>
-                                                <option value="paid">PAID</option>
-                                                <option value="waived">WAIVED</option>
-                                                <option value="disputed">DISPUTED</option>
-                                            </select>
-                                        </td>
-                                        <td className="px-4 py-3 border-r border-gray-100 text-right font-mono font-medium text-orange-600">
-                                            {fmtVND(f.amount)}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <div className="flex items-center justify-center gap-2">
-                                                <button onClick={() => { setEditingNode(f); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit"><Pencil className="w-4 h-4" /></button>
-                                                <button onClick={() => handleDelete(f.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                        {!loading && fines.length > 0 && (
-                            <tfoot className="bg-gray-50 border-t border-gray-200 text-sm font-bold text-gray-900">
+                    
+                    {/* TAB 1: FINES */}
+                    {activeTab === 'fines' && (
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-3 text-right">Total Fines</td>
-                                    <td className="px-4 py-3 text-right text-orange-600 font-mono">{fmtVND(totalAmount)}</td>
-                                    <td></td>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Ngày' : 'Date'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Vi Phạm' : 'Infraction'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Nguồn' : 'Source'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100 text-center">{language === 'vi' ? 'Trạng Thái' : 'Status'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100 text-right">{language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'}</th>
+                                    <th className="px-4 py-3 text-center">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
                                 </tr>
-                            </tfoot>
-                        )}
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {loading ? (
+                                    <tr><td colSpan={7} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin text-blue-500 mx-auto" /></td></tr>
+                                ) : fines.length === 0 ? (
+                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">{language === 'vi' ? 'Không có tiền phạt nào được ghi nhận cho tháng này.' : 'No fines recorded for this month.'}</td></tr>
+                                ) : (
+                                    fines.map(f => (
+                                        <tr key={f.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">{fmtDate(f.date)}</td>
+                                            <td className="px-4 py-3 border-r border-gray-100 max-w-xs truncate" title={f.infraction}>{f.infraction}</td>
+                                            <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-700">{f.notified_by || '-'}</td>
+                                            <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-700">
+                                                {f.deduction_source === 'salary' ? (language === 'vi' ? 'Khấu trừ lương gộp' : 'Gross salary deduction') :
+                                                 f.deduction_source === 'service_charge' ? (language === 'vi' ? 'Khấu trừ phí phục vụ' : 'Service charge deduction') :
+                                                 f.deduction_source === 'cash' ? (language === 'vi' ? 'Tiền mặt/Chuyển khoản' : 'Direct cash/transfer') :
+                                                 (f.deduction_source || '-').replace('_', ' ')}
+                                            </td>
+                                            <td className="px-4 py-3 border-r border-gray-100 text-center">
+                                                <select 
+                                                    value={f.status} 
+                                                    onChange={(e) => handleFineStatusChange(f.id, e.target.value)}
+                                                    className={`text-[10px] font-bold tracking-wider uppercase cursor-pointer rounded-full border px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-transparent hover:bg-white
+                                                        ${f.status === 'paid' ? 'text-emerald-600 border-emerald-200' : 
+                                                          f.status === 'waived' ? 'text-gray-600 border-gray-200' :
+                                                          f.status === 'disputed' ? 'text-red-600 border-red-200' :
+                                                          'text-amber-600 border-amber-200'}
+                                                    `}
+                                                >
+                                                    <option value="pending">{language === 'vi' ? 'CHỜ XỬ LÝ' : 'PENDING'}</option>
+                                                    <option value="paid">{language === 'vi' ? 'ĐÃ NỘP' : 'PAID'}</option>
+                                                    <option value="waived">{language === 'vi' ? 'ĐƯỢC MIỄN' : 'WAIVED'}</option>
+                                                    <option value="disputed">{language === 'vi' ? 'ĐANG TRANH CHẤP' : 'DISPUTED'}</option>
+                                                </select>
+                                            </td>
+                                            <td className="px-4 py-3 border-r border-gray-100 text-right font-mono font-medium text-red-600">
+                                                -{fmtVND(f.amount)}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button onClick={() => { setEditingFine(f); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={language === 'vi' ? 'Chỉnh sửa' : 'Edit'}><Pencil className="w-4 h-4" /></button>
+                                                    <button onClick={() => handleDeleteFine(f.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={language === 'vi' ? 'Xóa' : 'Delete'}><Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                            {!loading && fines.length > 0 && (
+                                <tfoot className="bg-gray-50 border-t border-gray-200 text-sm font-bold text-gray-900">
+                                    <tr>
+                                        <td colSpan={5} className="px-4 py-3 text-right">{language === 'vi' ? 'Tổng Tiền Phạt' : 'Total Fines'}</td>
+                                        <td className="px-4 py-3 text-right text-red-600 font-mono">-{fmtVND(totalFinesAmount)}</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            )}
+                        </table>
+                    )}
+
+                    {/* TAB 2: WARNINGS */}
+                    {activeTab === 'warnings' && (
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Ngày' : 'Date'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100 text-center w-36">{language === 'vi' ? 'Mức Cảnh Báo' : 'Flag Type'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Lý Do' : 'Reason'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</th>
+                                    <th className="px-4 py-3 text-center">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {loading ? (
+                                    <tr><td colSpan={5} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin text-blue-500 mx-auto" /></td></tr>
+                                ) : warnings.length === 0 ? (
+                                    <tr><td colSpan={5} className="text-center py-8 text-gray-400">{language === 'vi' ? 'Không có cảnh cáo nào được ghi nhận cho tháng này.' : 'No flags recorded for this month.'}</td></tr>
+                                ) : (
+                                    warnings.map(w => (
+                                        <tr key={w.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">{fmtDate(w.date)}</td>
+                                            <td className="px-4 py-3 border-r border-gray-100 text-center whitespace-nowrap">
+                                                {w.flag_type === 'green' ? (
+                                                    <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full text-xs font-semibold">
+                                                        <Flag className="w-3 h-3 fill-emerald-500 text-emerald-500" />
+                                                        {language === 'vi' ? 'Ghi chú tích cực' : 'Positive Note'}
+                                                    </span>
+                                                ) : w.flag_type === 'yellow' ? (
+                                                    <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-semibold">
+                                                        <Flag className="w-3 h-3 fill-amber-500 text-amber-500" />
+                                                        {language === 'vi' ? 'Nhắc nhở' : 'Caution'}
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-full text-xs font-semibold">
+                                                        <Flag className="w-3 h-3 fill-red-500 text-red-500" />
+                                                        {language === 'vi' ? 'Cảnh cáo' : 'Warning'}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 border-r border-gray-100 text-gray-700 max-w-sm truncate" title={formatWarningReason(w.reason, language)}>{formatWarningReason(w.reason, language)}</td>
+                                            <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-700">{w.notified_by || '-'}</td>
+                                            <td className="px-4 py-3 text-center">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button onClick={() => { setEditingWarning(w); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={language === 'vi' ? 'Chỉnh sửa' : 'Edit'}><Pencil className="w-4 h-4" /></button>
+                                                    <button onClick={() => handleDeleteWarning(w.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={language === 'vi' ? 'Xóa' : 'Delete'}><Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    )}
+
+                    {/* TAB 3: AWARDS */}
+                    {activeTab === 'awards' && (
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Ngày' : 'Date'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Khen Thưởng' : 'Award'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Nguồn' : 'Source'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100 text-center">{language === 'vi' ? 'Trạng Thái' : 'Status'}</th>
+                                    <th className="px-4 py-3 border-r border-gray-100 text-right">{language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'}</th>
+                                    <th className="px-4 py-3 text-center">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {loading ? (
+                                    <tr><td colSpan={7} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin text-blue-500 mx-auto" /></td></tr>
+                                ) : awards.length === 0 ? (
+                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">{language === 'vi' ? 'Không có khen thưởng nào được ghi nhận cho tháng này.' : 'No awards recorded for this month.'}</td></tr>
+                                ) : (
+                                    awards.map(a => (
+                                        <tr key={a.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">{fmtDate(a.date)}</td>
+                                            <td className="px-4 py-3 border-r border-gray-100 max-w-xs truncate" title={a.award_name}>{a.award_name}</td>
+                                            <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-700">{a.notified_by || '-'}</td>
+                                            <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-700">
+                                                {a.deduction_source === 'salary' ? (language === 'vi' ? 'Cộng vào lương gộp' : 'Gross salary credit') :
+                                                 a.deduction_source === 'cash' ? (language === 'vi' ? 'Tiền mặt/Chuyển khoản trực tiếp' : 'Direct cash/transfer') :
+                                                 (a.deduction_source || '-').replace('_', ' ')}
+                                            </td>
+                                            <td className="px-4 py-3 border-r border-gray-100 text-center">
+                                                <select 
+                                                    value={a.status} 
+                                                    onChange={(e) => handleAwardStatusChange(a.id, e.target.value)}
+                                                    className={`text-[10px] font-bold tracking-wider uppercase cursor-pointer rounded-full border px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-transparent hover:bg-white
+                                                        ${a.status === 'paid' ? 'text-emerald-600 border-emerald-200' : 
+                                                          a.status === 'waived' ? 'text-gray-600 border-gray-200' :
+                                                          a.status === 'disputed' ? 'text-red-600 border-red-200' :
+                                                          'text-amber-600 border-amber-200'}
+                                                    `}
+                                                >
+                                                    <option value="pending">{language === 'vi' ? 'CHỜ XỬ LÝ' : 'PENDING'}</option>
+                                                    <option value="paid">{language === 'vi' ? 'ĐÃ PHÁT' : 'PAID'}</option>
+                                                    <option value="waived">{language === 'vi' ? 'ĐƯỢC MIỄN' : 'WAIVED'}</option>
+                                                    <option value="disputed">{language === 'vi' ? 'ĐANG TRANH CHẤP' : 'DISPUTED'}</option>
+                                                </select>
+                                            </td>
+                                            <td className="px-4 py-3 border-r border-gray-100 text-right font-mono font-medium text-emerald-600">
+                                                +{fmtVND(a.amount)}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button onClick={() => { setEditingAward(a); setModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={language === 'vi' ? 'Chỉnh sửa' : 'Edit'}><Pencil className="w-4 h-4" /></button>
+                                                    <button onClick={() => handleDeleteAward(a.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={language === 'vi' ? 'Xóa' : 'Delete'}><Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                            {!loading && awards.length > 0 && (
+                                <tfoot className="bg-gray-50 border-t border-gray-200 text-sm font-bold text-gray-900">
+                                    <tr>
+                                        <td colSpan={5} className="px-4 py-3 text-right">{language === 'vi' ? 'Tổng Tiền Thưởng' : 'Total Awards'}</td>
+                                        <td className="px-4 py-3 text-right text-emerald-600 font-mono">+{fmtVND(totalAwardsAmount)}</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            )}
+                        </table>
+                    )}
+
                 </div>
             </div>
 
@@ -1817,17 +2798,44 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-900">{editingNode ? 'Edit Disciplinary Action' : 'Add Disciplinary Action'}</h3>
+                            <h3 className="text-lg font-bold text-gray-900">
+                                {activeTab === 'fines' ? (
+                                    editingFine ? (language === 'vi' ? 'Chỉnh Sửa Tiền Phạt' : 'Edit Fine') : (language === 'vi' ? 'Thêm Tiền Phạt' : 'Add Fine')
+                                ) : activeTab === 'warnings' ? (
+                                    editingWarning ? (language === 'vi' ? 'Chỉnh Sửa Cảnh Cáo' : 'Edit Flag') : (language === 'vi' ? 'Thêm Cảnh Cáo' : 'Add Flag')
+                                ) : (
+                                    editingAward ? (language === 'vi' ? 'Chỉnh Sửa Khen Thưởng' : 'Edit Award') : (language === 'vi' ? 'Thêm Khen Thưởng' : 'Add Award')
+                                )}
+                            </h3>
                             <button onClick={() => setModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-900 transition-colors"><X className="w-5 h-5" /></button>
                         </div>
                         <div className="p-6 overflow-y-auto space-y-4">
-                            <FormFine 
-                                initialData={editingNode} 
-                                catalog={catalog}
-                                loggedUserName={loggedUserName} 
-                                onSave={handleSave} 
-                                onCancel={() => setModalOpen(false)} 
-                            />
+                            {activeTab === 'fines' && (
+                                <FormFine 
+                                    initialData={editingFine} 
+                                    catalog={catalog}
+                                    loggedUserName={loggedUserName} 
+                                    onSave={handleSaveFine} 
+                                    onCancel={() => setModalOpen(false)} 
+                                />
+                            )}
+                            {activeTab === 'warnings' && (
+                                <FormWarning 
+                                    initialData={editingWarning} 
+                                    loggedUserName={loggedUserName} 
+                                    onSave={handleSaveWarning} 
+                                    onCancel={() => setModalOpen(false)} 
+                                />
+                            )}
+                            {activeTab === 'awards' && (
+                                <FormAward 
+                                    initialData={editingAward} 
+                                    catalog={awardsCatalog}
+                                    loggedUserName={loggedUserName} 
+                                    onSave={handleSaveAward} 
+                                    onCancel={() => setModalOpen(false)} 
+                                />
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1836,7 +2844,9 @@ function TabDisciplinary({ staff }: { staff: HRStaffMember }) {
     )
 }
 
+// FORM 1: FINE
 function FormFine({ initialData, catalog, loggedUserName, onSave, onCancel }: { initialData: HRStaffFine | null, catalog: HRDisciplinaryCatalog[], loggedUserName: string, onSave: (d: Partial<HRStaffFine>) => void, onCancel: () => void }) {
+    const { language } = useSettings() // Recupera la lingua corrente dal context settings
     const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0])
     const [infraction, setInfraction] = useState(initialData?.infraction || '')
     const [amount, setAmount] = useState(initialData?.amount || 0)
@@ -1863,88 +2873,271 @@ function FormFine({ initialData, catalog, loggedUserName, onSave, onCancel }: { 
         }
     }
 
-    function handleSubmit(e: React.FormEvent) {
+    async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (!infraction || amount < 0 || !date) return
         setSubmitting(true)
-        onSave({
-            date,
-            infraction,
-            amount,
-            notified_by: notifiedBy,
-            deduction_source: deductionSource,
-            // Only force 'pending' on new inserts. On edit, keep existing status so it isn't overwritten.
-            status: initialData ? initialData.status : 'pending'
-        })
+        try {
+            await onSave({
+                date,
+                infraction,
+                amount,
+                notified_by: notifiedBy,
+                deduction_source: deductionSource,
+                status: initialData ? initialData.status : 'pending'
+            })
+        } catch (err) {
+            setSubmitting(false)
+        }
     }
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Date <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Ngày' : 'Date'} <span className="text-red-500">*</span></label>
                     <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Deduction Source</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Nguồn Khấu Trừ' : 'Deduction Source'}</label>
                     <select value={deductionSource} onChange={e => setDeductionSource(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        <option value="salary">Gross Salary Deduction</option>
-                        <option value="service_charge">Service Charge Deduction</option>
-                        <option value="cash">Direct Cash/Transfer</option>
+                        <option value="salary">{language === 'vi' ? 'Khấu Trừ Lương Gộp' : 'Gross Salary Deduction'}</option>
+                        <option value="service_charge">{language === 'vi' ? 'Khấu Trừ Phí Phục Vụ' : 'Service Charge Deduction'}</option>
+                        <option value="cash">{language === 'vi' ? 'Tiền Mặt/Chuyển Khoản Trực Tiếp' : 'Direct Cash/Transfer'}</option>
                     </select>
                 </div>
             </div>
 
             <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Infraction <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Vi Phạm' : 'Infraction'} <span className="text-red-500">*</span></label>
                 <select required value={infraction} onChange={handleCatalogSelect} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="" disabled>Select an infraction...</option>
+                    <option value="" disabled>{language === 'vi' ? 'Chọn hành vi vi phạm...' : 'Select an infraction...'}</option>
                     {catalog.map(c => (
                         <option key={c.id} value={c.infraction_name}>{c.infraction_name}</option>
                     ))}
                     {initialData && !catalog.find(c => c.infraction_name === initialData.infraction) && (
-                        <option value={initialData.infraction}>{initialData.infraction} (Legacy/Manual)</option>
+                        <option value={initialData.infraction}>{initialData.infraction} {language === 'vi' ? '(Cũ/Thủ công)' : '(Legacy/Manual)'}</option>
                     )}
                 </select>
-                <p className="text-[11px] text-gray-400 mt-1">Selecting an infraction automatically sets the default fine amount.</p>
+                <p className="text-[11px] text-gray-400 mt-1">{language === 'vi' ? 'Chọn vi phạm sẽ tự động điền số tiền phạt mặc định.' : 'Selecting an infraction automatically sets the default fine amount.'}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount (VND) <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'} <span className="text-red-500">*</span></label>
                     <input type="text" required value={displayAmount} 
                         onChange={e => {
                             let val = e.target.value.replace(/[^0-9]/g, '');
                             if (val) {
                                 setDisplayAmount(parseInt(val, 10).toLocaleString('en-US'))
                                 setAmount(parseInt(val, 10))
-                            } else {
-                                setDisplayAmount('')
-                                setAmount(0)
-                            }
+                            } else { setDisplayAmount(''); setAmount(0); }
                         }}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Notified By</label>
-                    <div className="flex items-center gap-2">
-                        <input type="text" value={notifiedBy || ''} onChange={e => setNotifiedBy(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Name of person enforcing the fine" />
-                    </div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</label>
+                    <input type="text" value={notifiedBy || ''} onChange={e => setNotifiedBy(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
             </div>
             {!notifiedBy && loggedUserName && (
                 <div className="flex justify-end">
-                    <button type="button" onClick={() => setNotifiedBy(loggedUserName)} className="px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs font-medium hover:bg-blue-100 transition whitespace-nowrap">
-                        Fill my name
-                    </button>
+                    <button type="button" onClick={() => setNotifiedBy(loggedUserName)} className="px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs font-medium hover:bg-blue-100 transition whitespace-nowrap">{language === 'vi' ? 'Điền tên tôi' : 'Fill my name'}</button>
                 </div>
             )}
 
             <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
-                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition">Cancel</button>
+                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition">{language === 'vi' ? 'Hủy' : 'Cancel'}</button>
                 <button type="submit" disabled={submitting || !infraction || amount < 0} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                    {submitting ? 'Saving...' : 'Save Fine'}
+                    {submitting ? '...' : (language === 'vi' ? 'Lưu' : 'Save Fine')}
+                </button>
+            </div>
+        </form>
+    )
+}
+
+// FORM 2: WARNING
+function FormWarning({ initialData, loggedUserName, onSave, onCancel }: { initialData: HRStaffWarning | null, loggedUserName: string, onSave: (d: Partial<HRStaffWarning>) => void, onCancel: () => void }) {
+    const { language } = useSettings()
+    const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0])
+    const [flagType, setFlagType] = useState<WarningFlagType>(initialData?.flag_type || 'yellow')
+    const [reason, setReason] = useState(initialData?.reason || '')
+    const [notifiedBy, setNotifiedBy] = useState(initialData?.notified_by || loggedUserName)
+    const [submitting, setSubmitting] = useState(false)
+
+    useEffect(() => {
+        if (!initialData && !notifiedBy && loggedUserName) {
+            setNotifiedBy(loggedUserName)
+        }
+    }, [loggedUserName, initialData, notifiedBy])
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!reason || !date) return
+        setSubmitting(true)
+        try {
+            await onSave({
+                date,
+                flag_type: flagType,
+                reason,
+                notified_by: notifiedBy
+            })
+        } catch (err) {
+            setSubmitting(false)
+        }
+    }
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Ngày' : 'Date'} <span className="text-red-500">*</span></label>
+                    <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</label>
+                    <input type="text" value={notifiedBy || ''} onChange={e => setNotifiedBy(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">{language === 'vi' ? 'Mức Cảnh Báo' : 'Flag Level'} <span className="text-red-500">*</span></label>
+                <div className="grid grid-cols-3 gap-2">
+                    <button type="button" onClick={() => setFlagType('green')} className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${flagType === 'green' ? 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-sm font-semibold' : 'bg-transparent border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+                        <Flag className="w-4 h-4 fill-emerald-500 text-emerald-500" /> {language === 'vi' ? 'Tích cực' : 'Positive'}
+                    </button>
+                    <button type="button" onClick={() => setFlagType('yellow')} className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${flagType === 'yellow' ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-sm font-semibold' : 'bg-transparent border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+                        <Flag className="w-4 h-4 fill-amber-500 text-amber-500" /> {language === 'vi' ? 'Nhắc nhở' : 'Caution'}
+                    </button>
+                    <button type="button" onClick={() => setFlagType('red')} className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${flagType === 'red' ? 'bg-red-50 border-red-300 text-red-700 shadow-sm font-semibold' : 'bg-transparent border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+                        <Flag className="w-4 h-4 fill-red-500 text-red-500" /> {language === 'vi' ? 'Cảnh cáo' : 'Warning'}
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Lý Do' : 'Reason'} <span className="text-red-500">*</span></label>
+                <textarea required value={reason} onChange={e => setReason(e.target.value)} rows={3} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder={language === 'vi' ? 'Nhập lý do...' : 'Enter reason...'} />
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
+                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition">{language === 'vi' ? 'Hủy' : 'Cancel'}</button>
+                <button type="submit" disabled={submitting || !reason} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    {submitting ? '...' : (language === 'vi' ? 'Lưu' : 'Save Warning')}
+                </button>
+            </div>
+        </form>
+    )
+}
+
+// FORM 3: AWARD
+function FormAward({ initialData, catalog, loggedUserName, onSave, onCancel }: { initialData: HRStaffAward | null, catalog: HRAwardsCatalog[], loggedUserName: string, onSave: (d: Partial<HRStaffAward>) => void, onCancel: () => void }) {
+    const { language } = useSettings()
+    const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0])
+    const [awardName, setAwardName] = useState(initialData?.award_name || '')
+    const [amount, setAmount] = useState(initialData?.amount || 0)
+    const [notifiedBy, setNotifiedBy] = useState(initialData?.notified_by || loggedUserName)
+    const [deductionSource, setDeductionSource] = useState(initialData?.deduction_source || 'salary') // credit source
+    const [displayAmount, setDisplayAmount] = useState(initialData?.amount ? initialData.amount.toLocaleString('en-US') : '')
+    const [submitting, setSubmitting] = useState(false)
+
+    useEffect(() => {
+        if (!initialData && !notifiedBy && loggedUserName) {
+            setNotifiedBy(loggedUserName)
+        }
+    }, [loggedUserName, initialData, notifiedBy])
+
+    function handleCatalogSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+        const val = e.target.value
+        setAwardName(val)
+        if (val) {
+            const catItem = catalog.find(c => c.award_name === val)
+            if (catItem) {
+                setAmount(Number(catItem.default_amount))
+                setDisplayAmount(Number(catItem.default_amount).toLocaleString('en-US'))
+            }
+        }
+    }
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!awardName || amount < 0 || !date) return
+        setSubmitting(true)
+        try {
+            await onSave({
+                date,
+                award_name: awardName,
+                amount,
+                notified_by: notifiedBy,
+                deduction_source: deductionSource,
+                status: initialData ? initialData.status : 'pending'
+            })
+        } catch (err) {
+            setSubmitting(false)
+        }
+    }
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Ngày' : 'Date'} <span className="text-red-500">*</span></label>
+                    <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Nguồn Nhận Thưởng' : 'Credit Source'}</label>
+                    <select value={deductionSource} onChange={e => setDeductionSource(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="salary">{language === 'vi' ? 'Cộng Vào Lương Gộp' : 'Gross Salary Credit'}</option>
+                        <option value="cash">{language === 'vi' ? 'Tiền Mặt/Chuyển Khoản Trực Tiếp' : 'Direct Cash/Transfer'}</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Khen Thưởng' : 'Award'} <span className="text-red-500">*</span></label>
+                <select required value={awardName} onChange={handleCatalogSelect} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="" disabled>{language === 'vi' ? 'Chọn loại thưởng...' : 'Select an award...'}</option>
+                    {catalog.map(c => (
+                        <option key={c.id} value={c.award_name}>{c.award_name}</option>
+                    ))}
+                    {initialData && !catalog.find(c => c.award_name === initialData.award_name) && (
+                        <option value={initialData.award_name}>{initialData.award_name} {language === 'vi' ? '(Cũ/Thủ công)' : '(Legacy/Manual)'}</option>
+                    )}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">{language === 'vi' ? 'Chọn loại thưởng sẽ tự động điền số tiền thưởng mặc định.' : 'Selecting an award automatically sets the default award amount.'}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Số Tiền Thưởng (VND)' : 'Amount (VND)'} <span className="text-red-500">*</span></label>
+                    <input type="text" required value={displayAmount} 
+                        onChange={e => {
+                            let val = e.target.value.replace(/[^0-9]/g, '');
+                            if (val) {
+                                setDisplayAmount(parseInt(val, 10).toLocaleString('en-US'))
+                                setAmount(parseInt(val, 10))
+                            } else { setDisplayAmount(''); setAmount(0); }
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</label>
+                    <input type="text" value={notifiedBy || ''} onChange={e => setNotifiedBy(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+            </div>
+            {!notifiedBy && loggedUserName && (
+                <div className="flex justify-end">
+                    <button type="button" onClick={() => setNotifiedBy(loggedUserName)} className="px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs font-medium hover:bg-blue-100 transition whitespace-nowrap">{language === 'vi' ? 'Điền tên tôi' : 'Fill my name'}</button>
+                </div>
+            )}
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-6">
+                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition">{language === 'vi' ? 'Hủy' : 'Cancel'}</button>
+                <button type="submit" disabled={submitting || !awardName || amount < 0} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    {submitting ? '...' : (language === 'vi' ? 'Lưu' : 'Save Award')}
                 </button>
             </div>
         </form>
@@ -2113,32 +3306,79 @@ function TabAssets({ staff, assets, onUpdate }: { staff: HRStaffMember, assets: 
         );
     }
 
-    async function handleStateChangeSubmit(assetId: string, status: HRStaffAssetStatus, date: string, notes: string) {
+    async function handleStateChangeSubmit(assetId: string, status: HRStaffAssetStatus, date: string, notes: string, qtyToChange: number) {
+        if (!stateChangeAsset) return
+
+        const backupAsset = { ...stateChangeAsset };
+        let newAssetId: string | null = null;
+
         try {
-            const updateData: any = {
-                status,
-                notes: notes || null
-            }
-            if (status === 'returned' || status === 'damaged' || status === 'lost') {
-                updateData.return_date = date
+            const isReturned = status === 'returned' || status === 'damaged';
+            const returnCondition = status === 'returned' ? 'good' : status === 'damaged' ? 'poor' : null;
+            const returnDate = (status === 'returned' || status === 'damaged' || status === 'lost') ? date : null;
+
+            if (qtyToChange === stateChangeAsset.quantity) {
+                // Aggiorniamo direttamente l'asset esistente
+                const updateData = {
+                    status,
+                    return_condition: returnCondition,
+                    return_date: returnDate,
+                    notes: notes || null
+                };
+
+                const { error } = await supabase.from('hr_staff_assets').update(updateData).eq('id', assetId);
+                if (error) throw error;
             } else {
-                updateData.return_date = null
-            }
-            
-            if (status === 'returned') {
-                updateData.return_condition = 'good';
-            } else if (status === 'damaged') {
-                updateData.return_condition = 'poor';
-            } else {
-                updateData.return_condition = null;
+                // Scissione dell'asset
+                // 1. Riduciamo la quantità dell'asset originale
+                const newQty = stateChangeAsset.quantity - qtyToChange;
+                const updateOriginalRes = await supabase.from('hr_staff_assets').update({ quantity: newQty }).eq('id', assetId);
+                if (updateOriginalRes.error) throw updateOriginalRes.error;
+
+                // 2. Creiamo il nuovo asset con la quantità scissa e lo stato aggiornato
+                const insertData = {
+                    staff_id: stateChangeAsset.staff_id,
+                    asset_name: stateChangeAsset.asset_name,
+                    category: stateChangeAsset.category,
+                    serial_number: stateChangeAsset.serial_number,
+                    assigned_date: stateChangeAsset.assigned_date,
+                    initial_condition: stateChangeAsset.initial_condition,
+                    quantity: qtyToChange,
+                    status,
+                    return_condition: returnCondition,
+                    return_date: returnDate,
+                    notes: notes || null
+                };
+
+                const insertRes = await supabase.from('hr_staff_assets').insert([insertData]).select();
+                if (insertRes.error) throw insertRes.error;
+                if (insertRes.data && insertRes.data.length > 0) {
+                    newAssetId = insertRes.data[0].id;
+                }
             }
 
-            const { error } = await supabase.from('hr_staff_assets').update(updateData).eq('id', assetId)
-            if (error) throw error
-            
             await onUpdate()
         } catch (err) {
-            console.error(err)
+            console.error('Error in handleStateChangeSubmit:', err);
+
+            // ROLLBACK MANUAL
+            try {
+                // Se abbiamo inserito un nuovo record, lo eliminiamo
+                if (newAssetId) {
+                    await supabase.from('hr_staff_assets').delete().eq('id', newAssetId);
+                }
+                // Ripristiniamo la quantità e lo stato originali
+                await supabase.from('hr_staff_assets').update({
+                    quantity: backupAsset.quantity,
+                    status: backupAsset.status,
+                    return_condition: backupAsset.return_condition,
+                    return_date: backupAsset.return_date,
+                    notes: backupAsset.notes
+                }).eq('id', assetId);
+            } catch (rollbackErr) {
+                console.error('Error during rollback in handleStateChangeSubmit:', rollbackErr);
+            }
+
             alert(t.stateChangeError)
             throw err
         }
@@ -2623,6 +3863,8 @@ function AssetReturnModal({ open, staff, assets, onClose, onConfirm }: AssetRetu
     const [submitting, setSubmitting] = useState(false)
     const [localAssets, setLocalAssets] = useState<Array<{
         id: string;
+        originalAsset: HRStaffAsset;
+        index: number;
         name: string;
         quantity: number;
         status: HRStaffAssetStatus;
@@ -2635,17 +3877,27 @@ function AssetReturnModal({ open, staff, assets, onClose, onConfirm }: AssetRetu
 
     useEffect(() => {
         if (open && assets) {
-            setLocalAssets(assets.map(a => ({
-                id: a.id,
-                name: a.asset_name,
-                quantity: a.quantity || 1,
-                status: a.status || 'assigned',
-                assigned_date: a.assigned_date || '',
-                initial_condition: a.initial_condition || 'good',
-                return_condition: a.return_condition || (a.status === 'returned' ? 'good' : a.status === 'damaged' ? 'poor' : ''),
-                return_date: a.return_date || (a.status === 'assigned' ? '' : new Date().toISOString().split('T')[0]),
-                notes: a.notes || ''
-            })))
+            const expandedRows: any[] = [];
+            assets.forEach(a => {
+                const qty = a.quantity || 1;
+                for (let i = 0; i < qty; i++) {
+                    const returnCondition = a.return_condition || (a.status === 'returned' ? 'good' : a.status === 'damaged' ? 'poor' : '');
+                    expandedRows.push({
+                        id: `${a.id}_${i}`,
+                        originalAsset: a,
+                        index: i,
+                        name: a.asset_name,
+                        quantity: 1,
+                        status: a.status || 'assigned',
+                        assigned_date: a.assigned_date || '',
+                        initial_condition: a.initial_condition || 'good',
+                        return_condition: returnCondition,
+                        return_date: a.return_date || (a.status === 'assigned' ? '' : new Date().toISOString().split('T')[0]),
+                        notes: a.notes || ''
+                    });
+                }
+            });
+            setLocalAssets(expandedRows);
         }
     }, [open, assets])
 
@@ -2763,32 +4015,129 @@ function AssetReturnModal({ open, staff, assets, onClose, onConfirm }: AssetRetu
 
     const handleSaveAll = async () => {
         setSubmitting(true)
+
+        // Backup per eventuale rollback manuale in caso di errore
+        const backupAssets = [...assets];
+        const createdAssetIds: string[] = [];
+        const updatedAssetIds: string[] = [];
+
         try {
-            await Promise.all(
-                localAssets.map(la => {
-                    const isReturned = la.status === 'returned' || la.status === 'damaged';
-                    const updateData: any = {
-                        status: la.status,
-                        return_condition: isReturned ? la.return_condition || 'good' : null,
-                        notes: la.notes || null
-                    };
-                    if (isReturned) {
-                        updateData.return_date = la.return_date || new Date().toISOString().split('T')[0];
-                    } else {
-                        updateData.return_date = null;
+            // Raggruppiamo i localAssets sdoppiati per l'ID dell'asset originale
+            const groupedByOriginalId: Record<string, typeof localAssets> = {};
+            localAssets.forEach(la => {
+                const oId = la.originalAsset.id;
+                if (!groupedByOriginalId[oId]) {
+                    groupedByOriginalId[oId] = [];
+                }
+                groupedByOriginalId[oId].push(la);
+            });
+
+            // Per ciascun asset originale
+            for (const originalId of Object.keys(groupedByOriginalId)) {
+                const originalAsset = backupAssets.find(a => a.id === originalId);
+                if (!originalAsset) continue;
+
+                const rows = groupedByOriginalId[originalId];
+
+                // Raggruppiamo le righe in base allo stato finale (status, return_condition, return_date, notes)
+                const stateGroups: Record<string, typeof localAssets> = {};
+                rows.forEach(r => {
+                    const key = `${r.status}|${r.return_condition || ''}|${r.return_date || ''}|${r.notes || ''}`;
+                    if (!stateGroups[key]) {
+                        stateGroups[key] = [];
                     }
-                    return supabase.from('hr_staff_assets').update(updateData).eq('id', la.id);
-                })
-            );
+                    stateGroups[key].push(r);
+                });
+
+                const groups = Object.values(stateGroups);
+
+                // 1. Primo gruppo: aggiorna il record esistente
+                const firstGroup = groups[0];
+                const sample1 = firstGroup[0];
+                const isReturned1 = sample1.status === 'returned' || sample1.status === 'damaged';
+                const updateData = {
+                    quantity: firstGroup.length,
+                    status: sample1.status,
+                    return_condition: isReturned1 ? sample1.return_condition || 'good' : null,
+                    return_date: isReturned1 ? sample1.return_date || new Date().toISOString().split('T')[0] : null,
+                    notes: sample1.notes || null
+                };
+
+                const updateRes = await supabase.from('hr_staff_assets').update(updateData).eq('id', originalId).select();
+                if (updateRes.error) throw updateRes.error;
+                updatedAssetIds.push(originalId);
+
+                // 2. Gruppi successivi: inserisce nuovi record
+                if (groups.length > 1) {
+                    const insertData = [];
+                    for (let g = 1; g < groups.length; g++) {
+                        const currentGroup = groups[g];
+                        const sampleG = currentGroup[0];
+                        const isReturnedG = sampleG.status === 'returned' || sampleG.status === 'damaged';
+                        insertData.push({
+                            staff_id: originalAsset.staff_id,
+                            asset_name: originalAsset.asset_name,
+                            category: originalAsset.category,
+                            serial_number: originalAsset.serial_number,
+                            assigned_date: originalAsset.assigned_date,
+                            initial_condition: originalAsset.initial_condition,
+                            quantity: currentGroup.length,
+                            status: sampleG.status,
+                            return_condition: isReturnedG ? sampleG.return_condition || 'good' : null,
+                            return_date: isReturnedG ? sampleG.return_date || new Date().toISOString().split('T')[0] : null,
+                            notes: sampleG.notes || null
+                        });
+                    }
+
+                    const insertRes = await supabase.from('hr_staff_assets').insert(insertData).select();
+                    if (insertRes.error) throw insertRes.error;
+                    if (insertRes.data) {
+                        insertRes.data.forEach((newAsset: any) => createdAssetIds.push(newAsset.id));
+                    }
+                }
+            }
+
             await onConfirm();
         } catch (err) {
-            console.error(err);
+            console.error('Error during asset check save:', err);
+            
+            // ROLLBACK MANUAL
+            // 1. Elimina i record appena creati
+            if (createdAssetIds.length > 0) {
+                await supabase.from('hr_staff_assets').delete().in('id', createdAssetIds);
+            }
+            // 2. Ripristina i record originari modificati
+            if (updatedAssetIds.length > 0) {
+                await Promise.all(
+                    updatedAssetIds.map(async (uId) => {
+                        const originalAsset = backupAssets.find(a => a.id === uId);
+                        if (originalAsset) {
+                            const restoreData = {
+                                quantity: originalAsset.quantity,
+                                status: originalAsset.status,
+                                return_condition: originalAsset.return_condition,
+                                return_date: originalAsset.return_date,
+                                notes: originalAsset.notes
+                            };
+                            await supabase.from('hr_staff_assets').update(restoreData).eq('id', uId);
+                        }
+                    })
+                );
+            }
+
             alert(t.error);
+        } finally {
+            setSubmitting(false)
         }
-        setSubmitting(false)
     }
 
-    if (!open) return null;
+    const batches = assets.map(originalAsset => {
+        const items = localAssets.filter(la => la.originalAsset.id === originalAsset.id);
+        return {
+            originalAsset,
+            items
+        };
+    }).filter(batch => batch.items.length > 0);    if (!open) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -2810,114 +4159,137 @@ function AssetReturnModal({ open, staff, assets, onClose, onConfirm }: AssetRetu
                     </p>
 
                     <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 bg-slate-50/30 p-3 rounded-xl border border-slate-100">
-                        {localAssets.map(la => {
-                            const isReturned = la.status === 'returned' || la.status === 'damaged';
+                        {batches.map(batch => {
+                            const oa = batch.originalAsset;
                             return (
-                                <div key={la.id} className="bg-white border border-slate-100 rounded-xl p-4 shadow-[0_2px_12px_-4px_rgba(148,163,184,0.12)] hover:shadow-[0_4px_16px_-4px_rgba(148,163,184,0.18)] transition-all duration-200 space-y-3">
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                        {/* Left side: Asset Info */}
+                                <div key={oa.id} className="bg-white border border-slate-100 rounded-xl p-4 shadow-[0_2px_12px_-4px_rgba(148,163,184,0.12)] hover:shadow-[0_4px_16px_-4px_rgba(148,163,184,0.18)] transition-all duration-200 space-y-3">
+                                    {/* Intestazione del Batch genitore */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-3">
                                         <div className="space-y-2">
                                             <div className="flex items-center gap-2">
-                                                <span className="font-bold text-slate-900 text-sm sm:text-base">{la.name}</span>
+                                                <span className="font-bold text-slate-900 text-sm sm:text-base">{oa.asset_name}</span>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold">
                                                 <div className="text-left">
                                                     <span className="text-slate-600 font-bold uppercase text-[9px] tracking-wider block mb-0.5">{t.qty}</span>
-                                                    <span className="text-slate-900 font-bold">{la.quantity}</span>
+                                                    <span className="text-slate-900 font-bold">{oa.quantity}</span>
                                                 </div>
                                                 <div className="w-px h-5 bg-slate-250" />
                                                 <div className="text-left">
                                                     <span className="text-slate-600 font-bold uppercase text-[9px] tracking-wider block mb-0.5">{t.assignedDate}</span>
-                                                    <span className="text-slate-900 font-semibold">{fmtDate(la.assigned_date)}</span>
+                                                    <span className="text-slate-900 font-semibold">{fmtDate(oa.assigned_date)}</span>
                                                 </div>
                                                 <div className="w-px h-5 bg-slate-250" />
                                                 <div className="text-left">
                                                     <span className="text-slate-600 font-bold uppercase text-[9px] tracking-wider block mb-0.5">{t.assignedCondition}</span>
-                                                    <span className="text-slate-900 font-semibold">{condLabel(la.initial_condition)}</span>
+                                                    <span className="text-slate-900 font-semibold">{condLabel(oa.initial_condition)}</span>
                                                 </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Right side: Controls */}
-                                        <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                                            {/* Returned Toggle */}
-                                            <div className="flex flex-col gap-1 text-left">
-                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.returnedLabel}</label>
-                                                <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-250">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleToggleReturn(la.id, true)}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 border border-transparent
-                                                            ${isReturned 
-                                                                ? 'bg-emerald-50 text-emerald-900 border-emerald-300 shadow-sm' 
-                                                                : 'text-slate-600 hover:text-slate-850'}`}
-                                                    >
-                                                        <CheckCircle className="w-3.5 h-3.5" />
-                                                        {t.yes}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleToggleReturn(la.id, false)}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 border border-transparent
-                                                            ${!isReturned 
-                                                                ? 'bg-rose-50 text-rose-950 border-rose-350 shadow-sm' 
-                                                                : 'text-slate-600 hover:text-slate-855'}`}
-                                                    >
-                                                        <X className="w-3.5 h-3.5" />
-                                                        {t.no}
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* Condition Dropdown */}
-                                            <div className="flex flex-col gap-1 text-left">
-                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.condition}</label>
-                                                {isReturned ? (
-                                                    <select
-                                                        value={la.return_condition || 'good'}
-                                                        onChange={e => handleReturnConditionChange(la.id, e.target.value)}
-                                                        className="px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition w-40 text-slate-800"
-                                                    >
-                                                        <option value="good">{t.conditionGood}</option>
-                                                        <option value="fair">{t.conditionFair}</option>
-                                                        <option value="poor">{t.conditionPoor}</option>
-                                                    </select>
-                                                ) : (
-                                                    <select
-                                                        value={la.status}
-                                                        onChange={e => handleReturnConditionChange(la.id, e.target.value)}
-                                                        className="px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition w-40 text-slate-800"
-                                                    >
-                                                        <option value="assigned">{t.assigned}</option>
-                                                        <option value="lost">{t.lost}</option>
-                                                    </select>
-                                                )}
-                                            </div>
-
-                                            {/* Date Picker */}
-                                            <div className="flex flex-col gap-1 text-left">
-                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.returnDate}</label>
-                                                <input 
-                                                    type="date"
-                                                    value={la.return_date}
-                                                    disabled={!isReturned}
-                                                    onChange={e => handleDateChange(la.id, e.target.value)}
-                                                    className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs disabled:opacity-50 transition w-36 font-semibold text-slate-800"
-                                                />
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Notes input at the bottom of the card */}
-                                    <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
-                                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">{t.notes}:</span>
-                                        <input 
-                                            type="text"
-                                            value={la.notes}
-                                            placeholder={language === 'vi' ? 'Ghi chú thêm...' : 'Add details...'}
-                                            onChange={e => handleNotesChange(la.id, e.target.value)}
-                                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none transition text-slate-800 placeholder-slate-400 font-medium"
-                                        />
+                                    {/* Sotto-elementi (i singoli pezzi) */}
+                                    <div className="space-y-3 divide-y divide-slate-100">
+                                        {batch.items.map((la, index) => {
+                                            const isReturned = la.status === 'returned' || la.status === 'damaged';
+                                            const itemLabel = oa.quantity > 1 
+                                                ? `${language === 'vi' ? 'Phần' : 'Item'} #${la.index + 1}`
+                                                : '';
+
+                                            return (
+                                                <div key={la.id} className="pt-3 first:pt-0 space-y-3">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                        {/* Label del singolo pezzo se quantity > 1 */}
+                                                        {itemLabel && (
+                                                            <div className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 self-start sm:self-auto">
+                                                                {itemLabel}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Controls */}
+                                                        <div className="flex flex-wrap items-center gap-3 sm:justify-end flex-1 justify-between sm:flex-initial">
+                                                            {/* Returned Toggle */}
+                                                            <div className="flex flex-col gap-1 text-left">
+                                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.returnedLabel}</label>
+                                                                <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-250">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleToggleReturn(la.id, true)}
+                                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 border border-transparent
+                                                                            ${isReturned 
+                                                                                ? 'bg-emerald-50 text-emerald-900 border-emerald-300 shadow-sm' 
+                                                                                : 'text-slate-600 hover:text-slate-850'}`}
+                                                                    >
+                                                                        <CheckCircle className="w-3.5 h-3.5" />
+                                                                        {t.yes}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleToggleReturn(la.id, false)}
+                                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 border border-transparent
+                                                                            ${!isReturned 
+                                                                                ? 'bg-rose-50 text-rose-950 border-rose-350 shadow-sm' 
+                                                                                : 'text-slate-650 hover:text-slate-855'}`}
+                                                                    >
+                                                                        <X className="w-3.5 h-3.5" />
+                                                                        {t.no}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Condition Dropdown */}
+                                                            <div className="flex flex-col gap-1 text-left">
+                                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.condition}</label>
+                                                                {isReturned ? (
+                                                                    <select
+                                                                        value={la.return_condition || 'good'}
+                                                                        onChange={e => handleReturnConditionChange(la.id, e.target.value)}
+                                                                        className="px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition w-40 text-slate-800"
+                                                                    >
+                                                                        <option value="good">{t.conditionGood}</option>
+                                                                        <option value="fair">{t.conditionFair}</option>
+                                                                        <option value="poor">{t.conditionPoor}</option>
+                                                                    </select>
+                                                                ) : (
+                                                                    <select
+                                                                        value={la.status}
+                                                                        onChange={e => handleReturnConditionChange(la.id, e.target.value)}
+                                                                        className="px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition w-40 text-slate-800"
+                                                                    >
+                                                                        <option value="assigned">{t.assigned}</option>
+                                                                        <option value="lost">{t.lost}</option>
+                                                                    </select>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Date Picker */}
+                                                            <div className="flex flex-col gap-1 text-left">
+                                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{t.returnDate}</label>
+                                                                <input 
+                                                                    type="date"
+                                                                    value={la.return_date}
+                                                                    disabled={!isReturned}
+                                                                    onChange={e => handleDateChange(la.id, e.target.value)}
+                                                                    className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs disabled:opacity-50 transition w-36 font-semibold text-slate-800"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Notes input */}
+                                                    <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                                                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">{t.notes}:</span>
+                                                        <input 
+                                                            type="text"
+                                                            value={la.notes}
+                                                            placeholder={language === 'vi' ? 'Ghi chú thêm...' : 'Add details...'}
+                                                            onChange={e => handleNotesChange(la.id, e.target.value)}
+                                                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none transition text-slate-800 placeholder-slate-400 font-medium"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             );
@@ -3062,7 +4434,7 @@ interface StateChangeModalProps {
     open: boolean;
     asset: HRStaffAsset | null;
     onClose: () => void;
-    onSave: (assetId: string, status: HRStaffAssetStatus, date: string, notes: string) => Promise<void>;
+    onSave: (assetId: string, status: HRStaffAssetStatus, date: string, notes: string, qtyToChange: number) => Promise<void>;
     t: any;
     language: string;
 }
@@ -3071,6 +4443,7 @@ function StateChangeModal({ open, asset, onClose, onSave, t, language }: StateCh
     const [status, setStatus] = useState<HRStaffAssetStatus>('returned')
     const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0])
     const [notes, setNotes] = useState<string>('')
+    const [qtyToChange, setQtyToChange] = useState<number>(1)
     const [saving, setSaving] = useState<boolean>(false)
 
     useEffect(() => {
@@ -3079,6 +4452,7 @@ function StateChangeModal({ open, asset, onClose, onSave, t, language }: StateCh
             setStatus(nextStatus);
             setDate(new Date().toISOString().split('T')[0]);
             setNotes('');
+            setQtyToChange(asset.quantity || 1);
         }
     }, [open, asset])
 
@@ -3087,7 +4461,7 @@ function StateChangeModal({ open, asset, onClose, onSave, t, language }: StateCh
         if (!status || !date || !asset) return
         setSaving(true)
         try {
-            await onSave(asset.id, status, date, notes)
+            await onSave(asset.id, status, date, notes, qtyToChange)
             onClose()
         } catch (err) {
             console.error(err)
@@ -3110,10 +4484,33 @@ function StateChangeModal({ open, asset, onClose, onSave, t, language }: StateCh
                     </button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-6 space-y-4 text-left">
-                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl mb-2">
-                        <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">{t.assetName}</div>
-                        <div className="text-sm font-bold text-slate-800">{asset.asset_name}</div>
+                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl mb-2 flex items-center justify-between">
+                        <div>
+                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">{t.assetName}</div>
+                            <div className="text-sm font-bold text-slate-800">{asset.asset_name}</div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">{t.qty}</div>
+                            <div className="text-sm font-bold text-slate-800">{asset.quantity}</div>
+                        </div>
                     </div>
+
+                    {asset.quantity > 1 && (
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                                {language === 'vi' ? 'Số lượng cập nhật' : 'Quantity to Update'}
+                            </label>
+                            <select 
+                                value={qtyToChange} 
+                                onChange={e => setQtyToChange(Number(e.target.value))} 
+                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                            >
+                                {Array.from({ length: asset.quantity }, (_, i) => i + 1).map(n => (
+                                    <option key={n} value={n}>{n}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
@@ -3184,26 +4581,63 @@ function DeleteConfirm({ name, onConfirm, onCancel, deleting }: {
     name: string; onConfirm: () => void; onCancel: () => void; deleting: boolean
 }) {
     const { language } = useSettings()
+    const [typedConfirm, setTypedConfirm] = React.useState('')
+    const isConfirmed = typedConfirm.toLowerCase() === 'delete'
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-left">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    {language === 'vi' ? 'Xóa nhân viên' : 'Delete Staff Member'}
-                </h3>
-                <p className="text-sm text-gray-600 mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] max-w-sm w-full p-6 text-left border border-slate-100/80">
+                {/* Warning Icon Banner */}
+                <div className="flex items-center gap-3.5 mb-4 pb-4 border-b border-slate-100">
+                    <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-5 h-5 text-red-650 stroke-[1.75]" />
+                    </div>
+                    <div>
+                        <h3 className="text-[14px] font-extrabold text-slate-900 leading-tight">
+                            {language === 'vi' ? 'Xóa nhân viên' : 'Delete Staff Member'}
+                        </h3>
+                        <p className="text-[9px] text-red-600 font-extrabold uppercase tracking-wider mt-0.5">
+                            {language === 'vi' ? 'Hành động nguy hiểm' : 'Destructive Action'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Warning Description */}
+                <p className="text-[11px] text-slate-500 font-medium leading-relaxed mb-5">
                     {language === 'vi' ? (
-                        <>Bạn có chắc chắn muốn xóa <strong>{name}</strong>? Hành động này không thể hoàn tác.</>
+                        <>Bạn đang thực hiện xóa tài khoản của <strong>{name}</strong>. Hành động này là vĩnh viễn, không thể khôi phục và sẽ xóa toàn bộ dữ liệu lịch sử liên quan (hợp đồng, turn ca, lương, phép, v.v.).</>
                     ) : (
-                        <>Are you sure you want to delete <strong>{name}</strong>? This action cannot be undone.</>
+                        <>You are deleting the profile for <strong>{name}</strong>. This is permanent, cannot be undone, and will erase all related historical records (contracts, rosters, salary, leaves, etc.).</>
                     )}
                 </p>
-                <div className="flex justify-end gap-3">
-                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                
+                {/* Security Confirm Input */}
+                <div className="mb-5 bg-slate-50/60 border border-slate-100 rounded-2xl p-3.5">
+                    <label className="block text-[9px] font-extrabold text-slate-450 uppercase tracking-widest mb-1.5">
+                        {language === 'vi' ? 'Nhập chữ "delete" để xác nhận:' : 'Type "delete" to confirm:'}
+                    </label>
+                    <input 
+                        type="text"
+                        value={typedConfirm}
+                        onChange={(e) => setTypedConfirm(e.target.value)}
+                        placeholder="delete"
+                        className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-xl focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none transition-all placeholder:text-slate-350 font-medium text-slate-800"
+                    />
+                </div>
+
+                <div className="flex justify-end gap-2.5 border-t border-slate-100 pt-4">
+                    <button 
+                        onClick={onCancel} 
+                        className="px-4.5 py-2.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer"
+                    >
                         {language === 'vi' ? 'Hủy' : 'Cancel'}
                     </button>
-                    <button onClick={onConfirm} disabled={deleting}
-                        className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2">
-                        {deleting && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                    <button 
+                        onClick={onConfirm} 
+                        disabled={deleting || !isConfirmed}
+                        className="px-4.5 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200/60 rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer shadow-sm shadow-red-100/10"
+                    >
+                        {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-red-600" /> : null}
                         {language === 'vi' ? 'Xóa' : 'Delete'}
                     </button>
                 </div>

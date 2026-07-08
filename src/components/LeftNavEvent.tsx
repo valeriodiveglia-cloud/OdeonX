@@ -80,8 +80,7 @@ export default function LeftNavEvent() {
     const width = open ? `${EXP_W_REM}rem` : `${COLL_W_REM}rem`
     root.style.setProperty('--leftnav-w', width)
     return () => {
-      // su unmount la lasciamo collassata (fallback 56px nel resto dell'app)
-      root.style.setProperty('--leftnav-w', `${COLL_W_REM}rem`)
+      root.style.removeProperty('--leftnav-w')
     }
   }, [open])
 
@@ -168,7 +167,7 @@ export default function LeftNavEvent() {
     // fisso + bg + bordo
     <div
       className={`fixed inset-y-0 left-0 z-40 flex flex-col text-white transition-[width] duration-150 ease-out
-                  ${open ? 'w-64' : 'w-14'} ${stateClass} bg-slate-900 border-r border-white/10`}
+                  ${open ? 'w-64' : 'w-14'} ${stateClass} bg-gradient-to-b from-slate-800 to-slate-900 border-r border-white/10`}
       style={{ height: '100dvh' }}
       aria-expanded={open}
       onFocus={handleFocusWithin}

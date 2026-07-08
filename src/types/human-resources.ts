@@ -20,6 +20,8 @@ export interface HiringRequest {
   benefits: string | null;
   notes: string | null;
   created_by: string | null;
+  employment_type?: string | null;
+  closed_at?: string | null;
 }
 
 export interface Candidate {
@@ -27,6 +29,7 @@ export interface Candidate {
   created_at: string;
   updated_at: string;
   hiring_request_id: string;
+  recruitment_posting_id?: string | null;
   full_name: string;
   email: string | null;
   phone: string | null;
@@ -34,6 +37,32 @@ export interface Candidate {
   stage: CandidateStage;
   source: string | null;
   notes: string | null;
+  interview_scheduled_at?: string | null;
+  interview_location?: string | null;
+  english_level?: string | null;
+  experience_years?: string | null;
+  initial_rating?: number | null;
+  screening_notes?: string | null;
+  interview_rating?: number | null;
+  interview_feedback?: string | null;
+  interview_answers?: Record<string, string> | null;
+  offer_salary_amount?: number | null;
+  offer_salary_type?: string | null;
+  probation_months?: number | null;
+  probation_salary_pct?: number | null;
+  offer_start_date?: string | null;
+  offer_branch_id?: string | null;
+  offer_expiry_date?: string | null;
+  rejection_reason?: string | null;
+  offer_approval_status?: 'none' | 'pending' | 'approved' | 'rejected' | null;
+  offer_approval_notes?: string | null;
+  offer_approval_by?: string | null;
+  offer_approval_at?: string | null;
+  related_staff_id?: string | null;
+  document_type?: 'id_card' | 'passport' | null;
+  document_number?: string | null;
+  application_count?: number;
+  rehire_eligible?: boolean | null;
 }
 
 export interface HRActivityLog {
@@ -46,7 +75,7 @@ export interface HRActivityLog {
   payload: any; // JSONB
 }
 
-export type PostingStatus = 'active' | 'paused' | 'expired' | 'removed';
+export type PostingStatus = 'active' | 'paused' | 'expired' | 'removed' | 'archived';
 
 export interface RecruitmentPosting {
   id: string;
@@ -59,6 +88,12 @@ export interface RecruitmentPosting {
   status: PostingStatus;
   notes: string | null;
   responses_count: number;
+  expires_at?: string | null;
+  package_id: string | null;
+  direct_cost: number;
+  currency: string;
+  package_name: string | null;
+  hired_count: number;
 }
 
 export interface RecruitmentPlatform {
@@ -70,7 +105,32 @@ export interface RecruitmentPlatform {
   color_text: string;
   sort_order: number;
   created_at: string;
+  has_packages: boolean;
 }
+
+export interface RecruitmentPlatformPackage {
+  id: string;
+  platform: string;
+  name: string;
+  total_cost: number;
+  currency: string;
+  start_date: string;
+  end_date: string | null;
+  max_posts: number | null;
+  notes: string | null;
+  created_at: string;
+  postings_count?: number;
+}
+
+export interface RecruitmentJobTemplate {
+  id: string;
+  position_title: string;
+  department: string;
+  description: string;
+  created_at: string;
+  employment_type: string;
+}
+
 
 // ── HR Management ──
 
@@ -99,6 +159,7 @@ export interface HRPosition {
 export interface HRRatingCategory {
   id: string;
   label: string;
+  label_vi?: string | null;
   scope: RatingCategoryScope;
   scope_id: string | null;
   sort_order: number;
@@ -151,6 +212,25 @@ export interface HRStaffMember {
   contract_doc_url: string | null;
   cv_doc_url: string | null;
   id_card_doc_url: string | null;
+  bank_name: string | null;
+  bank_account_number: string | null;
+  bank_account_name: string | null;
+  bank_same_as_staff: boolean;
+  portal_password_hash?: string | null;
+  document_type?: 'id_card' | 'passport' | null;
+  document_number?: string | null;
+  application_count?: number;
+  staff_code?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  marital_status?: string | null;
+  bank_branch?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_relationship?: string | null;
+  emergency_contact_phone?: string | null;
+  document_issue_date?: string | null;
+  document_issue_place?: string | null;
+  rehire_eligible?: boolean | null;
   created_at: string;
   updated_at: string;
   // Joined
@@ -184,6 +264,7 @@ export interface HRStaffPerformance {
   id: string;
   staff_id: string;
   reviewer_id?: string | null;
+  assigned_reviewer_id?: string | null;
   review_date: string;
   reviewer_name: string | null;
   period: string | null;
@@ -251,6 +332,62 @@ export interface HRStaffFine {
   // Joined
   hr_staff?: HRStaffMember;
 }
+
+export interface HRAwardsCatalog {
+  id: string;
+  award_name: string;
+  default_amount: number;
+  applicability_type: 'global' | 'department' | 'position';
+  target_id: string | null;
+  category_id: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  category?: HRDisciplinaryCategory | null;
+  hr_departments?: HRDepartment | null;
+  hr_positions?: HRPosition | null;
+}
+
+export interface HRStaffAward {
+  id: string;
+  staff_id: string;
+  date: string;
+  award_name: string;
+  amount: number;
+  notified_by: string | null;
+  deduction_source: string | null;
+  status: FineStatus;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  hr_staff?: HRStaffMember;
+}
+
+export type WarningFlagType = 'green' | 'yellow' | 'red';
+
+export interface HRStaffWarning {
+  id: string;
+  staff_id: string;
+  date: string;
+  flag_type: WarningFlagType;
+  reason: string;
+  notified_by: string | null;
+  is_converted?: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  hr_staff?: HRStaffMember;
+}
+
+export interface HRFlagRule {
+  id: string;
+  yellow_limit: number;
+  green_limit: number;
+  award_catalog_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 
 export interface HRStaffSalaryHistory {
   id: string;
@@ -391,4 +528,30 @@ export interface HRStaffAsset {
   created_at?: string;
   updated_at?: string;
   hr_staff_asset_history?: HRStaffAssetHistory[];
+}
+
+export interface InterviewQuestion {
+    id: string;
+    text_en: string;
+    text_vi: string;
+    type: 'text' | 'yes_no';
+}
+
+export interface InterviewTemplateSection {
+    id: string;
+    name_en: string;
+    name_vi: string;
+    questions: InterviewQuestion[];
+}
+
+export interface HRInterviewTemplate {
+    id: string;
+    name: string;
+    department?: string | null;
+    position_title?: string | null;
+    employment_type?: string | null;
+    is_default: boolean;
+    sections: InterviewTemplateSection[];
+    created_at?: string;
+    updated_at?: string;
 }

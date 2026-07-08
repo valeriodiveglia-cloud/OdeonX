@@ -10,6 +10,7 @@ import AutoLogout from '@/components/AutoLogout'
 import RecentVisitsTracker from '@/components/RecentVisitsTracker'
 
 import { cookies } from 'next/headers'
+import TopHeader from '@/components/TopHeader'
 
 const beVietnam = Be_Vietnam_Pro({ subsets: ['vietnamese', 'latin'], weight: ['400', '500', '600', '700', '800'], display: 'swap', variable: '--font-be-vietnam' })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
@@ -33,7 +34,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <RecentVisitsTracker />
         <AutoLogout />
         <ClientErrorGuard>
-          <SettingsProvider>{children}</SettingsProvider>
+          <SettingsProvider>
+            {children}
+            <TopHeader />
+          </SettingsProvider>
         </ClientErrorGuard>
 
         {showEnvBadge && (

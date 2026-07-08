@@ -15,6 +15,9 @@ import {
   EllipsisVerticalIcon,
   CheckCircleIcon,
   ArrowPathIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline'
 import CircularLoader from '@/components/CircularLoader'
 import Papa from 'papaparse'
@@ -23,6 +26,219 @@ import ExcelJS from 'exceljs'
 // i18n + settings
 import { t } from '@/lib/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
+
+interface ColumnHeaderProps {
+  colKey: string
+  label: string
+  sortCol: string
+  sortAsc: boolean
+  onSort: (key: any, asc: boolean) => void
+  values: string[]
+  activeFilter: Set<string> | null
+  onFilter: (vals: Set<string> | null) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  dict: {
+    sortAsc: string
+    sortDesc: string
+    selectAll: string
+    deselectAll: string
+    filterPlaceholder: string
+    clearFilters: string
+  }
+  right?: boolean
+  center?: boolean
+  className?: string
+}
+
+function ColumnHeader({
+  colKey,
+  label,
+  sortCol,
+  sortAsc,
+  onSort,
+  values,
+  activeFilter,
+  onFilter,
+  onClear,
+  open,
+  onToggle,
+  onClose,
+  dict,
+  right,
+  center,
+  className = '',
+}: ColumnHeaderProps) {
+  const ref = useRef<HTMLTableCellElement>(null)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+  useEffect(() => {
+    if (open) {
+      setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+      setFilterSearch('')
+    }
+  }, [open, values, activeFilter])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open, onClose])
+
+  const isActive = sortCol === colKey
+  const hasFilter = !!activeFilter
+  const dropdownStyle = useMemo(() => {
+    if (!open || !ref.current) return undefined
+    const rect = ref.current.getBoundingClientRect()
+    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+  }, [open, right])
+
+  const filteredValues = filterSearch
+    ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+    : values
+
+  const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+  function toggleAll() {
+    const next = new Set(localChecked)
+    if (allVisibleChecked) {
+      filteredValues.forEach(v => next.delete(v))
+    } else {
+      filteredValues.forEach(v => next.add(v))
+    }
+    setLocalChecked(next)
+  }
+
+  function toggleOne(v: string) {
+    const next = new Set(localChecked)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    setLocalChecked(next)
+  }
+
+  function handleApply() {
+    let finalChecked = localChecked
+    if (filterSearch) {
+      finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+    }
+    if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+  }
+
+  return (
+    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <span className="select-none">{label}</span>
+        {isActive && (
+          sortAsc ? (
+            <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          ) : (
+            <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          )
+        )}
+        {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation()
+            onToggle()
+          }}
+          className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+          aria-label={`Menu ${label}`}
+        >
+          <EllipsisVerticalIcon className="w-3.5 h-3.5 text-gray-500" />
+        </button>
+      </div>
+
+      {open && dropdownStyle && (
+        <div
+          className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case"
+          style={dropdownStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 space-y-1">
+            <button
+              type="button"
+              onClick={() => onSort(colKey, true)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowUpIcon className="w-4 h-4" />
+              {dict.sortAsc}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSort(colKey, false)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowDownIcon className="w-4 h-4" />
+              {dict.sortDesc}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              value={filterSearch}
+              onChange={e => setFilterSearch(e.target.value)}
+              placeholder={dict.filterPlaceholder}
+              className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+            >
+              {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+            </button>
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+              {filteredValues.map(v => (
+                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localChecked.has(v)}
+                    onChange={() => toggleOne(v)}
+                    className="accent-blue-600 rounded"
+                  />
+                  <span className="truncate text-xs">{v || '(Empty)'}</span>
+                </label>
+              ))}
+              {filteredValues.length === 0 && (
+                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+            >
+              {dict.clearFilters}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+    </th>
+  )
+}
 
 /* ---------- DB tables ---------- */
 const TBL_EQ = 'rental_equipment'
@@ -1202,11 +1418,18 @@ export default function EquipmentPage() {
   const [sortCol, setSortCol] = useState<SortKey>('name')
   const [sortAsc, setSortAsc] = useState(true)
 
-  const [filters, setFilters] = useState({
-    name: '',
-    categoryId: '' as string | number | '',
-    supplierId: '' as string | '',
-  })
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+
+  const hasActiveFilters = Object.values(columnFilters).some(vals => vals !== null)
+  function clearAllColumnFilters() {
+    setColumnFilters({})
+  }
+
+  function applyColumnFilter(col: SortKey, vals: Set<string> | null) {
+    setColumnFilters(prev => ({ ...prev, [col]: vals }))
+    setOpenMenu(null)
+  }
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [progress, setProgress] = useState<number | null>(null)
@@ -1283,18 +1506,51 @@ export default function EquipmentPage() {
     return base * m
   }
 
+  function getColValue(it: Equip, k: string) {
+    switch (k) {
+      case 'name':
+        return it.name || ''
+      case 'category_id': {
+        const c = cats.find(x => x.id === it.category_id)
+        return c ? c.name : ''
+      }
+      case 'supplier_id': {
+        const s = sups.find(x => x.id === it.supplier_id)
+        return s ? s.name : ''
+      }
+      case 'cost':
+        return it.cost != null ? num.format(it.cost) : ''
+      case 'vat_rate':
+        return `${effVatPct(it)}%`
+      case 'markup_x':
+        return it.markup_x != null ? it.markup_x.toString() : ''
+      case 'final_calc':
+        return num.format(finalCalc(it))
+      case 'notes':
+        return it.notes || ''
+      case 'last_update':
+        return fmtDate(it.last_update)
+      default:
+        return ''
+    }
+  }
+
+  function handleSort(col: SortKey, asc: boolean) {
+    setSortCol(col)
+    setSortAsc(asc)
+  }
+
   function applyFilters(list: Equip[]) {
     let r = [...list]
 
-    if (filters.name.trim()) {
-      r = r.filter(x => x.name.toLowerCase().includes(filters.name.trim().toLowerCase()))
-    }
-    if (filters.categoryId !== '') {
-      r = r.filter(x => x.category_id === Number(filters.categoryId))
-    }
-    if (filters.supplierId !== '') {
-      r = r.filter(x => x.supplier_id === String(filters.supplierId))
-    }
+    // Apply column checklist filters
+    Object.entries(columnFilters).forEach(([col, vals]) => {
+      if (!vals) return
+      r = r.filter(x => {
+        const v = getColValue(x, col)
+        return vals.has(v)
+      })
+    })
 
     r.sort((a, b) => {
       const getVal = (it: Equip): any => {
@@ -2008,79 +2264,107 @@ ${t('Skipped', language)}: ${skipped}`)
     }
   }
 
-  if (loading) return <CircularLoader />
+   if (loading) return <CircularLoader />
+
+  const columnHeaderDict = {
+    sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
+    sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort Descending',
+    selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select All',
+    deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect All',
+    filterPlaceholder: language === 'vi' ? 'Lọc...' : 'Filter...',
+    clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters',
+  }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 text-gray-100">
+    <div className="max-w-none mx-auto p-4 text-gray-100">
       {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {selectMode && (
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setMenuOpen(v => !v)}
-                className="p-2 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                title={t('BulkActions', language)}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-              >
-                <EllipsisVerticalIcon className="w-6 h-6 text-white" />
-              </button>
-              {menuOpen && (
-                <div className="absolute z-10 mt-2 w-64 rounded-xl border border-white/10 bg-white text-gray-900 shadow-xl">
-                  {/* Bulk Edit Markup */}
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
-                    onClick={() => { setMenuOpen(false); setShowMarkupModal(true) }}
-                    disabled={selectedIds.length === 0}
-                  >
-                    {t('BulkEditMarkup', language) || 'Bulk Edit Markup'}
-                  </button>
+      <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            {selectMode && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(v => !v)}
+                  className="p-2 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                  title={t('BulkActions', language)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                >
+                  <EllipsisVerticalIcon className="w-6 h-6 text-white" />
+                </button>
+                {menuOpen && (
+                  <div className="absolute z-10 mt-2 w-64 rounded-xl border border-white/10 bg-white text-gray-900 shadow-xl">
+                    {/* Bulk Edit Markup */}
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
+                      onClick={() => { setMenuOpen(false); setShowMarkupModal(true) }}
+                      disabled={selectedIds.length === 0}
+                    >
+                      {t('BulkEditMarkup', language) || 'Bulk Edit Markup'}
+                    </button>
 
-                  {/* Bulk Edit VAT */}
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
-                    onClick={() => { setMenuOpen(false); setShowVatModal(true) }}
-                    disabled={selectedIds.length === 0 || !vatEnabled}
-                    title={!vatEnabled ? t('VatDisabledWarn', language) : undefined}
-                  >
-                    {t('BulkEditVat', language)}
-                  </button>
+                    {/* Bulk Edit VAT */}
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
+                      onClick={() => { setMenuOpen(false); setShowVatModal(true) }}
+                      disabled={selectedIds.length === 0 || !vatEnabled}
+                      title={!vatEnabled ? t('VatDisabledWarn', language) : undefined}
+                    >
+                      {t('BulkEditVat', language)}
+                    </button>
 
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
-                    onClick={() => { setMenuOpen(false); bulkMarkReviewed() }}
-                    disabled={selectedIds.length === 0}
-                  >
-                    {t('MarkAsReviewed', language)}
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 text-red-600 disabled:opacity-50 flex items-center gap-2"
-                    onClick={() => { setMenuOpen(false); bulkMoveToTrash() }}
-                    disabled={selectedIds.length === 0}
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                    {t('MoveToTrash', language)}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 disabled:opacity-50"
+                      onClick={() => { setMenuOpen(false); bulkMarkReviewed() }}
+                      disabled={selectedIds.length === 0}
+                    >
+                      {t('MarkAsReviewed', language)}
+                    </button>
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 text-red-600 disabled:opacity-50 flex items-center gap-2"
+                      onClick={() => { setMenuOpen(false); bulkMoveToTrash() }}
+                      disabled={selectedIds.length === 0}
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                      {t('MoveToTrash', language)}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
-          <h1 className="text-2xl font-bold text-white">{t('CateringRentalEquipment', language)}</h1>
-          {selectedIds.length > 0 && (
-            <span className="ml-2 text-sm text-blue-200">({selectedIds.length} {t('SelectedCountSuffix', language)})</span>
-          )}
+            <h1 className="text-2xl font-bold text-white sm:text-3xl tracking-tight leading-normal">{t('CateringRentalEquipment', language)}</h1>
+            {selectedIds.length > 0 && (
+              <span className="ml-2 text-sm text-blue-200">({selectedIds.length} {t('SelectedCountSuffix', language)})</span>
+            )}
+          </div>
+          <p className="text-xs text-slate-400">
+            {language === 'vi'
+              ? 'Quản lý thiết bị cho thuê, chi phí và cấu hình thuế VAT'
+              : 'Manage rental equipment, costs, and VAT configurations'}
+          </p>
         </div>
 
+        {/* Header Actions */}
         <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllColumnFilters}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-200 border border-red-500/20 text-sm font-medium cursor-pointer"
+            >
+              <XMarkIcon className="w-4 h-4" />
+              {language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters'}
+            </button>
+          )}
+
           <button
             onClick={handleExportExcel}
             disabled={exporting}
             className="inline-flex items-center gap-2 px-3 h-9 rounded-lg
                        bg-blue-600/15 text-blue-200 hover:bg-blue-600/25
-                       border border-blue-400/30 disabled:opacity-60"
+                       border border-blue-400/30 disabled:opacity-60 text-sm font-medium cursor-pointer"
             title={t('ExportExcel', language)}
           >
             <ArrowUpTrayIcon className="w-5 h-5" />
@@ -2096,7 +2380,7 @@ ${t('Skipped', language)}: ${skipped}`)
                 disabled={progress != null}
                 className="inline-flex items-center gap-2 px-3 h-9 rounded-lg
                            bg-blue-600/15 text-blue-200 hover:bg-blue-600/25
-                           border border-blue-400/30 disabled:opacity-60"
+                           border border-blue-400/30 disabled:opacity-60 text-sm font-medium cursor-pointer"
                 title={t('ImportCSV', language)}
               >
                 <ArrowDownTrayIcon className="w-5 h-5" />
@@ -2108,7 +2392,7 @@ ${t('Skipped', language)}: ${skipped}`)
           {role && role !== 'accountant' && (
             <button
               onClick={() => setSelectMode(s => !s)}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
+              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium cursor-pointer ${selectMode
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
                 }`}
@@ -2122,7 +2406,7 @@ ${t('Skipped', language)}: ${skipped}`)
           {role && role !== 'accountant' && (
             <button
               onClick={openCreate}
-              className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
+              className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white text-sm font-medium cursor-pointer hover:opacity-80"
             >
               <PlusIcon className="w-5 h-5" /> {t('NewEquipment', language)}
             </button>
@@ -2130,233 +2414,242 @@ ${t('Skipped', language)}: ${skipped}`)
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl shadow p-3 mb-4">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder={t('FilterByName', language)}
-            value={filters.name}
-            onChange={e => setFilters(s => ({ ...s, name: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm text-gray-900 placeholder-gray-600 w-[220px]"
-          />
-          <select
-            value={filters.categoryId}
-            onChange={e => setFilters(s => ({ ...s, categoryId: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[180px]"
-          >
-            <option value="">{t('AllCategories', language)}</option>
-            {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select
-            value={filters.supplierId}
-            onChange={e => setFilters(s => ({ ...s, supplierId: e.target.value }))}
-            className="border rounded-lg px-2 h-9 text-sm bg-white text-gray-900 w-[200px]"
-          >
-            <option value="">{t('AllSuppliers', language)}</option>
-            {sups.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-
-          <div className="ml-auto" />
-          <button
-            type="button"
-            onClick={() => setFilters({ name: '', categoryId: '', supplierId: '' })}
-            className="inline-flex items-center gap-1 px-3 h-9 rounded-lg
-                       border border-blue-600 text-blue-700 hover:bg-blue-50"
-            title={t('ClearFilters', language)}
-          >
-            {t('Clear', language)}
-          </button>
-        </div>
-      </div>
-
       {/* Table */}
-      <div className="bg-white rounded-2xl shadow p-3">
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed text-sm text-gray-900">
-            <colgroup>
-              {[
-                <col key="c0" className="w-[3rem]" />,
-                <col key="c1" className="w-[22rem]" />,
-                <col key="c2" className="w-[14rem]" />,
-                <col key="c3" className="w-[16rem]" />,
-                <col key="c4" className="w-[10rem]" />,
-                vatEnabled ? <col key="c5" className="w-[9rem]" /> : null,
-                <col key="c7" className="w-[12rem]" />,
-                <col key="c8" className="w-[10rem]" />,
-                <col key="c9" className="w-[18rem]" />,
-              ].filter(Boolean) as any}
-            </colgroup>
+      <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
+        <table className="w-full table-auto text-sm text-gray-900">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+              <th className="p-2 w-7">
+                {selectMode ? (
+                  <input
+                    ref={headerCbRef}
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every(m => !!selected[m.id])}
+                    onChange={toggleSelectAllVisible}
+                    className="h-4 w-4"
+                    title={t('SelectAll', language)}
+                  />
+                ) : null}
+              </th>
 
-            <thead>
-              <tr className="bg-blue-50 text-gray-800">
-                <th className="p-2 text-left">
-                  {selectMode ? (
-                    <input
-                      ref={headerCbRef}
-                      type="checkbox"
-                      checked={filtered.length > 0 && filtered.every(m => !!selected[m.id])}
-                      onChange={toggleSelectAllVisible}
-                      className="h-4 w-4"
-                      title={t('SelectAll', language)}
-                    />
-                  ) : null}
-                </th>
+              <ColumnHeader
+                colKey="name"
+                label={t('Equipment', language)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'name')))).sort()}
+                activeFilter={columnFilters.name || null}
+                onFilter={vals => applyColumnFilter('name', vals)}
+                onClear={() => applyColumnFilter('name', null)}
+                open={openMenu === 'name'}
+                onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
 
-                <th className="p-2 text-left">
-                  <button type="button" onClick={() => toggleSort('name')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-start font-semibold">
-                      <span>{t('Equipment', language)}</span>
-                      <SortIcon active={sortCol === 'name'} asc={sortAsc} />
-                    </div>
-                  </button>
-                </th>
+              <ColumnHeader
+                colKey="category_id"
+                label={t('Category', language)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'category_id')))).sort()}
+                activeFilter={columnFilters.category_id || null}
+                onFilter={vals => applyColumnFilter('category_id', vals)}
+                onClear={() => applyColumnFilter('category_id', null)}
+                open={openMenu === 'category_id'}
+                onToggle={() => setOpenMenu(openMenu === 'category_id' ? null : 'category_id')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
 
-                <th className="p-2 text-left">
-                  <button type="button" onClick={() => toggleSort('category_id')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-start font-semibold">
-                      <span>{t('Category', language)}</span>
-                      <SortIcon active={sortCol === 'category_id'} asc={sortAsc} />
-                    </div>
-                  </button>
-                </th>
+              <ColumnHeader
+                colKey="supplier_id"
+                label={t('Supplier', language)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'supplier_id')))).sort()}
+                activeFilter={columnFilters.supplier_id || null}
+                onFilter={vals => applyColumnFilter('supplier_id', vals)}
+                onClear={() => applyColumnFilter('supplier_id', null)}
+                open={openMenu === 'supplier_id'}
+                onToggle={() => setOpenMenu(openMenu === 'supplier_id' ? null : 'supplier_id')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
 
-                <th className="p-2 text-left">
-                  <button type="button" onClick={() => toggleSort('supplier_id')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-start font-semibold">
-                      <span>{t('Supplier', language)}</span>
-                      <SortIcon active={sortCol === 'supplier_id'} asc={sortAsc} />
-                    </div>
-                  </button>
-                </th>
+              <ColumnHeader
+                colKey="cost"
+                label={`${t('Cost', language)} (${currency})`}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'cost')))).sort()}
+                activeFilter={columnFilters.cost || null}
+                onFilter={vals => applyColumnFilter('cost', vals)}
+                onClear={() => applyColumnFilter('cost', null)}
+                open={openMenu === 'cost'}
+                onToggle={() => setOpenMenu(openMenu === 'cost' ? null : 'cost')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                right
+                className="text-[11px]"
+              />
 
-                <th className="p-2 text-right">
-                  <button type="button" onClick={() => toggleSort('cost')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-end font-semibold">
-                      <SortIcon active={sortCol === 'cost'} asc={sortAsc} />
-                      <span>{t('Cost', language)}</span>
-                    </div>
-                  </button>
-                </th>
+              {vatEnabled && (
+                <ColumnHeader
+                  colKey="vat_rate"
+                  label={t('VatRatePct', language)}
+                  sortCol={sortCol}
+                  sortAsc={sortAsc}
+                  onSort={handleSort}
+                  values={Array.from(new Set(rows.map(r => getColValue(r, 'vat_rate')))).sort()}
+                  activeFilter={columnFilters.vat_rate || null}
+                  onFilter={vals => applyColumnFilter('vat_rate', vals)}
+                  onClear={() => applyColumnFilter('vat_rate', null)}
+                  open={openMenu === 'vat_rate'}
+                  onToggle={() => setOpenMenu(openMenu === 'vat_rate' ? null : 'vat_rate')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnHeaderDict}
+                  right
+                  className="text-[11px]"
+                />
+              )}
 
-                {vatEnabled && (
-                  <th className="p-2 text-right">
-                    <button type="button" onClick={() => toggleSort('vat_rate')} className="w-full cursor-pointer">
-                      <div className="flex items-center gap-1 justify-end font-semibold">
-                        <SortIcon active={sortCol === 'vat_rate'} asc={sortAsc} />
-                        <span>{t('VatRatePct', language)}</span>
-                      </div>
-                    </button>
-                  </th>
-                )}
+              <ColumnHeader
+                colKey="final_calc"
+                label={`${t('FinalPrice', language)} (${currency})`}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'final_calc')))).sort()}
+                activeFilter={columnFilters.final_calc || null}
+                onFilter={vals => applyColumnFilter('final_calc', vals)}
+                onClear={() => applyColumnFilter('final_calc', null)}
+                open={openMenu === 'final_calc'}
+                onToggle={() => setOpenMenu(openMenu === 'final_calc' ? null : 'final_calc')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                right
+                className="text-[11px]"
+              />
 
-                <th className="p-2 text-right">
-                  <button type="button" onClick={() => toggleSort('final_calc')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-end font-semibold">
-                      <SortIcon active={sortCol === 'final_calc'} asc={sortAsc} />
-                      <span>{t('FinalPrice', language)}</span>
-                    </div>
-                  </button>
-                </th>
+              <ColumnHeader
+                colKey="last_update"
+                label={t('LastUpdate', language)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'last_update')))).sort()}
+                activeFilter={columnFilters.last_update || null}
+                onFilter={vals => applyColumnFilter('last_update', vals)}
+                onClear={() => applyColumnFilter('last_update', null)}
+                open={openMenu === 'last_update'}
+                onToggle={() => setOpenMenu(openMenu === 'last_update' ? null : 'last_update')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                right
+                className="text-[11px]"
+              />
 
-                <th className="p-2 text-right">
-                  <button type="button" onClick={() => toggleSort('last_update')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-end font-semibold">
-                      <SortIcon active={sortCol === 'last_update'} asc={sortAsc} />
-                      <span>{t('LastUpdate', language)}</span>
-                    </div>
-                  </button>
-                </th>
+              <ColumnHeader
+                colKey="notes"
+                label={t('Notes', language)}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                values={Array.from(new Set(rows.map(r => getColValue(r, 'notes')))).sort()}
+                activeFilter={columnFilters.notes || null}
+                onFilter={vals => applyColumnFilter('notes', vals)}
+                onClear={() => applyColumnFilter('notes', null)}
+                open={openMenu === 'notes'}
+                onToggle={() => setOpenMenu(openMenu === 'notes' ? null : 'notes')}
+                onClose={() => setOpenMenu(null)}
+                dict={columnHeaderDict}
+                className="text-[11px]"
+              />
+            </tr>
+          </thead>
 
-                <th className="p-2 text-left">
-                  <button type="button" onClick={() => toggleSort('notes')} className="w-full cursor-pointer">
-                    <div className="flex items-center gap-1 justify-start font-semibold">
-                      <span>{t('Notes', language)}</span>
-                      <SortIcon active={sortCol === 'notes'} asc={sortAsc} />
-                    </div>
-                  </button>
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filtered.map(it => {
-                const isSelected = !!selected[it.id]
-                return (
-                  <tr
-                    key={it.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      if (selectMode) {
-                        setSelected(s => ({ ...s, [it.id]: !s[it.id] }))
-                      } else {
-                        openView(it)
-                      }
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        if (selectMode) {
-                          setSelected(s => ({ ...s, [it.id]: !s[it.id] }))
-                        } else {
-                          openView(it)
-                        }
-                      }
-                    }}
-                    className={`border-t hover:bg-blue-50 cursor-pointer ${isSelected ? 'bg-blue-100/70' : ''}`}
-                  >
-                    <td className="p-2">
-                      {selectMode && (
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          checked={isSelected}
-                          onClick={e => e.stopPropagation()}
-                          onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
-                        />
-                      )}
-                    </td>
-
-                    <td className="p-2 font-medium">
-                      {it.name}
-                    </td>
-
-                    <td className="p-2">
-                      {cats.find(c => c.id === it.category_id)?.name || ''}
-                    </td>
-
-                    <td className="p-2">
-                      {sups.find(s => s.id === it.supplier_id)?.name || ''}
-                    </td>
-
-                    <td className="p-2 text-right">
-                      {it.cost != null ? num.format(it.cost) : ''}
-                    </td>
-
-                    {vatEnabled && (
-                      <td className="p-2 text-right">
-                        {effVatPct(it)}%
-                      </td>
+          <tbody>
+            {filtered.map((it, idx) => {
+              const isSelected = !!selected[it.id]
+              return (
+                <tr
+                  key={it.id}
+                  onClick={() => {
+                    if (selectMode) {
+                      setSelected(s => ({ ...s, [it.id]: !s[it.id] }))
+                    } else {
+                      openView(it)
+                    }
+                  }}
+                  className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer ${
+                    idx % 2 === 0 ? 'bg-gray-50/30' : ''
+                  }`}
+                >
+                  <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                    {selectMode && (
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={isSelected}
+                        onChange={e => setSelected(s => ({ ...s, [it.id]: e.target.checked }))}
+                      />
                     )}
+                  </td>
 
-                    <td className="p-2 text-right font-semibold">
-                      {num.format(finalCalc(it))}
-                    </td>
+                  <td className="px-3 py-2.5 text-xs text-gray-900 font-semibold truncate max-w-[22rem]">
+                    {it.name}
+                  </td>
 
-                    <td className={`p-2 text-right ${isOlderThanMonths(it.last_update, reviewM) ? 'text-red-600 font-medium' : ''}`}>
-                      {fmtDate(it.last_update)}
-                    </td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[14rem]">
+                    {cats.find(c => c.id === it.category_id)?.name || ''}
+                  </td>
 
-                    <td className="p-2 truncate max-w-[200px]">
-                      {it.notes || ''}
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[16rem]">
+                    {sups.find(s => s.id === it.supplier_id)?.name || ''}
+                  </td>
+
+                  <td className="px-3 py-2.5 text-right font-mono text-gray-900 whitespace-nowrap">
+                    {it.cost != null ? num.format(it.cost) : ''}
+                  </td>
+
+                  {vatEnabled && (
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-600 whitespace-nowrap">
+                      {effVatPct(it)}%
                     </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                  )}
+
+                  <td className="px-3 py-2.5 text-right font-mono text-gray-900 font-semibold whitespace-nowrap">
+                    {num.format(finalCalc(it))}
+                  </td>
+
+                  <td className={`px-3 py-2.5 text-right font-mono whitespace-nowrap ${isOlderThanMonths(it.last_update, reviewM) ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                    {fmtDate(it.last_update)}
+                  </td>
+
+                  <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[18rem]">
+                    {it.notes || ''}
+                  </td>
+                </tr>
+              )
+            })}
+
+            {filtered.length === 0 && (
+              <tr>
+                <td className="px-3 py-4 text-center text-gray-500" colSpan={vatEnabled ? 9 : 8}>
+                  {t('NoEquipment', language) || 'No equipment found'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       {openEditor && (
@@ -2407,4 +2700,3 @@ ${t('Skipped', language)}: ${skipped}`)
     </div>
   )
 }
-

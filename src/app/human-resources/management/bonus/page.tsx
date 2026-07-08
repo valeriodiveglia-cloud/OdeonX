@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffMember, HRStaffContract } from '@/types/human-resources'
-import { Search, X, Loader2, Users, Star, ChevronLeft, ChevronRight, FileDown } from 'lucide-react'
+import { Search, X, Loader2, Users, Star, ChevronLeft, ChevronRight, CalendarDays, FileDown, Clock, MoreVertical, ArrowUp, ArrowDown, Filter } from 'lucide-react'
 import { saveAs } from 'file-saver'
 import { useSettings } from '@/contexts/SettingsContext'
 
@@ -171,6 +171,23 @@ export default function BonusPage() {
     const [activeTab, setActiveTab] = useState<TabKey>('full_time')
     const [exportModalOpen, setExportModalOpen] = useState(false)
 
+    // Column Header state
+    type SortKey = 'name' | 'totalTenure' | 'yearlyTenure' | 'currentBonus' | 'projectedBonus';
+    const [sortKey, setSortKey] = useState<SortKey>('name')
+    const [sortAsc, setSortAsc] = useState(true)
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+    const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
+
+    function applySort(k: SortKey, asc: boolean) {
+        setSortKey(k); setSortAsc(asc); setOpenMenu(null)
+    }
+    function applyColumnFilter(col: SortKey, vals: Set<string> | null) {
+        setColumnFilters(prev => ({ ...prev, [col]: vals })); setOpenMenu(null)
+    }
+    function clearColumnFilter(col: SortKey) {
+        setColumnFilters(prev => { const n = { ...prev }; delete n[col]; return n }); setOpenMenu(null)
+    }
+
     const fetchAllData = async (year: number) => {
         setLoading(true)
         try {
@@ -231,47 +248,31 @@ export default function BonusPage() {
         }
     };
 
-    const filteredStaff = useMemo(() => {
-        let list = staffList;
-        if (activeTab === 'full_time') {
-            list = list.filter(s => s.employment_type === 'full_time');
-        } else {
-            list = list.filter(s => s.employment_type === 'part_time');
-        }
-        
-        if (!search.trim()) return list;
-        const q = search.toLowerCase();
-        return list.filter(s => 
-            s.full_name?.toLowerCase().includes(q) || 
-            s.position?.toLowerCase().includes(q)
-        );
-    }, [staffList, search, activeTab]);
-
     const today = new Date();
     const yearEnd = new Date(selectedYear, 11, 31);
     const yearStart = new Date(selectedYear, 0, 1);
-    
     const evaluationEndDate = selectedYear === currentYear ? today : yearEnd;
     const availableYears = Array.from({ length: Math.max(2, currentYear - 2024 + 2) }, (_, i) => 2024 + i);
 
-    const totals = useMemo(() => {
-        let ftCurrent = 0;
-        let ftProjected = 0;
-        let ptCurrent = 0;
-        let ptProjected = 0;
-
-        staffList.forEach(staff => {
-            const effectiveStartDate = new Date(Math.max(new Date(staff.start_date || new Date()).getTime(), yearStart.getTime()));
-            const workedThisYear = effectiveStartDate <= evaluationEndDate;
-            if (!workedThisYear) return;
-
+    const processedStaffList = useMemo(() => {
+        return staffList.map(staff => {
             const avgRating = getStaffAverageRating(staff.id);
             const hasReviews = performanceReviews.some(r => r.staff_id === staff.id);
+            
+            const totalTenureCurrent = calculateTenure(staff.start_date || new Date().toISOString(), evaluationEndDate);
+            const effectiveStartDate = new Date(Math.max(new Date(staff.start_date || new Date()).getTime(), yearStart.getTime()));
+            const tenureInYear = calculateTenure(effectiveStartDate.toISOString(), evaluationEndDate);
+            const workedThisYear = effectiveStartDate <= evaluationEndDate;
+
+            let currentTotal = 0;
+            let projectedTotal = 0;
+            let yearlyTenureVal = 0;
+            let yearlyTenureStr = '';
+
+            let currentData = null;
+            let projectedData = null;
 
             if (staff.employment_type === 'full_time') {
-                const totalTenureCurrent = calculateTenure(staff.start_date || new Date().toISOString(), evaluationEndDate);
-                const totalTenureProjected = calculateTenure(staff.start_date || new Date().toISOString(), yearEnd);
-                
                 const calcFullTime = (endDate: Date, tenureYears: number, isProjected: boolean) => {
                     const pureBase = calculateBaseBonus(staff, yearStart, endDate);
                     const guaranteedPart = pureBase * (hrBonus13thGuaranteedPct / 100);
@@ -285,7 +286,7 @@ export default function BonusPage() {
                             const matched = [...hrBonus13thPerfTiers].filter(t => avgRating >= t.min_rating).sort((a,b) => b.min_rating - a.min_rating);
                             if (matched.length > 0) tierMult = matched[0].multiplier_pct / 100;
                         } else {
-                            tierMult = 1; 
+                            tierMult = 1;
                         }
                     }
                     
@@ -294,19 +295,67 @@ export default function BonusPage() {
                     const mult14th = get14thMonthMultiplier(tenureYears, hrBonus14thBaseYears, hrBonus14thSteps);
                     const raw14th = final13th * mult14th;
                     const final14th = passes14thGate ? raw14th : 0;
-                    return final13th + final14th;
+                    return { final13th, raw14th, final14th, total: final13th + final14th, passes14thGate };
                 };
 
-                ftCurrent += calcFullTime(evaluationEndDate, totalTenureCurrent.years, false);
-                ftProjected += calcFullTime(yearEnd, totalTenureProjected.years, true);
+                const curr = calcFullTime(evaluationEndDate, totalTenureCurrent.years, false);
+                currentTotal = curr.total;
+                currentData = curr;
+
+                const totalTenureProjected = calculateTenure(staff.start_date || new Date().toISOString(), yearEnd);
+                const proj = calcFullTime(yearEnd, totalTenureProjected.years, true);
+                projectedTotal = proj.total;
+                projectedData = proj;
+
+                yearlyTenureVal = workedThisYear ? tenureInYear.totalDays : 0;
+                yearlyTenureStr = workedThisYear ? formatTenure(tenureInYear, language) : (language === 'vi' ? 'Chưa vào làm' : 'Not employed');
             } else {
                 const hoursRaw = ptHours[staff.id];
                 const hours = hoursRaw === undefined ? 0 : (parseFloat(hoursRaw) || 0);
                 const pureBonus = calculatePartTimeBonus(hours, hrBonusPtMaxCap, hrBonusPtTargetHours, hrBonusPtMinHours);
-                
                 const passesGate = !hasReviews || avgRating >= hrBonusPtMinRating;
-                ptCurrent += passesGate ? pureBonus : 0;
-                ptProjected += selectedYear === currentYear ? hrBonusPtMaxCap : pureBonus;
+                
+                currentTotal = passesGate ? pureBonus : 0;
+                projectedTotal = selectedYear === currentYear ? hrBonusPtMaxCap : pureBonus;
+
+                yearlyTenureVal = hours;
+                yearlyTenureStr = `${hours} ${language === 'vi' ? 'giờ' : 'hrs'}`;
+            }
+
+            return {
+                staff,
+                id: staff.id,
+                name: staff.full_name || '',
+                avgRating,
+                hasReviews,
+                totalTenureCurrent,
+                totalTenureCurrentStr: formatTenure(totalTenureCurrent, language),
+                tenureInYear,
+                workedThisYear,
+                yearlyTenureVal,
+                yearlyTenureStr,
+                currentTotal,
+                projectedTotal,
+                currentData,
+                projectedData
+            };
+        });
+    }, [staffList, ptHours, performanceReviews, hrBonus13thGuaranteedPct, hrBonus13thPerfPct, hrBonus13thPerfTiers, hrBonus14thMinRating, hrBonus14thBaseYears, hrBonus14thSteps, hrBonusPtMaxCap, hrBonusPtTargetHours, hrBonusPtMinHours, hrBonusPtMinRating, selectedYear, currentYear, language, getStaffAverageRating]);
+
+    const totals = useMemo(() => {
+        let ftCurrent = 0;
+        let ftProjected = 0;
+        let ptCurrent = 0;
+        let ptProjected = 0;
+
+        processedStaffList.forEach(item => {
+            if (!item.workedThisYear) return;
+            if (item.staff.employment_type === 'full_time') {
+                ftCurrent += item.currentTotal;
+                ftProjected += item.projectedTotal;
+            } else {
+                ptCurrent += item.currentTotal;
+                ptProjected += item.projectedTotal;
             }
         });
 
@@ -316,7 +365,78 @@ export default function BonusPage() {
             grandCurrent: ftCurrent + ptCurrent,
             grandProjected: ftProjected + ptProjected
         };
-    }, [staffList, ptHours, performanceReviews, hrBonus13thGuaranteedPct, hrBonus13thPerfPct, hrBonus13thPerfTiers, hrBonus14thMinRating, hrBonus14thBaseYears, hrBonus14thSteps, hrBonusPtMaxCap, hrBonusPtTargetHours, hrBonusPtMinHours, hrBonusPtMinRating, yearStart, yearEnd, evaluationEndDate, selectedYear, currentYear, getStaffAverageRating]);
+    }, [processedStaffList]);
+
+    const columnValues = useMemo(() => {
+        const map: Record<string, string[]> = {}
+        const keys: SortKey[] = ['name', 'totalTenure', 'yearlyTenure', 'currentBonus', 'projectedBonus']
+        const listForTab = processedStaffList.filter(item => item.staff.employment_type === activeTab)
+
+        keys.forEach(k => {
+            const set = new Set<string>()
+            listForTab.forEach(item => {
+                let val = ''
+                switch (k) {
+                    case 'name': val = item.name; break;
+                    case 'totalTenure': val = item.totalTenureCurrentStr; break;
+                    case 'yearlyTenure': val = item.yearlyTenureStr; break;
+                    case 'currentBonus': val = fmtCurrency(item.currentTotal); break;
+                    case 'projectedBonus': val = fmtCurrency(item.projectedTotal); break;
+                }
+                if (val) set.add(val)
+            })
+            map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        })
+        return map
+    }, [processedStaffList, activeTab, language])
+
+    const filteredStaff = useMemo(() => {
+        let out = processedStaffList.filter(item => item.staff.employment_type === activeTab);
+
+        if (search) {
+            const q = search.toLowerCase();
+            out = out.filter(item => 
+                item.name.toLowerCase().includes(q) || 
+                (item.staff.position || '').toLowerCase().includes(q)
+            );
+        }
+
+        for (const [col, allowed] of Object.entries(columnFilters)) {
+            if (!allowed) continue;
+            out = out.filter(item => {
+                let val = '';
+                switch (col) {
+                    case 'name': val = item.name; break;
+                    case 'totalTenure': val = item.totalTenureCurrentStr; break;
+                    case 'yearlyTenure': val = item.yearlyTenureStr; break;
+                    case 'currentBonus': val = fmtCurrency(item.currentTotal); break;
+                    case 'projectedBonus': val = fmtCurrency(item.projectedTotal); break;
+                }
+                return allowed.has(val);
+            });
+        }
+
+        out.sort((a, b) => {
+            let av: any, bv: any;
+            switch (sortKey) {
+                case 'name': av = a.name; bv = b.name; break;
+                case 'totalTenure': av = a.totalTenureCurrent.totalDays; bv = b.totalTenureCurrent.totalDays; break;
+                case 'yearlyTenure': av = a.yearlyTenureVal; bv = b.yearlyTenureVal; break;
+                case 'currentBonus': av = a.currentTotal; bv = b.currentTotal; break;
+                case 'projectedBonus': av = a.projectedTotal; bv = b.projectedTotal; break;
+                default: av = ''; bv = '';
+            }
+            let cmp = 0;
+            if (typeof av === 'number' && typeof bv === 'number') {
+                cmp = av - bv;
+            } else {
+                cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+            }
+            return sortAsc ? cmp : -cmp;
+        });
+
+        return out;
+    }, [processedStaffList, activeTab, search, columnFilters, sortKey, sortAsc]);
 
     const handleExport = async (exportYear: number) => {
         let exportPtHours = ptHours;
@@ -439,6 +559,22 @@ export default function BonusPage() {
         setExportModalOpen(false)
     }
 
+    const dict = language === 'vi' ? {
+        sortAsc: 'Sắp xếp tăng dần',
+        sortDesc: 'Sắp xếp giảm dần',
+        selectAll: 'Chọn tất cả',
+        deselectAll: 'Bỏ chọn tất cả',
+        filterPlaceholder: 'Lọc...',
+        clearFilters: 'Xóa bộ lọc'
+    } : {
+        sortAsc: 'Sort Ascending',
+        sortDesc: 'Sort Descending',
+        selectAll: 'Select All',
+        deselectAll: 'Deselect All',
+        filterPlaceholder: 'Filter...',
+        clearFilters: 'Clear Filters'
+    };
+
     if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 text-blue-500 animate-spin" /></div>
 
     return (
@@ -460,73 +596,73 @@ export default function BonusPage() {
 
                 {/* KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div className="bg-slate-800 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
-                        <div className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div> {language === 'vi' ? 'Thưởng toàn thời gian' : 'Full-Time Bonus'}
+                    <div className="bg-white border border-gray-200/60 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+                        <div className="text-sm font-medium text-gray-500 mb-2 flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+                                <Users className="w-4 h-4" />
+                            </div>
+                            {language === 'vi' ? 'Thưởng toàn thời gian' : 'Full-Time Bonus'}
                         </div>
                         <div>
-                            <div className="text-xl font-bold text-white">{fmtCurrency(totals.ftCurrent)} <span className="text-[10px] font-normal text-slate-500 font-mono">VND</span></div>
-                            <div className="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                            <div className="text-2xl font-bold text-gray-900">{fmtCurrency(totals.ftCurrent)} <span className="text-xs font-normal text-gray-400">VND</span></div>
+                            <div className="text-xs text-gray-500 mt-2 flex items-center justify-between border-t border-gray-50 pt-2">
                                 <span>{language === 'vi' ? 'Tối đa dự kiến:' : 'Projected max:'}</span>
-                                <span className="font-medium text-blue-400">{fmtCurrency(totals.ftProjected)} <span className="text-[10px] font-normal">VND</span></span>
+                                <span className="font-semibold text-blue-600">{fmtCurrency(totals.ftProjected)} VND</span>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-slate-800 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
-                        <div className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> {language === 'vi' ? 'Thưởng bán thời gian' : 'Part-Time Bonus'}
+                    <div className="bg-white border border-gray-200/60 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+                        <div className="text-sm font-medium text-gray-500 mb-2 flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+                                <Clock className="w-4 h-4" />
+                            </div>
+                            {language === 'vi' ? 'Thưởng bán thời gian' : 'Part-Time Bonus'}
                         </div>
                         <div>
-                            <div className="text-xl font-bold text-white">{fmtCurrency(totals.ptCurrent)} <span className="text-[10px] font-normal text-slate-500 font-mono">VND</span></div>
-                            <div className="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                            <div className="text-2xl font-bold text-gray-900">{fmtCurrency(totals.ptCurrent)} <span className="text-xs font-normal text-gray-400">VND</span></div>
+                            <div className="text-xs text-gray-500 mt-2 flex items-center justify-between border-t border-gray-50 pt-2">
                                 <span>{language === 'vi' ? 'Tối đa dự kiến:' : 'Projected max:'}</span>
-                                <span className="font-medium text-emerald-400">{fmtCurrency(totals.ptProjected)} <span className="text-[10px] font-normal">VND</span></span>
+                                <span className="font-semibold text-emerald-600">{fmtCurrency(totals.ptProjected)} VND</span>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-gradient-to-br from-indigo-900/40 to-blue-900/40 border border-indigo-500/20 rounded-xl p-4 flex flex-col justify-between">
-                        <div className="text-sm font-medium text-indigo-200 mb-2 flex items-center gap-2">
-                            <Star className="w-3.5 h-3.5 text-indigo-400 fill-current" /> {language === 'vi' ? 'Tổng nghĩa vụ chi trả' : 'Grand Total Liability'}
+                    <div className="bg-white border border-gray-200/60 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+                        <div className="text-sm font-medium text-indigo-600 mb-2 flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                                <Star className="w-4 h-4 fill-current" />
+                            </div>
+                            {language === 'vi' ? 'Tổng nghĩa vụ chi trả' : 'Grand Total Liability'}
                         </div>
                         <div>
-                            <div className="text-2xl font-black text-white">{fmtCurrency(totals.grandCurrent)} <span className="text-[10px] font-normal text-indigo-300/50 font-mono">VND</span></div>
-                            <div className="text-xs text-indigo-300/70 mt-1 flex items-center justify-between">
+                            <div className="text-2xl font-bold text-gray-900">{fmtCurrency(totals.grandCurrent)} <span className="text-xs font-normal text-gray-400">VND</span></div>
+                            <div className="text-xs text-gray-500 mt-2 flex items-center justify-between border-t border-gray-50 pt-2">
                                 <span>{language === 'vi' ? 'Tối đa tuyệt đối dự kiến:' : 'Projected absolute max:'}</span>
-                                <span className="font-bold text-indigo-300">{fmtCurrency(totals.grandProjected)} <span className="text-[10px] font-normal">VND</span></span>
+                                <span className="font-semibold text-indigo-600">{fmtCurrency(totals.grandProjected)} VND</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Filters & Tabs */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                    <div className="flex bg-slate-800/50 p-1 rounded-lg border border-white/10">
+                <div className="border-b border-white/10 mt-12 mb-3">
+                    <div className="flex gap-6 -mb-px">
                         <button 
                             onClick={() => setActiveTab('full_time')}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'full_time' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                            className={`pb-3 text-sm font-semibold border-b-2 transition-all ${activeTab === 'full_time' ? 'border-blue-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
                         >
                             {language === 'vi' ? 'Toàn thời gian' : 'Full-Time'}
                         </button>
                         <button 
                             onClick={() => setActiveTab('part_time')}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'part_time' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                            className={`pb-3 text-sm font-semibold border-b-2 transition-all ${activeTab === 'part_time' ? 'border-blue-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
                         >
                             {language === 'vi' ? 'Bán thời gian' : 'Part-Time'}
                         </button>
                     </div>
-
-                    <div className="flex items-center gap-3">
-                        <div className="relative w-full sm:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <input type="text" placeholder={language === 'vi' ? 'Tìm kiếm nhân viên...' : 'Search staff...'} value={search} onChange={e => setSearch(e.target.value)}
-                                className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none" />
-                            {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"><X className="w-3 h-3 text-slate-400" /></button>}
-                        </div>
-                    </div>
                 </div>
 
                 {/* Header Nav */}
-                <div className="mt-3 mb-4 flex items-center justify-between text-sm text-blue-100 border-t border-white/10 pt-4">
+                <div className="mt-2 mb-3 flex items-center justify-between text-sm text-blue-100 pt-1">
                     <button 
                         type="button" 
                         onClick={() => setSelectedYear(y => Math.max(2024, y - 1))} 
@@ -539,6 +675,18 @@ export default function BonusPage() {
 
                     <div className="flex items-center gap-2 text-white">
                         <span className="text-base font-semibold">{selectedYear}</span>
+                        <div className="relative w-5 h-5 group">
+                            <CalendarDays className="w-5 h-5 text-blue-200 group-hover:text-blue-100 transition-colors cursor-pointer" />
+                            <select 
+                                value={selectedYear} 
+                                onChange={e => setSelectedYear(parseInt(e.target.value) || currentYear)}
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                            >
+                                {availableYears.map(y => (
+                                    <option key={y} value={y} className="text-gray-900">{y}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     <button 
@@ -551,22 +699,95 @@ export default function BonusPage() {
                         <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
-
                 {/* Main Table */}
                 <div className="rounded-2xl bg-white shadow-md overflow-hidden text-gray-900">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-gray-50/80 border-b border-gray-200">
-                                    <th className="text-left px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 w-1/4">{language === 'vi' ? 'Nhân viên' : 'Staff Member'}</th>
-                                    <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Tổng thâm niên' : 'Total Tenure'}</th>
-                                    {activeTab === 'part_time' ? (
-                                        <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? `Số giờ trong năm ${selectedYear}` : `Hours in ${selectedYear}`}</th>
-                                    ) : (
-                                        <th className="text-left px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? `Thâm niên trong năm ${selectedYear}` : `Tenure in ${selectedYear}`}</th>
-                                    )}
-                                    <th className="text-right px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 border-l border-gray-200/60 bg-white/50">{language === 'vi' ? 'Thưởng hiện tại' : 'Current Bonus'}</th>
-                                    <th className="text-right px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50/50 border-l border-blue-100">{language === 'vi' ? 'Dự kiến cuối năm' : 'Projected Year-End'}</th>
+                                    <ColumnHeader
+                                        colKey="name"
+                                        label={language === 'vi' ? 'Nhân viên' : 'Staff Member'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['name'] || []}
+                                        activeFilter={columnFilters['name'] || null}
+                                        onFilter={(s) => applyColumnFilter('name', s)}
+                                        onClear={() => clearColumnFilter('name')}
+                                        open={openMenu === 'name'}
+                                        onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="w-1/4 min-w-[200px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="totalTenure"
+                                        label={language === 'vi' ? 'Tổng thâm niên' : 'Total Tenure'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['totalTenure'] || []}
+                                        activeFilter={columnFilters['totalTenure'] || null}
+                                        onFilter={(s) => applyColumnFilter('totalTenure', s)}
+                                        onClear={() => clearColumnFilter('totalTenure')}
+                                        open={openMenu === 'totalTenure'}
+                                        onToggle={() => setOpenMenu(openMenu === 'totalTenure' ? null : 'totalTenure')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                    />
+                                    <ColumnHeader
+                                        colKey="yearlyTenure"
+                                        label={activeTab === 'part_time'
+                                            ? (language === 'vi' ? `Số giờ in ${selectedYear}` : `Hours in ${selectedYear}`)
+                                            : (language === 'vi' ? `Thâm niên in ${selectedYear}` : `Tenure in ${selectedYear}`)
+                                        }
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['yearlyTenure'] || []}
+                                        activeFilter={columnFilters['yearlyTenure'] || null}
+                                        onFilter={(s) => applyColumnFilter('yearlyTenure', s)}
+                                        onClear={() => clearColumnFilter('yearlyTenure')}
+                                        open={openMenu === 'yearlyTenure'}
+                                        onToggle={() => setOpenMenu(openMenu === 'yearlyTenure' ? null : 'yearlyTenure')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                    />
+                                    <ColumnHeader
+                                        colKey="currentBonus"
+                                        label={language === 'vi' ? 'Thưởng hiện tại' : 'Current Bonus'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['currentBonus'] || []}
+                                        activeFilter={columnFilters['currentBonus'] || null}
+                                        onFilter={(s) => applyColumnFilter('currentBonus', s)}
+                                        onClear={() => clearColumnFilter('currentBonus')}
+                                        open={openMenu === 'currentBonus'}
+                                        onToggle={() => setOpenMenu(openMenu === 'currentBonus' ? null : 'currentBonus')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        right
+                                        className="border-l border-gray-200/60 bg-white/50"
+                                    />
+                                    <ColumnHeader
+                                        colKey="projectedBonus"
+                                        label={language === 'vi' ? 'Dự kiến cuối năm' : 'Projected Year-End'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['projectedBonus'] || []}
+                                        activeFilter={columnFilters['projectedBonus'] || null}
+                                        onFilter={(s) => applyColumnFilter('projectedBonus', s)}
+                                        onClear={() => clearColumnFilter('projectedBonus')}
+                                        open={openMenu === 'projectedBonus'}
+                                        onToggle={() => setOpenMenu(openMenu === 'projectedBonus' ? null : 'projectedBonus')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        right
+                                        className="text-blue-600 bg-blue-50/50 border-l border-blue-100"
+                                    />
                                 </tr>
                             </thead>
                             <tbody>
@@ -580,57 +801,29 @@ export default function BonusPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredStaff.map((staff, idx) => {
-                                        const totalTenureCurrent = calculateTenure(staff.start_date || new Date().toISOString(), evaluationEndDate);
-                                        const effectiveStartDate = new Date(Math.max(new Date(staff.start_date || new Date()).getTime(), yearStart.getTime()));
-                                        const tenureInYear = calculateTenure(effectiveStartDate.toISOString(), evaluationEndDate);
-                                        const workedThisYear = effectiveStartDate <= evaluationEndDate;
+                                    filteredStaff.map((item, idx) => {
+                                        const {
+                                            staff,
+                                            id,
+                                            name,
+                                            avgRating,
+                                            hasReviews,
+                                            totalTenureCurrent,
+                                            totalTenureCurrentStr,
+                                            tenureInYear,
+                                            workedThisYear,
+                                            yearlyTenureVal,
+                                            yearlyTenureStr,
+                                            currentTotal,
+                                            projectedTotal,
+                                            currentData,
+                                            projectedData
+                                        } = item;
 
-                                        const avgRating = getStaffAverageRating(staff.id);
-                                        const hasReviews = performanceReviews.some(r => r.staff_id === staff.id);
-
-                                        let currentTotal = 0;
-                                        let projectedTotal = 0;
                                         let detailsLine1: React.ReactNode = '';
                                         let detailsLine2: React.ReactNode = '';
 
-                                        if (activeTab === 'full_time') {
-                                            const calcFullTime = (endDate: Date, tenureYears: number, isProjected: boolean) => {
-                                                const pureBase = calculateBaseBonus(staff, yearStart, endDate);
-                                                
-                                                const guaranteedPart = pureBase * (hrBonus13thGuaranteedPct / 100);
-                                                const perfPart = pureBase * (hrBonus13thPerfPct / 100);
-                                                
-                                                let tierMult = 0;
-                                                if (isProjected) {
-                                                    tierMult = 1; // 100% of performance chunk for absolute maximum liability
-                                                } else {
-                                                    if (hasReviews) {
-                                                        const matched = [...hrBonus13thPerfTiers].filter(t => avgRating >= t.min_rating).sort((a,b) => b.min_rating - a.min_rating);
-                                                        if (matched.length > 0) tierMult = matched[0].multiplier_pct / 100;
-                                                    } else {
-                                                        tierMult = 1; // Default to 100% of performance chunk if no reviews exist for the year
-                                                    }
-                                                }
-                                                
-                                                const final13th = guaranteedPart + (perfPart * tierMult);
-                                                
-                                                const passes14thGate = isProjected || (!hasReviews || avgRating >= hrBonus14thMinRating);
-                                                const mult14th = get14thMonthMultiplier(tenureYears, hrBonus14thBaseYears, hrBonus14thSteps);
-                                                
-                                                const raw14th = final13th * mult14th;
-                                                const final14th = passes14thGate ? raw14th : 0;
-                                                
-                                                return { final13th, raw14th, final14th, total: final13th + final14th, passes14thGate };
-                                            };
-
-                                            const currentData = calcFullTime(evaluationEndDate, totalTenureCurrent.years, false);
-                                            currentTotal = currentData.total;
-                                            
-                                            const totalTenureProjected = calculateTenure(staff.start_date || new Date().toISOString(), yearEnd);
-                                            const projectedData = calcFullTime(yearEnd, totalTenureProjected.years, true);
-                                            projectedTotal = projectedData.total;
-                                            
+                                        if (activeTab === 'full_time' && currentData && projectedData) {
                                             detailsLine1 = (
                                                 <div className="flex flex-col items-end gap-1 mt-1.5">
                                                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -660,16 +853,9 @@ export default function BonusPage() {
                                                     </div>
                                                 </div>
                                             );
-                                        } else {
-                                            // Part time logic
-                                            const hoursRaw = ptHours[staff.id];
-                                            const hours = hoursRaw === undefined ? 0 : (parseFloat(hoursRaw) || 0);
-                                            const pureBonus = calculatePartTimeBonus(hours, hrBonusPtMaxCap, hrBonusPtTargetHours, hrBonusPtMinHours);
-                                            
+                                        } else if (activeTab === 'part_time') {
+                                            const hours = yearlyTenureVal;
                                             const passesGate = !hasReviews || avgRating >= hrBonusPtMinRating;
-                                            currentTotal = passesGate ? pureBonus : 0;
-                                            projectedTotal = selectedYear === currentYear ? hrBonusPtMaxCap : pureBonus; // Always assume max/passed for projected
-                                            
                                             detailsLine1 = (
                                                 <div className="flex flex-col items-end gap-1 mt-1.5">
                                                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -677,7 +863,7 @@ export default function BonusPage() {
                                                             {language === 'vi' ? `${hours} giờ (giới hạn ở ${fmtCurrency(hrBonusPtMaxCap)})` : `${hours} hrs (capped at ${fmtCurrency(hrBonusPtMaxCap)})`}
                                                         </span>
                                                         {!passesGate && (
-                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600 border-red-200">
                                                                 {language === 'vi' ? '⚠️ Chưa đạt' : '⚠️ Missed'}
                                                             </span>
                                                         )}
@@ -714,7 +900,7 @@ export default function BonusPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="text-sm font-medium text-gray-900">{formatTenure(totalTenureCurrent, language)}</div>
+                                                    <div className="text-sm font-medium text-gray-900">{totalTenureCurrentStr}</div>
                                                     <div className="text-xs text-gray-500">{language === 'vi' ? `${totalTenureCurrent.totalDays} ngày` : `${totalTenureCurrent.totalDays} days`}</div>
                                                 </td>
                                                 <td className="px-4 py-3 whitespace-nowrap">
@@ -762,7 +948,7 @@ export default function BonusPage() {
                                                     )}
                                                 </td>
                                             </tr>
-                                        )
+                                        );
                                     })
                                 )}
                             </tbody>
@@ -775,5 +961,176 @@ export default function BonusPage() {
                 <ExportModalYear onClose={() => setExportModalOpen(false)} onExport={handleExport} currentYear={currentYear} language={language} />
             )}
         </div>
+    )
+}
+
+/* --- Column Header Component --- */
+type ColumnHeaderProps = {
+    colKey: string
+    label: string
+    sortKey: string
+    sortAsc: boolean
+    onSort: (k: any, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (s: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+    right?: boolean
+    center?: boolean
+    className?: string
+}
+
+function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '' }: ColumnHeaderProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+        ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+        : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) { filteredValues.forEach(v => next.delete(v)) }
+        else { filteredValues.forEach(v => next.add(v)) }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        let finalChecked = localChecked;
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)));
+        }
+        if (finalChecked.size >= values.length) onFilter(null); 
+        else onFilter(finalChecked);
+    }
+
+    return (
+        <th className={`px-4 py-3.5 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
+            <div className={`flex items-center gap-1 font-bold uppercase tracking-wider text-gray-500 text-[10px] ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+                <span className="select-none">{label}</span>
+                {isActive && (
+                    sortAsc
+                        ? <ArrowUp className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        : <ArrowDown className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                )}
+                {hasFilter && <Filter className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onToggle() }}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+                    aria-label={`Menu ${label}`}
+                >
+                    <MoreVertical className="w-4 h-4 text-gray-500" />
+                </button>
+            </div>
+
+            {open && dropdownStyle && (
+                <div
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case font-normal"
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button
+                            type="button"
+                            onClick={() => onSort(colKey, true)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowUp className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onSort(colKey, false)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowDown className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input
+                            type="text"
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                            placeholder={dict.filterPlaceholder}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-gray-900"
+                        />
+                        <button
+                            type="button"
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v || '(Empty)'}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+                        <button type="button" onClick={onClear} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium">
+                            {dict.clearFilters}
+                        </button>
+                        <button type="button" onClick={handleApply} className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
+        </th>
     )
 }

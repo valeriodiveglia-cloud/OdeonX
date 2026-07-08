@@ -45,24 +45,31 @@ export default function EditHiringRequestPage() {
     if (!request) return <div className="p-8 text-center">Request not found</div>
 
     return (
-        <div className="min-h-screen text-gray-100 p-4">
-            <div className="max-w-5xl mx-auto mb-6">
-                <div className="flex items-center">
-                    <Link
-                        href={`/human-resources/recruitment/${request.id}`}
-                        className="mr-4 p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
-                    >
-                        <ArrowLeftIcon className="h-5 w-5" />
-                    </Link>
-                    <div>
-                        <h1 className="text-2xl font-semibold text-white">Edit Hiring Request</h1>
-                        <p className="text-sm text-blue-200">Update details for {request.position_title}</p>
+        <div className="min-h-screen text-gray-100 p-6">
+            <div className="max-w-4xl mx-auto">
+                {/* Header */}
+                <header className="mb-6">
+                    <div className="flex items-center gap-4">
+                        <Link
+                            href={`/human-resources/recruitment/${request.id}`}
+                            className="p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition"
+                        >
+                            <ArrowLeftIcon className="h-5 w-5" />
+                        </Link>
+                        <div>
+                            <h1 className="text-2xl font-bold text-white sm:text-3xl tracking-tight leading-normal">
+                                Edit Hiring Request
+                            </h1>
+                            <p className="mt-1 text-sm text-slate-400">
+                                Update details for {request.position_title}
+                            </p>
+                        </div>
                     </div>
-                </div>
-            </div>
+                </header>
 
-            <div className="max-w-5xl mx-auto">
-                <HiringRequestForm initialData={request} />
+                <main>
+                    <HiringRequestForm initialData={request} />
+                </main>
             </div>
         </div>
     )

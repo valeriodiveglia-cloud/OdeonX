@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRActivityLog } from '@/types/human-resources'
+import { useSettings } from '@/contexts/SettingsContext'
 import {
     UserCircleIcon,
     PlusCircleIcon,
@@ -27,7 +28,28 @@ const ACTION_CONFIG: Record<string, { icon: typeof UserCircleIcon; bg: string; i
     'default': { icon: UserCircleIcon, bg: 'bg-gray-400', iconColor: 'text-white' },
 }
 
+const formatActivityMessage = (message: string, lang: string) => {
+    if (!message) return ''
+    const parts = message.split(' / ')
+    if (parts.length === 2) {
+        return lang === 'vi' ? parts[1] : parts[0]
+    }
+    return message
+}
+
+const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return dateString
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const year = date.getFullYear()
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${day}/${month}/${year} ${hours}:${minutes}`
+}
+
 export function ActivityTimeline({ hiringRequestId }: ActivityTimelineProps) {
+    const { language } = useSettings()
     const [activities, setActivities] = useState<HRActivityLog[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -85,11 +107,11 @@ export function ActivityTimeline({ hiringRequestId }: ActivityTimelineProps) {
                                     <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
                                         <div>
                                             <p className="text-sm text-gray-600">
-                                                {activity.message}
+                                                {formatActivityMessage(activity.message || '', language)}
                                             </p>
                                         </div>
                                         <div className="whitespace-nowrap text-right text-sm text-gray-400">
-                                            <time dateTime={activity.created_at}>{new Date(activity.created_at).toLocaleString()}</time>
+                                            <time dateTime={activity.created_at}>{formatDateTime(activity.created_at)}</time>
                                         </div>
                                     </div>
                                 </div>
