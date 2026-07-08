@@ -133,6 +133,7 @@ export default function StaffListPage() {
 
     // Filters
     const [search, setSearch]         = useState('')
+    const [activeTab, setActiveTab]   = useState<EmploymentType>('full_time')
 
     // Column Header state
     type SortKey = 'name' | 'department' | 'position' | 'branch' | 'type' | 'status' | 'salary' | 'skill';
@@ -273,7 +274,7 @@ export default function StaffListPage() {
 
     const columnValues = useMemo(() => {
         const map: Record<string, string[]> = {}
-        const keys: SortKey[] = ['name', 'department', 'position', 'branch', 'type', 'status', 'salary', 'skill']
+        const keys: SortKey[] = ['name', 'department', 'position', 'branch', 'status', 'salary', 'skill']
         keys.forEach(k => {
             const set = new Set<string>()
             staff.forEach(s => { 
@@ -334,6 +335,10 @@ export default function StaffListPage() {
         })
         return out
     }, [staff, search, sortKey, sortAsc, columnFilters, displayValue, branchMap])
+
+    const tabFiltered = useMemo(() => {
+        return filtered.filter(s => s.employment_type === activeTab)
+    }, [filtered, activeTab])
 
 
     /* ─── Summary cards ─── */
@@ -681,6 +686,26 @@ export default function StaffListPage() {
                     ))}
                 </div>
 
+                {/* Minimalist Tabs */}
+                <div className="flex border-b border-white/10 mb-6 space-x-2">
+                    {(['full_time', 'part_time', 'outsourced'] as EmploymentType[]).map((t) => (
+                        <button
+                            key={t}
+                            type="button"
+                            onClick={() => setActiveTab(t)}
+                            className={`pb-3 text-sm font-semibold transition-all px-4 cursor-pointer hover:text-white ${
+                                activeTab === t 
+                                    ? 'border-b-2 border-blue-500 text-white font-semibold' 
+                                    : 'border-b-2 border-transparent text-slate-400 hover:text-slate-200'
+                            }`}
+                        >
+                                {t === 'full_time' && (language === 'vi' ? 'Toàn thời gian' : 'Full-time')}
+                                {t === 'part_time' && (language === 'vi' ? 'Bán thời gian' : 'Part-time')}
+                                {t === 'outsourced' && (language === 'vi' ? 'Thuê ngoài' : 'Outsourced')}
+                        </button>
+                    ))}
+                </div>
+
                 {/* Filters */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
                     {/* Search */}
@@ -701,7 +726,7 @@ export default function StaffListPage() {
                     </div>
 
                     <span className="text-xs text-slate-500 ml-auto mr-2">
-                        {filtered.length} {language === 'vi' ? 'trên' : 'of'} {staff.length} {language === 'vi' ? 'được hiển thị' : 'shown'}
+                        {tabFiltered.length} {language === 'vi' ? 'trên' : 'of'} {staff.filter(s => s.employment_type === activeTab).length} {language === 'vi' ? 'được hiển thị' : 'shown'}
                     </span>
                     <button
                         onClick={() => router.push('/human-resources/management/staff-archive')}
@@ -725,7 +750,6 @@ export default function StaffListPage() {
                                         ['department', language === 'vi' ? 'Bộ phận' : 'Department'], 
                                         ['position', language === 'vi' ? 'Vị trí' : 'Position'], 
                                         ['branch', language === 'vi' ? 'Chi nhánh' : 'Branch(es)'], 
-                                        ['type', language === 'vi' ? 'Loại' : 'Type', true], 
                                         ['skill', language === 'vi' ? 'Kỹ năng' : 'Skill', true],
                                         ['salary', language === 'vi' ? 'Mức lương (VND)' : 'Salary (VND)', false, true]
                                     ] as [SortKey, string, boolean?, boolean?][]).map(([k, lbl, center, right]) => (
@@ -756,7 +780,7 @@ export default function StaffListPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map((s, idx) => {
+                                {tabFiltered.map((s, idx) => {
                                     const branchNames = (s.hr_staff_branches || [])
                                         .map(b => branchMap[b.branch_id])
                                         .filter(Boolean)
@@ -783,16 +807,6 @@ export default function StaffListPage() {
                                             <td className="px-4 py-3">
                                                 <BranchCell branchNames={branchNames} />
                                             </td>
-                                            <td className="px-4 py-3 text-center whitespace-nowrap">
-                                                <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold border
-                                                    ${s.employment_type === 'full_time'
-                                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-100'
-                                                        : 'bg-amber-50 text-amber-700 border-amber-100'
-                                                    }`}
-                                                >
-                                                    {getEmploymentLabel(s.employment_type, language)}
-                                                </span>
-                                            </td>
                                             {/* Status column removed */}
                                             <td className="px-4 py-3 text-center whitespace-nowrap">
                                                 <div className="flex items-center justify-center gap-0.5" title={`Skill Level: ${s.skill_level || 1}`}>
@@ -814,12 +828,12 @@ export default function StaffListPage() {
                                         </tr>
                                     )
                                 })}
-                                {filtered.length === 0 && (
+                                {tabFiltered.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-16 text-center">
+                                        <td colSpan={7} className="px-4 py-16 text-center">
                                             <Users className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                                             <p className="text-gray-500 text-sm font-medium">
-                                                {staff.length === 0 
+                                                {staff.filter(s => s.employment_type === activeTab).length === 0 
                                                     ? (language === 'vi' ? 'Chưa có nhân viên nào' : 'No staff members yet') 
                                                     : (language === 'vi' ? 'Không có kết quả nào phù hợp con bộ lọc' : 'No results match your filters')}
                                             </p>
