@@ -7,6 +7,7 @@ import { Save, Receipt, Loader2, Coins, ChevronDown } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import MonthPicker from '@/components/MonthPicker'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 function toMonthInputValue(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 function fromMonthInputValue(val: string) { const [y, m] = val.split('-').map(Number); return new Date(y, m - 1, 1) }
@@ -18,6 +19,10 @@ export default function ServiceChargeMonthlyPage() {
     const [saving, setSaving] = useState(false)
     const [selectedCity, setSelectedCity] = useState<'Ho Chi Minh' | 'Da Lat'>('Ho Chi Minh')
     const [cityDropdownOpen, setCityDropdownOpen] = useState(false)
+
+    // Permissions State
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
 
     // Data
     const [staffList, setStaffList] = useState<HRStaffMember[]>([])
@@ -34,10 +39,20 @@ export default function ServiceChargeMonthlyPage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            // Fetch active staff (excluding outsourced)
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
+            // Fetch active staff (excluding outsourced) with branch info
             const { data: staffRes, error: staffErr } = await supabase
                 .from('hr_staff')
-                .select('*')
+                .select('*, hr_staff_branches(branch_id)')
                 .eq('status', 'active')
                 .neq('employment_type', 'outsourced')
                 .order('full_name')
@@ -60,8 +75,14 @@ export default function ServiceChargeMonthlyPage() {
                 .eq('city', selectedCity)
             if (recErr) throw recErr
 
-            setStaffList((staffRes as HRStaffMember[]) || [])
-            setServiceCharge(scRes || null)
+            let filteredStaff = (staffRes as any[] || [])
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredStaff = filteredStaff.filter(s =>
+                    (s.hr_staff_branches || []).some((sb: any) => userBranches.includes(sb.branch_id))
+                )
+            }
+            setStaffList(filteredStaff as HRStaffMember[])
+            
             if (scRes && scRes.total_amount != null) {
                 const parts = scRes.total_amount.toString().split('.')
                 parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",")
@@ -79,7 +100,7 @@ export default function ServiceChargeMonthlyPage() {
                 })
             }
             // Populate defaults for staff that don't have records yet
-            staffRes?.forEach(s => {
+            filteredStaff.forEach(s => {
                 if (!hoursMap[s.id]) {
                     hoursMap[s.id] = '0'
                 }
@@ -91,7 +112,7 @@ export default function ServiceChargeMonthlyPage() {
             console.error('Error fetching service charge data:', err)
         }
         setLoading(false)
-    }, [monthId, selectedCity])
+    }, [monthId, selectedCity, currentUserRole, currentUserBranches])
 
     useEffect(() => { fetchAll() }, [fetchAll])
 

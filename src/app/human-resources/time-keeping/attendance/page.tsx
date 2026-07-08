@@ -7,6 +7,7 @@ import { Users, X, Save, ChevronDown } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import MonthPicker from '@/components/MonthPicker'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 function toMonthInputValue(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 function fromMonthInputValue(val: string) { const [y, m] = val.split('-').map(Number); return new Date(y, m - 1, 1) }
@@ -17,6 +18,10 @@ export default function AttendanceMonthlyPage() {
     const [loading, setLoading] = useState(true)
     const [selectedCity, setSelectedCity] = useState<'Ho Chi Minh' | 'Da Lat'>('Ho Chi Minh')
     const [cityDropdownOpen, setCityDropdownOpen] = useState(false)
+
+    // Permissions State
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
 
     // Data
     const [staffList, setStaffList] = useState<HRStaffMember[]>([])
@@ -30,10 +35,20 @@ export default function AttendanceMonthlyPage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            // Fetch all active staff (excluding outsourced)
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
+            // Fetch all active staff (excluding outsourced) with branch info
             const { data: staffRes, error: staffErr } = await supabase
                 .from('hr_staff')
-                .select('id, full_name, position, department, city, employment_type')
+                .select('id, full_name, position, department, city, employment_type, hr_staff_branches(branch_id)')
                 .eq('status', 'active')
                 .neq('employment_type', 'outsourced')
                 .order('full_name')
@@ -46,18 +61,29 @@ export default function AttendanceMonthlyPage() {
                 .eq('month_id', monthId)
             if (attErr) throw attErr
 
-            setStaffList(staffRes as HRStaffMember[] || [])
+            let filteredStaff = (staffRes as any[] || [])
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredStaff = filteredStaff.filter(s =>
+                    (s.hr_staff_branches || []).some((sb: any) => userBranches.includes(sb.branch_id))
+                )
+            }
+
+            setStaffList(filteredStaff as HRStaffMember[])
             
             const dict: Record<string, HRStaffAttendanceMonthly> = {}
             if (attRes) {
-                attRes.forEach((r: any) => { dict[r.staff_id] = r })
+                attRes.forEach((r: any) => { 
+                    if (!userRole || ['owner', 'admin'].includes(userRole) || !userBranches || filteredStaff.some(s => s.id === r.staff_id)) {
+                        dict[r.staff_id] = r 
+                    }
+                })
             }
             setAttendanceDict(dict)
         } catch (err) {
             console.error('Error fetching attendance data:', err)
         }
         setLoading(false)
-    }, [monthId])
+    }, [monthId, currentUserRole, currentUserBranches])
 
     useEffect(() => { fetchAll() }, [fetchAll])
 

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase_shim'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 import MonthPicker from '@/components/MonthPicker'
 import CircularLoader from '@/components/CircularLoader'
 import { getOvertimeSettings } from '@/lib/hr-operational-data'
@@ -22,6 +23,7 @@ interface StaffMember {
     salary_type: 'monthly' | 'hourly'
     city?: string
     employment_type?: string
+    hr_staff_branches?: { branch_id: string }[]
 }
 
 interface AttendanceMonthly {
@@ -58,6 +60,10 @@ export default function TimeKeepingDashboard() {
     const [cityDropdownOpen, setCityDropdownOpen] = useState(false)
     const [activeRankTab, setActiveRankTab] = useState<'tardiness' | 'overtime' | 'service-charge'>('tardiness')
 
+    // Permissions State
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
+
     // Raw database state
     const [staffList, setStaffList] = useState<StaffMember[]>([])
     const [attendanceData, setAttendanceData] = useState<AttendanceMonthly[]>([])
@@ -78,10 +84,20 @@ export default function TimeKeepingDashboard() {
     const fetchAllData = useCallback(async () => {
         setLoading(true)
         try {
-            // 1. Fetch active staff (excluding outsourced)
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
+            // 1. Fetch active staff (excluding outsourced) with branch info
             const { data: staffRes, error: staffErr } = await supabase
                 .from('hr_staff')
-                .select('id, full_name, position, department, salary_amount, salary_type, city, employment_type')
+                .select('id, full_name, position, department, salary_amount, salary_type, city, employment_type, hr_staff_branches(branch_id)')
                 .eq('status', 'active')
                 .neq('employment_type', 'outsourced')
                 .order('full_name')
@@ -120,18 +136,38 @@ export default function TimeKeepingDashboard() {
                 .select('staff_id, hours_worked')
                 .eq('month_id', monthId)
 
-            setStaffList((staffRes as StaffMember[]) || [])
-            setAttendanceData((attRes as AttendanceMonthly[]) || [])
-            setOvertimeData((otRes as OvertimeRecord[]) || [])
-            setSalaryHistory((historyRes as SalaryHistory[]) || [])
+            let filteredStaff = (staffRes as StaffMember[]) || []
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredStaff = filteredStaff.filter(s =>
+                    (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                )
+            }
+            const allowedStaffIds = new Set(filteredStaff.map(s => s.id))
+
+            let filteredAtt = (attRes as AttendanceMonthly[]) || []
+            let filteredOt = (otRes as OvertimeRecord[]) || []
+            let filteredHistory = (historyRes as SalaryHistory[]) || []
+            let filteredScStaff = (scStaffRes as any[]) || []
+
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredAtt = filteredAtt.filter(r => allowedStaffIds.has(r.staff_id))
+                filteredOt = filteredOt.filter(r => allowedStaffIds.has(r.staff_id))
+                filteredHistory = filteredHistory.filter(r => allowedStaffIds.has(r.staff_id))
+                filteredScStaff = filteredScStaff.filter(r => allowedStaffIds.has(r.staff_id))
+            }
+
+            setStaffList(filteredStaff)
+            setAttendanceData(filteredAtt)
+            setOvertimeData(filteredOt)
+            setSalaryHistory(filteredHistory)
             setServiceChargePools((scPoolRes as any[]) || [])
-            setServiceChargeStaff((scStaffRes as any[]) || [])
+            setServiceChargeStaff(filteredScStaff)
         } catch (err) {
             console.error('Error fetching Time Keeping dashboard data:', err)
         } finally {
             setLoading(false)
         }
-    }, [monthId, dateStartStr, dateEndStr])
+    }, [monthId, dateStartStr, dateEndStr, currentUserRole, currentUserBranches])
 
     useEffect(() => {
         fetchAllData()
