@@ -8,6 +8,7 @@ import CircularLoader from '@/components/CircularLoader'
 import { getOvertimeSettings, OvertimeSettings } from '@/lib/hr-operational-data'
 import { useSettings } from '@/contexts/SettingsContext'
 import MonthPicker from '@/components/MonthPicker'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 function toMonthInputValue(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 function fromMonthInputValue(val: string) { const [y, m] = val.split('-').map(Number); return new Date(y, m - 1, 1) }
@@ -27,6 +28,10 @@ export default function OvertimeMonthlyPage() {
         public_holiday_off_multiplier: 1.0
     })
 
+    // Permissions State
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
+
     // Data
     const [staffList, setStaffList] = useState<HRStaffMember[]>([])
     const [overtimeRecords, setOvertimeRecords] = useState<Record<string, HRStaffOvertime[]>>({})
@@ -45,10 +50,20 @@ export default function OvertimeMonthlyPage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            // Fetch active staff with salary info and city (excluding outsourced)
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
+            // Fetch active staff with salary info and city (excluding outsourced) with branch info
             const { data: staffRes, error: staffErr } = await supabase
                 .from('hr_staff')
-                .select('id, full_name, position, department, salary_amount, salary_type, employment_type, city')
+                .select('id, full_name, position, department, salary_amount, salary_type, employment_type, city, hr_staff_branches(branch_id)')
                 .eq('status', 'active')
                 .neq('employment_type', 'outsourced')
                 .order('full_name')
@@ -63,22 +78,36 @@ export default function OvertimeMonthlyPage() {
                 .order('date', { ascending: true })
             if (otErr) throw otErr
 
-            setStaffList((staffRes as HRStaffMember[]) || [])
+            let filteredStaff = (staffRes as any[] || [])
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredStaff = filteredStaff.filter(s =>
+                    (s.hr_staff_branches || []).some((sb: any) => userBranches.includes(sb.branch_id))
+                )
+            }
+            setStaffList(filteredStaff as HRStaffMember[])
             
+            const allowedStaffIds = new Set(filteredStaff.map(s => s.id))
+
             // Fetch salary history to determine past salaries
             const { data: historyRes } = await supabase
                 .from('hr_staff_salary_history')
                 .select('*')
                 .order('effective_date', { ascending: false })
             if (historyRes) {
-                setSalaryHistory(historyRes as HRStaffSalaryHistory[])
+                let filteredHistory = historyRes as HRStaffSalaryHistory[]
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    filteredHistory = filteredHistory.filter(h => allowedStaffIds.has(h.staff_id))
+                }
+                setSalaryHistory(filteredHistory)
             }
 
             const grouped: Record<string, HRStaffOvertime[]> = {}
             if (otRes) {
                 otRes.forEach((r: any) => {
-                    if (!grouped[r.staff_id]) grouped[r.staff_id] = []
-                    grouped[r.staff_id].push(r)
+                    if (!userRole || ['owner', 'admin'].includes(userRole) || !userBranches || allowedStaffIds.has(r.staff_id)) {
+                        if (!grouped[r.staff_id]) grouped[r.staff_id] = []
+                        grouped[r.staff_id].push(r)
+                    }
                 })
             }
             setOvertimeRecords(grouped)
@@ -86,7 +115,7 @@ export default function OvertimeMonthlyPage() {
             console.error('Error fetching overtime data:', err)
         }
         setLoading(false)
-    }, [dateStartStr, dateEndStr])
+    }, [dateStartStr, dateEndStr, currentUserRole, currentUserBranches])
 
     useEffect(() => { 
         fetchAll()
