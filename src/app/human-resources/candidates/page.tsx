@@ -13,6 +13,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { CandidateWorkflowModal } from '@/components/human-resources/CandidateWorkflowModal'
 import { AddCandidateModal } from '@/components/human-resources/AddCandidateModal'
 import CircularLoader from '@/components/CircularLoader'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 export default function CandidatesPage() {
     const { language } = useSettings()
@@ -112,13 +113,25 @@ export default function CandidatesPage() {
     const fetchCandidates = async () => {
         setLoading(true)
         try {
+            const perms = await getCurrentUserPermissions()
             const { data, error } = await supabase
                 .from('candidates')
-                .select('*, hiring_requests(position_title, department)')
+                .select('*, hiring_requests(position_title, department, branch_ids)')
                 .order('created_at', { ascending: false })
 
             if (error) throw error
-            setCandidates(data as any[])
+            if (data) {
+                let filteredData = data
+                if (!perms.isAdminOrOwner) {
+                    filteredData = data.filter((c: any) => {
+                        const hr = c.hiring_requests
+                        if (!hr) return false
+                        const hrBranches = hr.branch_ids || []
+                        return hrBranches.some((bid: string) => perms.userBranches.includes(String(bid)))
+                    })
+                }
+                setCandidates(filteredData as any[])
+            }
         } catch (error) {
             console.error('Error fetching global candidates:', error)
         } finally {

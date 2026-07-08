@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase_shim'
 import { HiringRequest } from '@/types/human-resources'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 export default function RecruitmentPage() {
     const { language } = useSettings()
@@ -22,41 +23,45 @@ export default function RecruitmentPage() {
     useEffect(() => {
         const loadData = async () => {
             setLoading(true)
-            await fetchUserRoleAndBranches()
-            await Promise.all([fetchRequests(), fetchBranches()])
-            setLoading(false)
+            try {
+                const perms = await getCurrentUserPermissions()
+                setUserRole(perms.role)
+                setUserBranches(perms.userBranches)
+                await Promise.all([
+                    fetchRequests(perms.isAdminOrOwner, perms.userBranches),
+                    fetchBranches(perms.isAdminOrOwner, perms.userBranches)
+                ])
+            } catch (error) {
+                console.error('Error loading page data:', error)
+            } finally {
+                setLoading(false)
+            }
         }
         loadData()
     }, [])
 
-    const fetchUserRoleAndBranches = async () => {
+    const fetchBranches = async (isAdminOrOwnerVal?: boolean, userBranchesVal?: string[]) => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (user) {
-                const { data } = await supabase
-                    .from('app_accounts')
-                    .select('role, branches')
-                    .eq('user_id', user.id)
-                    .single()
-                if (data) {
-                    setUserRole(data.role)
-                    setUserBranches(data.branches || [])
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching user account details:', error)
-        }
-    }
+            let allowedBranches = userBranchesVal !== undefined ? userBranchesVal : userBranches
+            let isAdmin = isAdminOrOwnerVal !== undefined ? isAdminOrOwnerVal : (userRole === 'admin' || userRole === 'owner')
 
-    const fetchBranches = async () => {
-        try {
+            if (userBranchesVal === undefined || isAdminOrOwnerVal === undefined) {
+                const perms = await getCurrentUserPermissions()
+                allowedBranches = perms.userBranches
+                isAdmin = perms.isAdminOrOwner
+            }
+
             const { data } = await supabase
                 .from('provider_branches')
                 .select('id, name')
 
             if (data) {
+                let filteredData = data
+                if (!isAdmin) {
+                    filteredData = data.filter((b: any) => allowedBranches.includes(String(b.id)))
+                }
                 const lookup: Record<string, string> = {}
-                data.forEach((b: any) => {
+                filteredData.forEach((b: any) => {
                     lookup[String(b.id)] = b.name
                 })
                 setBranchNames(lookup)
@@ -66,15 +71,33 @@ export default function RecruitmentPage() {
         }
     }
 
-    const fetchRequests = async () => {
+    const fetchRequests = async (isAdminOrOwnerVal?: boolean, userBranchesVal?: string[]) => {
         try {
+            let allowedBranches = userBranchesVal !== undefined ? userBranchesVal : userBranches
+            let isAdmin = isAdminOrOwnerVal !== undefined ? isAdminOrOwnerVal : (userRole === 'admin' || userRole === 'owner')
+
+            if (userBranchesVal === undefined || isAdminOrOwnerVal === undefined) {
+                const perms = await getCurrentUserPermissions()
+                allowedBranches = perms.userBranches
+                isAdmin = perms.isAdminOrOwner
+            }
+
             const { data, error } = await supabase
                 .from('hiring_requests')
                 .select('*, candidates(id)')
                 .order('created_at', { ascending: false })
 
             if (error) throw error
-            setRequests(data as any)
+
+            if (data) {
+                let filteredData = data
+                if (!isAdmin) {
+                    filteredData = data.filter((r: any) =>
+                        (r.branch_ids || []).some((bid: string) => allowedBranches.includes(String(bid)))
+                    )
+                }
+                setRequests(filteredData as any)
+            }
         } catch (error) {
             console.error('Error fetching hiring requests:', JSON.stringify(error, null, 2) || error)
         }
