@@ -13,6 +13,7 @@ import {
     CalendarDays, BarChart3, Settings, Users, Clock, 
     Palmtree, AlertCircle, ChevronLeft, ChevronRight, ChevronRight as ArrowRight 
 } from 'lucide-react'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 import { 
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
     Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell 
@@ -51,6 +52,10 @@ export default function HROperationalDashboard() {
     const [currentDate, setCurrentDate] = useState(() => new Date())
     const [loading, setLoading] = useState(true)
 
+    // Permissions states
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
+
     // Data lists
     const [branches, setBranches] = useState<Branch[]>([])
     const [staffList, setStaffList] = useState<StaffMember[]>([])
@@ -65,6 +70,16 @@ export default function HROperationalDashboard() {
     const fetchDashboardData = useCallback(async () => {
         setLoading(true)
         try {
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
             // 1. Fetch branches
             const { data: branchesRes, error: branchesErr } = await supabase
                 .from('provider_branches')
@@ -75,7 +90,7 @@ export default function HROperationalDashboard() {
             // 2. Fetch staff
             const { data: staffRes, error: staffErr } = await supabase
                 .from('hr_staff')
-                .select('id, full_name, position, department')
+                .select('id, full_name, position, department, hr_staff_branches(branch_id)')
                 .eq('status', 'active')
             if (staffErr) throw staffErr
 
@@ -93,8 +108,25 @@ export default function HROperationalDashboard() {
                 .lte('date', dateEndStr)
             if (assignmentsErr) throw assignmentsErr
 
-            setBranches(branchesRes || [])
-            setStaffList(staffRes || [])
+            let filteredBranches = branchesRes || []
+            let filteredStaff = staffRes || []
+            let filteredAssignments = assignmentsRes || []
+
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredBranches = filteredBranches.filter(b => userBranches.includes(b.id))
+                filteredStaff = filteredStaff.filter((s: any) => 
+                    (s.hr_staff_branches || []).some((sb: any) => userBranches.includes(sb.branch_id))
+                )
+                filteredAssignments = filteredAssignments.filter(a => userBranches.includes(a.branch_id))
+            }
+
+            setBranches(filteredBranches)
+            setStaffList(filteredStaff.map((s: any) => ({
+                id: s.id,
+                full_name: s.full_name,
+                position: s.position,
+                department: s.department
+            })))
             setShiftTypes((shiftTypesRes as any[])?.map(t => ({
                 id: t.id,
                 name: t.name,
@@ -103,13 +135,13 @@ export default function HROperationalDashboard() {
                 hours: Number(t.hours),
                 color: t.color
             })) || [])
-            setAssignments(assignmentsRes || [])
+            setAssignments(filteredAssignments)
         } catch (err) {
             console.error('Error loading operational dashboard:', err)
         } finally {
             setLoading(false)
         }
-    }, [dateStartStr, dateEndStr])
+    }, [dateStartStr, dateEndStr, currentUserRole, currentUserBranches])
 
     useEffect(() => {
         fetchDashboardData()

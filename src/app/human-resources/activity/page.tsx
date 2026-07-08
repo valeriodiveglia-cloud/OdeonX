@@ -20,6 +20,7 @@ import {
     GlobeAltIcon
 } from '@heroicons/react/24/outline'
 import CircularLoader from '@/components/CircularLoader'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 import { useSettings } from '@/contexts/SettingsContext'
 
 interface ActivityWithPosition extends HRActivityLog {
@@ -47,12 +48,26 @@ export default function AllActivityPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [filterCategory, setFilterCategory] = useState<'all' | 'requests' | 'candidates'>('all')
 
+    // Permissions states
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
+
     useEffect(() => {
         fetchAllActivity()
     }, [])
 
     const fetchAllActivity = async () => {
         try {
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
             // Fetch all activity logs
             const { data: activityData, error } = await supabase
                 .from('hr_activity_log')
@@ -97,7 +112,7 @@ export default function AllActivityPage() {
                 }
             }
 
-            const enriched: ActivityWithPosition[] = (activityData || []).map((a: HRActivityLog) => {
+            let enriched: ActivityWithPosition[] = (activityData || []).map((a: HRActivityLog) => {
                 const pos = positionMap[a.hiring_request_id]
                 const branchNames = pos?.branch_ids?.map(id => branchNameMap[String(id)] || id).join(', ') || ''
                 return {
@@ -107,6 +122,19 @@ export default function AllActivityPage() {
                     headcount: pos?.headcount,
                 }
             })
+
+            // Filter activities based on the branch of the related staff (hiring request) or branch log
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                enriched = enriched.filter(a => {
+                    if (a.hiring_request_id) {
+                        const pos = positionMap[a.hiring_request_id]
+                        if (pos && pos.branch_ids) {
+                            return pos.branch_ids.some(bid => userBranches.includes(bid))
+                        }
+                    }
+                    return false
+                })
+            }
 
             setActivities(enriched)
         } catch (error) {
