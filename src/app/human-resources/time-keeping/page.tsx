@@ -57,6 +57,7 @@ export default function TimeKeepingDashboard() {
     const [currentDate, setCurrentDate] = useState(() => new Date())
     const [loading, setLoading] = useState(true)
     const [selectedCity, setSelectedCity] = useState<'Ho Chi Minh' | 'Da Lat'>('Ho Chi Minh')
+    const [allowedCities, setAllowedCities] = useState<('Ho Chi Minh' | 'Da Lat')[]>(['Ho Chi Minh', 'Da Lat'])
     const [cityDropdownOpen, setCityDropdownOpen] = useState(false)
     const [activeRankTab, setActiveRankTab] = useState<'tardiness' | 'overtime' | 'service-charge'>('tardiness')
 
@@ -92,6 +93,23 @@ export default function TimeKeepingDashboard() {
                 userBranches = perms.branches
                 setCurrentUserRole(userRole)
                 setCurrentUserBranches(userBranches)
+            }
+
+            // Carica tutti i branch per mappare le città autorizzate
+            const { data: bData } = await supabase.from('provider_branches').select('id, name, city')
+            let cities: ('Ho Chi Minh' | 'Da Lat')[] = ['Ho Chi Minh', 'Da Lat']
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches && bData) {
+                const mappedCities = bData
+                    .filter((b: any) => userBranches.includes(b.id))
+                    .map((b: any) => b.city as 'Ho Chi Minh' | 'Da Lat')
+                    .filter(Boolean)
+                cities = Array.from(new Set(mappedCities))
+                setAllowedCities(cities)
+                if (cities.length > 0 && !cities.includes(selectedCity)) {
+                    setSelectedCity(cities[0])
+                }
+            } else {
+                setAllowedCities(['Ho Chi Minh', 'Da Lat'])
             }
 
             // 1. Fetch active staff (excluding outsourced) with branch info
@@ -460,44 +478,50 @@ export default function TimeKeepingDashboard() {
                     <div className="relative inline-block text-left">
                         <button
                             type="button"
-                            onClick={() => setCityDropdownOpen(!cityDropdownOpen)}
-                            className="inline-flex justify-between items-center gap-2 w-36 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-900 hover:bg-gray-50 transition-all focus:ring-2 focus:ring-blue-500/50 outline-none"
+                            onClick={() => allowedCities.length > 1 && setCityDropdownOpen(!cityDropdownOpen)}
+                            className={`inline-flex justify-between items-center gap-2 w-36 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-900 transition-all outline-none ${
+                                allowedCities.length > 1 ? 'hover:bg-gray-50 focus:ring-2 focus:ring-blue-500/50' : 'cursor-default opacity-85'
+                            }`}
                         >
                             <span className="truncate">{selectedCity}</span>
-                            <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />
+                            {allowedCities.length > 1 && <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />}
                         </button>
 
-                        {cityDropdownOpen && (
+                        {cityDropdownOpen && allowedCities.length > 1 && (
                             <>
                                 <div className="fixed inset-0 z-10" onClick={() => setCityDropdownOpen(false)} />
                                 <div className="absolute left-0 mt-2 w-36 rounded-lg bg-white border border-gray-200 shadow-xl z-20 focus:outline-none overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100">
                                     <div className="py-1">
-                                        <button
-                                            onClick={() => {
-                                                setSelectedCity('Ho Chi Minh')
-                                                setCityDropdownOpen(false)
-                                            }}
-                                            className={`w-full text-left px-3 py-2 text-sm font-semibold transition-colors ${
-                                                selectedCity === 'Ho Chi Minh'
-                                                    ? 'bg-blue-600 text-white'
-                                                    : 'text-gray-700 hover:bg-gray-100'
-                                            }`}
-                                        >
-                                            Ho Chi Minh
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setSelectedCity('Da Lat')
-                                                setCityDropdownOpen(false)
-                                            }}
-                                            className={`w-full text-left px-3 py-2 text-sm font-semibold transition-colors ${
-                                                selectedCity === 'Da Lat'
-                                                    ? 'bg-blue-600 text-white'
-                                                    : 'text-gray-700 hover:bg-gray-100'
-                                            }`}
-                                        >
-                                            Da Lat
-                                        </button>
+                                        {allowedCities.includes('Ho Chi Minh') && (
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedCity('Ho Chi Minh')
+                                                    setCityDropdownOpen(false)
+                                                }}
+                                                className={`w-full text-left px-3 py-2 text-sm font-semibold transition-colors ${
+                                                    selectedCity === 'Ho Chi Minh'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'text-gray-700 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                Ho Chi Minh
+                                            </button>
+                                        )}
+                                        {allowedCities.includes('Da Lat') && (
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedCity('Da Lat')
+                                                    setCityDropdownOpen(false)
+                                                }}
+                                                className={`w-full text-left px-3 py-2 text-sm font-semibold transition-colors ${
+                                                    selectedCity === 'Da Lat'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'text-gray-700 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                Da Lat
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </>

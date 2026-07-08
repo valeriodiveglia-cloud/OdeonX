@@ -275,7 +275,7 @@ export default function SalaryHistoryPage() {
 
             if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
                 filteredStaff = filteredStaff.filter(s =>
-                    (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                    (s.hr_staff_branches || []).some((sb: any) => userBranches.includes(sb.branch_id))
                 )
                 filteredEntries = filteredEntries.filter((e: any) => {
                     const s = e.hr_staff

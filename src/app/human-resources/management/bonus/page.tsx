@@ -266,7 +266,7 @@ export default function BonusPage() {
             let filteredStaff = staffRes.data || []
             if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
                 filteredStaff = filteredStaff.filter(s =>
-                    (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                    (s.hr_staff_branches || []).some((sb: any) => userBranches.includes(sb.branch_id))
                 )
             }
             const allowedStaffIds = new Set(filteredStaff.map(s => s.id))

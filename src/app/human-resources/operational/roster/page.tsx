@@ -978,7 +978,7 @@ export default function RosterPage() {
             if (bData && bData.length > 0) {
                 let branchData = bData
                 if (perms.role && !['owner', 'admin'].includes(perms.role) && perms.branches) {
-                    branchData = bData.filter((b: any) => perms.branches.includes(b.id))
+                    branchData = bData.filter((b: any) => (perms.branches || []).includes(b.id))
                 }
                 setBranches(branchData)
                 if (branchData.length > 0) {

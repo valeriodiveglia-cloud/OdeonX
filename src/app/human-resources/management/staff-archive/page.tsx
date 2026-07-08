@@ -66,7 +66,7 @@ export default function StaffArchivePage() {
                 let filteredStaffData = staffData
                 if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
                     filteredStaffData = staffData.filter(s =>
-                        (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                        (s.hr_staff_branches || []).some((sb: any) => userBranches.includes(sb.branch_id))
                     )
                 }
 
