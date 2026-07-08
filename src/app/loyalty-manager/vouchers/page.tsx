@@ -1,8 +1,14 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { Plus, Search, Loader2, CheckCircle, XCircle, AlertCircle, Download, MoreVertical, Trash, ScanBarcode, Ticket, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
+import {
+    BarsArrowUpIcon,
+    BarsArrowDownIcon,
+    FunnelIcon,
+    EllipsisVerticalIcon,
+} from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 import CreateVoucherModal from './_components/CreateVoucherModal'
 import VoucherDetailsModal from './_components/VoucherDetailsModal'
@@ -19,6 +25,236 @@ type GiftVoucher = {
     donor_type: 'restaurant' | 'partner' | 'customer'
     donor_name: string | null
     notes: string | null
+    created_at?: string
+}
+
+const textDict = {
+    en: {
+        sortAsc: 'Sort Ascending',
+        sortDesc: 'Sort Descending',
+        selectAll: 'Select All',
+        deselectAll: 'Deselect All',
+        filterPlaceholder: 'Search...',
+        clearFilters: 'Clear',
+        ok: 'OK',
+        empty: '(Empty)',
+    },
+    vi: {
+        sortAsc: 'Sắp xếp tăng dần',
+        sortDesc: 'Sắp xếp giảm dần',
+        selectAll: 'Chọn tất cả',
+        deselectAll: 'Bỏ chọn tất cả',
+        filterPlaceholder: 'Tìm kiếm...',
+        clearFilters: 'Xoá bộ lọc',
+        ok: 'Đồng ý',
+        empty: '(Trống)',
+    }
+}
+
+interface ColumnHeaderProps {
+    colKey: string
+    label: string
+    sortCol: string
+    sortAsc: boolean
+    onSort: (key: any, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (vals: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: typeof textDict.en
+    right?: boolean
+    center?: boolean
+    className?: string
+}
+
+function ColumnHeader({
+    colKey,
+    label,
+    sortCol,
+    sortAsc,
+    onSort,
+    values,
+    activeFilter,
+    onFilter,
+    onClear,
+    open,
+    onToggle,
+    onClose,
+    dict,
+    right,
+    center,
+    className = '',
+}: ColumnHeaderProps) {
+    const ref = useRef<HTMLTableCellElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortCol === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+        ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+        : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) {
+            filteredValues.forEach(v => next.delete(v))
+        } else {
+            filteredValues.forEach(v => next.add(v))
+        }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        let finalChecked = localChecked
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+        }
+        if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+    }
+
+    return (
+        <th className={`px-6 py-4 text-left text-slate-600 font-semibold ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+            <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+                <span className="select-none">{label}</span>
+                {isActive && (
+                    sortAsc ? (
+                        <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                    ) : (
+                        <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                    )
+                )}
+                {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+                <button
+                    type="button"
+                    onClick={e => {
+                        e.stopPropagation()
+                        onToggle()
+                    }}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+                    aria-label={`Menu ${label}`}
+                >
+                    <EllipsisVerticalIcon className="w-3.5 h-3.5 text-gray-500" />
+                </button>
+            </div>
+
+            {open && dropdownStyle && (
+                <div
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case font-normal"
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button
+                            type="button"
+                            onClick={() => onSort(colKey, true)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                                isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                            }`}
+                        >
+                            <BarsArrowUpIcon className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onSort(colKey, false)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                                isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                            }`}
+                        >
+                            <BarsArrowDownIcon className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input
+                            type="text"
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                            placeholder={dict.filterPlaceholder}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+                        <button
+                            type="button"
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v || dict.empty}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 border-solid px-3 py-2 flex items-center justify-between gap-2">
+                        <button
+                            type="button"
+                            onClick={onClear}
+                            className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+                        >
+                            {dict.clearFilters}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleApply}
+                            className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
+        </th>
+    )
 }
 
 export default function VouchersPage() {
@@ -107,54 +343,108 @@ export default function VouchersPage() {
         }
     }
 
-    const filteredVouchers = vouchers.filter(v =>
-        (v.code || '').toLowerCase().includes(search.toLowerCase()) ||
-        (v.donor_name && v.donor_name.toLowerCase().includes(search.toLowerCase()))
-    )
+    const langDict = language === 'vi' ? textDict.vi : textDict.en
 
-    const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+    const [openMenu, setOpenMenu] = useState<string | null>(null)
+    const [sortCol, setSortCol] = useState<string>('issued_on')
+    const [sortAsc, setSortAsc] = useState<boolean>(false)
 
-    const sortedVouchers = sort ? [...filteredVouchers].sort((a, b) => {
-        const dir = sort.dir === 'asc' ? 1 : -1
-        switch (sort.key) {
-            case 'code': return (a.code || '').localeCompare(b.code || '') * dir
-            case 'status': return (a.status || '').localeCompare(b.status || '') * dir
-            case 'donor_type': return (a.donor_type || '').localeCompare(b.donor_type || '') * dir
-            case 'issued_on': return (new Date(a.issued_on || 0).getTime() - new Date(b.issued_on || 0).getTime()) * dir
-            case 'expires_on': return (new Date(a.expires_on || 0).getTime() - new Date(b.expires_on || 0).getTime()) * dir
-            case 'value': return ((a.value || 0) - (b.value || 0)) * dir
-            default: return 0
-        }
-    }) : filteredVouchers
+    const applyColumnFilter = (colKey: string, vals: Set<string> | null) => {
+        setColumnFilters(prev => ({ ...prev, [colKey]: vals }))
+        setOpenMenu(null)
+    }
 
-    const handleSort = (key: string) => {
-        setSort(prev => {
-            if (prev?.key === key) {
-                return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+    const handleSort = (colKey: string, asc: boolean) => {
+        setSortCol(colKey)
+        setSortAsc(asc)
+    }
+
+    const getColValue = (voucher: GiftVoucher, colKey: string): string => {
+        switch (colKey) {
+            case 'code':
+                return voucher.code || ''
+            case 'status':
+                return voucher.status === 'active' ? t.vouchers.status.active :
+                       voucher.status === 'redeemed' ? t.vouchers.status.redeemed :
+                       voucher.status === 'expired' ? t.vouchers.status.expired :
+                       voucher.status === 'blocked' ? t.vouchers.status.blocked : voucher.status || ''
+            case 'donor': {
+                let d: string = voucher.donor_type || ''
+                if (voucher.donor_name) {
+                    d = `${d} (${voucher.donor_name})`
+                }
+                return d
             }
-            return { key, dir: 'asc' }
-        })
+            case 'issued_on':
+                return voucher.issued_on ? format(new Date(voucher.issued_on), 'dd/MM/yyyy') : ''
+            case 'expires_on':
+                return voucher.expires_on ? format(new Date(voucher.expires_on), 'dd/MM/yyyy') : t.cards.table.never
+            case 'value':
+                return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(voucher.value)
+            default:
+                return ''
+        }
     }
 
-    const SortableHeader = ({ label, colKey, className, align = 'left' }: { label: string; colKey: string; className?: string; align?: 'left' | 'right' }) => {
-        const active = sort?.key === colKey
-        const dir = sort?.dir
-        return (
-            <th className={`px-6 py-4 ${className || ''}`}>
-                <button
-                    type="button"
-                    onClick={() => handleSort(colKey)}
-                    className={`inline-flex items-center gap-1 font-semibold hover:opacity-80 ${align === 'right' ? 'w-full justify-end' : ''}`}
-                    title={`Sort by ${label}`}
-                >
-                    <span>{label}</span>
-                    {!active && <ArrowUpDown className="w-4 h-4 text-slate-400" />}
-                    {active && dir === 'asc' && <ChevronUp className="w-4 h-4 text-slate-700" />}
-                    {active && dir === 'desc' && <ChevronDown className="w-4 h-4 text-slate-700" />}
-                </button>
-            </th>
+    const searchedVouchers = useMemo(() => {
+        return vouchers.filter(v =>
+            (v.code || '').toLowerCase().includes(search.toLowerCase()) ||
+            (v.donor_name && v.donor_name.toLowerCase().includes(search.toLowerCase()))
         )
-    }
+    }, [vouchers, search])
+
+    const filteredVouchers = useMemo(() => {
+        let list = [...searchedVouchers]
+        Object.entries(columnFilters).forEach(([col, vals]) => {
+            if (!vals) return
+            list = list.filter(x => {
+                const v = getColValue(x, col)
+                return vals.has(v)
+            })
+        })
+        return list
+    }, [searchedVouchers, columnFilters])
+
+    const sortedVouchers = useMemo(() => {
+        const list = [...filteredVouchers]
+        list.sort((a, b) => {
+            const dir = sortAsc ? 1 : -1
+            switch (sortCol) {
+                case 'code':
+                    return (a.code || '').localeCompare(b.code || '') * dir
+                case 'status': {
+                    const statusA = getColValue(a, 'status')
+                    const statusB = getColValue(b, 'status')
+                    return statusA.localeCompare(statusB) * dir
+                }
+                case 'donor': {
+                    const donorA = getColValue(a, 'donor')
+                    const donorB = getColValue(b, 'donor')
+                    return donorA.localeCompare(donorB) * dir
+                }
+                case 'issued_on': {
+                    const tIssuedA = a.issued_on ? new Date(a.issued_on).getTime() : 0
+                    const tIssuedB = b.issued_on ? new Date(b.issued_on).getTime() : 0
+                    return (tIssuedA - tIssuedB) * dir
+                }
+                case 'expires_on': {
+                    const tExpiresA = a.expires_on ? new Date(a.expires_on).getTime() : 0
+                    const tExpiresB = b.expires_on ? new Date(b.expires_on).getTime() : 0
+                    return (tExpiresA - tExpiresB) * dir
+                }
+                case 'value':
+                    return ((a.value || 0) - (b.value || 0)) * dir
+                case 'issued_on':
+                default: {
+                    const tA = a.issued_on ? new Date(a.issued_on).getTime() : 0
+                    const tB = b.issued_on ? new Date(b.issued_on).getTime() : 0
+                    return (tA - tB) * dir
+                }
+            }
+        })
+        return list
+    }, [filteredVouchers, sortCol, sortAsc])
 
     const [selectMode, setSelectMode] = useState(false)
     const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -301,21 +591,110 @@ export default function VouchersPage() {
                         <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                             <tr>
                                 {selectMode && (
-                                    <th className="px-6 py-4 w-12">
+                                    <th className="px-6 py-4 w-12 align-middle text-left">
                                         <input
                                             type="checkbox"
                                             checked={allSelected}
                                             onChange={toggleSelectAll}
-                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                         />
                                     </th>
                                 )}
-                                <SortableHeader label={t.vouchers.table.code} colKey="code" />
-                                <SortableHeader label={t.vouchers.table.status} colKey="status" />
-                                <SortableHeader label={t.vouchers.table.donor} colKey="donor_type" />
-                                <SortableHeader label={t.vouchers.table.issued_on} colKey="issued_on" />
-                                <SortableHeader label={t.vouchers.table.expires_on} colKey="expires_on" />
-                                <SortableHeader label={t.vouchers.table.value} colKey="value" align="right" />
+                                <ColumnHeader
+                                    colKey="code"
+                                    label={t.vouchers.table.code}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(vouchers.map(v => getColValue(v, 'code')))).sort()}
+                                    activeFilter={columnFilters.code || null}
+                                    onFilter={vals => applyColumnFilter('code', vals)}
+                                    onClear={() => applyColumnFilter('code', null)}
+                                    open={openMenu === 'code'}
+                                    onToggle={() => setOpenMenu(openMenu === 'code' ? null : 'code')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="status"
+                                    label={t.vouchers.table.status}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(vouchers.map(v => getColValue(v, 'status')))).sort()}
+                                    activeFilter={columnFilters.status || null}
+                                    onFilter={vals => applyColumnFilter('status', vals)}
+                                    onClear={() => applyColumnFilter('status', null)}
+                                    open={openMenu === 'status'}
+                                    onToggle={() => setOpenMenu(openMenu === 'status' ? null : 'status')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="donor"
+                                    label={t.vouchers.table.donor}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(vouchers.map(v => getColValue(v, 'donor')))).sort()}
+                                    activeFilter={columnFilters.donor || null}
+                                    onFilter={vals => applyColumnFilter('donor', vals)}
+                                    onClear={() => applyColumnFilter('donor', null)}
+                                    open={openMenu === 'donor'}
+                                    onToggle={() => setOpenMenu(openMenu === 'donor' ? null : 'donor')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="issued_on"
+                                    label={t.vouchers.table.issued_on}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(vouchers.map(v => getColValue(v, 'issued_on')))).sort()}
+                                    activeFilter={columnFilters.issued_on || null}
+                                    onFilter={vals => applyColumnFilter('issued_on', vals)}
+                                    onClear={() => applyColumnFilter('issued_on', null)}
+                                    open={openMenu === 'issued_on'}
+                                    onToggle={() => setOpenMenu(openMenu === 'issued_on' ? null : 'issued_on')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="expires_on"
+                                    label={t.vouchers.table.expires_on}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(vouchers.map(v => getColValue(v, 'expires_on')))).sort()}
+                                    activeFilter={columnFilters.expires_on || null}
+                                    onFilter={vals => applyColumnFilter('expires_on', vals)}
+                                    onClear={() => applyColumnFilter('expires_on', null)}
+                                    open={openMenu === 'expires_on'}
+                                    onToggle={() => setOpenMenu(openMenu === 'expires_on' ? null : 'expires_on')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="value"
+                                    label={t.vouchers.table.value}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(vouchers.map(v => getColValue(v, 'value')))).sort((a,b) => {
+                                        const numA = parseFloat(a.replace(/[^0-9.-]+/g,"")) || 0
+                                        const numB = parseFloat(b.replace(/[^0-9.-]+/g,"")) || 0
+                                        return numA - numB
+                                    })}
+                                    activeFilter={columnFilters.value || null}
+                                    onFilter={vals => applyColumnFilter('value', vals)}
+                                    onClear={() => applyColumnFilter('value', null)}
+                                    open={openMenu === 'value'}
+                                    onToggle={() => setOpenMenu(openMenu === 'value' ? null : 'value')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                    right
+                                />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -328,7 +707,7 @@ export default function VouchersPage() {
                                 </tr>
                             ) : sortedVouchers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={selectMode ? 7 : 6} className="px-6 py-8 text-center text-slate-500">
+                                    <td colSpan={selectMode ? 7 : 6} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                                         {t.vouchers.no_vouchers}
                                     </td>
                                 </tr>

@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 export default function StaffArchivePage() {
     const { language } = useSettings()
@@ -27,6 +28,8 @@ export default function StaffArchivePage() {
     const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
     const [departments, setDepartments] = useState<HRDepartment[]>([])
     const [positions, setPositions] = useState<HRPosition[]>([])
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
     
     const [rehireModalOpen, setRehireModalOpen] = useState(false)
     const [rehireStaff, setRehireStaff] = useState<HRStaffMember | null>(null)
@@ -35,6 +38,16 @@ export default function StaffArchivePage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
             // Fetch inactive staff
             const { data: staffData } = await supabase
                 .from('hr_staff')
@@ -50,8 +63,15 @@ export default function StaffArchivePage() {
                 .order('created_at', { ascending: false })
 
             if (staffData && historyData) {
+                let filteredStaffData = staffData
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    filteredStaffData = staffData.filter(s =>
+                        (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                    )
+                }
+
                 // Map departure record to staff (take the most recent one for each staff)
-                const merged = staffData.map(staff => {
+                const merged = filteredStaffData.map(staff => {
                     const latestRoleEvent = historyData.find(h => h.staff_id === staff.id)
                     let departureRecord = null
                     if (latestRoleEvent) {
@@ -79,7 +99,13 @@ export default function StaffArchivePage() {
             }
 
             const { data: bData } = await supabase.from('provider_branches').select('id, name, city')
-            if (bData) setBranches(bData)
+            if (bData) {
+                let branchData = bData
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    branchData = branchData.filter((b: any) => userBranches.includes(b.id))
+                }
+                setBranches(branchData)
+            }
             const { data: dData } = await supabase.from('hr_departments').select('*')
             if (dData) setDepartments(dData)
             const { data: pData } = await supabase.from('hr_positions').select('*')
@@ -89,7 +115,7 @@ export default function StaffArchivePage() {
             console.error(err)
         }
         setLoading(false)
-    }, [])
+    }, [currentUserRole, currentUserBranches])
 
     useEffect(() => { fetchAll() }, [fetchAll])
 

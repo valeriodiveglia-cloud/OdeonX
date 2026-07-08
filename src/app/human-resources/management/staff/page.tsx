@@ -15,6 +15,7 @@ import SalaryModal from '@/components/human-resources/SalaryModal'
 import { StaffModal } from '@/components/human-resources/StaffModal'
 import { saveAs } from 'file-saver'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 /* ─── Helpers ─── */
 const fmt = (n: number) =>
@@ -123,6 +124,8 @@ export default function StaffListPage() {
     const [staff, setStaff]           = useState<HRStaffMember[]>([])
     const [branches, setBranches]     = useState<{ id: string; name: string }[]>([])
     const [branchMap, setBranchMap]   = useState<Record<string, string>>({})
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
     const [departments, setDepartments] = useState<HRDepartment[]>([])
     const [positions, setPositions]     = useState<HRPosition[]>([])
     const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
@@ -189,6 +192,16 @@ export default function StaffListPage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
             const [branchRes, staffRes, deptRes, posRes, catRes] = await Promise.all([
                 supabase.from('provider_branches').select('id, name, city').order('name'),
                 supabase.from('hr_staff').select('*, hr_staff_branches(*), hr_staff_contracts(*), hr_staff_performance(period)').eq('status', 'active').order('full_name'),
@@ -198,14 +211,23 @@ export default function StaffListPage() {
             ])
 
             if (branchRes.data) {
-                setBranches(branchRes.data)
+                let branchData = branchRes.data
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    branchData = branchData.filter((b: any) => userBranches.includes(b.id))
+                }
+                setBranches(branchData)
                 const map: Record<string, string> = {}
                 branchRes.data.forEach((b: any) => { map[b.id] = b.name })
                 setBranchMap(map)
             }
 
             if (staffRes.data) {
-                const staffList = staffRes.data as HRStaffMember[]
+                let staffList = staffRes.data as HRStaffMember[]
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    staffList = staffList.filter(s =>
+                        (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                    )
+                }
                 setStaff(staffList)
                 
                 // Identify active staff missing staff_code or skill_level (null/0)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffSalaryHistory, HRStaffMember, SalaryType, HRDepartment, HRPosition } from '@/types/human-resources'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -8,12 +8,23 @@ import CircularLoader from '@/components/CircularLoader'
 import SalaryModal from '@/components/human-resources/SalaryModal'
 import {
     TrendingUp, Plus, Search, X, Pencil, Trash2,
-    ArrowUpRight, DollarSign, Calendar, Users, Briefcase, TrendingDown, FileDown
+    ArrowUpRight, DollarSign, Calendar, Users, Briefcase, TrendingDown, FileDown,
+    ArrowUp, ArrowDown, Filter, MoreVertical
 } from 'lucide-react'
 import { saveAs } from 'file-saver'
 
 /* ─── Helpers ─── */
 const fmt = (n: number) => new Intl.NumberFormat('en-US').format(Math.round(n))
+
+const fmtDate = (dStr: string | null | undefined) => {
+    if (!dStr) return '—'
+    const d = new Date(dStr)
+    if (isNaN(d.getTime())) return dStr
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${day}/${month}/${year}`
+}
 
 const getLocalizedReason = (reason: string | null | undefined, lang: string) => {
     if (!reason) return '—'
@@ -36,6 +47,21 @@ const getLocalizedReason = (reason: string | null | undefined, lang: string) => 
     }
     return mapping[reason] || reason
 }
+
+const getChangeIndicatorText = (prev: number, next: number, type: string, incType?: string | null, incValue?: number | null, prevType?: string | null, newType?: string | null, language?: string) => {
+    if (prev === 0) return language === 'vi' ? 'Mới' : 'New'
+    if (prevType && newType && prevType !== newType) {
+        return language === 'vi' ? 'Đổi loại lương' : 'Type Changed'
+    }
+    const diff = next - prev
+    const pct = ((diff / prev) * 100).toFixed(1)
+    const isUp = diff > 0
+    const isDown = diff < 0
+    if (diff === 0) return language === 'vi' ? 'Không đổi' : 'No Change'
+    const pctSign = isUp ? `+${pct}%` : `${pct}%`
+    return pctSign
+}
+
 
 function ChangeIndicator({ prev, next, type, incType, incValue, prevType, newType }: { prev: number; next: number; type: string; incType?: string | null; incValue?: number | null; prevType?: string | null; newType?: string | null }) {
     const { language } = useSettings()
@@ -173,9 +199,22 @@ export default function SalaryHistoryPage() {
     const [departments, setDepartments] = useState<HRDepartment[]>([])
     const [positions, setPositions]   = useState<HRPosition[]>([])
 
-    const [search, setSearch]         = useState('')
-    const [filterStaff, setFilterStaff]   = useState('all')
-    const [filterType, setFilterType] = useState('all')
+
+
+    const [sortKey, setSortKey] = useState<string>('date')
+    const [sortAsc, setSortAsc] = useState<boolean>(false)
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({})
+    const [openMenu, setOpenMenu] = useState<string | null>(null)
+
+    const dict = {
+        sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort ascending',
+        sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort descending',
+        selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select all',
+        deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect all',
+        filterPlaceholder: language === 'vi' ? 'Tìm kiếm...' : 'Search...',
+        clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear filters',
+        empty: language === 'vi' ? 'Rỗng' : 'Empty'
+    }
 
     const [modalOpen, setModalOpen]       = useState(false)
     const [editingEntry, setEditingEntry] = useState<HRStaffSalaryHistory | null>(null)
@@ -227,18 +266,185 @@ export default function SalaryHistoryPage() {
 
     useEffect(() => { fetchAll() }, [fetchAll])
 
-    const filtered = useMemo(() => {
-        return entries.filter(e => {
-            if (search) {
-                const q = search.toLowerCase()
-                const name = e.hr_staff?.full_name || ''
-                if (!name.toLowerCase().includes(q) && !(e.reason || '').toLowerCase().includes(q)) return false
+    const columnValues = useMemo(() => {
+        const out: Record<string, string[]> = {
+            record_type: [],
+            name: [],
+            date: [],
+            previous_amount: [],
+            new_amount: [],
+            increase: [],
+            reason: []
+        }
+
+        const typeLabels: Record<string, string> = {
+            promotion: language === 'vi' ? 'Thăng chức' : 'Promotion',
+            resignation: language === 'vi' ? 'Thôi việc' : 'Resignation',
+            dismissal: language === 'vi' ? 'Sa thải' : 'Dismissal',
+            rejection: language === 'vi' ? 'Từ chối' : 'Rejection',
+            salary_increase: language === 'vi' ? 'Đổi lương gộp' : 'Gross Salary Change'
+        }
+
+        entries.forEach(e => {
+            const typeLabel = typeLabels[e.record_type] || e.record_type
+            if (typeLabel && !out.record_type.includes(typeLabel)) {
+                out.record_type.push(typeLabel)
             }
-            if (filterStaff !== 'all' && e.staff_id !== filterStaff) return false
-            if (filterType !== 'all' && e.record_type !== filterType) return false
+            const staffName = e.hr_staff?.full_name || ''
+            if (staffName && !out.name.includes(staffName)) {
+                out.name.push(staffName)
+            }
+            const dStr = fmtDate(e.effective_date)
+            if (dStr && !out.date.includes(dStr)) {
+                out.date.push(dStr)
+            }
+
+            const prevAmtStr = fmt(e.previous_amount)
+            if (prevAmtStr && !out.previous_amount.includes(prevAmtStr)) {
+                out.previous_amount.push(prevAmtStr)
+            }
+
+            const isDeparture = e.record_type === 'resignation' || e.record_type === 'dismissal'
+            const newAmtStr = isDeparture ? '—' : fmt(e.new_amount)
+            if (newAmtStr && !out.new_amount.includes(newAmtStr)) {
+                out.new_amount.push(newAmtStr)
+            }
+
+            const incStr = isDeparture ? '—' : getChangeIndicatorText(e.previous_amount, e.new_amount, e.record_type, e.increase_type, e.increase_value, e.previous_salary_type, e.salary_type, language)
+            if (incStr && !out.increase.includes(incStr)) {
+                out.increase.push(incStr)
+            }
+
+            const reasonLoc = getLocalizedReason(e.reason, language)
+            if (reasonLoc && !out.reason.includes(reasonLoc)) {
+                out.reason.push(reasonLoc)
+            }
+        })
+
+        Object.keys(out).forEach(k => out[k].sort())
+        return out
+    }, [entries, language])
+
+    const applySort = (key: string, isAsc?: boolean) => {
+        if (isAsc !== undefined) {
+            setSortKey(key)
+            setSortAsc(isAsc)
+        } else {
+            if (sortKey === key) {
+                setSortAsc(!sortAsc)
+            } else {
+                setSortKey(key)
+                setSortAsc(true)
+            }
+        }
+    }
+
+    const applyColumnFilter = (key: string, values: Set<string> | null) => {
+        setColumnFilters(prev => {
+            const next = { ...prev }
+            if (values) next[key] = values; else delete next[key]
+            return next
+        })
+    }
+
+    const clearColumnFilter = (key: string) => {
+        setColumnFilters(prev => {
+            const next = { ...prev }
+            delete next[key]
+            return next
+        })
+    }
+
+    const filtered = useMemo(() => {
+        const typeLabels: Record<string, string> = {
+            promotion: language === 'vi' ? 'Thăng chức' : 'Promotion',
+            resignation: language === 'vi' ? 'Thôi việc' : 'Resignation',
+            dismissal: language === 'vi' ? 'Sa thải' : 'Dismissal',
+            rejection: language === 'vi' ? 'Từ chối' : 'Rejection',
+            salary_increase: language === 'vi' ? 'Đổi lương gộp' : 'Gross Salary Change'
+        }
+
+        let out = entries.filter(e => {
+            if (columnFilters['record_type'] && columnFilters['record_type'].size > 0) {
+                const label = typeLabels[e.record_type] || e.record_type
+                if (!columnFilters['record_type'].has(label)) return false
+            }
+
+            if (columnFilters['name'] && columnFilters['name'].size > 0) {
+                const staffName = e.hr_staff?.full_name || ''
+                if (!columnFilters['name'].has(staffName)) return false
+            }
+
+            if (columnFilters['date'] && columnFilters['date'].size > 0) {
+                const dStr = fmtDate(e.effective_date)
+                if (!columnFilters['date'].has(dStr)) return false
+            }
+
+            if (columnFilters['previous_amount'] && columnFilters['previous_amount'].size > 0) {
+                const prevAmtStr = fmt(e.previous_amount)
+                if (!columnFilters['previous_amount'].has(prevAmtStr)) return false
+            }
+
+            if (columnFilters['new_amount'] && columnFilters['new_amount'].size > 0) {
+                const isDeparture = e.record_type === 'resignation' || e.record_type === 'dismissal'
+                const newAmtStr = isDeparture ? '—' : fmt(e.new_amount)
+                if (!columnFilters['new_amount'].has(newAmtStr)) return false
+            }
+
+            if (columnFilters['increase'] && columnFilters['increase'].size > 0) {
+                const isDeparture = e.record_type === 'resignation' || e.record_type === 'dismissal'
+                const incStr = isDeparture ? '—' : getChangeIndicatorText(e.previous_amount, e.new_amount, e.record_type, e.increase_type, e.increase_value, e.previous_salary_type, e.salary_type, language)
+                if (!columnFilters['increase'].has(incStr)) return false
+            }
+
+            if (columnFilters['reason'] && columnFilters['reason'].size > 0) {
+                const reasonLoc = getLocalizedReason(e.reason, language)
+                if (!columnFilters['reason'].has(reasonLoc)) return false
+            }
+
             return true
         })
-    }, [entries, search, filterStaff, filterType])
+
+        if (sortKey) {
+            out.sort((a, b) => {
+                let valA: any = ''
+                let valB: any = ''
+
+                if (sortKey === 'record_type') {
+                    valA = typeLabels[a.record_type] || a.record_type
+                    valB = typeLabels[b.record_type] || b.record_type
+                } else if (sortKey === 'name') {
+                    valA = a.hr_staff?.full_name || ''
+                    valB = b.hr_staff?.full_name || ''
+                } else if (sortKey === 'date') {
+                    valA = a.effective_date
+                    valB = b.effective_date
+                } else if (sortKey === 'previous_amount') {
+                    valA = a.previous_amount
+                    valB = b.previous_amount
+                } else if (sortKey === 'new_amount') {
+                    valA = a.new_amount
+                    valB = b.new_amount
+                } else if (sortKey === 'increase') {
+                    const diffA = a.new_amount - a.previous_amount
+                    const diffB = b.new_amount - b.previous_amount
+                    const pctA = a.previous_amount > 0 ? (diffA / a.previous_amount) : 0
+                    const pctB = b.previous_amount > 0 ? (diffB / b.previous_amount) : 0
+                    valA = pctA
+                    valB = pctB
+                } else if (sortKey === 'reason') {
+                    valA = getLocalizedReason(a.reason, language)
+                    valB = getLocalizedReason(b.reason, language)
+                }
+
+                if (valA < valB) return sortAsc ? -1 : 1
+                if (valA > valB) return sortAsc ? 1 : -1
+                return 0
+            })
+        }
+
+        return out
+    }, [entries, columnFilters, sortKey, sortAsc, language])
 
     /* Summary */
     const totalChanges = entries.length
@@ -480,31 +686,7 @@ export default function SalaryHistoryPage() {
                     ))}
                 </div>
 
-                {/* Filters */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-                    <div className="relative flex-1 max-w-xs">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input type="text" placeholder={language === 'vi' ? 'Tìm tên, lý do...' : 'Search name, reason…'} value={search} onChange={e => setSearch(e.target.value)}
-                            className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none" />
-                        {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"><X className="w-3 h-3 text-slate-400" /></button>}
-                    </div>
-                    <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)}
-                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none">
-                        <option value="all">{language === 'vi' ? 'Tất cả nhân viên' : 'All Staff'}</option>
-                        {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-                    </select>
-                    <select value={filterType} onChange={e => setFilterType(e.target.value)}
-                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none">
-                        <option value="all">{language === 'vi' ? 'Tất cả loại sự kiện' : 'All Event Types'}</option>
-                        <option value="promotion">{language === 'vi' ? 'Thăng chức' : 'Promotions'}</option>
-                        <option value="salary_increase">{language === 'vi' ? 'Tăng lương gộp' : 'Gross Salary Increases'}</option>
-                    </select>
-                    <span className="text-xs text-slate-500 ml-auto">
-                        {language === 'vi' 
-                            ? `Hiển thị ${filtered.length} trên ${entries.length}` 
-                            : `${filtered.length} of ${entries.length} shown`}
-                    </span>
-                </div>
+
 
                 {/* Table */}
                 <div className="rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden">
@@ -512,28 +694,122 @@ export default function SalaryHistoryPage() {
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Sự kiện' : 'Event'}
-                                    </th>
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Nhân viên' : 'Staff Member'}
-                                    </th>
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Ngày' : 'Date'}
-                                    </th>
-                                    <th className="text-right px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Lương gộp cũ' : 'Old Gross Salary'}
-                                    </th>
-                                    <th className="text-right px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Lương gộp mới' : 'New Gross Salary'}
-                                    </th>
-                                    <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Tăng trưởng' : 'Increase'}
-                                    </th>
-                                    <th className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        {language === 'vi' ? 'Lý do' : 'Reason'}
-                                    </th>
-                                    <th className="text-center px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    <ColumnHeader
+                                        colKey="record_type"
+                                        label={language === 'vi' ? 'Sự kiện' : 'Event'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['record_type'] || []}
+                                        activeFilter={columnFilters['record_type'] || null}
+                                        onFilter={(s) => applyColumnFilter('record_type', s)}
+                                        onClear={() => clearColumnFilter('record_type')}
+                                        open={openMenu === 'record_type'}
+                                        onToggle={() => setOpenMenu(openMenu === 'record_type' ? null : 'record_type')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="text-left w-[140px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="name"
+                                        label={language === 'vi' ? 'Nhân viên' : 'Staff Member'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['name'] || []}
+                                        activeFilter={columnFilters['name'] || null}
+                                        onFilter={(s) => applyColumnFilter('name', s)}
+                                        onClear={() => clearColumnFilter('name')}
+                                        open={openMenu === 'name'}
+                                        onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="text-left w-1/5 min-w-[150px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="date"
+                                        label={language === 'vi' ? 'Ngày' : 'Date'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['date'] || []}
+                                        activeFilter={columnFilters['date'] || null}
+                                        onFilter={(s) => applyColumnFilter('date', s)}
+                                        onClear={() => clearColumnFilter('date')}
+                                        open={openMenu === 'date'}
+                                        onToggle={() => setOpenMenu(openMenu === 'date' ? null : 'date')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="text-left w-[120px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="previous_amount"
+                                        label={language === 'vi' ? 'Lương gộp cũ' : 'Old Gross Salary'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['previous_amount'] || []}
+                                        activeFilter={columnFilters['previous_amount'] || null}
+                                        onFilter={(s) => applyColumnFilter('previous_amount', s)}
+                                        onClear={() => clearColumnFilter('previous_amount')}
+                                        open={openMenu === 'previous_amount'}
+                                        onToggle={() => setOpenMenu(openMenu === 'previous_amount' ? null : 'previous_amount')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        right
+                                        className="text-right"
+                                    />
+                                    <ColumnHeader
+                                        colKey="new_amount"
+                                        label={language === 'vi' ? 'Lương gộp mới' : 'New Gross Salary'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['new_amount'] || []}
+                                        activeFilter={columnFilters['new_amount'] || null}
+                                        onFilter={(s) => applyColumnFilter('new_amount', s)}
+                                        onClear={() => clearColumnFilter('new_amount')}
+                                        open={openMenu === 'new_amount'}
+                                        onToggle={() => setOpenMenu(openMenu === 'new_amount' ? null : 'new_amount')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        right
+                                        className="text-right"
+                                    />
+                                    <ColumnHeader
+                                        colKey="increase"
+                                        label={language === 'vi' ? 'Tăng trưởng' : 'Increase'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['increase'] || []}
+                                        activeFilter={columnFilters['increase'] || null}
+                                        onFilter={(s) => applyColumnFilter('increase', s)}
+                                        onClear={() => clearColumnFilter('increase')}
+                                        open={openMenu === 'increase'}
+                                        onToggle={() => setOpenMenu(openMenu === 'increase' ? null : 'increase')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        center
+                                        className="text-center"
+                                    />
+                                    <ColumnHeader
+                                        colKey="reason"
+                                        label={language === 'vi' ? 'Lý do' : 'Reason'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['reason'] || []}
+                                        activeFilter={columnFilters['reason'] || null}
+                                        onFilter={(s) => applyColumnFilter('reason', s)}
+                                        onClear={() => clearColumnFilter('reason')}
+                                        open={openMenu === 'reason'}
+                                        onToggle={() => setOpenMenu(openMenu === 'reason' ? null : 'reason')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="text-left max-w-[150px]"
+                                    />
+                                    <th className="text-center px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-gray-500 w-24">
                                         {language === 'vi' ? 'Hành động' : 'Actions'}
                                     </th>
                                 </tr>
@@ -545,7 +821,7 @@ export default function SalaryHistoryPage() {
                                     const isDismissal = e.record_type === 'dismissal'
                                     const isDeparture = isResign || isDismissal
                                     return (
-                                        <tr key={e.id} className="group hover:bg-gray-50/50 transition-colors">
+                                        <tr key={e.id} className="group hover:bg-gray-100 transition-colors border-t border-gray-100 cursor-pointer" onClick={() => { setEditingEntry(e); setModalOpen(true) }}>
                                             <td className="px-6 py-4">
                                                 {isPromo ? (
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-xs font-bold border border-purple-100">
@@ -581,7 +857,7 @@ export default function SalaryHistoryPage() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-sm font-medium text-gray-600">
-                                                {new Date(e.effective_date).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-GB')}
+                                                {fmtDate(e.effective_date)}
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-500 text-right font-mono">{fmt(e.previous_amount)}</td>
                                             <td className="px-6 py-4 text-sm font-bold text-gray-900 text-right font-mono">{isDeparture ? '—' : fmt(e.new_amount)}</td>
@@ -598,13 +874,9 @@ export default function SalaryHistoryPage() {
                                                             : (e.salary_type === 'fixed' ? (language === 'vi' ? 'Toàn thời gian' : 'Full-Time') : (language === 'vi' ? 'Bán thời gian' : 'Part-Time')))}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-center">
+                                            <td className="px-6 py-4 text-center" onClick={(event) => event.stopPropagation()}>
                                                 <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => { setEditingEntry(e); setModalOpen(true) }}
-                                                        className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition" title={language === 'vi' ? 'Chỉnh sửa' : 'Edit'}>
-                                                        <Pencil className="w-4 h-4" />
-                                                    </button>
-                                                    <button onClick={() => setDeletingId(e.id)}
+                                                    <button onClick={(event) => { event.stopPropagation(); setDeletingId(e.id) }}
                                                         className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition" title={language === 'vi' ? 'Xóa' : 'Delete'}>
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
@@ -615,23 +887,20 @@ export default function SalaryHistoryPage() {
                                 })}
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-6 py-16 text-center">
-                                            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
-                                                <Briefcase className="w-8 h-8 text-gray-300" />
-                                            </div>
-                                            <p className="text-gray-900 text-base font-bold mb-1">
+                                        <td colSpan={8} className="px-6 py-12 text-center text-slate-400 text-xs italic font-semibold">
+                                            <p className="mb-1 text-gray-900 text-sm font-bold not-italic">
                                                 {entries.length === 0 
                                                     ? (language === 'vi' ? 'Chưa có lịch sử được ghi lại' : 'No history recorded') 
                                                     : (language === 'vi' ? 'Không tìm thấy kết quả' : 'No results found')}
                                             </p>
-                                            <p className="text-gray-500 text-sm">
+                                            <p className="text-gray-500 text-xs font-normal not-italic">
                                                 {entries.length === 0 
                                                     ? (language === 'vi' ? 'Bắt đầu theo dõi thăng chức và tăng lương.' : 'Start tracking promotions and salary increases.') 
                                                     : (language === 'vi' ? 'Thử điều chỉnh bộ lọc của bạn.' : 'Try adjusting your filters.')}
                                             </p>
                                             {entries.length === 0 && (
                                                 <button onClick={() => { setEditingEntry(null); setModalOpen(true) }}
-                                                    className="mt-4 text-sm font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition">
+                                                    className="mt-4 text-xs font-bold text-blue-650 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition not-italic">
                                                     {language === 'vi' ? 'Ghi nhận sự kiện đầu tiên' : 'Record First Event'}
                                                 </button>
                                             )}
@@ -657,5 +926,209 @@ export default function SalaryHistoryPage() {
                 <ExportModal onClose={() => setExportModalOpen(false)} onExport={handleExport} />
             )}
         </div>
+    )
+}
+
+interface ColumnHeaderProps {
+    colKey: string
+    label: string
+    sortKey: string
+    sortAsc: boolean
+    onSort: (key: string, isAsc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (values: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: {
+        sortAsc: string
+        sortDesc: string
+        selectAll: string
+        deselectAll: string
+        filterPlaceholder: string
+        clearFilters: string
+        empty: string
+    }
+    className?: string
+    center?: boolean
+    right?: boolean
+}
+
+function ColumnHeader({
+    colKey,
+    label,
+    sortKey,
+    sortAsc,
+    onSort,
+    values,
+    activeFilter,
+    onFilter,
+    onClear,
+    open,
+    onToggle,
+    onClose,
+    dict,
+    className = '',
+    center = false,
+    right = false
+}: ColumnHeaderProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = useMemo(() => {
+        if (!filterSearch.trim()) return values
+        const q = filterSearch.toLowerCase()
+        return values.filter(v => (v || '').toLowerCase().includes(q))
+    }, [values, filterSearch])
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) { filteredValues.forEach(v => next.delete(v)) }
+        else { filteredValues.forEach(v => next.add(v)) }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        let finalChecked = localChecked;
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)));
+        }
+        if (finalChecked.size >= values.length) onFilter(null); 
+        else onFilter(finalChecked);
+    }
+
+    return (
+        <th className={`px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-gray-500 relative select-none ${className}`} ref={ref as any}>
+            <div className={`flex items-center gap-1 ${center ? 'justify-center' : right ? 'justify-end' : 'justify-between'}`}>
+                <span className="cursor-pointer hover:text-gray-900 transition-colors" onClick={() => onSort(colKey, !sortAsc)}>
+                    {label}
+                </span>
+                
+                <div className="flex items-center gap-0.5">
+                    {isActive && (
+                        sortAsc ? <ArrowUp className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                    )}
+                    
+                    {hasFilter && (
+                        <Filter className="w-3.5 h-3.5 text-orange-500 fill-current flex-shrink-0" />
+                    )}
+                    
+                    <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+                        className="p-0.5 rounded hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700 flex-shrink-0 cursor-pointer"
+                    >
+                        <MoreVertical className="w-4 h-4 text-gray-500" />
+                    </button>
+                </div>
+            </div>
+
+            {open && dropdownStyle && (
+                <div 
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case font-normal" 
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button 
+                            type="button"
+                            onClick={() => { onSort(colKey, true); onClose(); }}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowUp className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={() => { onSort(colKey, false); onClose(); }}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowDown className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input 
+                            type="text" 
+                            placeholder={dict.filterPlaceholder}
+                            value={filterSearch}
+                            onChange={(e) => setFilterSearch(e.target.value)}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-gray-900"
+                        />
+                        <button
+                            type="button"
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v || `[${dict.empty}]`}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+                        <button type="button" onClick={() => { onClear(); onClose(); }} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium">
+                            {dict.clearFilters}
+                        </button>
+                        <button type="button" onClick={() => { handleApply(); onClose(); }} className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
+        </th>
     )
 }

@@ -64,6 +64,7 @@ export async function GET(req: Request) {
         title_vi,
         message_en,
         message_vi,
+        branch_id,
         app_notification_reads (
           read_at
         )
@@ -89,6 +90,7 @@ export async function GET(req: Request) {
         title_vi: item.title_vi,
         message_en: item.message_en,
         message_vi: item.message_vi,
+        branch_id: item.branch_id,
         isRead
       }
     })

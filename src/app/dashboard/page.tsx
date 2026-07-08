@@ -376,7 +376,7 @@ export default function HomeDashboard() {
     // Column 4
     { id: 'branch-picker', Component: BranchPickerCTA, title: t(language, 'CheckInSystem') || 'Check In System', icon: MapPinIcon, roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
     { id: 'monthly-reports', href: '/monthly-reports', icon: LayoutDashboard, title: t(language, 'MonthlyReports') || 'Monthly Reports', roles: ['owner', 'admin', 'accountant'] },
-    { id: 'hr-module', Component: HRModuleCTA, title: t(language, 'HumanResources') || 'Human Resources', icon: UserGroupIcon, roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+    { id: 'hr-module', Component: HRModuleCTA, title: t(language, 'HumanResources') || 'Human Resources', icon: UserGroupIcon, roles: ['owner', 'admin', 'manager', 'sale advisor'] },
     { id: 'finance', href: '/finance', icon: DollarSign, title: t(language, 'Finance') || 'Finance', roles: ['owner', 'accountant'] },
   ]
 

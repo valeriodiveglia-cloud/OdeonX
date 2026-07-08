@@ -1,14 +1,249 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { Plus, Search, Loader2, CheckCircle, XCircle, AlertCircle, Download, MoreVertical, Trash, ScanBarcode, CreditCard, Wallet, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
+import {
+    BarsArrowUpIcon,
+    BarsArrowDownIcon,
+    FunnelIcon,
+    EllipsisVerticalIcon,
+} from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 import CreateCardModal from './_components/CreateCardModal'
 import CardDetailsModal from './_components/CardDetailsModal'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getLoyaltyManagerDictionary } from '../_i18n'
 import { LoyaltyCard } from './types'
+
+const textDict = {
+    en: {
+        sortAsc: 'Sort Ascending',
+        sortDesc: 'Sort Descending',
+        selectAll: 'Select All',
+        deselectAll: 'Deselect All',
+        filterPlaceholder: 'Search...',
+        clearFilters: 'Clear',
+        ok: 'OK',
+        empty: '(Empty)',
+    },
+    vi: {
+        sortAsc: 'Sắp xếp tăng dần',
+        sortDesc: 'Sắp xếp giảm dần',
+        selectAll: 'Chọn tất cả',
+        deselectAll: 'Bỏ chọn tất cả',
+        filterPlaceholder: 'Tìm kiếm...',
+        clearFilters: 'Xoá bộ lọc',
+        ok: 'Đồng ý',
+        empty: '(Trống)',
+    }
+}
+
+interface ColumnHeaderProps {
+    colKey: string
+    label: string
+    sortCol: string
+    sortAsc: boolean
+    onSort: (key: any, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (vals: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: typeof textDict.en
+    right?: boolean
+    center?: boolean
+    className?: string
+}
+
+function ColumnHeader({
+    colKey,
+    label,
+    sortCol,
+    sortAsc,
+    onSort,
+    values,
+    activeFilter,
+    onFilter,
+    onClear,
+    open,
+    onToggle,
+    onClose,
+    dict,
+    right,
+    center,
+    className = '',
+}: ColumnHeaderProps) {
+    const ref = useRef<HTMLTableCellElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortCol === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+        ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+        : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) {
+            filteredValues.forEach(v => next.delete(v))
+        } else {
+            filteredValues.forEach(v => next.add(v))
+        }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        let finalChecked = localChecked
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+        }
+        if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+    }
+
+    return (
+        <th className={`px-6 py-4 text-left text-slate-600 font-semibold ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+            <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+                <span className="select-none">{label}</span>
+                {isActive && (
+                    sortAsc ? (
+                        <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                    ) : (
+                        <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                    )
+                )}
+                {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+                <button
+                    type="button"
+                    onClick={e => {
+                        e.stopPropagation()
+                        onToggle()
+                    }}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+                    aria-label={`Menu ${label}`}
+                >
+                    <EllipsisVerticalIcon className="w-3.5 h-3.5 text-gray-500" />
+                </button>
+            </div>
+
+            {open && dropdownStyle && (
+                <div
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case font-normal"
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button
+                            type="button"
+                            onClick={() => onSort(colKey, true)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                                isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                            }`}
+                        >
+                            <BarsArrowUpIcon className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onSort(colKey, false)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                                isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                            }`}
+                        >
+                            <BarsArrowDownIcon className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input
+                            type="text"
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                            placeholder={dict.filterPlaceholder}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+                        <button
+                            type="button"
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v || dict.empty}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 border-solid px-3 py-2 flex items-center justify-between gap-2">
+                        <button
+                            type="button"
+                            onClick={onClear}
+                            className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+                        >
+                            {dict.clearFilters}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleApply}
+                            className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
+        </th>
+    )
+}
 
 export default function LoyaltyCardsPage() {
     const { language } = useSettings()
@@ -98,57 +333,112 @@ export default function LoyaltyCardsPage() {
         }
     }
 
-    const filteredCards = cards.filter(c =>
-        (c.customer_name?.toLowerCase() || '').includes(search.toLowerCase()) ||
-        c.card_number.includes(search) ||
-        (c.phone_number || '').includes(search)
-    )
+    const langDict = language === 'vi' ? textDict.vi : textDict.en
 
-    const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+    const [openMenu, setOpenMenu] = useState<string | null>(null)
+    const [sortCol, setSortCol] = useState<string>('issued_on')
+    const [sortAsc, setSortAsc] = useState<boolean>(false)
 
-    const sortedCards = sort ? [...filteredCards].sort((a, b) => {
-        const dir = sort.dir === 'asc' ? 1 : -1
-        switch (sort.key) {
-            case 'card_number': return (a.card_number || '').localeCompare(b.card_number || '') * dir
-            case 'status': return (a.status || '').localeCompare(b.status || '') * dir
-            case 'customer_name': return (a.customer_name || '').localeCompare(b.customer_name || '') * dir
-            case 'class': return (a.class || '').localeCompare(b.class || '') * dir
-            case 'total_spent': return ((a.total_spent || 0) - (b.total_spent || 0)) * dir
-            case 'points': return ((a.points || 0) - (b.points || 0)) * dir
-            case 'balance': return ((a.balance || 0) - (b.balance || 0)) * dir
-            case 'card_expires_on': return (new Date(a.card_expires_on || 0).getTime() - new Date(b.card_expires_on || 0).getTime()) * dir
-            default: return 0
+    const applyColumnFilter = (colKey: string, vals: Set<string> | null) => {
+        setColumnFilters(prev => ({ ...prev, [colKey]: vals }))
+        setOpenMenu(null)
+    }
+
+    const handleSort = (colKey: string, asc: boolean) => {
+        setSortCol(colKey)
+        setSortAsc(asc)
+    }
+
+    const getColValue = (card: LoyaltyCard, colKey: string): string => {
+        switch (colKey) {
+            case 'card_number':
+                return card.card_number || ''
+            case 'status':
+                return card.status === 'active' ? t.cards.status.active :
+                       card.status === 'unassigned' ? t.cards.status.unassigned :
+                       card.status === 'expired' ? t.cards.status.expired :
+                       card.status === 'blocked' ? t.cards.status.blocked : card.status || ''
+            case 'customer_name':
+                return card.customer_name || t.cards.status.unassigned
+            case 'class':
+                if (card.class === '-') return '-'
+                return card.class || t.cards.table.standard
+            case 'total_spent':
+                return formatCurrency(card.total_spent || 0)
+            case 'points':
+                return card.status === 'blocked' ? '0 pts' : `${card.points || 0} pts`
+            case 'balance':
+                return card.status === 'blocked' ? formatCurrency(0) : formatCurrency(card.balance || 0)
+            case 'expires':
+                return (card.card_expires_on || card.tier_expires_on)
+                    ? format(new Date(card.card_expires_on || card.tier_expires_on!), 'dd/MM/yyyy')
+                    : t.cards.table.never
+            default:
+                return ''
         }
-    }) : filteredCards
-
-    const handleSort = (key: string) => {
-        setSort(prev => {
-            if (prev?.key === key) {
-                return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-            }
-            return { key, dir: 'asc' }
-        })
     }
 
-    const SortableHeader = ({ label, colKey, className, align = 'left' }: { label: string; colKey: string; className?: string; align?: 'left' | 'right' }) => {
-        const active = sort?.key === colKey
-        const dir = sort?.dir
-        return (
-            <th className={`px-6 py-4 ${className || ''}`}>
-                <button
-                    type="button"
-                    onClick={() => handleSort(colKey)}
-                    className={`inline-flex items-center gap-1 font-semibold hover:opacity-80 ${align === 'right' ? 'w-full justify-end' : ''}`}
-                    title={`Sort by ${label}`}
-                >
-                    <span>{label}</span>
-                    {!active && <ArrowUpDown className="w-4 h-4 text-slate-400" />}
-                    {active && dir === 'asc' && <ChevronUp className="w-4 h-4 text-slate-700" />}
-                    {active && dir === 'desc' && <ChevronDown className="w-4 h-4 text-slate-700" />}
-                </button>
-            </th>
+    const searchedCards = useMemo(() => {
+        return cards.filter(c =>
+            (c.customer_name?.toLowerCase() || '').includes(search.toLowerCase()) ||
+            c.card_number.includes(search) ||
+            (c.phone_number || '').includes(search)
         )
-    }
+    }, [cards, search])
+
+    const filteredCards = useMemo(() => {
+        let list = [...searchedCards]
+        Object.entries(columnFilters).forEach(([col, vals]) => {
+            if (!vals) return
+            list = list.filter(x => {
+                const v = getColValue(x, col)
+                return vals.has(v)
+            })
+        })
+        return list
+    }, [searchedCards, columnFilters])
+
+    const sortedCards = useMemo(() => {
+        const list = [...filteredCards]
+        list.sort((a, b) => {
+            const dir = sortAsc ? 1 : -1
+            switch (sortCol) {
+                case 'card_number': 
+                    return (a.card_number || '').localeCompare(b.card_number || '') * dir
+                case 'status': {
+                    const valA = getColValue(a, 'status')
+                    const valB = getColValue(b, 'status')
+                    return valA.localeCompare(valB) * dir
+                }
+                case 'customer_name': {
+                    const valA = a.customer_name || ''
+                    const valB = b.customer_name || ''
+                    return valA.localeCompare(valB) * dir
+                }
+                case 'class': 
+                    return (a.class || '').localeCompare(b.class || '') * dir
+                case 'total_spent': 
+                    return ((a.total_spent || 0) - (b.total_spent || 0)) * dir
+                case 'points': 
+                    return ((a.points || 0) - (b.points || 0)) * dir
+                case 'balance': 
+                    return ((a.balance || 0) - (b.balance || 0)) * dir
+                case 'expires': {
+                    const timeA = a.card_expires_on || a.tier_expires_on ? new Date(a.card_expires_on || a.tier_expires_on!).getTime() : 0
+                    const timeB = b.card_expires_on || b.tier_expires_on ? new Date(b.card_expires_on || b.tier_expires_on!).getTime() : 0
+                    return (timeA - timeB) * dir
+                }
+                case 'issued_on':
+                default: {
+                    const tA = a.issued_on ? new Date(a.issued_on).getTime() : 0
+                    const tB = b.issued_on ? new Date(b.issued_on).getTime() : 0
+                    return (tA - tB) * dir
+                }
+            }
+        })
+        return list
+    }, [filteredCards, sortCol, sortAsc])
 
     const [selectMode, setSelectMode] = useState(false)
     const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -287,23 +577,150 @@ export default function LoyaltyCardsPage() {
                         <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                             <tr>
                                 {selectMode && (
-                                    <th className="px-6 py-4 w-12">
+                                    <th className="px-6 py-4 w-12 align-middle text-left">
                                         <input
                                             type="checkbox"
                                             checked={allSelected}
                                             onChange={toggleSelectAll}
-                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                         />
                                     </th>
                                 )}
-                                <SortableHeader label={t.cards.table.card_id} colKey="card_number" />
-                                <SortableHeader label={t.cards.table.status} colKey="status" />
-                                <SortableHeader label={t.cards.table.customer} colKey="customer_name" />
-                                <SortableHeader label={t.cards.table.class} colKey="class" />
-                                <SortableHeader label={t.cards.table.total_value} colKey="total_spent" align="right" />
-                                <SortableHeader label={t.cards.table.points} colKey="points" align="right" />
-                                <SortableHeader label={t.cards.table.wallet_balance} colKey="balance" align="right" />
-                                <SortableHeader label={t.cards.table.expires} colKey="card_expires_on" />
+                                <ColumnHeader
+                                    colKey="card_number"
+                                    label={t.cards.table.card_id}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(cards.map(c => getColValue(c, 'card_number')))).sort()}
+                                    activeFilter={columnFilters.card_number || null}
+                                    onFilter={vals => applyColumnFilter('card_number', vals)}
+                                    onClear={() => applyColumnFilter('card_number', null)}
+                                    open={openMenu === 'card_number'}
+                                    onToggle={() => setOpenMenu(openMenu === 'card_number' ? null : 'card_number')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="status"
+                                    label={t.cards.table.status}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(cards.map(c => getColValue(c, 'status')))).sort()}
+                                    activeFilter={columnFilters.status || null}
+                                    onFilter={vals => applyColumnFilter('status', vals)}
+                                    onClear={() => applyColumnFilter('status', null)}
+                                    open={openMenu === 'status'}
+                                    onToggle={() => setOpenMenu(openMenu === 'status' ? null : 'status')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="customer_name"
+                                    label={t.cards.table.customer}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(cards.map(c => getColValue(c, 'customer_name')))).sort()}
+                                    activeFilter={columnFilters.customer_name || null}
+                                    onFilter={vals => applyColumnFilter('customer_name', vals)}
+                                    onClear={() => applyColumnFilter('customer_name', null)}
+                                    open={openMenu === 'customer_name'}
+                                    onToggle={() => setOpenMenu(openMenu === 'customer_name' ? null : 'customer_name')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="class"
+                                    label={t.cards.table.class}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(cards.map(c => getColValue(c, 'class')))).sort()}
+                                    activeFilter={columnFilters.class || null}
+                                    onFilter={vals => applyColumnFilter('class', vals)}
+                                    onClear={() => applyColumnFilter('class', null)}
+                                    open={openMenu === 'class'}
+                                    onToggle={() => setOpenMenu(openMenu === 'class' ? null : 'class')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
+                                <ColumnHeader
+                                    colKey="total_spent"
+                                    label={t.cards.table.total_value}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(cards.map(c => getColValue(c, 'total_spent')))).sort((a,b) => {
+                                        const numA = parseFloat(a.replace(/[^0-9.-]+/g,"")) || 0
+                                        const numB = parseFloat(b.replace(/[^0-9.-]+/g,"")) || 0
+                                        return numA - numB
+                                    })}
+                                    activeFilter={columnFilters.total_spent || null}
+                                    onFilter={vals => applyColumnFilter('total_spent', vals)}
+                                    onClear={() => applyColumnFilter('total_spent', null)}
+                                    open={openMenu === 'total_spent'}
+                                    onToggle={() => setOpenMenu(openMenu === 'total_spent' ? null : 'total_spent')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                    right
+                                />
+                                <ColumnHeader
+                                    colKey="points"
+                                    label={t.cards.table.points}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(cards.map(c => getColValue(c, 'points')))).sort((a,b) => {
+                                        const numA = parseInt(a.replace(/[^0-9]+/g,"")) || 0
+                                        const numB = parseInt(b.replace(/[^0-9]+/g,"")) || 0
+                                        return numA - numB
+                                    })}
+                                    activeFilter={columnFilters.points || null}
+                                    onFilter={vals => applyColumnFilter('points', vals)}
+                                    onClear={() => applyColumnFilter('points', null)}
+                                    open={openMenu === 'points'}
+                                    onToggle={() => setOpenMenu(openMenu === 'points' ? null : 'points')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                    right
+                                />
+                                <ColumnHeader
+                                    colKey="balance"
+                                    label={t.cards.table.wallet_balance}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(cards.map(c => getColValue(c, 'balance')))).sort((a,b) => {
+                                        const numA = parseFloat(a.replace(/[^0-9.-]+/g,"")) || 0
+                                        const numB = parseFloat(b.replace(/[^0-9.-]+/g,"")) || 0
+                                        return numA - numB
+                                    })}
+                                    activeFilter={columnFilters.balance || null}
+                                    onFilter={vals => applyColumnFilter('balance', vals)}
+                                    onClear={() => applyColumnFilter('balance', null)}
+                                    open={openMenu === 'balance'}
+                                    onToggle={() => setOpenMenu(openMenu === 'balance' ? null : 'balance')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                    right
+                                />
+                                <ColumnHeader
+                                    colKey="expires"
+                                    label={t.cards.table.expires}
+                                    sortCol={sortCol}
+                                    sortAsc={sortAsc}
+                                    onSort={handleSort}
+                                    values={Array.from(new Set(cards.map(c => getColValue(c, 'expires')))).sort()}
+                                    activeFilter={columnFilters.expires || null}
+                                    onFilter={vals => applyColumnFilter('expires', vals)}
+                                    onClear={() => applyColumnFilter('expires', null)}
+                                    open={openMenu === 'expires'}
+                                    onToggle={() => setOpenMenu(openMenu === 'expires' ? null : 'expires')}
+                                    onClose={() => setOpenMenu(null)}
+                                    dict={langDict}
+                                />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -316,7 +733,7 @@ export default function LoyaltyCardsPage() {
                                 </tr>
                             ) : sortedCards.length === 0 ? (
                                 <tr>
-                                    <td colSpan={selectMode ? 9 : 8} className="px-6 py-8 text-center text-slate-500">
+                                    <td colSpan={selectMode ? 9 : 8} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                                         {t.cards.no_cards}
                                     </td>
                                 </tr>

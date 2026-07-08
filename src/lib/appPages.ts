@@ -103,28 +103,28 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   { id: 'loyalty-settings', href: '/loyalty-manager/settings', title: 'Loyalty Settings', module: 'Loyalty', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
 
   // HR Module - Global
-  { id: 'hr-dashboard', href: '/human-resources', title: 'HR Dashboard', module: 'HR General', icon: Home, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'hr manager'] },
-  { id: 'hr-recruitment', href: '/human-resources/recruitment', title: 'Recruitment', module: 'HR General', icon: Briefcase, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'hr manager'] },
-  { id: 'hr-activity', href: '/human-resources/activity', title: 'Activity', module: 'HR General', icon: Activity, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'hr manager'] },
-  { id: 'hr-candidates', href: '/human-resources/candidates', title: 'Candidates', module: 'HR General', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'hr manager'] },
+  { id: 'hr-dashboard', href: '/human-resources', title: 'HR Dashboard', module: 'HR General', icon: Home, requiresRole: ['owner', 'admin', 'manager', 'sale advisor', 'hr manager'] },
+  { id: 'hr-recruitment', href: '/human-resources/recruitment', title: 'Recruitment', module: 'HR General', icon: Briefcase, requiresRole: ['owner', 'admin', 'manager', 'sale advisor', 'hr manager'] },
+  { id: 'hr-activity', href: '/human-resources/activity', title: 'Activity', module: 'HR General', icon: Activity, requiresRole: ['owner', 'admin', 'manager', 'sale advisor', 'hr manager'] },
+  { id: 'hr-candidates', href: '/human-resources/candidates', title: 'Candidates', module: 'HR General', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'sale advisor', 'hr manager'] },
   
   // HR Management
-  { id: 'hrm-staff', href: '/human-resources/management/staff', title: 'Staff List', module: 'HR Management', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hrm-staff-archive', href: '/human-resources/management/staff-archive', title: 'Staff Archive', module: 'HR Management', icon: Folders, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hrm-performance', href: '/human-resources/management/performance', title: 'Performance Reviews', module: 'HR Management', icon: Star, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hrm-salary', href: '/human-resources/management/salary-history', title: 'Status Change', module: 'HR Management', icon: TrendingUp, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hrm-settings', href: '/human-resources/management/settings', title: 'Management Settings', module: 'HR Management', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hrm-staff', href: '/human-resources/management/staff', title: 'Staff List', module: 'HR Management', icon: Users, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hrm-staff-archive', href: '/human-resources/management/staff-archive', title: 'Staff Archive', module: 'HR Management', icon: Folders, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hrm-performance', href: '/human-resources/management/performance', title: 'Performance Reviews', module: 'HR Management', icon: Star, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hrm-salary', href: '/human-resources/management/salary-history', title: 'Status Change', module: 'HR Management', icon: TrendingUp, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hrm-settings', href: '/human-resources/management/settings', title: 'Management Settings', module: 'HR Management', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
   
   // HR Operational
-  { id: 'hro-roster', href: '/human-resources/operational/roster', title: 'Roster', module: 'HR Operational', icon: CalendarDays, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hro-reports', href: '/human-resources/operational/reports', title: 'HR Reports', module: 'HR Operational', icon: BarChart3, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hro-settings', href: '/human-resources/operational/settings', title: 'Operational Settings', module: 'HR Operational', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hro-roster', href: '/human-resources/operational/roster', title: 'Roster', module: 'HR Operational', icon: CalendarDays, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hro-reports', href: '/human-resources/operational/reports', title: 'HR Reports', module: 'HR Operational', icon: BarChart3, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hro-settings', href: '/human-resources/operational/settings', title: 'Operational Settings', module: 'HR Operational', icon: Settings, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
 
   // HR Time Keeping
-  { id: 'hr-time-keeping', href: '/human-resources/time-keeping', title: 'Time Keeping Dashboard', module: 'HR Time Keeping', icon: Clock, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hr-time-keeping-attendance', href: '/human-resources/time-keeping/attendance', title: 'Attendance', module: 'HR Time Keeping', icon: Clock, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hr-time-keeping-overtime', href: '/human-resources/time-keeping/overtime', title: 'Overtime', module: 'HR Time Keeping', icon: Timer, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-  { id: 'hr-time-keeping-service-charge', href: '/human-resources/time-keeping/service-charge', title: 'Service Charge', module: 'HR Time Keeping', icon: Coins, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
+  { id: 'hr-time-keeping', href: '/human-resources/time-keeping', title: 'Time Keeping Dashboard', module: 'HR Time Keeping', icon: Clock, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hr-time-keeping-attendance', href: '/human-resources/time-keeping/attendance', title: 'Attendance', module: 'HR Time Keeping', icon: Clock, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hr-time-keeping-overtime', href: '/human-resources/time-keeping/overtime', title: 'Overtime', module: 'HR Time Keeping', icon: Timer, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
+  { id: 'hr-time-keeping-service-charge', href: '/human-resources/time-keeping/service-charge', title: 'Service Charge', module: 'HR Time Keeping', icon: Coins, requiresRole: ['owner', 'admin', 'manager', 'sale advisor'] },
   
   // CRM
   { id: 'crm-dash', href: '/crm', title: 'CRM Dashboard', module: 'CRM', icon: Home, requiresRole: ['owner', 'admin', 'manager', 'accountant'] },

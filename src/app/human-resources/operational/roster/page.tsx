@@ -19,6 +19,7 @@ import html2canvas from 'html2canvas-pro'
 import jsPDF from 'jspdf'
 import ExcelJS from 'exceljs'
 import { saveAs } from 'file-saver'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 const parseTimeToMinutes = (t: string): number => {
     if (!t) return 0
@@ -289,6 +290,8 @@ export default function RosterPage() {
     const [isLoadingOperationalData, setIsLoadingOperationalData] = useState(true)
     const [branches, setBranches] = useState<{ id: string; name: string; city?: string | null }[]>([])
     const [selectedBranch, setSelectedBranch] = useState('')
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
     const [weekStart, setWeekStart] = useState(getMonday(new Date()))
     const [activeView, setActiveView] = useState<'weekly' | 'daily'>('weekly')
     const [selectedDayIndex, setSelectedDayIndex] = useState<number>(7)
@@ -962,16 +965,25 @@ export default function RosterPage() {
         saveAs(new Blob([buffer]), `roster-${branchName}-${formatWeekRange(weekStart, language).replace(/\s+/g, '_')}.xlsx`)
     }
 
-    // Load branches, staff and Supabase operational data on mount
     useEffect(() => {
         ;(async () => {
             setIsLoadingOperationalData(true)
             await initOperationalDataFromDb()
 
+            const perms = await getCurrentUserPermissions()
+            setCurrentUserRole(perms.role)
+            setCurrentUserBranches(perms.branches)
+
             const { data: bData } = await supabase.from('provider_branches').select('id, name, city').order('name')
             if (bData && bData.length > 0) {
-                setBranches(bData)
-                setSelectedBranch(bData[0].id)
+                let branchData = bData
+                if (perms.role && !['owner', 'admin'].includes(perms.role) && perms.branches) {
+                    branchData = bData.filter((b: any) => perms.branches.includes(b.id))
+                }
+                setBranches(branchData)
+                if (branchData.length > 0) {
+                    setSelectedBranch(branchData[0].id)
+                }
             }
             
             const { data: sData } = await supabase

@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffMember, HRStaffContract } from '@/types/human-resources'
-import { Search, X, Loader2, Users, Star, ChevronLeft, ChevronRight, CalendarDays, FileDown, Clock, MoreVertical, ArrowUp, ArrowDown, Filter } from 'lucide-react'
+import { Search, X, Loader2, Users, Star, ChevronLeft, ChevronRight, CalendarDays, FileDown, Clock, MoreVertical, ArrowUp, ArrowDown, Filter, Building2 } from 'lucide-react'
 import { saveAs } from 'file-saver'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 // --- Helpers ---
 function calculateTenure(startStr: string, endStr: string | Date) {
@@ -70,7 +71,7 @@ function calculateBaseBonus(staff: HRStaffMember, periodStart: Date, periodEnd: 
     pEnd.setHours(23, 59, 59, 999);
 
     while (current <= pEnd) {
-        let activeSalary = (staff as any).basic_salary || staff.salary_amount || 0;
+        let activeSalary = staff.salary_amount || 0;
         let activeContract = null;
         for (const c of contracts) {
             const signing = new Date(c.signing_date!);
@@ -80,8 +81,14 @@ function calculateBaseBonus(staff: HRStaffMember, periodStart: Date, periodEnd: 
             }
         }
         
-        if (activeContract && activeContract.basic_salary) {
-            activeSalary = activeContract.basic_salary;
+        if (activeContract) {
+            const basic = Number(activeContract.basic_salary || 0);
+            const home = Number(activeContract.home_support_allowance || 0);
+            const uniform = Number(activeContract.uniforms_allowance || 0);
+            const fuel = Number(activeContract.fuel_allowance || 0);
+            const lunch = Number(activeContract.lunch_allowance || 0);
+            const phone = Number(activeContract.phone_allowance || 0);
+            activeSalary = basic + home + uniform + fuel + lunch + phone;
         }
 
         const dailySalary = (activeSalary * 12) / 365;
@@ -152,6 +159,47 @@ function ExportModalYear({ onClose, onExport, currentYear, language }: { onClose
     )
 }
 
+const BranchCell = ({ branchNames }: { branchNames: string[] }) => {
+    const { language } = useSettings()
+    const [isExpanded, setIsExpanded] = useState(false)
+    if (branchNames.length === 0) return <span className="text-[11px] text-gray-400 italic">{language === 'vi' ? 'Chưa phân công' : 'Not assigned'}</span>
+    
+    if (branchNames.length <= 2 || isExpanded) {
+        return (
+            <div className="flex flex-wrap gap-1">
+                {branchNames.map((name, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200/80 bg-slate-50 text-[10px] font-semibold text-slate-500">
+                        <Building2 className="w-2.5 h-2.5 text-slate-400" />
+                        {name}
+                    </span>
+                ))}
+                {isExpanded && branchNames.length > 2 && (
+                    <button onClick={(e) => { e.stopPropagation(); setIsExpanded(false) }} className="text-[9px] font-bold text-blue-600 hover:text-blue-700 ml-1">
+                        {language === 'vi' ? 'Thu gọn' : 'Show less'}
+                    </button>
+                )}
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex flex-wrap gap-1 items-center">
+            {branchNames.slice(0, 2).map((name, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200/80 bg-slate-50 text-[10px] font-semibold text-slate-500">
+                    <Building2 className="w-2.5 h-2.5 text-slate-400" />
+                    {name}
+                </span>
+            ))}
+            <button 
+                onClick={(e) => { e.stopPropagation(); setIsExpanded(true) }}
+                className="inline-flex items-center px-1.5 py-0.5 rounded border border-blue-200/80 bg-blue-50 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
+            >
+                +{branchNames.length - 2} {language === 'vi' ? 'thêm' : 'more'}
+            </button>
+        </div>
+    )
+}
+
 type TabKey = 'full_time' | 'part_time';
 
 export default function BonusPage() {
@@ -164,6 +212,10 @@ export default function BonusPage() {
     const [staffList, setStaffList] = useState<HRStaffMember[]>([])
     const [ptHours, setPtHours] = useState<Record<string, string>>({}) // staff_id -> total_hours as string
     const [performanceReviews, setPerformanceReviews] = useState<any[]>([])
+    const [branches, setBranches] = useState<any[]>([])
+    const [branchMap, setBranchMap] = useState<Record<string, string>>({})
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
     
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState<number>(currentYear)
@@ -172,7 +224,7 @@ export default function BonusPage() {
     const [exportModalOpen, setExportModalOpen] = useState(false)
 
     // Column Header state
-    type SortKey = 'name' | 'totalTenure' | 'yearlyTenure' | 'currentBonus' | 'projectedBonus';
+    type SortKey = 'name' | 'branch' | 'totalTenure' | 'yearlyTenure' | 'currentBonus' | 'projectedBonus';
     const [sortKey, setSortKey] = useState<SortKey>('name')
     const [sortAsc, setSortAsc] = useState(true)
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
@@ -191,14 +243,46 @@ export default function BonusPage() {
     const fetchAllData = async (year: number) => {
         setLoading(true)
         try {
-            const [staffRes, hoursRes, perfRes] = await Promise.all([
-                supabase.from('hr_staff').select('*, hr_staff_contracts(*)').eq('status', 'active').order('full_name'),
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
+            const [staffRes, hoursRes, perfRes, branchesRes] = await Promise.all([
+                supabase.from('hr_staff').select('*, hr_staff_contracts(*), hr_staff_branches(*)').eq('status', 'active').order('full_name'),
                 supabase.from('hr_part_time_hours').select('*').eq('year', year),
-                supabase.from('hr_staff_performance').select('*').like('period', `%${year}%`)
+                supabase.from('hr_staff_performance').select('*').like('period', `%${year}%`),
+                supabase.from('provider_branches').select('id, name, city').order('name')
             ]);
             
             if (staffRes.error) throw staffRes.error;
-            setStaffList(staffRes.data as HRStaffMember[]);
+            if (branchesRes.error) throw branchesRes.error;
+            
+            let filteredStaff = staffRes.data || []
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredStaff = filteredStaff.filter(s =>
+                    (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                )
+            }
+            const allowedStaffIds = new Set(filteredStaff.map(s => s.id))
+            setStaffList(filteredStaff as HRStaffMember[]);
+
+            let filteredBranches = branchesRes.data || []
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredBranches = filteredBranches.filter(b => userBranches.includes(b.id))
+            }
+            setBranches(filteredBranches);
+            
+            const bMap: Record<string, string> = {};
+            branchesRes.data?.forEach(b => {
+                bMap[b.id] = b.name;
+            });
+            setBranchMap(bMap);
             
             if (hoursRes.data) {
                 const hoursMap: Record<string, string> = {};
@@ -208,7 +292,11 @@ export default function BonusPage() {
                 setPtHours(hoursMap);
             }
             if (perfRes.data) {
-                setPerformanceReviews(perfRes.data);
+                let filteredPerf = perfRes.data
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    filteredPerf = filteredPerf.filter(p => allowedStaffIds.has(p.staff_id))
+                }
+                setPerformanceReviews(filteredPerf);
             }
         } catch (error) {
             console.error("Error fetching data:", error);
@@ -340,36 +428,67 @@ export default function BonusPage() {
                 projectedData
             };
         });
-    }, [staffList, ptHours, performanceReviews, hrBonus13thGuaranteedPct, hrBonus13thPerfPct, hrBonus13thPerfTiers, hrBonus14thMinRating, hrBonus14thBaseYears, hrBonus14thSteps, hrBonusPtMaxCap, hrBonusPtTargetHours, hrBonusPtMinHours, hrBonusPtMinRating, selectedYear, currentYear, language, getStaffAverageRating]);
+    }, [staffList, ptHours, performanceReviews, hrBonus13thGuaranteedPct, hrBonus13thPerfPct, hrBonus13thPerfTiers, hrBonus14thMinRating, hrBonus14thBaseYears, hrBonus14thSteps, hrBonusPtMaxCap, hrBonusPtTargetHours, hrBonusPtMinHours, hrBonusPtMinRating, selectedYear, currentYear, language, getStaffAverageRating, branches, branchMap]);
 
     const totals = useMemo(() => {
         let ftCurrent = 0;
         let ftProjected = 0;
         let ptCurrent = 0;
         let ptProjected = 0;
+        
+        let hcmCurrent = 0;
+        let hcmProjected = 0;
+        let dalatCurrent = 0;
+        let dalatProjected = 0;
 
         processedStaffList.forEach(item => {
             if (!item.workedThisYear) return;
-            if (item.staff.employment_type === 'full_time') {
+            const isFT = item.staff.employment_type === 'full_time';
+            if (isFT) {
                 ftCurrent += item.currentTotal;
                 ftProjected += item.projectedTotal;
             } else {
                 ptCurrent += item.currentTotal;
                 ptProjected += item.projectedTotal;
             }
+            
+            // Determine City based on branch
+            const associatedBranchIds = (item.staff.hr_staff_branches || []).map(b => b.branch_id);
+            let city = item.staff.city || '';
+            if (associatedBranchIds.length > 0 && branches.length > 0) {
+                for (const bId of associatedBranchIds) {
+                    const br = branches.find(b => b.id === bId);
+                    if (br && br.city) {
+                        city = br.city;
+                        break;
+                    }
+                }
+            }
+            
+            const isHCM = city.toLowerCase().includes('ho chi minh') || city.toLowerCase().includes('hcm') || city.toLowerCase().includes('saigon') || (!city && !associatedBranchIds.includes('pb_e5u1fjs3zv6mi7cqds8'));
+            
+            if (isHCM) {
+                hcmCurrent += item.currentTotal;
+                hcmProjected += item.projectedTotal;
+            } else {
+                dalatCurrent += item.currentTotal;
+                dalatProjected += item.projectedTotal;
+            }
         });
 
         return {
             ftCurrent, ftProjected,
             ptCurrent, ptProjected,
+            hcmCurrent, hcmProjected,
+            dalatCurrent, dalatProjected,
             grandCurrent: ftCurrent + ptCurrent,
             grandProjected: ftProjected + ptProjected
         };
-    }, [processedStaffList]);
+    }, [processedStaffList, branches]);
 
     const columnValues = useMemo(() => {
         const map: Record<string, string[]> = {}
-        const keys: SortKey[] = ['name', 'totalTenure', 'yearlyTenure', 'currentBonus', 'projectedBonus']
+        const keys: SortKey[] = ['name', 'branch', 'totalTenure', 'yearlyTenure', 'currentBonus', 'projectedBonus']
         const listForTab = processedStaffList.filter(item => item.staff.employment_type === activeTab)
 
         keys.forEach(k => {
@@ -378,6 +497,7 @@ export default function BonusPage() {
                 let val = ''
                 switch (k) {
                     case 'name': val = item.name; break;
+                    case 'branch': val = (item.staff.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean).join(', ') || '—'; break;
                     case 'totalTenure': val = item.totalTenureCurrentStr; break;
                     case 'yearlyTenure': val = item.yearlyTenureStr; break;
                     case 'currentBonus': val = fmtCurrency(item.currentTotal); break;
@@ -388,7 +508,7 @@ export default function BonusPage() {
             map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
         })
         return map
-    }, [processedStaffList, activeTab, language])
+    }, [processedStaffList, activeTab, language, branchMap])
 
     const filteredStaff = useMemo(() => {
         let out = processedStaffList.filter(item => item.staff.employment_type === activeTab);
@@ -397,7 +517,8 @@ export default function BonusPage() {
             const q = search.toLowerCase();
             out = out.filter(item => 
                 item.name.toLowerCase().includes(q) || 
-                (item.staff.position || '').toLowerCase().includes(q)
+                (item.staff.position || '').toLowerCase().includes(q) ||
+                (item.staff.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean).join(', ').toLowerCase().includes(q)
             );
         }
 
@@ -407,6 +528,7 @@ export default function BonusPage() {
                 let val = '';
                 switch (col) {
                     case 'name': val = item.name; break;
+                    case 'branch': val = (item.staff.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean).join(', ') || '—'; break;
                     case 'totalTenure': val = item.totalTenureCurrentStr; break;
                     case 'yearlyTenure': val = item.yearlyTenureStr; break;
                     case 'currentBonus': val = fmtCurrency(item.currentTotal); break;
@@ -420,6 +542,10 @@ export default function BonusPage() {
             let av: any, bv: any;
             switch (sortKey) {
                 case 'name': av = a.name; bv = b.name; break;
+                case 'branch': 
+                    av = (a.staff.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean).join(', ') || '—';
+                    bv = (b.staff.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean).join(', ') || '—';
+                    break;
                 case 'totalTenure': av = a.totalTenureCurrent.totalDays; bv = b.totalTenureCurrent.totalDays; break;
                 case 'yearlyTenure': av = a.yearlyTenureVal; bv = b.yearlyTenureVal; break;
                 case 'currentBonus': av = a.currentTotal; bv = b.currentTotal; break;
@@ -436,7 +562,7 @@ export default function BonusPage() {
         });
 
         return out;
-    }, [processedStaffList, activeTab, search, columnFilters, sortKey, sortAsc]);
+    }, [processedStaffList, activeTab, search, columnFilters, sortKey, sortAsc, branchMap]);
 
     const handleExport = async (exportYear: number) => {
         let exportPtHours = ptHours;
@@ -483,6 +609,7 @@ export default function BonusPage() {
 
         ftSheet.columns = [
             { header: language === 'vi' ? 'Họ và tên' : 'Name', key: 'name', width: 25 },
+            { header: language === 'vi' ? 'Chi nhánh' : 'Branch', key: 'branch', width: 25 },
             { header: language === 'vi' ? 'Chức vụ' : 'Position', key: 'position', width: 25 },
             { header: language === 'vi' ? 'Tổng số ngày làm việc' : 'Total Work Days', key: 'days', width: 18 },
             { header: language === 'vi' ? `Thưởng tháng 13 (${exportYear})` : `13th Month (${exportYear})`, key: 'bonus13', width: 20, style: { numFmt: '#,##0' } },
@@ -492,6 +619,7 @@ export default function BonusPage() {
 
         ptSheet.columns = [
             { header: language === 'vi' ? 'Họ và tên' : 'Name', key: 'name', width: 25 },
+            { header: language === 'vi' ? 'Chi nhánh' : 'Branch', key: 'branch', width: 25 },
             { header: language === 'vi' ? 'Chức vụ' : 'Position', key: 'position', width: 25 },
             { header: language === 'vi' ? 'Tổng số giờ' : 'Total Hours', key: 'hours', width: 15 },
             { header: language === 'vi' ? `Thưởng hiện tại (${exportYear})` : `Current Bonus (${exportYear})`, key: 'bonus', width: 20, style: { numFmt: '#,##0' } }
@@ -531,6 +659,7 @@ export default function BonusPage() {
 
                 ftSheet.addRow({
                     name: staff.full_name || '',
+                    branch: (staff.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean).join(', ') || '—',
                     position: staff.position || '',
                     days: tenureInYear.totalDays,
                     bonus13: final13th,
@@ -546,6 +675,7 @@ export default function BonusPage() {
 
                 ptSheet.addRow({
                     name: staff.full_name || '',
+                    branch: (staff.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean).join(', ') || '—',
                     position: staff.position || '',
                     hours: hours,
                     bonus: ptCurrent
@@ -636,8 +766,42 @@ export default function BonusPage() {
                         <div>
                             <div className="text-2xl font-bold text-gray-900">{fmtCurrency(totals.grandCurrent)} <span className="text-xs font-normal text-gray-400">VND</span></div>
                             <div className="text-xs text-gray-500 mt-2 flex items-center justify-between border-t border-gray-50 pt-2">
-                                <span>{language === 'vi' ? 'Tối đa tuyệt đối dự kiến:' : 'Projected absolute max:'}</span>
+                                <span>{language === 'vi' ? 'Dự kiến tối đa:' : 'Projected max:'}</span>
                                 <span className="font-semibold text-indigo-600">{fmtCurrency(totals.grandProjected)} VND</span>
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-4 text-xs">
+                                <div className="pr-2 border-r border-gray-100/80">
+                                    <div className="font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                                        Saigon (HCM)
+                                    </div>
+                                    <div className="flex flex-col gap-1 text-[10px] text-gray-500">
+                                        <div className="flex justify-between">
+                                            <span>{language === 'vi' ? 'H.tại:' : 'Curr:'}</span>
+                                            <span className="font-medium text-gray-800">{fmtCurrency(totals.hcmCurrent)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>{language === 'vi' ? 'D.kiến:' : 'Proj:'}</span>
+                                            <span className="font-semibold text-blue-600">{fmtCurrency(totals.hcmProjected)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                                        Đà Lạt
+                                    </div>
+                                    <div className="flex flex-col gap-1 text-[10px] text-gray-500">
+                                        <div className="flex justify-between">
+                                            <span>{language === 'vi' ? 'H.tại:' : 'Curr:'}</span>
+                                            <span className="font-medium text-gray-800">{fmtCurrency(totals.dalatCurrent)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>{language === 'vi' ? 'D.kiến:' : 'Proj:'}</span>
+                                            <span className="font-semibold text-emerald-600">{fmtCurrency(totals.dalatProjected)}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -662,7 +826,7 @@ export default function BonusPage() {
                 </div>
 
                 {/* Header Nav */}
-                <div className="mt-2 mb-3 flex items-center justify-between text-sm text-blue-100 pt-1">
+                <div className="mt-6 mb-3 flex items-center justify-between text-sm text-blue-100 pt-1">
                     <button 
                         type="button" 
                         onClick={() => setSelectedYear(y => Math.max(2024, y - 1))} 
@@ -719,7 +883,23 @@ export default function BonusPage() {
                                         onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
                                         onClose={() => setOpenMenu(null)}
                                         dict={dict}
-                                        className="w-1/4 min-w-[200px]"
+                                        className="w-1/5 min-w-[180px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="branch"
+                                        label={language === 'vi' ? 'Chi nhánh' : 'Branch'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['branch'] || []}
+                                        activeFilter={columnFilters['branch'] || null}
+                                        onFilter={(s) => applyColumnFilter('branch', s)}
+                                        onClear={() => clearColumnFilter('branch')}
+                                        open={openMenu === 'branch'}
+                                        onToggle={() => setOpenMenu(openMenu === 'branch' ? null : 'branch')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="w-1/5 min-w-[150px]"
                                     />
                                     <ColumnHeader
                                         colKey="totalTenure"
@@ -793,7 +973,7 @@ export default function BonusPage() {
                             <tbody>
                                 {filteredStaff.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center">
+                                        <td colSpan={6} className="px-6 py-12 text-center">
                                             <div className="flex flex-col items-center justify-center text-gray-400">
                                                 <Users className="w-12 h-12 mb-3 opacity-20" />
                                                 <p className="text-sm font-medium text-gray-500">{language === 'vi' ? `Không tìm thấy nhân viên ${activeTab === 'full_time' ? 'toàn thời gian' : 'bán thời gian'}.` : `No ${activeTab === 'full_time' ? 'full-time' : 'part-time'} staff found.`}</p>
@@ -899,6 +1079,9 @@ export default function BonusPage() {
                                                         </div>
                                                     </div>
                                                 </td>
+                                                <td className="px-4 py-3">
+                                                    <BranchCell branchNames={(staff.hr_staff_branches || []).map(b => branchMap[b.branch_id]).filter(Boolean)} />
+                                                </td>
                                                 <td className="px-4 py-3 whitespace-nowrap">
                                                     <div className="text-sm font-medium text-gray-900">{totalTenureCurrentStr}</div>
                                                     <div className="text-xs text-gray-500">{language === 'vi' ? `${totalTenureCurrent.totalDays} ngày` : `${totalTenureCurrent.totalDays} days`}</div>
@@ -937,7 +1120,7 @@ export default function BonusPage() {
                                                         <span className="text-sm text-gray-400">—</span>
                                                     )}
                                                 </td>
-                                                <td className="px-5 py-3 whitespace-nowrap text-right bg-blue-50/20 border-l border-blue-50">
+                                                <td className="px-5 py-3 whitespace-nowrap text-right bg-blue-50/20 border-l border-blue-50 text-blue-700">
                                                     {workedThisYear ? (
                                                         <>
                                                             <div className="text-[15px] font-black tracking-tight text-blue-700">{fmtCurrency(projectedTotal)} <span className="text-[10px] font-normal font-mono text-blue-400 ml-0.5">VND</span></div>
@@ -952,6 +1135,35 @@ export default function BonusPage() {
                                     })
                                 )}
                             </tbody>
+                            {filteredStaff.length > 0 && (
+                                <tfoot className="bg-gray-50 border-t border-gray-200/80 font-bold text-gray-900">
+                                    <tr className="border-t border-gray-300">
+                                        <td className="px-4 py-3.5 whitespace-nowrap text-sm font-bold text-gray-900">
+                                            {language === 'vi' ? 'TỔNG CỘNG' : 'GRAND TOTAL'}
+                                        </td>
+                                        <td className="px-4 py-3.5 whitespace-nowrap text-sm text-gray-500">
+                                            {/* Branch */}
+                                        </td>
+                                        <td className="px-4 py-3.5 whitespace-nowrap text-sm text-gray-500">
+                                            {/* Total Tenure */}
+                                        </td>
+                                        <td className="px-4 py-3.5 whitespace-nowrap text-sm text-gray-900">
+                                            {activeTab === 'part_time' ? (
+                                                <div className="flex items-center gap-1 font-bold text-gray-900">
+                                                    <span>{filteredStaff.reduce((sum, item) => sum + (item.yearlyTenureVal || 0), 0)}</span>
+                                                    <span className="text-xs text-gray-500 font-normal">{language === 'vi' ? 'giờ' : 'hrs'}</span>
+                                                </div>
+                                            ) : null}
+                                        </td>
+                                        <td className="px-5 py-3.5 whitespace-nowrap text-right text-sm border-l border-gray-100 font-black text-gray-900">
+                                            {fmtCurrency(filteredStaff.reduce((sum, item) => sum + (item.currentTotal || 0), 0))} <span className="text-[10px] font-normal font-mono text-gray-400">VND</span>
+                                        </td>
+                                        <td className="px-5 py-3.5 whitespace-nowrap text-right text-sm bg-blue-50/10 border-l border-blue-50 text-blue-700 font-black">
+                                            {fmtCurrency(filteredStaff.reduce((sum, item) => sum + (item.projectedTotal || 0), 0))} <span className="text-[10px] font-normal font-mono text-blue-400">VND</span>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            )}
                         </table>
                     </div>
                 </div>

@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, Loader2, Trash2, Pencil, X, CheckCircle, ChevronLeft, ChevronRight, CalendarDays, User, Search, FileDown, Flag, AlertTriangle, Award } from 'lucide-react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { Plus, Loader2, Trash2, Pencil, X, CheckCircle, ChevronLeft, ChevronRight, CalendarDays, User, Search, FileDown, Flag, AlertTriangle, Award, ArrowUp, ArrowDown, Filter, MoreVertical } from 'lucide-react'
 import { saveAs } from 'file-saver'
 import { supabase } from '@/lib/supabase_shim'
 import { HRDisciplinaryCatalog, HRAwardsCatalog, HRStaffFine, HRStaffAward, HRStaffWarning, HRStaffMember, WarningFlagType } from '@/types/human-resources'
@@ -140,6 +140,46 @@ export default function DisciplinaryPage() {
     const [month, setMonth] = useState<number>(now.getMonth())
 
     const [loggedUserName, setLoggedUserName] = useState<string>('')
+
+    // States for sorting and filtering
+    type SortKey = 'date' | 'name' | 'infraction' | 'notified_by' | 'source' | 'status' | 'amount' | 'flag_type' | 'reason' | 'award_name';
+    const [sortKey, setSortKey] = useState<SortKey>('date')
+    const [sortAsc, setSortAsc] = useState(false) // default date descending
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+    const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
+
+    useEffect(() => {
+        setSortKey('date')
+        setSortAsc(false)
+        setColumnFilters({})
+        setOpenMenu(null)
+    }, [activeTab])
+
+    const dict = useMemo(() => language === 'vi' ? {
+        sortAsc: 'Sắp xếp tăng dần',
+        sortDesc: 'Sắp xếp giảm dần',
+        selectAll: 'Chọn tất cả',
+        deselectAll: 'Bỏ chọn tất cả',
+        filterPlaceholder: 'Lọc...',
+        clearFilters: 'Xóa bộ lọc'
+    } : {
+        sortAsc: 'Sort Ascending',
+        sortDesc: 'Sort Descending',
+        selectAll: 'Select All',
+        deselectAll: 'Deselect All',
+        filterPlaceholder: 'Filter...',
+        clearFilters: 'Clear Filters'
+    }, [language]);
+
+    const applySort = useCallback((k: SortKey, asc: boolean) => {
+        setSortKey(k); setSortAsc(asc); setOpenMenu(null)
+    }, [])
+    const applyColumnFilter = useCallback((col: SortKey, vals: Set<string> | null) => {
+        setColumnFilters(prev => ({ ...prev, [col]: vals })); setOpenMenu(null)
+    }, [])
+    const clearColumnFilter = useCallback((col: SortKey) => {
+        setColumnFilters(prev => { const n = { ...prev }; delete n[col]; return n }); setOpenMenu(null)
+    }, [])
 
     useEffect(() => {
         let isMounted = true
@@ -494,8 +534,234 @@ export default function DisciplinaryPage() {
         setExportModalOpen(false)
     }
 
-    const totalFinesAmount = fines.reduce((sum, f) => sum + Number(f.amount || 0), 0)
-    const totalAwardsAmount = awards.reduce((sum, a) => sum + Number(a.amount || 0), 0)
+    const columnValues = useMemo(() => {
+        const map: Record<string, string[]> = {}
+        
+        if (activeTab === 'fines') {
+            const keys: SortKey[] = ['date', 'name', 'infraction', 'notified_by', 'source', 'status', 'amount']
+            keys.forEach(k => {
+                const set = new Set<string>()
+                fines.forEach(f => {
+                    let val = ''
+                    switch (k) {
+                        case 'date': val = fmtDate(f.date); break;
+                        case 'name': val = f.staff?.full_name || (language === 'vi' ? 'Không xác định' : 'Unknown'); break;
+                        case 'infraction': val = f.infraction || ''; break;
+                        case 'notified_by': val = f.notified_by || ''; break;
+                        case 'source': 
+                            val = f.deduction_source === 'salary' ? (language === 'vi' ? 'Khấu trừ lương gộp' : 'Gross salary deduction') :
+                                  f.deduction_source === 'service_charge' ? (language === 'vi' ? 'Khấu trừ phí phục vụ' : 'Service charge deduction') :
+                                  f.deduction_source === 'cash' ? (language === 'vi' ? 'Tiền mặt/Chuyển khoản' : 'Direct cash/transfer') :
+                                  (f.deduction_source || '-').replace('_', ' ');
+                            break;
+                        case 'status': 
+                            val = f.status === 'paid' ? (language === 'vi' ? 'ĐÃ NỘP' : 'PAID') : 
+                                  f.status === 'waived' ? (language === 'vi' ? 'ĐƯỢC MIỄN' : 'WAIVED') :
+                                  f.status === 'disputed' ? (language === 'vi' ? 'ĐANG TRANH CHẤP' : 'DISPUTED') :
+                                  (language === 'vi' ? 'CHỜ XỬ LÝ' : 'PENDING');
+                            break;
+                        case 'amount': val = fmtVND(f.amount); break;
+                    }
+                    if (val !== undefined && val !== null) set.add(val)
+                })
+                map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+            })
+        } else if (activeTab === 'warnings') {
+            const keys: SortKey[] = ['date', 'name', 'flag_type', 'reason', 'notified_by']
+            keys.forEach(k => {
+                const set = new Set<string>()
+                warnings.forEach(w => {
+                    let val = ''
+                    switch (k) {
+                        case 'date': val = fmtDate(w.date); break;
+                        case 'name': val = w.staff?.full_name || (language === 'vi' ? 'Không xác định' : 'Unknown'); break;
+                        case 'flag_type': 
+                            val = w.flag_type === 'green' ? (language === 'vi' ? 'Ghi chú tích cực' : 'Positive Note') :
+                                  w.flag_type === 'yellow' ? (language === 'vi' ? 'Nhắc nhở' : 'Caution') :
+                                  (language === 'vi' ? 'Cảnh cáo' : 'Warning');
+                            break;
+                        case 'reason': val = formatWarningReason(w.reason, language as any) || ''; break;
+                        case 'notified_by': val = w.notified_by || ''; break;
+                    }
+                    if (val !== undefined && val !== null) set.add(val)
+                })
+                map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+            })
+        } else if (activeTab === 'awards') {
+            const keys: SortKey[] = ['date', 'name', 'award_name', 'notified_by', 'source', 'status', 'amount']
+            keys.forEach(k => {
+                const set = new Set<string>()
+                awards.forEach(a => {
+                    let val = ''
+                    switch (k) {
+                        case 'date': val = fmtDate(a.date); break;
+                        case 'name': val = a.staff?.full_name || (language === 'vi' ? 'Không xác định' : 'Unknown'); break;
+                        case 'award_name': val = a.award_name || ''; break;
+                        case 'notified_by': val = a.notified_by || ''; break;
+                        case 'source':
+                            val = a.deduction_source === 'salary' ? (language === 'vi' ? 'Cộng Vào Lương Gộp' : 'Gross Salary Credit') :
+                                  a.deduction_source === 'cash' ? (language === 'vi' ? 'Tiền Mặt/Chuyển Khoản Trực Tiếp' : 'Direct Cash/Transfer') :
+                                  (a.deduction_source || '-').replace('_', ' ');
+                            break;
+                        case 'status':
+                            val = a.status === 'paid' ? (language === 'vi' ? 'ĐÃ NỘP' : 'PAID') : 
+                                  a.status === 'waived' ? (language === 'vi' ? 'ĐƯỢC MIỄN' : 'WAIVED') :
+                                  a.status === 'disputed' ? (language === 'vi' ? 'ĐANG TRANH CHẤP' : 'DISPUTED') :
+                                  (language === 'vi' ? 'CHỜ XỬ LÝ' : 'PENDING');
+                            break;
+                        case 'amount': val = fmtVND(a.amount); break;
+                    }
+                    if (val !== undefined && val !== null) set.add(val)
+                })
+                map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+            })
+        }
+        
+        return map
+    }, [activeTab, fines, warnings, awards, language])
+
+    const filteredFines = useMemo(() => {
+        let out = [...fines]
+        for (const [col, allowed] of Object.entries(columnFilters)) {
+            if (!allowed) continue
+            out = out.filter(f => {
+                let val = ''
+                switch (col) {
+                    case 'date': val = fmtDate(f.date); break;
+                    case 'name': val = f.staff?.full_name || (language === 'vi' ? 'Không xác định' : 'Unknown'); break;
+                    case 'infraction': val = f.infraction || ''; break;
+                    case 'notified_by': val = f.notified_by || ''; break;
+                    case 'source': 
+                        val = f.deduction_source === 'salary' ? (language === 'vi' ? 'Khấu trừ lương gộp' : 'Gross salary deduction') :
+                              f.deduction_source === 'service_charge' ? (language === 'vi' ? 'Khấu trừ phí phục vụ' : 'Service charge deduction') :
+                              f.deduction_source === 'cash' ? (language === 'vi' ? 'Tiền mặt/Chuyển khoản' : 'Direct cash/transfer') :
+                              (f.deduction_source || '-').replace('_', ' ');
+                        break;
+                    case 'status': 
+                        val = f.status === 'paid' ? (language === 'vi' ? 'ĐÃ NỘP' : 'PAID') : 
+                              f.status === 'waived' ? (language === 'vi' ? 'ĐƯỢC MIỄN' : 'WAIVED') :
+                              f.status === 'disputed' ? (language === 'vi' ? 'ĐANG TRANH CHẤP' : 'DISPUTED') :
+                              (language === 'vi' ? 'CHỜ XỬ LÝ' : 'PENDING');
+                        break;
+                    case 'amount': val = fmtVND(f.amount); break;
+                }
+                return allowed.has(val)
+            })
+        }
+        
+        out.sort((a, b) => {
+            let av: any, bv: any
+            switch (sortKey) {
+                case 'date': av = a.date; bv = b.date; break;
+                case 'name': av = a.staff?.full_name || ''; bv = b.staff?.full_name || ''; break;
+                case 'infraction': av = a.infraction || ''; bv = b.infraction || ''; break;
+                case 'notified_by': av = a.notified_by || ''; bv = b.notified_by || ''; break;
+                case 'source': av = a.deduction_source || ''; bv = b.deduction_source || ''; break;
+                case 'status': av = a.status || ''; bv = b.status || ''; break;
+                case 'amount': av = Number(a.amount || 0); bv = Number(b.amount || 0); break;
+                default: av = ''; bv = '';
+            }
+            let cmp = 0
+            if (typeof av === 'number' && typeof bv === 'number') {
+                cmp = av - bv
+            } else {
+                cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
+            }
+            return sortAsc ? cmp : -cmp
+        })
+        return out
+    }, [fines, columnFilters, sortKey, sortAsc, language])
+
+    const filteredWarnings = useMemo(() => {
+        let out = [...warnings]
+        for (const [col, allowed] of Object.entries(columnFilters)) {
+            if (!allowed) continue
+            out = out.filter(w => {
+                let val = ''
+                switch (col) {
+                    case 'date': val = fmtDate(w.date); break;
+                    case 'name': val = w.staff?.full_name || (language === 'vi' ? 'Không xác định' : 'Unknown'); break;
+                    case 'flag_type':
+                        val = w.flag_type === 'green' ? (language === 'vi' ? 'Ghi chú tích cực' : 'Positive Note') :
+                              w.flag_type === 'yellow' ? (language === 'vi' ? 'Nhắc nhở' : 'Caution') :
+                              (language === 'vi' ? 'Cảnh cáo' : 'Warning');
+                        break;
+                    case 'reason': val = formatWarningReason(w.reason, language as any) || ''; break;
+                    case 'notified_by': val = w.notified_by || ''; break;
+                }
+                return allowed.has(val)
+            })
+        }
+        
+        out.sort((a, b) => {
+            let av: any, bv: any
+            switch (sortKey) {
+                case 'date': av = a.date; bv = b.date; break;
+                case 'name': av = a.staff?.full_name || ''; bv = b.staff?.full_name || ''; break;
+                case 'flag_type': av = a.flag_type || ''; bv = b.flag_type || ''; break;
+                case 'reason': av = a.reason || ''; bv = b.reason || ''; break;
+                case 'notified_by': av = a.notified_by || ''; bv = b.notified_by || ''; break;
+                default: av = ''; bv = '';
+            }
+            let cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
+            return sortAsc ? cmp : -cmp
+        })
+        return out
+    }, [warnings, columnFilters, sortKey, sortAsc, language])
+
+    const filteredAwards = useMemo(() => {
+        let out = [...awards]
+        for (const [col, allowed] of Object.entries(columnFilters)) {
+            if (!allowed) continue
+            out = out.filter(a => {
+                let val = ''
+                switch (col) {
+                    case 'date': val = fmtDate(a.date); break;
+                    case 'name': val = a.staff?.full_name || (language === 'vi' ? 'Không xác định' : 'Unknown'); break;
+                    case 'award_name': val = a.award_name || ''; break;
+                    case 'notified_by': val = a.notified_by || ''; break;
+                    case 'source':
+                        val = a.deduction_source === 'salary' ? (language === 'vi' ? 'Cộng Vào Lương Gộp' : 'Gross Salary Credit') :
+                              a.deduction_source === 'cash' ? (language === 'vi' ? 'Tiền Mặt/Chuyển Khoản Trực Tiếp' : 'Direct Cash/Transfer') :
+                              (a.deduction_source || '-').replace('_', ' ');
+                        break;
+                    case 'status':
+                        val = a.status === 'paid' ? (language === 'vi' ? 'ĐÃ NỘP' : 'PAID') : 
+                              a.status === 'waived' ? (language === 'vi' ? 'ĐƯỢC MIỄN' : 'WAIVED') :
+                              a.status === 'disputed' ? (language === 'vi' ? 'ĐANG TRANH CHẤP' : 'DISPUTED') :
+                              (language === 'vi' ? 'CHỜ XỬ LÝ' : 'PENDING');
+                        break;
+                    case 'amount': val = fmtVND(a.amount); break;
+                }
+                return allowed.has(val)
+            })
+        }
+        
+        out.sort((a, b) => {
+            let av: any, bv: any
+            switch (sortKey) {
+                case 'date': av = a.date; bv = b.date; break;
+                case 'name': av = a.staff?.full_name || ''; bv = b.staff?.full_name || ''; break;
+                case 'award_name': av = a.award_name || ''; bv = b.award_name || ''; break;
+                case 'notified_by': av = a.notified_by || ''; bv = b.notified_by || ''; break;
+                case 'source': av = a.deduction_source || ''; bv = b.deduction_source || ''; break;
+                case 'status': av = a.status || ''; bv = b.status || ''; break;
+                case 'amount': av = Number(a.amount || 0); bv = Number(b.amount || 0); break;
+                default: av = ''; bv = '';
+            }
+            let cmp = 0
+            if (typeof av === 'number' && typeof bv === 'number') {
+                cmp = av - bv
+            } else {
+                cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
+            }
+            return sortAsc ? cmp : -cmp
+        })
+        return out
+    }, [awards, columnFilters, sortKey, sortAsc, language])
+
+    const totalFinesAmount = filteredFines.reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0)
+    const totalAwardsAmount = filteredAwards.reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0)
 
     const baseBtn = 'flex items-center gap-1 text-gray-500 hover:text-gray-900 transition'
 
@@ -586,28 +852,135 @@ export default function DisciplinaryPage() {
                         {activeTab === 'fines' && (
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
-                                    <tr>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Ngày' : 'Date'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Tên Nhân Viên' : 'Staff Name'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Vi Phạm' : 'Infraction'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Nguồn' : 'Source'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100 text-center">{language === 'vi' ? 'Trạng Thái' : 'Status'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100 text-right">{language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'}</th>
-                                        <th className="px-4 py-3 text-center w-24">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
+                                    <tr className="bg-gray-50/80 border-b border-gray-200">
+                                        <ColumnHeader
+                                            colKey="date"
+                                            label={language === 'vi' ? 'Ngày' : 'Date'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['date'] || []}
+                                            activeFilter={columnFilters['date'] || null}
+                                            onFilter={(s) => applyColumnFilter('date', s)}
+                                            onClear={() => clearColumnFilter('date')}
+                                            open={openMenu === 'date'}
+                                            onToggle={() => setOpenMenu(openMenu === 'date' ? null : 'date')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 w-[120px]"
+                                        />
+                                        <ColumnHeader
+                                            colKey="name"
+                                            label={language === 'vi' ? 'Tên Nhân Viên' : 'Staff Name'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['name'] || []}
+                                            activeFilter={columnFilters['name'] || null}
+                                            onFilter={(s) => applyColumnFilter('name', s)}
+                                            onClear={() => clearColumnFilter('name')}
+                                            open={openMenu === 'name'}
+                                            onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 w-1/5 min-w-[150px]"
+                                        />
+                                        <ColumnHeader
+                                            colKey="infraction"
+                                            label={language === 'vi' ? 'Vi Phạm' : 'Infraction'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['infraction'] || []}
+                                            activeFilter={columnFilters['infraction'] || null}
+                                            onFilter={(s) => applyColumnFilter('infraction', s)}
+                                            onClear={() => clearColumnFilter('infraction')}
+                                            open={openMenu === 'infraction'}
+                                            onToggle={() => setOpenMenu(openMenu === 'infraction' ? null : 'infraction')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 max-w-xs"
+                                        />
+                                        <ColumnHeader
+                                            colKey="notified_by"
+                                            label={language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['notified_by'] || []}
+                                            activeFilter={columnFilters['notified_by'] || null}
+                                            onFilter={(s) => applyColumnFilter('notified_by', s)}
+                                            onClear={() => clearColumnFilter('notified_by')}
+                                            open={openMenu === 'notified_by'}
+                                            onToggle={() => setOpenMenu(openMenu === 'notified_by' ? null : 'notified_by')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100"
+                                        />
+                                        <ColumnHeader
+                                            colKey="source"
+                                            label={language === 'vi' ? 'Nguồn' : 'Source'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['source'] || []}
+                                            activeFilter={columnFilters['source'] || null}
+                                            onFilter={(s) => applyColumnFilter('source', s)}
+                                            onClear={() => clearColumnFilter('source')}
+                                            open={openMenu === 'source'}
+                                            onToggle={() => setOpenMenu(openMenu === 'source' ? null : 'source')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100"
+                                        />
+                                        <ColumnHeader
+                                            colKey="status"
+                                            label={language === 'vi' ? 'Trạng Thái' : 'Status'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['status'] || []}
+                                            activeFilter={columnFilters['status'] || null}
+                                            onFilter={(s) => applyColumnFilter('status', s)}
+                                            onClear={() => clearColumnFilter('status')}
+                                            open={openMenu === 'status'}
+                                            onToggle={() => setOpenMenu(openMenu === 'status' ? null : 'status')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            center
+                                            className="border-r border-gray-100 text-center"
+                                        />
+                                        <ColumnHeader
+                                            colKey="amount"
+                                            label={language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['amount'] || []}
+                                            activeFilter={columnFilters['amount'] || null}
+                                            onFilter={(s) => applyColumnFilter('amount', s)}
+                                            onClear={() => clearColumnFilter('amount')}
+                                            open={openMenu === 'amount'}
+                                            onToggle={() => setOpenMenu(openMenu === 'amount' ? null : 'amount')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            right
+                                            className="border-r border-gray-100 text-right"
+                                        />
+                                        <th className="px-4 py-3 text-center w-24 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                 {loading ? (
                                     <tr><td colSpan={8} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></td></tr>
-                                ) : fines.length === 0 ? (
+                                ) : filteredFines.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="text-center py-12 text-gray-400">
-                                            {language === 'vi' ? `Không có hồ sơ phạt tiền nào được ghi nhận cho ${monthLabel}.` : `No fines recorded for ${monthLabel}.`}
+                                        <td colSpan={8} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+                                            {language === 'vi' ? `Không có hồ sơ phạt tiền nào được ghi nhận.` : `No fines recorded.`}
                                         </td>
                                     </tr>
                                 ) : (
-                                    fines.map(f => (
+                                    filteredFines.map(f => (
                                         <tr key={f.id} className="hover:bg-gray-50 transition-colors group">
                                             <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">{fmtDate(f.date)}</td>
                                             <td className="px-4 py-3 border-r border-gray-100 text-gray-900 font-medium">
@@ -638,7 +1011,7 @@ export default function DisciplinaryPage() {
                                                     <option value="disputed">{language === 'vi' ? 'ĐANG TRANH CHẤP' : 'DISPUTED'}</option>
                                                 </select>
                                             </td>
-                                            <td className="px-4 py-3 border-r border-gray-100 text-right font-mono font-medium text-orange-655 text-red-600">
+                                            <td className="px-4 py-3 border-r border-gray-100 text-right font-mono font-medium text-red-600">
                                                 -{fmtVND(f.amount)}
                                             </td>
                                             <td className="px-4 py-3 text-center">
@@ -655,7 +1028,7 @@ export default function DisciplinaryPage() {
                                     ))
                                 )}
                                 </tbody>
-                                {!loading && fines.length > 0 && (
+                                {!loading && filteredFines.length > 0 && (
                                     <tfoot className="bg-gray-50 border-t border-gray-200 text-sm font-bold text-gray-900">
                                         <tr>
                                             <td colSpan={6} className="px-4 py-3 text-right">{language === 'vi' ? 'Tổng Tiền Phạt Kỷ Luật' : 'Total Disciplinary Fines'}</td>
@@ -671,26 +1044,102 @@ export default function DisciplinaryPage() {
                         {activeTab === 'warnings' && (
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
-                                    <tr>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Ngày' : 'Date'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Tên Nhân Viên' : 'Staff Name'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100 text-center w-36">{language === 'vi' ? 'Mức Cảnh Báo' : 'Flag Type'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Lý Do' : 'Reason'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</th>
-                                        <th className="px-4 py-3 text-center w-24">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
+                                    <tr className="bg-gray-50/80 border-b border-gray-200">
+                                        <ColumnHeader
+                                            colKey="date"
+                                            label={language === 'vi' ? 'Ngày' : 'Date'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['date'] || []}
+                                            activeFilter={columnFilters['date'] || null}
+                                            onFilter={(s) => applyColumnFilter('date', s)}
+                                            onClear={() => clearColumnFilter('date')}
+                                            open={openMenu === 'date'}
+                                            onToggle={() => setOpenMenu(openMenu === 'date' ? null : 'date')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 w-[120px]"
+                                        />
+                                        <ColumnHeader
+                                            colKey="name"
+                                            label={language === 'vi' ? 'Tên Nhân Viên' : 'Staff Name'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['name'] || []}
+                                            activeFilter={columnFilters['name'] || null}
+                                            onFilter={(s) => applyColumnFilter('name', s)}
+                                            onClear={() => clearColumnFilter('name')}
+                                            open={openMenu === 'name'}
+                                            onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 w-1/5 min-w-[150px]"
+                                        />
+                                        <ColumnHeader
+                                            colKey="flag_type"
+                                            label={language === 'vi' ? 'Mức Cảnh Báo' : 'Flag Type'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['flag_type'] || []}
+                                            activeFilter={columnFilters['flag_type'] || null}
+                                            onFilter={(s) => applyColumnFilter('flag_type', s)}
+                                            onClear={() => clearColumnFilter('flag_type')}
+                                            open={openMenu === 'flag_type'}
+                                            onToggle={() => setOpenMenu(openMenu === 'flag_type' ? null : 'flag_type')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            center
+                                            className="border-r border-gray-100 text-center w-36"
+                                        />
+                                        <ColumnHeader
+                                            colKey="reason"
+                                            label={language === 'vi' ? 'Lý Do' : 'Reason'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['reason'] || []}
+                                            activeFilter={columnFilters['reason'] || null}
+                                            onFilter={(s) => applyColumnFilter('reason', s)}
+                                            onClear={() => clearColumnFilter('reason')}
+                                            open={openMenu === 'reason'}
+                                            onToggle={() => setOpenMenu(openMenu === 'reason' ? null : 'reason')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 max-w-sm"
+                                        />
+                                        <ColumnHeader
+                                            colKey="notified_by"
+                                            label={language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['notified_by'] || []}
+                                            activeFilter={columnFilters['notified_by'] || null}
+                                            onFilter={(s) => applyColumnFilter('notified_by', s)}
+                                            onClear={() => clearColumnFilter('notified_by')}
+                                            open={openMenu === 'notified_by'}
+                                            onToggle={() => setOpenMenu(openMenu === 'notified_by' ? null : 'notified_by')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100"
+                                        />
+                                        <th className="px-4 py-3 text-center w-24 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                 {loading ? (
                                     <tr><td colSpan={6} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></td></tr>
-                                ) : warnings.length === 0 ? (
+                                ) : filteredWarnings.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="text-center py-12 text-gray-400">
-                                            {language === 'vi' ? `Không có cảnh cáo nào được ghi nhận cho ${monthLabel}.` : `No flags recorded for ${monthLabel}.`}
+                                        <td colSpan={6} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+                                            {language === 'vi' ? `Không có cảnh cáo nào được ghi nhận.` : `No flags recorded.`}
                                         </td>
                                     </tr>
                                 ) : (
-                                    warnings.map(w => (
+                                    filteredWarnings.map(w => (
                                         <tr key={w.id} className="hover:bg-gray-50 transition-colors group">
                                             <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">{fmtDate(w.date)}</td>
                                             <td className="px-4 py-3 border-r border-gray-100 text-gray-900 font-medium">
@@ -737,28 +1186,135 @@ export default function DisciplinaryPage() {
                         {activeTab === 'awards' && (
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold uppercase tracking-wider">
-                                    <tr>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Ngày' : 'Date'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Tên Nhân Viên' : 'Staff Name'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Khen Thưởng' : 'Award'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100">{language === 'vi' ? 'Nguồn' : 'Source'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100 text-center">{language === 'vi' ? 'Trạng Thái' : 'Status'}</th>
-                                        <th className="px-4 py-3 border-r border-gray-100 text-right">{language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'}</th>
-                                        <th className="px-4 py-3 text-center w-24">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
+                                    <tr className="bg-gray-50/80 border-b border-gray-200">
+                                        <ColumnHeader
+                                            colKey="date"
+                                            label={language === 'vi' ? 'Ngày' : 'Date'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['date'] || []}
+                                            activeFilter={columnFilters['date'] || null}
+                                            onFilter={(s) => applyColumnFilter('date', s)}
+                                            onClear={() => clearColumnFilter('date')}
+                                            open={openMenu === 'date'}
+                                            onToggle={() => setOpenMenu(openMenu === 'date' ? null : 'date')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 w-[120px]"
+                                        />
+                                        <ColumnHeader
+                                            colKey="name"
+                                            label={language === 'vi' ? 'Tên Nhân Viên' : 'Staff Name'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['name'] || []}
+                                            activeFilter={columnFilters['name'] || null}
+                                            onFilter={(s) => applyColumnFilter('name', s)}
+                                            onClear={() => clearColumnFilter('name')}
+                                            open={openMenu === 'name'}
+                                            onToggle={() => setOpenMenu(openMenu === 'name' ? null : 'name')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 w-1/5 min-w-[150px]"
+                                        />
+                                        <ColumnHeader
+                                            colKey="award_name"
+                                            label={language === 'vi' ? 'Khen Thưởng' : 'Award'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['award_name'] || []}
+                                            activeFilter={columnFilters['award_name'] || null}
+                                            onFilter={(s) => applyColumnFilter('award_name', s)}
+                                            onClear={() => clearColumnFilter('award_name')}
+                                            open={openMenu === 'award_name'}
+                                            onToggle={() => setOpenMenu(openMenu === 'award_name' ? null : 'award_name')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100 max-w-xs"
+                                        />
+                                        <ColumnHeader
+                                            colKey="notified_by"
+                                            label={language === 'vi' ? 'Người Báo Cáo' : 'Notified By'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['notified_by'] || []}
+                                            activeFilter={columnFilters['notified_by'] || null}
+                                            onFilter={(s) => applyColumnFilter('notified_by', s)}
+                                            onClear={() => clearColumnFilter('notified_by')}
+                                            open={openMenu === 'notified_by'}
+                                            onToggle={() => setOpenMenu(openMenu === 'notified_by' ? null : 'notified_by')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100"
+                                        />
+                                        <ColumnHeader
+                                            colKey="source"
+                                            label={language === 'vi' ? 'Nguồn' : 'Source'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['source'] || []}
+                                            activeFilter={columnFilters['source'] || null}
+                                            onFilter={(s) => applyColumnFilter('source', s)}
+                                            onClear={() => clearColumnFilter('source')}
+                                            open={openMenu === 'source'}
+                                            onToggle={() => setOpenMenu(openMenu === 'source' ? null : 'source')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            className="border-r border-gray-100"
+                                        />
+                                        <ColumnHeader
+                                            colKey="status"
+                                            label={language === 'vi' ? 'Trạng Thái' : 'Status'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['status'] || []}
+                                            activeFilter={columnFilters['status'] || null}
+                                            onFilter={(s) => applyColumnFilter('status', s)}
+                                            onClear={() => clearColumnFilter('status')}
+                                            open={openMenu === 'status'}
+                                            onToggle={() => setOpenMenu(openMenu === 'status' ? null : 'status')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            center
+                                            className="border-r border-gray-100 text-center"
+                                        />
+                                        <ColumnHeader
+                                            colKey="amount"
+                                            label={language === 'vi' ? 'Số Tiền (VND)' : 'Amount (VND)'}
+                                            sortKey={sortKey}
+                                            sortAsc={sortAsc}
+                                            onSort={applySort}
+                                            values={columnValues['amount'] || []}
+                                            activeFilter={columnFilters['amount'] || null}
+                                            onFilter={(s) => applyColumnFilter('amount', s)}
+                                            onClear={() => clearColumnFilter('amount')}
+                                            open={openMenu === 'amount'}
+                                            onToggle={() => setOpenMenu(openMenu === 'amount' ? null : 'amount')}
+                                            onClose={() => setOpenMenu(null)}
+                                            dict={dict}
+                                            right
+                                            className="border-r border-gray-100 text-right"
+                                        />
+                                        <th className="px-4 py-3 text-center w-24 text-[10px] font-bold uppercase tracking-wider text-gray-500">{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                 {loading ? (
                                     <tr><td colSpan={8} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></td></tr>
-                                ) : awards.length === 0 ? (
+                                ) : filteredAwards.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="text-center py-12 text-gray-400">
-                                            {language === 'vi' ? `Không có hồ sơ khen thưởng nào được ghi nhận cho ${monthLabel}.` : `No awards recorded for ${monthLabel}.`}
+                                        <td colSpan={8} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+                                            {language === 'vi' ? `Không có hồ sơ khen thưởng nào được ghi nhận.` : `No awards recorded.`}
                                         </td>
                                     </tr>
                                 ) : (
-                                    awards.map(a => (
+                                    filteredAwards.map(a => (
                                         <tr key={a.id} className="hover:bg-gray-50 transition-colors group">
                                             <td className="px-4 py-3 border-r border-gray-100 whitespace-nowrap text-gray-900 font-medium">{fmtDate(a.date)}</td>
                                             <td className="px-4 py-3 border-r border-gray-100 text-gray-900 font-medium">
@@ -806,7 +1362,7 @@ export default function DisciplinaryPage() {
                                     ))
                                 )}
                                 </tbody>
-                                {!loading && awards.length > 0 && (
+                                {!loading && filteredAwards.length > 0 && (
                                     <tfoot className="bg-gray-50 border-t border-gray-200 text-sm font-bold text-gray-900">
                                         <tr>
                                             <td colSpan={6} className="px-4 py-3 text-right">{language === 'vi' ? 'Tổng Tiền Khen Thưởng' : 'Total Awards'}</td>
@@ -1416,5 +1972,176 @@ function FormAwardGlobal({
                 </button>
             </div>
         </form>
+    )
+}
+
+/* --- Column Header Component --- */
+type ColumnHeaderProps = {
+    colKey: string
+    label: string
+    sortKey: string
+    sortAsc: boolean
+    onSort: (k: any, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (s: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+    right?: boolean
+    center?: boolean
+    className?: string
+}
+
+function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '' }: ColumnHeaderProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+        ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+        : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) { filteredValues.forEach(v => next.delete(v)) }
+        else { filteredValues.forEach(v => next.add(v)) }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        let finalChecked = localChecked;
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)));
+        }
+        if (finalChecked.size >= values.length) onFilter(null); 
+        else onFilter(finalChecked);
+    }
+
+    return (
+        <th className={`px-4 py-3.5 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
+            <div className={`flex items-center gap-1 font-bold uppercase tracking-wider text-gray-500 text-[10px] ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+                <span className="select-none">{label}</span>
+                {isActive && (
+                    sortAsc
+                        ? <ArrowUp className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        : <ArrowDown className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                )}
+                {hasFilter && <Filter className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onToggle() }}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+                    aria-label={`Menu ${label}`}
+                >
+                    <MoreVertical className="w-4 h-4 text-gray-500" />
+                </button>
+            </div>
+
+            {open && dropdownStyle && (
+                <div
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case font-normal"
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button
+                            type="button"
+                            onClick={() => onSort(colKey, true)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowUp className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onSort(colKey, false)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowDown className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input
+                            type="text"
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                            placeholder={dict.filterPlaceholder}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-gray-900"
+                        />
+                        <button
+                            type="button"
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v || '(Empty)'}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+                        <button type="button" onClick={onClear} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium">
+                            {dict.clearFilters}
+                        </button>
+                        <button type="button" onClick={handleApply} className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
+        </th>
     )
 }

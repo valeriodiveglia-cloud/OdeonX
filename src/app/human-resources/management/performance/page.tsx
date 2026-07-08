@@ -18,11 +18,28 @@ export type AppAccount = {
 }
 
 import CircularLoader from '@/components/CircularLoader'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 import { useSettings } from '@/contexts/SettingsContext'
 import {
     Star, Plus, Search, X, Pencil, Trash2,
-    TrendingUp, TrendingDown, User, ChevronLeft, ChevronRight, FileDown, MoreVertical, Building2
+    TrendingUp, TrendingDown, User, ChevronLeft, ChevronRight, FileDown, MoreVertical, Building2,
+    ArrowUp, ArrowDown, Filter
 } from 'lucide-react'
+
+/* ─── Helpers ─── */
+const fmtDate = (dStr: string | null | undefined) => {
+    if (!dStr) return '—'
+    try {
+        const d = new Date(dStr)
+        if (isNaN(d.getTime())) return '—'
+        const day = String(d.getDate()).padStart(2, '0')
+        const month = String(d.getMonth() + 1).padStart(2, '0')
+        const year = d.getFullYear()
+        return `${day}/${month}/${year}`
+    } catch {
+        return '—'
+    }
+}
 
 /* ═══════════════════════════════════════════════════════════
    Rating categories are now loaded dynamically from
@@ -491,13 +508,14 @@ export default function PerformancePage() {
     const [accountList, setAccountList] = useState<AppAccount[]>([])
     const [allCategories, setAllCategories] = useState<HRRatingCategory[]>([])
     const [branchMap, setBranchMap]   = useState<Record<string, string>>({})
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
     
     const [periodOffset, setPeriodOffset] = useState(0)
     const today = new Date().toISOString().slice(0, 10)
     const activePeriodLabel = useMemo(() => computePeriodLabel(hrReviewFrequency, today, periodOffset), [hrReviewFrequency, today, periodOffset])
 
     const [search, setSearch]         = useState('')
-    const [filterRating, setFilterRating] = useState<'all' | string>('all')
     const [expandedId, setExpandedId]     = useState<string | null>(null)
 
     const [isStaffSelectOpen, setStaffSelectOpen] = useState(false)
@@ -509,21 +527,50 @@ export default function PerformancePage() {
     const [isAssignSelectOpen, setAssignSelectOpen] = useState(false)
     const [assigningForId, setAssigningForId] = useState<string | null>(null)
 
-    const [filterBranch, setFilterBranch] = useState<'all' | string>('all')
-    const [filterDate, setFilterDate] = useState<string>('')
-    const [filterReviewer, setFilterReviewer] = useState<string>('all')
-    const [activeHeaderFilter, setActiveHeaderFilter] = useState<'staff' | 'branch' | 'rating' | 'date' | 'reviewer' | null>(null)
-    const headerFilterRef = useRef<HTMLDivElement>(null)
+    const [sortKey, setSortKey] = useState<string>('')
+    const [sortAsc, setSortAsc] = useState<boolean>(true)
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({})
+    const [openMenu, setOpenMenu] = useState<string | null>(null)
 
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (headerFilterRef.current && !headerFilterRef.current.contains(event.target as Node)) {
-                setActiveHeaderFilter(null)
+    const dict = {
+        sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort ascending',
+        sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort descending',
+        selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select all',
+        deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect all',
+        filterPlaceholder: language === 'vi' ? 'Tìm kiếm...' : 'Search...',
+        clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear filters',
+        empty: language === 'vi' ? 'Rỗng' : 'Empty'
+    }
+
+    const applySort = (key: string, isAsc?: boolean) => {
+        if (isAsc !== undefined) {
+            setSortKey(key)
+            setSortAsc(isAsc)
+        } else {
+            if (sortKey === key) {
+                setSortAsc(!sortAsc)
+            } else {
+                setSortKey(key)
+                setSortAsc(true)
             }
         }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
+    }
+
+    const applyColumnFilter = (key: string, values: Set<string> | null) => {
+        setColumnFilters(prev => {
+            const next = { ...prev }
+            if (values) next[key] = values; else delete next[key]
+            return next
+        })
+    }
+
+    const clearColumnFilter = (key: string) => {
+        setColumnFilters(prev => {
+            const next = { ...prev }
+            delete next[key]
+            return next
+        })
+    }
 
     const [deletingId, setDeletingId]     = useState<string | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
@@ -552,6 +599,16 @@ export default function PerformancePage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
             const [staffRes, reviewRes, catRes, accRes, historyRes, branchRes] = await Promise.all([
                 supabase.from('hr_staff').select('*, hr_staff_branches(*)').order('full_name'),
                 supabase.from('hr_staff_performance').select('*, hr_staff(*)').order('review_date', { ascending: false }),
@@ -561,14 +618,27 @@ export default function PerformancePage() {
                 supabase.from('provider_branches').select('id, name')
             ])
             if (branchRes.data) {
+                let branchData = branchRes.data
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    branchData = branchData.filter((b: any) => userBranches.includes(b.id))
+                }
                 const map: Record<string, string> = {}
-                branchRes.data.forEach((b: any) => {
+                branchData.forEach((b: any) => {
                     map[b.id] = b.name
                 })
                 setBranchMap(map)
             }
             if (staffRes.data) {
-                const staffWithDeparture = staffRes.data.map(s => {
+                let filteredStaff = staffRes.data
+                if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                    filteredStaff = filteredStaff.filter(s =>
+                        (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                    )
+                }
+
+                const allowedStaffIds = new Set(filteredStaff.map(s => s.id))
+
+                const staffWithDeparture = filteredStaff.map(s => {
                     let termination_date = null
                     if (s.status !== 'active' && historyRes.data) {
                         const leaveEvent = historyRes.data.find(h => h.staff_id === s.id && String(h.reason).match(/^\[(RESIGNATION|DISMISSAL|REJECTION)\]/i))
@@ -579,32 +649,98 @@ export default function PerformancePage() {
                     return { ...s, termination_date }
                 })
                 setStaffList(staffWithDeparture)
+
+                if (reviewRes.data) {
+                    let filteredReviews = reviewRes.data
+                    if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                        filteredReviews = filteredReviews.filter(r => allowedStaffIds.has(r.staff_id))
+                    }
+                    setReviews(filteredReviews as any)
+                }
             }
-            if (reviewRes.data) setReviews(reviewRes.data as any)
             if (catRes.data) setAllCategories(catRes.data as HRRatingCategory[])
             if (accRes.data) setAccountList(accRes.data as AppAccount[])
         } catch (err) { console.error(err) }
         setLoading(false)
-    }, [])
+    }, [currentUserRole, currentUserBranches])
 
     useEffect(() => { fetchAll() }, [fetchAll])
 
     const { end: periodEnd } = useMemo(() => getPeriodDates(hrReviewFrequency, today, periodOffset), [hrReviewFrequency, today, periodOffset])
     const periodEndStr = periodEnd.toISOString().slice(0, 10)
 
-    const filteredStaff = useMemo(() => {
-        return staffList.filter(s => {
+    const columnValues = useMemo(() => {
+        const out: Record<string, string[]> = {
+            staff: [],
+            branch: [],
+            date: [],
+            rating: [],
+            reviewer: []
+        }
+        staffList.forEach(s => {
             const review = reviews.find(r => r.staff_id === s.id && r.period === activePeriodLabel)
             
-            // If they started after this period ended, don't show them
-            if (s.start_date && s.start_date > periodEndStr) return false
-
-            // If they are outsourced, only show them if they have a review
-            if (s.employment_type === 'outsourced' && !review) {
-                return false
+            if (s.start_date && s.start_date > periodEndStr) return
+            if (s.employment_type === 'outsourced' && !review) return
+            if (s.status !== 'active') {
+                if (!review) {
+                    if (!s.termination_date) return
+                    if (s.termination_date < periodEndStr) return
+                }
             }
 
-            // If they are inactive, only show them if they have a review, OR they left on/after the period ended
+            const staffName = s.full_name || ''
+            if (staffName && !out.staff.includes(staffName)) {
+                out.staff.push(staffName)
+            }
+
+            const bNames = (s.hr_staff_branches || []).map((sb: any) => branchMap[sb.branch_id]).filter(Boolean)
+            bNames.forEach((bn: string) => {
+                if (bn && !out.branch.includes(bn)) {
+                    out.branch.push(bn)
+                }
+            })
+
+            if (review) {
+                const dStr = fmtDate(review.review_date)
+                if (dStr && !out.date.includes(dStr)) {
+                    out.date.push(dStr)
+                }
+                
+                const avg = computeAverage(review.category_ratings || {})
+                const overallRounded = Math.round(avg) || review.rating || 0
+                const rLabel = getOverallLabelTranslated(overallRounded, language)
+                const ratingStr = `${overallRounded} — ${rLabel}`
+                if (ratingStr && !out.rating.includes(ratingStr)) {
+                    out.rating.push(ratingStr)
+                }
+
+                const reviewer = accountList.find(a => a.id === review.reviewer_id)
+                const revName = review.reviewer_name || (reviewer ? (reviewer.name || reviewer.email) : (language === 'vi' ? 'Hệ thống' : 'System'))
+                if (revName && !out.reviewer.includes(revName)) {
+                    out.reviewer.push(revName)
+                }
+            } else {
+                const pendingStr = language === 'vi' ? 'Chưa đánh giá' : 'Pending'
+                if (!out.rating.includes(pendingStr)) {
+                    out.rating.push(pendingStr)
+                }
+                const noneStr = '—'
+                if (!out.reviewer.includes(noneStr)) {
+                    out.reviewer.push(noneStr)
+                }
+            }
+        })
+        Object.keys(out).forEach(k => out[k].sort())
+        return out
+    }, [staffList, reviews, activePeriodLabel, periodEndStr, branchMap, language, accountList])
+
+    const filteredStaff = useMemo(() => {
+        let out = staffList.filter(s => {
+            const review = reviews.find(r => r.staff_id === s.id && r.period === activePeriodLabel)
+            
+            if (s.start_date && s.start_date > periodEndStr) return false
+            if (s.employment_type === 'outsourced' && !review) return false
             if (s.status !== 'active') {
                 if (!review) {
                     if (!s.termination_date) return false
@@ -616,21 +752,86 @@ export default function PerformancePage() {
                 const q = search.toLowerCase()
                 if (!s.full_name?.toLowerCase().includes(q) && !s.position?.toLowerCase().includes(q)) return false
             }
-            if (filterBranch !== 'all') {
-                if (!(s.hr_staff_branches || []).some((b: any) => b.branch_id === filterBranch)) return false
+
+            if (columnFilters['staff'] && columnFilters['staff'].size > 0) {
+                if (!columnFilters['staff'].has(s.full_name || '')) return false
             }
-            if (filterDate) {
-                if (!review || review.review_date !== filterDate) return false
+
+            if (columnFilters['branch'] && columnFilters['branch'].size > 0) {
+                const bNames = (s.hr_staff_branches || []).map((sb: any) => branchMap[sb.branch_id]).filter(Boolean)
+                const matches = bNames.some((bn: string) => columnFilters['branch'].has(bn))
+                if (!matches) return false
             }
-            if (filterReviewer !== 'all') {
-                if (!review || (review.reviewer_name !== filterReviewer && review.assigned_reviewer_id !== filterReviewer)) return false
+
+            if (columnFilters['date'] && columnFilters['date'].size > 0) {
+                const dStr = review ? fmtDate(review.review_date) : '—'
+                if (!columnFilters['date'].has(dStr)) return false
             }
-            if (filterRating !== 'all') {
-                if (!review || String(review.rating) !== filterRating) return false
+
+            if (columnFilters['rating'] && columnFilters['rating'].size > 0) {
+                let ratingStr = ''
+                if (review) {
+                    const avg = computeAverage(review.category_ratings || {})
+                    const overallRounded = Math.round(avg) || review.rating || 0
+                    const rLabel = getOverallLabelTranslated(overallRounded, language)
+                    ratingStr = `${overallRounded} — ${rLabel}`
+                } else {
+                    ratingStr = language === 'vi' ? 'Chưa đánh giá' : 'Pending'
+                }
+                if (!columnFilters['rating'].has(ratingStr)) return false
             }
+
+            if (columnFilters['reviewer'] && columnFilters['reviewer'].size > 0) {
+                let revName = '—'
+                if (review) {
+                    const reviewer = accountList.find(a => a.id === review.reviewer_id)
+                    revName = review.reviewer_name || (reviewer ? (reviewer.name || reviewer.email) : (language === 'vi' ? 'Hệ thống' : 'System'))
+                }
+                if (!columnFilters['reviewer'].has(revName)) return false
+            }
+
             return true
         })
-    }, [staffList, search, filterBranch, filterDate, filterReviewer, filterRating, reviews, activePeriodLabel, periodEndStr])
+
+        if (sortKey) {
+            out.sort((a, b) => {
+                const reviewA = reviews.find(r => r.staff_id === a.id && r.period === activePeriodLabel)
+                const reviewB = reviews.find(r => r.staff_id === b.id && r.period === activePeriodLabel)
+                
+                let valA: any = ''
+                let valB: any = ''
+
+                if (sortKey === 'staff') {
+                    valA = a.full_name || ''
+                    valB = b.full_name || ''
+                } else if (sortKey === 'branch') {
+                    valA = (a.hr_staff_branches || []).map((sb: any) => branchMap[sb.branch_id]).filter(Boolean).join(', ')
+                    valB = (b.hr_staff_branches || []).map((sb: any) => branchMap[sb.branch_id]).filter(Boolean).join(', ')
+                } else if (sortKey === 'date') {
+                    valA = reviewA ? reviewA.review_date : ''
+                    valB = reviewB ? reviewB.review_date : ''
+                } else if (sortKey === 'rating') {
+                    const avgA = reviewA ? computeAverage(reviewA.category_ratings || {}) : 0
+                    const ratingA = reviewA ? (Math.round(avgA) || reviewA.rating) : 0
+                    const avgB = reviewB ? computeAverage(reviewB.category_ratings || {}) : 0
+                    const ratingB = reviewB ? (Math.round(avgB) || reviewB.rating) : 0
+                    valA = ratingA
+                    valB = ratingB
+                } else if (sortKey === 'reviewer') {
+                    const reviewerA = reviewA ? accountList.find(al => al.id === reviewA.reviewer_id) : null
+                    valA = reviewA ? (reviewA.reviewer_name || (reviewerA ? (reviewerA.name || reviewerA.email) : 'System')) : ''
+                    const reviewerB = reviewB ? accountList.find(al => al.id === reviewB.reviewer_id) : null
+                    valB = reviewB ? (reviewB.reviewer_name || (reviewerB ? (reviewerB.name || reviewerB.email) : 'System')) : ''
+                }
+
+                if (valA < valB) return sortAsc ? -1 : 1
+                if (valA > valB) return sortAsc ? 1 : -1
+                return 0
+            })
+        }
+
+        return out
+    }, [staffList, reviews, activePeriodLabel, periodEndStr, search, columnFilters, branchMap, language, accountList, sortKey, sortAsc])
 
     const eligibleForNewReview = useMemo(() => {
         return staffList.filter(s => 
@@ -862,167 +1063,89 @@ export default function PerformancePage() {
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
-                                <tr className="bg-gray-50 border-b border-gray-200">
-                                    {/* Staff Member Header */}
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[200px]">
-                                        <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'staff' ? headerFilterRef : null}>
-                                            <span>{language === 'vi' ? 'Nhân viên' : 'Staff Member'}</span>
-                                            <button 
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'staff' ? null : 'staff') }}
-                                                className={`p-1 rounded hover:bg-gray-200 transition ${search ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
-                                            >
-                                                <MoreVertical className="w-3.5 h-3.5" />
-                                            </button>
-                                            
-                                            {activeHeaderFilter === 'staff' && (
-                                                <div className="absolute left-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800">
-                                                    <div className="relative">
-                                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                                                        <input 
-                                                            type="text" 
-                                                            autoFocus
-                                                            placeholder={language === 'vi' ? 'Tìm tên…' : 'Search name…'} 
-                                                            value={search} 
-                                                            onChange={e => setSearch(e.target.value)}
-                                                            className="w-full pl-8 pr-7 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 outline-none bg-white text-gray-900" 
-                                                        />
-                                                        {search && (
-                                                            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-100">
-                                                                <X className="w-3 h-3 text-gray-400" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </th>
-
-                                     {/* Branches Header */}
-                                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[150px]">
-                                         <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'branch' ? headerFilterRef : null}>
-                                             <span>{language === 'vi' ? 'Chi nhánh' : 'Branch(es)'}</span>
-                                             <button 
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'branch' ? null : 'branch') }}
-                                                className={`p-1 rounded hover:bg-gray-200 transition ${filterBranch !== 'all' ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
-                                            >
-                                                <MoreVertical className="w-3.5 h-3.5" />
-                                            </button>
-                                            
-                                            {activeHeaderFilter === 'branch' && (
-                                                <div className="absolute left-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800">
-                                                    <select 
-                                                        autoFocus
-                                                        value={filterBranch} 
-                                                        onChange={e => setFilterBranch(e.target.value)}
-                                                        className="w-full border border-gray-300 rounded-lg text-xs py-1.5 px-2 bg-white text-gray-900 focus:ring-1 focus:ring-blue-500 outline-none"
-                                                    >
-                                                        <option value="all">{language === 'vi' ? 'Tất cả chi nhánh' : 'All Branches'}</option>
-                                                        {Object.entries(branchMap).map(([id, name]) => (
-                                                            <option key={id} value={id}>{name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </th>
-
-                                    {/* Review Date Header */}
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[140px]">
-                                        <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'date' ? headerFilterRef : null}>
-                                            <span>{language === 'vi' ? 'Ngày đánh giá' : 'Review Date'}</span>
-                                            <button 
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'date' ? null : 'date') }}
-                                                className={`p-1 rounded hover:bg-gray-200 transition ${filterDate ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
-                                            >
-                                                <MoreVertical className="w-3.5 h-3.5" />
-                                            </button>
-                                            
-                                            {activeHeaderFilter === 'date' && (
-                                                <div className="absolute left-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800">
-                                                    <div className="relative flex items-center gap-1">
-                                                        <input 
-                                                            type="date" 
-                                                            autoFocus
-                                                            value={filterDate} 
-                                                            onChange={e => setFilterDate(e.target.value)}
-                                                            className="w-full border border-gray-300 rounded-lg text-xs py-1.5 px-2 bg-white text-gray-900 focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                        />
-                                                        {filterDate && (
-                                                            <button onClick={() => setFilterDate('')} className="p-1 rounded hover:bg-gray-100 shrink-0">
-                                                                <X className="w-3 h-3 text-gray-400" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </th>
-
-                                    {/* Status & Overall Header */}
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[180px]">
-                                        <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'rating' ? headerFilterRef : null}>
-                                            <span className="mx-auto">{language === 'vi' ? 'Trạng thái & Đánh giá' : 'Status & Overall'}</span>
-                                            <button 
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'rating' ? null : 'rating') }}
-                                                className={`p-1 rounded hover:bg-gray-200 transition ${filterRating !== 'all' ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
-                                            >
-                                                <MoreVertical className="w-3.5 h-3.5" />
-                                            </button>
-                                            
-                                            {activeHeaderFilter === 'rating' && (
-                                                <div className="absolute right-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800 text-left">
-                                                    <select 
-                                                        autoFocus
-                                                        value={filterRating} 
-                                                        onChange={e => setFilterRating(e.target.value)}
-                                                        className="w-full border border-gray-300 rounded-lg text-xs py-1.5 px-2 bg-white text-gray-900 focus:ring-1 focus:ring-blue-500 outline-none"
-                                                    >
-                                                        <option value="all">{language === 'vi' ? 'Tất cả điểm số' : 'All Ratings'}</option>
-                                                        {[5, 4, 3, 2, 1].map(r => (
-                                                            <option key={r} value={String(r)}>{r} — {getOverallLabelTranslated(r, language)}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </th>
-
-                                    {/* Reviewer Header */}
-                                    <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-500 min-w-[150px]">
-                                        <div className="flex items-center gap-1.5 justify-between relative" ref={activeHeaderFilter === 'reviewer' ? headerFilterRef : null}>
-                                            <span>{language === 'vi' ? 'Người đánh giá' : 'Reviewer'}</span>
-                                            <button 
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); setActiveHeaderFilter(activeHeaderFilter === 'reviewer' ? null : 'reviewer') }}
-                                                className={`p-1 rounded hover:bg-gray-200 transition ${filterReviewer !== 'all' ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
-                                            >
-                                                <MoreVertical className="w-3.5 h-3.5" />
-                                            </button>
-                                            
-                                            {activeHeaderFilter === 'reviewer' && (
-                                                <div className="absolute left-0 top-full mt-1 z-30 w-52 p-3 bg-white border border-gray-200 rounded-xl shadow-lg normal-case font-normal text-slate-800">
-                                                    <select 
-                                                        autoFocus
-                                                        value={filterReviewer} 
-                                                        onChange={e => setFilterReviewer(e.target.value)}
-                                                        className="w-full border border-gray-300 rounded-lg text-xs py-1.5 px-2 bg-white text-gray-900 focus:ring-1 focus:ring-blue-500 outline-none"
-                                                    >
-                                                        <option value="all">{language === 'vi' ? 'Tất cả người đánh giá' : 'All Reviewers'}</option>
-                                                        {Array.from(new Set(reviews.map(r => r.reviewer_name).filter(Boolean))).map(name => (
-                                                             <option key={name} value={name || ''}>{name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </th>
-
-                                    {/* Actions Header */}
-                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+                                <tr className="bg-gray-50 border-b border-gray-100">
+                                    <ColumnHeader
+                                        colKey="staff"
+                                        label={language === 'vi' ? 'Nhân viên' : 'Staff Member'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['staff'] || []}
+                                        activeFilter={columnFilters['staff'] || null}
+                                        onFilter={(s) => applyColumnFilter('staff', s)}
+                                        onClear={() => clearColumnFilter('staff')}
+                                        open={openMenu === 'staff'}
+                                        onToggle={() => setOpenMenu(openMenu === 'staff' ? null : 'staff')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="text-left min-w-[200px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="branch"
+                                        label={language === 'vi' ? 'Chi nhánh' : 'Branch(es)'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['branch'] || []}
+                                        activeFilter={columnFilters['branch'] || null}
+                                        onFilter={(s) => applyColumnFilter('branch', s)}
+                                        onClear={() => clearColumnFilter('branch')}
+                                        open={openMenu === 'branch'}
+                                        onToggle={() => setOpenMenu(openMenu === 'branch' ? null : 'branch')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="text-left min-w-[150px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="date"
+                                        label={language === 'vi' ? 'Ngày đánh giá' : 'Review Date'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['date'] || []}
+                                        activeFilter={columnFilters['date'] || null}
+                                        onFilter={(s) => applyColumnFilter('date', s)}
+                                        onClear={() => clearColumnFilter('date')}
+                                        open={openMenu === 'date'}
+                                        onToggle={() => setOpenMenu(openMenu === 'date' ? null : 'date')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="text-left min-w-[140px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="rating"
+                                        label={language === 'vi' ? 'Trạng thái & Đánh giá' : 'Status & Overall'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['rating'] || []}
+                                        activeFilter={columnFilters['rating'] || null}
+                                        onFilter={(s) => applyColumnFilter('rating', s)}
+                                        onClear={() => clearColumnFilter('rating')}
+                                        open={openMenu === 'rating'}
+                                        onToggle={() => setOpenMenu(openMenu === 'rating' ? null : 'rating')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        center
+                                        className="text-center min-w-[180px]"
+                                    />
+                                    <ColumnHeader
+                                        colKey="reviewer"
+                                        label={language === 'vi' ? 'Người đánh giá' : 'Reviewer'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={applySort}
+                                        values={columnValues['reviewer'] || []}
+                                        activeFilter={columnFilters['reviewer'] || null}
+                                        onFilter={(s) => applyColumnFilter('reviewer', s)}
+                                        onClear={() => clearColumnFilter('reviewer')}
+                                        open={openMenu === 'reviewer'}
+                                        onToggle={() => setOpenMenu(openMenu === 'reviewer' ? null : 'reviewer')}
+                                        onClose={() => setOpenMenu(null)}
+                                        dict={dict}
+                                        className="text-left min-w-[150px]"
+                                    />
+                                    <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-gray-500 w-24">
                                         {language === 'vi' ? 'Hành động' : 'Actions'}
                                     </th>
                                 </tr>
@@ -1066,7 +1189,7 @@ export default function PerformancePage() {
                                                     />
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-600">
-                                                    {r ? new Intl.DateTimeFormat(language === 'vi' ? 'vi-VN' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(r.review_date)) : <span className="text-slate-400">—</span>}
+                                                    {r ? fmtDate(r.review_date) : <span className="text-slate-400">—</span>}
                                                 </td>
                                                 <td className="px-4 py-3 text-center">
                                                     {r ? (
@@ -1102,10 +1225,12 @@ export default function PerformancePage() {
                                 })}
                                 {filteredStaff.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} className="px-4 py-16 text-center">
-                                            <User className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                                            <p className="text-gray-500 text-sm font-medium">
-                                                {language === 'vi' ? 'Không có kết quả nào khớp với bộ lọc của bạn' : 'No results match your filters'}
+                                        <td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-xs italic font-semibold">
+                                            <p className="mb-1 text-gray-900 text-sm font-bold not-italic">
+                                                {language === 'vi' ? 'Không tìm thấy kết quả' : 'No results found'}
+                                            </p>
+                                            <p className="text-gray-550 text-xs font-normal not-italic">
+                                                {language === 'vi' ? 'Thử điều chỉnh bộ lọc của bạn.' : 'Try adjusting your filters.'}
                                             </p>
                                         </td>
                                     </tr>
@@ -1199,5 +1324,209 @@ export default function PerformancePage() {
                     onConfirm={handleDelete} onCancel={() => setDeletingId(null)} deleting={deleteLoading} />
             )}
         </div>
+    )
+}
+
+interface ColumnHeaderProps {
+    colKey: string
+    label: string
+    sortKey: string
+    sortAsc: boolean
+    onSort: (key: string, isAsc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (values: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: {
+        sortAsc: string
+        sortDesc: string
+        selectAll: string
+        deselectAll: string
+        filterPlaceholder: string
+        clearFilters: string
+        empty: string
+    }
+    className?: string
+    center?: boolean
+    right?: boolean
+}
+
+function ColumnHeader({
+    colKey,
+    label,
+    sortKey,
+    sortAsc,
+    onSort,
+    values,
+    activeFilter,
+    onFilter,
+    onClear,
+    open,
+    onToggle,
+    onClose,
+    dict,
+    className = '',
+    center = false,
+    right = false
+}: ColumnHeaderProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    useEffect(() => {
+        if (open) {
+            setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+            setFilterSearch('')
+        }
+    }, [open, values, activeFilter])
+
+    useEffect(() => {
+        if (!open) return
+        function handleClick(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+        if (!open || !ref.current) return undefined
+        const rect = ref.current.getBoundingClientRect()
+        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = useMemo(() => {
+        if (!filterSearch.trim()) return values
+        const q = filterSearch.toLowerCase()
+        return values.filter(v => (v || '').toLowerCase().includes(q))
+    }, [values, filterSearch])
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+        const next = new Set(localChecked)
+        if (allVisibleChecked) { filteredValues.forEach(v => next.delete(v)) }
+        else { filteredValues.forEach(v => next.add(v)) }
+        setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+        const next = new Set(localChecked)
+        if (next.has(v)) next.delete(v); else next.add(v)
+        setLocalChecked(next)
+    }
+
+    function handleApply() {
+        let finalChecked = localChecked;
+        if (filterSearch) {
+            finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)));
+        }
+        if (finalChecked.size >= values.length) onFilter(null); 
+        else onFilter(finalChecked);
+    }
+
+    return (
+        <th className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 relative select-none ${className}`} ref={ref as any}>
+            <div className={`flex items-center gap-1 ${center ? 'justify-center' : right ? 'justify-end' : 'justify-between'}`}>
+                <span className="cursor-pointer hover:text-gray-900 transition-colors" onClick={() => onSort(colKey, !sortAsc)}>
+                    {label}
+                </span>
+                
+                <div className="flex items-center gap-0.5">
+                    {isActive && (
+                        sortAsc ? <ArrowUp className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                    )}
+                    
+                    {hasFilter && (
+                        <Filter className="w-3.5 h-3.5 text-orange-500 fill-current flex-shrink-0" />
+                    )}
+                    
+                    <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+                        className="p-0.5 rounded hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700 flex-shrink-0 cursor-pointer"
+                    >
+                        <MoreVertical className="w-4 h-4 text-gray-500" />
+                    </button>
+                </div>
+            </div>
+
+            {open && dropdownStyle && (
+                <div 
+                    className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case font-normal" 
+                    style={dropdownStyle}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="px-3 py-2 space-y-1">
+                        <button 
+                            type="button"
+                            onClick={() => { onSort(colKey, true); onClose(); }}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowUp className="w-4 h-4" />
+                            {dict.sortAsc}
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={() => { onSort(colKey, false); onClose(); }}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+                        >
+                            <ArrowDown className="w-4 h-4" />
+                            {dict.sortDesc}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-200" />
+
+                    <div className="px-3 py-2">
+                        <input 
+                            type="text" 
+                            placeholder={dict.filterPlaceholder}
+                            value={filterSearch}
+                            onChange={(e) => setFilterSearch(e.target.value)}
+                            className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-gray-900"
+                        />
+                        <button
+                            type="button"
+                            onClick={toggleAll}
+                            className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+                        >
+                            {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+                        </button>
+
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                            {filteredValues.map(v => (
+                                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={localChecked.has(v)}
+                                        onChange={() => toggleOne(v)}
+                                        className="accent-blue-600 rounded"
+                                    />
+                                    <span className="truncate text-xs">{v || `[${dict.empty}]`}</span>
+                                </label>
+                            ))}
+                            {filteredValues.length === 0 && (
+                                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+                        <button type="button" onClick={() => { onClear(); onClose(); }} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium">
+                            {dict.clearFilters}
+                        </button>
+                        <button type="button" onClick={() => { handleApply(); onClose(); }} className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
+        </th>
     )
 }
