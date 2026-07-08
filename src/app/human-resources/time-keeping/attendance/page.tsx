@@ -71,23 +71,52 @@ export default function AttendanceMonthlyPage() {
 
         // Ordinamento
         list.sort((a, b) => {
-            let valA = ''
-            let valB = ''
+            let valA: any = ''
+            let valB: any = ''
             if (sortKey === 'full_name') {
                 valA = a.full_name || ''
                 valB = b.full_name || ''
+                return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA)
             } else if (sortKey === 'position') {
                 valA = a.position || ''
                 valB = b.position || ''
+                return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA)
             } else {
-                return 0
-            }
+                // Colonne numeriche di Attendance
+                const recA = attendanceDict[a.id] || { lates_count: 0, lates_minutes: 0, annual_leaves: 0, sick_leaves: 0, unpaid_leaves: 0, other_leaves: 0 }
+                const recB = attendanceDict[b.id] || { lates_count: 0, lates_minutes: 0, annual_leaves: 0, sick_leaves: 0, unpaid_leaves: 0, other_leaves: 0 }
 
-            return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA)
+                if (sortKey === 'lates_count') {
+                    valA = recA.lates_count || 0
+                    valB = recB.lates_count || 0
+                } else if (sortKey === 'lates_minutes') {
+                    valA = recA.lates_minutes || 0
+                    valB = recB.lates_minutes || 0
+                } else if (sortKey === 'avg_rate') {
+                    valA = recA.lates_count > 0 ? (recA.lates_minutes / recA.lates_count) : 0
+                    valB = recB.lates_count > 0 ? (recB.lates_minutes / recB.lates_count) : 0
+                } else if (sortKey === 'annual_leaves') {
+                    valA = recA.annual_leaves || 0
+                    valB = recB.annual_leaves || 0
+                } else if (sortKey === 'sick_leaves') {
+                    valA = recA.sick_leaves || 0
+                    valB = recB.sick_leaves || 0
+                } else if (sortKey === 'unpaid_leaves') {
+                    valA = recA.unpaid_leaves || 0
+                    valB = recB.unpaid_leaves || 0
+                } else if (sortKey === 'other_leaves') {
+                    valA = recA.other_leaves || 0
+                    valB = recB.other_leaves || 0
+                } else {
+                    return 0
+                }
+
+                return sortAsc ? valA - valB : valB - valA
+            }
         })
 
         return list
-    }, [staffList, selectedCity, searchQuery, filterPosition, sortKey, sortAsc])
+    }, [staffList, selectedCity, searchQuery, filterPosition, sortKey, sortAsc, attendanceDict])
 
     const fetchAll = useCallback(async () => {
         setLoading(true)
@@ -417,13 +446,146 @@ export default function AttendanceMonthlyPage() {
                                     </th>
                                 </tr>
                                 <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
-                                    <th className="px-3 py-2 text-center border-l border-gray-100 font-semibold">{language === 'vi' ? 'Số lần trễ' : 'Lates'}</th>
-                                    <th className="px-3 py-2 text-center font-semibold">{language === 'vi' ? 'Số phút trễ' : 'Lates (Mins)'}</th>
-                                    <th className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/50 border-r border-gray-100">{language === 'vi' ? 'Tỉ lệ TB' : 'Avg Rate'}</th>
-                                    <th className="px-3 py-2 text-center font-semibold">{language === 'vi' ? 'Phép năm' : 'Annual'}</th>
-                                    <th className="px-3 py-2 text-center font-semibold">{language === 'vi' ? 'Bệnh' : 'Sick'}</th>
-                                    <th className="px-3 py-2 text-center font-semibold">{language === 'vi' ? 'Không lương' : 'Unpaid'}</th>
-                                    <th className="px-3 py-2 text-center font-semibold">{language === 'vi' ? 'Khác' : 'Other'}</th>
+                                    <ColumnHeader
+                                        colKey="lates_count"
+                                        label={language === 'vi' ? 'Số lần trễ' : 'Lates'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={(k, asc) => {
+                                            setSortKey(k)
+                                            setSortAsc(asc)
+                                        }}
+                                        values={[]}
+                                        activeFilter={null}
+                                        onFilter={() => {}}
+                                        onClear={() => {}}
+                                        open={activeDropdown === 'lates_count'}
+                                        onToggle={() => setActiveDropdown(activeDropdown === 'lates_count' ? null : 'lates_count')}
+                                        onClose={() => setActiveDropdown(null)}
+                                        dict={dict}
+                                        center
+                                        className="border-l border-gray-100 font-semibold"
+                                    />
+                                    <ColumnHeader
+                                        colKey="lates_minutes"
+                                        label={language === 'vi' ? 'Số phút trễ' : 'Lates (Mins)'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={(k, asc) => {
+                                            setSortKey(k)
+                                            setSortAsc(asc)
+                                        }}
+                                        values={[]}
+                                        activeFilter={null}
+                                        onFilter={() => {}}
+                                        onClear={() => {}}
+                                        open={activeDropdown === 'lates_minutes'}
+                                        onToggle={() => setActiveDropdown(activeDropdown === 'lates_minutes' ? null : 'lates_minutes')}
+                                        onClose={() => setActiveDropdown(null)}
+                                        dict={dict}
+                                        center
+                                        className="font-semibold"
+                                    />
+                                    <ColumnHeader
+                                        colKey="avg_rate"
+                                        label={language === 'vi' ? 'Tỉ lệ TB' : 'Avg Rate'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={(k, asc) => {
+                                            setSortKey(k)
+                                            setSortAsc(asc)
+                                        }}
+                                        values={[]}
+                                        activeFilter={null}
+                                        onFilter={() => {}}
+                                        onClear={() => {}}
+                                        open={activeDropdown === 'avg_rate'}
+                                        onToggle={() => setActiveDropdown(activeDropdown === 'avg_rate' ? null : 'avg_rate')}
+                                        onClose={() => setActiveDropdown(null)}
+                                        dict={dict}
+                                        center
+                                        className="text-blue-600 bg-blue-50/50 border-r border-gray-100 font-semibold"
+                                    />
+                                    <ColumnHeader
+                                        colKey="annual_leaves"
+                                        label={language === 'vi' ? 'Phép năm' : 'Annual'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={(k, asc) => {
+                                            setSortKey(k)
+                                            setSortAsc(asc)
+                                        }}
+                                        values={[]}
+                                        activeFilter={null}
+                                        onFilter={() => {}}
+                                        onClear={() => {}}
+                                        open={activeDropdown === 'annual_leaves'}
+                                        onToggle={() => setActiveDropdown(activeDropdown === 'annual_leaves' ? null : 'annual_leaves')}
+                                        onClose={() => setActiveDropdown(null)}
+                                        dict={dict}
+                                        center
+                                        className="font-semibold"
+                                    />
+                                    <ColumnHeader
+                                        colKey="sick_leaves"
+                                        label={language === 'vi' ? 'Bệnh' : 'Sick'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={(k, asc) => {
+                                            setSortKey(k)
+                                            setSortAsc(asc)
+                                        }}
+                                        values={[]}
+                                        activeFilter={null}
+                                        onFilter={() => {}}
+                                        onClear={() => {}}
+                                        open={activeDropdown === 'sick_leaves'}
+                                        onToggle={() => setActiveDropdown(activeDropdown === 'sick_leaves' ? null : 'sick_leaves')}
+                                        onClose={() => setActiveDropdown(null)}
+                                        dict={dict}
+                                        center
+                                        className="font-semibold"
+                                    />
+                                    <ColumnHeader
+                                        colKey="unpaid_leaves"
+                                        label={language === 'vi' ? 'Không lương' : 'Unpaid'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={(k, asc) => {
+                                            setSortKey(k)
+                                            setSortAsc(asc)
+                                        }}
+                                        values={[]}
+                                        activeFilter={null}
+                                        onFilter={() => {}}
+                                        onClear={() => {}}
+                                        open={activeDropdown === 'unpaid_leaves'}
+                                        onToggle={() => setActiveDropdown(activeDropdown === 'unpaid_leaves' ? null : 'unpaid_leaves')}
+                                        onClose={() => setActiveDropdown(null)}
+                                        dict={dict}
+                                        center
+                                        className="font-semibold"
+                                    />
+                                    <ColumnHeader
+                                        colKey="other_leaves"
+                                        label={language === 'vi' ? 'Khác' : 'Other'}
+                                        sortKey={sortKey}
+                                        sortAsc={sortAsc}
+                                        onSort={(k, asc) => {
+                                            setSortKey(k)
+                                            setSortAsc(asc)
+                                        }}
+                                        values={[]}
+                                        activeFilter={null}
+                                        onFilter={() => {}}
+                                        onClear={() => {}}
+                                        open={activeDropdown === 'other_leaves'}
+                                        onToggle={() => setActiveDropdown(activeDropdown === 'other_leaves' ? null : 'other_leaves')}
+                                        onClose={() => setActiveDropdown(null)}
+                                        dict={dict}
+                                        center
+                                        className="font-semibold"
+                                    />
                                 </tr>
                             </thead>
                             <tbody>
