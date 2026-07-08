@@ -372,6 +372,7 @@ export default function AttendanceMonthlyPage() {
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-200">
                                     <ColumnHeader
+                                        rowSpan={2}
                                         colKey="full_name"
                                         label={language === 'vi' ? 'Nhân viên' : 'Staff Member'}
                                         sortKey={sortKey}
@@ -390,6 +391,7 @@ export default function AttendanceMonthlyPage() {
                                         dict={dict}
                                     />
                                     <ColumnHeader
+                                        rowSpan={2}
                                         colKey="position"
                                         label={language === 'vi' ? 'Chức vụ' : 'Position'}
                                         sortKey={sortKey}
@@ -654,9 +656,10 @@ type ColumnHeaderProps = {
     right?: boolean
     center?: boolean
     className?: string
+    rowSpan?: number
 }
 
-function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '' }: ColumnHeaderProps) {
+function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '', rowSpan }: ColumnHeaderProps) {
     const ref = useRef<HTMLTableCellElement>(null)
     const [filterSearch, setFilterSearch] = useState('')
     const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
@@ -714,7 +717,7 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
     }
 
     return (
-        <th className={`px-4 py-3.5 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+        <th rowSpan={rowSpan} className={`px-4 py-3.5 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
             <div className={`flex items-center gap-1 font-bold uppercase tracking-wider text-gray-500 text-[10px] ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
                 <span className="select-none">{label}</span>
                 {isActive && (
