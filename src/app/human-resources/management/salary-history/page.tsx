@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { HRStaffSalaryHistory, HRStaffMember, SalaryType, HRDepartment, HRPosition } from '@/types/human-resources'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 import CircularLoader from '@/components/CircularLoader'
 import SalaryModal from '@/components/human-resources/SalaryModal'
 import {
@@ -226,6 +227,8 @@ export default function SalaryHistoryPage() {
     const [exportModalOpen, setExportModalOpen] = useState(false)
 
     const [loggedUserName, setLoggedUserName] = useState<string>('')
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
 
     useEffect(() => {
         let isMounted = true
@@ -243,11 +246,21 @@ export default function SalaryHistoryPage() {
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
             const [staffRes, histRes, deptRes, posRes] = await Promise.all([
-                supabase.from('hr_staff').select('*').order('full_name'),
+                supabase.from('hr_staff').select('*, hr_staff_branches(*)').order('full_name'),
                 supabase.from('hr_staff_salary_history').select(`
                     *, 
-                    hr_staff(*),
+                    hr_staff(*, hr_staff_branches(*)),
                     previous_position:hr_positions!hr_staff_salary_history_previous_position_id_fkey(name),
                     new_position:hr_positions!hr_staff_salary_history_new_position_id_fkey(name),
                     previous_department:hr_departments!hr_staff_salary_history_previous_department_id_fkey(name),
@@ -256,13 +269,27 @@ export default function SalaryHistoryPage() {
                 supabase.from('hr_departments').select('*').order('name'),
                 supabase.from('hr_positions').select('*').order('name')
             ])
-            if (staffRes.data) setStaffList(staffRes.data as HRStaffMember[])
-            if (histRes.data) setEntries(histRes.data as any)
+
+            let filteredStaff = (staffRes.data as any[]) || []
+            let filteredEntries = histRes.data || []
+
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredStaff = filteredStaff.filter(s =>
+                    (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                )
+                filteredEntries = filteredEntries.filter((e: any) => {
+                    const s = e.hr_staff
+                    return s && (s.hr_staff_branches || []).some((sb: any) => userBranches.includes(sb.branch_id))
+                })
+            }
+
+            if (staffRes.data) setStaffList(filteredStaff)
+            if (histRes.data) setEntries(filteredEntries as any)
             if (deptRes.data) setDepartments(deptRes.data as HRDepartment[])
             if (posRes.data) setPositions(posRes.data as HRPosition[])
         } catch (err) { console.error(err) }
         setLoading(false)
-    }, [])
+    }, [currentUserRole, currentUserBranches])
 
     useEffect(() => { fetchAll() }, [fetchAll])
 

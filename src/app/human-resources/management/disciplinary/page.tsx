@@ -6,6 +6,7 @@ import { saveAs } from 'file-saver'
 import { supabase } from '@/lib/supabase_shim'
 import { HRDisciplinaryCatalog, HRAwardsCatalog, HRStaffFine, HRStaffAward, HRStaffWarning, HRStaffMember, WarningFlagType } from '@/types/human-resources'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 const fmtVND = (n: number | null) => {
     if (n === null || isNaN(n)) return '0'
@@ -140,6 +141,8 @@ export default function DisciplinaryPage() {
     const [month, setMonth] = useState<number>(now.getMonth())
 
     const [loggedUserName, setLoggedUserName] = useState<string>('')
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [currentUserBranches, setCurrentUserBranches] = useState<string[] | null>(null)
 
     // States for sorting and filtering
     type SortKey = 'date' | 'name' | 'infraction' | 'notified_by' | 'source' | 'status' | 'amount' | 'flag_type' | 'reason' | 'award_name';
@@ -202,9 +205,19 @@ export default function DisciplinaryPage() {
         const endDate = new Date(year, month + 1, 0) // last day
         
         try {
+            let userRole = currentUserRole
+            let userBranches = currentUserBranches
+            if (!userRole) {
+                const perms = await getCurrentUserPermissions()
+                userRole = perms.role
+                userBranches = perms.branches
+                setCurrentUserRole(userRole)
+                setCurrentUserBranches(userBranches)
+            }
+
             const [finesRes, catRes, staffRes, warningsRes, awardsRes, awardsCatRes] = await Promise.all([
                 supabase.from('hr_staff_fines')
-                    .select('*, staff:hr_staff(id, full_name)')
+                    .select('*, staff:hr_staff(id, full_name, hr_staff_branches(*))')
                     .neq('deduction_source', 'cash')
                     .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
                     .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`)
@@ -213,16 +226,16 @@ export default function DisciplinaryPage() {
                     .select('*')
                     .order('infraction_name', { ascending: true }),
                 supabase.from('hr_staff')
-                    .select('*')
+                    .select('*, hr_staff_branches(*)')
                     .eq('status', 'active')
                     .order('full_name', { ascending: true }),
                 supabase.from('hr_staff_warnings')
-                    .select('*, staff:hr_staff(id, full_name)')
+                    .select('*, staff:hr_staff(id, full_name, hr_staff_branches(*))')
                     .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
                     .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`)
                     .order('date', { ascending: false }),
                 supabase.from('hr_staff_awards')
-                    .select('*, staff:hr_staff(id, full_name)')
+                    .select('*, staff:hr_staff(id, full_name, hr_staff_branches(*))')
                     .neq('deduction_source', 'cash')
                     .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
                     .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`)
@@ -240,26 +253,38 @@ export default function DisciplinaryPage() {
             if (awardsCatRes.error) throw awardsCatRes.error
 
             // Merge fines
-            const mappedFines = (finesRes.data || []).map(f => {
+            let mappedFines = (finesRes.data || []).map(f => {
                 const s = Array.isArray(f.staff) ? f.staff[0] : f.staff
                 return { ...f, staff: s }
             })
 
             // Merge warnings
-            const mappedWarnings = (warningsRes.data || []).map(w => {
+            let mappedWarnings = (warningsRes.data || []).map(w => {
                 const s = Array.isArray(w.staff) ? w.staff[0] : w.staff
                 return { ...w, staff: s }
             })
 
             // Merge awards
-            const mappedAwards = (awardsRes.data || []).map(a => {
+            let mappedAwards = (awardsRes.data || []).map(a => {
                 const s = Array.isArray(a.staff) ? a.staff[0] : a.staff
                 return { ...a, staff: s }
             })
 
+            let filteredStaff = (staffRes.data as any[]) || []
+
+            if (userRole && !['owner', 'admin'].includes(userRole) && userBranches) {
+                filteredStaff = filteredStaff.filter(s =>
+                    (s.hr_staff_branches || []).some(sb => userBranches.includes(sb.branch_id))
+                )
+                const allowedStaffIds = new Set(filteredStaff.map(s => s.id))
+                mappedFines = mappedFines.filter(f => f.staff && allowedStaffIds.has(f.staff.id))
+                mappedWarnings = mappedWarnings.filter(w => w.staff && allowedStaffIds.has(w.staff.id))
+                mappedAwards = mappedAwards.filter(a => a.staff && allowedStaffIds.has(a.staff.id))
+            }
+
             setFines(mappedFines)
             setCatalog(catRes.data as HRDisciplinaryCatalog[] || [])
-            setStaffList(staffRes.data as HRStaffMember[] || [])
+            setStaffList(filteredStaff)
             setWarnings(mappedWarnings)
             setAwards(mappedAwards)
             setAwardsCatalog(awardsCatRes.data as HRAwardsCatalog[] || [])
@@ -268,7 +293,7 @@ export default function DisciplinaryPage() {
         } finally {
             setLoading(false)
         }
-    }, [year, month])
+    }, [year, month, currentUserRole, currentUserBranches])
 
     useEffect(() => {
         fetchAll()
@@ -416,8 +441,8 @@ export default function DisciplinaryPage() {
         const dnow = new Date()
         let fileNameSuffix = 'All_Time'
 
-        let finesQuery = supabase.from('hr_staff_fines').select('*, staff:hr_staff(id, full_name, department, position)').neq('deduction_source', 'cash')
-        let awardsQuery = supabase.from('hr_staff_awards').select('*, staff:hr_staff(id, full_name, department, position)').neq('deduction_source', 'cash')
+        let finesQuery = supabase.from('hr_staff_fines').select('*, staff:hr_staff(id, full_name, department, position, hr_staff_branches(*))').neq('deduction_source', 'cash')
+        let awardsQuery = supabase.from('hr_staff_awards').select('*, staff:hr_staff(id, full_name, department, position, hr_staff_branches(*))').neq('deduction_source', 'cash')
 
         if (range === 'this_month') {
             const y = dnow.getFullYear()
@@ -457,6 +482,19 @@ export default function DisciplinaryPage() {
             const finesData = finesRes.data || []
             const awardsData = awardsRes.data || []
 
+            let filteredFines = finesData
+            let filteredAwards = awardsData
+            if (currentUserRole && !['owner', 'admin'].includes(currentUserRole) && currentUserBranches) {
+                filteredFines = finesData.filter((f: any) => {
+                    const s = Array.isArray(f.staff) ? f.staff[0] : f.staff
+                    return s && (s.hr_staff_branches || []).some((sb: any) => currentUserBranches.includes(sb.branch_id))
+                })
+                filteredAwards = awardsData.filter((a: any) => {
+                    const s = Array.isArray(a.staff) ? a.staff[0] : a.staff
+                    return s && (s.hr_staff_branches || []).some((sb: any) => currentUserBranches.includes(sb.branch_id))
+                })
+            }
+
             // Consolidation map
             const consolidation: Record<string, {
                 name: string
@@ -484,7 +522,7 @@ export default function DisciplinaryPage() {
                 return consolidation[staffId]
             }
 
-            finesData.forEach((fine: any) => {
+            filteredFines.forEach((fine: any) => {
                 const s = Array.isArray(fine.staff) ? fine.staff[0] : fine.staff
                 const emp = getOrCreateEmployee(s)
                 if (emp) {
@@ -492,7 +530,7 @@ export default function DisciplinaryPage() {
                 }
             })
 
-            awardsData.forEach((award: any) => {
+            filteredAwards.forEach((award: any) => {
                 const s = Array.isArray(award.staff) ? award.staff[0] : award.staff
                 const emp = getOrCreateEmployee(s)
                 if (emp) {
