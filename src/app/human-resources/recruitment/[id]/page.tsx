@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase_shim'
 import { HiringRequest } from '@/types/human-resources'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
+import { getCurrentUserPermissions } from '@/lib/user-branches'
 
 import { RequestOverview } from '@/components/human-resources/RequestOverview'
 
@@ -25,6 +26,8 @@ export default function HiringRequestDetailPage() {
 
     const [request, setRequest] = useState<HiringRequest | null>(null)
     const [branchNames, setBranchNames] = useState<string>('')
+    const [userRole, setUserRole] = useState<string | null>(null)
+    const [userBranches, setUserBranches] = useState<string[]>([])
     const [loading, setLoading] = useState(true)
     const [updatingStatus, setUpdatingStatus] = useState(false)
     const [activeTab, setActiveTab] = useState<'overview' | 'postings' | 'candidates'>('overview')
@@ -45,6 +48,10 @@ export default function HiringRequestDetailPage() {
     const fetchRequest = async (silent = false) => {
         if (!silent) setLoading(true)
         try {
+            const perms = await getCurrentUserPermissions()
+            setUserRole(perms.role)
+            setUserBranches(perms.userBranches)
+
             const { data: requestData, error: requestError } = await supabase
                 .from('hiring_requests')
                 .select('*')
@@ -52,6 +59,15 @@ export default function HiringRequestDetailPage() {
                 .single()
 
             if (requestError) throw requestError
+
+            if (!perms.isAdminOrOwner) {
+                const reqBranches = requestData.branch_ids || []
+                const hasAccess = reqBranches.some((bid: string) => perms.userBranches.includes(String(bid)))
+                if (!hasAccess) {
+                    router.push('/human-resources/recruitment')
+                    return
+                }
+            }
             
             let currentStatus = requestData.status
             if (currentStatus === 'submitted') {
