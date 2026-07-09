@@ -418,7 +418,7 @@ export default function MonthlyClosingListPage() {
                     <tbody>
                         {filtered.length === 0 && (
                             <tr>
-                                <td colSpan={10} className="text-center text-gray-500 py-6">
+                                <td colSpan={10} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                                     {t.table.noResults}
                                 </td>
                             </tr>
