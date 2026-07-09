@@ -26,6 +26,19 @@ type MappingRecord = {
   account_id: string | null
 }
 
+const generateUUID = (): string => {
+  try {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID()
+    }
+  } catch (e) {}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
 export default function MapOperationalCategoriesModal({ accounts, onClose }: MappingModalProps) {
   const { language } = useSettings()
   const [loading, setLoading] = useState(true)
@@ -126,12 +139,16 @@ export default function MapOperationalCategoriesModal({ accounts, onClose }: Map
     setSaving(true)
     try {
       // Upsert all modified mappings
-      const recordsToUpsert = mappings.filter(m => m.account_id !== null).map(m => ({
-        ...(m.id ? { id: m.id } : {}),
-        branch_name: m.branch_name,
-        category_name: m.category_name,
-        account_id: m.account_id
-      }))
+      // Include existing mappings (with m.id) even if account_id is null, to support clearing mappings.
+      // Generate client-side UUID for new mappings to avoid PostgREST bulk insert issue.
+      const recordsToUpsert = mappings
+        .filter(m => m.id || m.account_id !== null)
+        .map(m => ({
+          id: m.id || generateUUID(),
+          branch_name: m.branch_name,
+          category_name: m.category_name,
+          account_id: m.account_id
+        }))
 
       if (recordsToUpsert.length > 0) {
         const { error } = await supabase
