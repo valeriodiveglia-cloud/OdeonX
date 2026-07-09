@@ -16,6 +16,9 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   TrashIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline'
 
 import {
@@ -460,7 +463,7 @@ function EditorModal({
 }
 
 /* ---------- Page ---------- */
-type SortKeyBase = 'date' | 'description' | 'category' | 'amount' | 'supplier_name' | 'invoice' | 'deliveryNote' | 'shift' | 'paidBy'
+type SortKeyBase = 'date' | 'time' | 'description' | 'category' | 'amount' | 'supplier_name' | 'invoice' | 'deliveryNote' | 'shift' | 'paidBy'
 type SortKeyWithBranch = SortKeyBase | 'branch'
 type SortState = { key: SortKeyWithBranch | null; dir: 'asc' | 'desc' }
 
@@ -490,6 +493,35 @@ export default function CashoutPage() {
     bulkDeleteCashout,
   } = useCashout({ year, month })
 
+  // Display value helper for filter checkboxes
+  const displayValue = React.useCallback((r: CashoutRow, key: SortKeyWithBranch): string => {
+    switch (key) {
+      case 'date': return fmtDateDMY(r.date)
+      case 'time': return r.created_at ? extractHHMM(r.created_at) : ''
+      case 'description': return r.description || ''
+      case 'category': return r.category || ''
+      case 'amount': return fmtInt(r.amount)
+      case 'supplier_name': return r.supplier_name || ''
+      case 'invoice': return r.invoice ? yesNo.yes : yesNo.no
+      case 'deliveryNote': return r.deliveryNote ? yesNo.yes : yesNo.no
+      case 'branch': return r.branch || ''
+      case 'paidBy': return r.paidBy || ''
+      default: return ''
+    }
+  }, [yesNo])
+
+  // Unique filterable values per column
+  const columnValues = useMemo(() => {
+    const map: Partial<Record<SortKeyWithBranch, string[]>> = {}
+    const keys: SortKeyWithBranch[] = ['date', 'time', 'description', 'category', 'amount', 'supplier_name', 'invoice', 'deliveryNote', 'branch', 'paidBy']
+    keys.forEach(k => {
+      const s = new Set<string>()
+      rows.forEach(r => { const v = displayValue(r, k); if (v) s.add(v) })
+      map[k] = Array.from(s).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    })
+    return map
+  }, [rows, displayValue])
+
   // nuove categorie prese dai settings Daily Report
   const { cashOutCategories } = useDailyReportSettings()
   const catOpts = useMemo(
@@ -498,6 +530,37 @@ export default function CashoutPage() {
   )
 
   const [search, setSearch] = useState<string>('')
+
+  const columnMenuDict = {
+    sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
+    sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort Descending',
+    selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select All',
+    deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect All',
+    filterPlaceholder: language === 'vi' ? 'Lọc...' : 'Filter...',
+    clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters',
+  }
+
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<SortKeyWithBranch, Set<string>>>>({})
+  const [openMenu, setOpenMenu] = useState<SortKeyWithBranch | null>(null)
+
+  function applySort(k: SortKeyWithBranch, asc: boolean) {
+    setSort({ key: k, dir: asc ? 'asc' : 'desc' })
+    setOpenMenu(null)
+  }
+
+  function applyColumnFilter(col: SortKeyWithBranch, vals: Set<string> | null) {
+    setColumnFilters(prev => ({ ...prev, [col]: vals }))
+    setOpenMenu(null)
+  }
+
+  function clearColumnFilter(col: SortKeyWithBranch) {
+    setColumnFilters(prev => {
+      const next = { ...prev }
+      delete next[col]
+      return next
+    })
+    setOpenMenu(null)
+  }
 
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -656,28 +719,38 @@ export default function CashoutPage() {
     })
 
     const branchName = (selectedBranchName || '').trim()
-    const base = branchName ? monthFiltered.filter(r => (r.branch || '') === branchName) : monthFiltered
+    let out = branchName ? monthFiltered.filter(r => (r.branch || '') === branchName) : monthFiltered
 
     const q = search.trim().toLowerCase()
-    if (!q) return base
-    return base.filter(r => {
-      const dmy = fmtDateDMY(r.date).toLowerCase()
-      const iso = String(r.date || '').toLowerCase()
-      const amt = String(Math.round(r.amount || 0))
-      const desc = (r.description || '').toLowerCase()
-      const cat = (r.category || '').toLowerCase()
-      const supp = (r.supplier_name || '').toLowerCase()
-      const shift = (r.shift || '').toLowerCase()
-      const by = (r.paidBy || '').toLowerCase()
-      const br = (r.branch || '').toLowerCase()
-      const inv = r.invoice ? 'yes' : 'no'
-      const deln = r.deliveryNote ? 'yes' : 'no'
-      return (
-        desc.includes(q) || cat.includes(q) || supp.includes(q) || shift.includes(q) || by.includes(q) ||
-        inv.includes(q) || deln.includes(q) || dmy.includes(q) || iso.includes(q) || amt.includes(q) || br.includes(q)
-      )
-    })
-  }, [rows, search, selectedBranchName, monthStart, monthEnd])
+    if (q) {
+      out = out.filter(r => {
+        const dmy = fmtDateDMY(r.date).toLowerCase()
+        const iso = String(r.date || '').toLowerCase()
+        const amt = String(Math.round(r.amount || 0))
+        const desc = (r.description || '').toLowerCase()
+        const cat = (r.category || '').toLowerCase()
+        const supp = (r.supplier_name || '').toLowerCase()
+        const shift = (r.shift || '').toLowerCase()
+        const by = (r.paidBy || '').toLowerCase()
+        const br = (r.branch || '').toLowerCase()
+        const inv = r.invoice ? 'yes' : 'no'
+        const deln = r.deliveryNote ? 'yes' : 'no'
+        return (
+          desc.includes(q) || cat.includes(q) || supp.includes(q) || shift.includes(q) || by.includes(q) ||
+          inv.includes(q) || deln.includes(q) || dmy.includes(q) || iso.includes(q) || amt.includes(q) || br.includes(q)
+        )
+      })
+    }
+
+    // Apply column checklist filters
+    for (const [col, allowed] of Object.entries(columnFilters)) {
+      if (allowed && allowed.size > 0) {
+        out = out.filter(r => allowed.has(displayValue(r, col as SortKeyWithBranch)))
+      }
+    }
+
+    return out
+  }, [rows, search, selectedBranchName, monthStart, monthEnd, columnFilters, displayValue])
 
   /* ---------- Totali (solo valore, niente conteggio) ---------- */
   const totalAmount = useMemo(() => {
@@ -699,6 +772,7 @@ export default function CashoutPage() {
       switch (sort.key) {
         case 'amount': return (a.amount - b.amount) * dir
         case 'date': return (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir
+        case 'time': return ((a.created_at ? new Date(a.created_at).getTime() : 0) - (b.created_at ? new Date(b.created_at).getTime() : 0)) * dir
         case 'invoice': return ((a.invoice ? 1 : 0) - (b.invoice ? 1 : 0)) * dir
         case 'deliveryNote': return ((a.deliveryNote ? 1 : 0) - (b.deliveryNote ? 1 : 0)) * dir
         case 'supplier_name': return ((a.supplier_name || '').toLowerCase()).localeCompare((b.supplier_name || '').toLowerCase()) * dir
@@ -761,22 +835,199 @@ export default function CashoutPage() {
     URL.revokeObjectURL(url)
   }
 
-  function SortableHeader({ label, colKey, className }: { label: string; colKey: SortKeyWithBranch; className?: string }) {
-    const active = sort.key === colKey
-    const dir = sort.dir
+  /* --- Column Header with Excel-style dropdown --- */
+  type ColumnHeaderProps = {
+    colKey: SortKeyWithBranch
+    label: string
+    sortKey: SortKeyWithBranch
+    sortAsc: boolean
+    onSort: (k: SortKeyWithBranch, asc: boolean) => void
+    values: string[]
+    activeFilter: Set<string> | null
+    onFilter: (s: Set<string> | null) => void
+    onClear: () => void
+    open: boolean
+    onToggle: () => void
+    onClose: () => void
+    dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+    right?: boolean
+    center?: boolean
+    className?: string
+  }
+
+  function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeFilter, onFilter, onClear, open, onToggle, onClose, dict, right, center, className = '' }: ColumnHeaderProps) {
+    const ref = useRef<HTMLTableCellElement>(null)
+    const [filterSearch, setFilterSearch] = useState('')
+    const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+    // Sync local state when menu opens or values change
+    useEffect(() => {
+      if (open) {
+        setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+        setFilterSearch('')
+      }
+    }, [open, values, activeFilter])
+
+    // Click-outside handler
+    useEffect(() => {
+      if (!open) return
+      function handleClick(e: MouseEvent) {
+        if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      }
+      document.addEventListener('mousedown', handleClick)
+      return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose])
+
+    const isActive = sortKey === colKey
+    const hasFilter = !!activeFilter
+    const dropdownStyle = useMemo(() => {
+      if (!open || !ref.current) return undefined
+      const rect = ref.current.getBoundingClientRect()
+      return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    }, [open, right])
+
+    const filteredValues = filterSearch
+      ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+      : values
+
+    const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+    function toggleAll() {
+      const next = new Set(localChecked)
+      if (allVisibleChecked) {
+        filteredValues.forEach(v => next.delete(v))
+      } else {
+        filteredValues.forEach(v => next.add(v))
+      }
+      setLocalChecked(next)
+    }
+
+    function toggleOne(v: string) {
+      const next = new Set(localChecked)
+      if (next.has(v)) next.delete(v); else next.add(v)
+      setLocalChecked(next)
+    }
+
+    function handleApply() {
+      let finalChecked = localChecked
+      if (filterSearch) {
+        finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+      }
+      if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+    }
+
     return (
-      <th className={`p-2 ${className || ''}`}>
-        <button
-          type="button"
-          onClick={() => toggleSort(colKey)}
-          className="inline-flex items-center gap-1 font-semibold text-left hover:opacity-80"
-          title={t.table.sortTitle.replace('{label}', label)}
-        >
-          <span>{label}</span>
-          {!active && <ArrowsUpDownIcon className="w-4 h-4 text-gray-400" />}
-          {active && dir === 'asc' && <ChevronUpIcon className="w-4 h-4 text-gray-700" />}
-          {active && dir === 'desc' && <ChevronDownIcon className="w-4 h-4 text-gray-700" />}
-        </button>
+      <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+        <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+          <span className="select-none">{label}</span>
+          {isActive && (
+            sortAsc
+              ? <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+              : <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          )}
+          {/* Filter indicator */}
+          {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+          {/* Kebab menu button */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggle() }}
+            className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+            aria-label={`Menu ${label}`}
+          >
+            <EllipsisVerticalIcon className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        {/* Dropdown panel */}
+        {open && dropdownStyle && (
+          <div
+            className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700"
+            style={dropdownStyle}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Sort section */}
+            <div className="px-3 py-2 space-y-1">
+              <button
+                type="button"
+                onClick={() => onSort(colKey, true)}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                  }`}
+              >
+                <BarsArrowUpIcon className="w-4 h-4" />
+                {dict.sortAsc}
+              </button>
+              <button
+                type="button"
+                onClick={() => onSort(colKey, false)}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+                  }`}
+              >
+                <BarsArrowDownIcon className="w-4 h-4" />
+                {dict.sortDesc}
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-gray-200" />
+
+            {/* Filter section */}
+            <div className="px-3 py-2">
+              {/* Search */}
+              <input
+                type="text"
+                value={filterSearch}
+                onChange={e => setFilterSearch(e.target.value)}
+                placeholder={dict.filterPlaceholder}
+                className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+
+              {/* Select all / Deselect all */}
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+              >
+                {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+              </button>
+
+              {/* Checkbox list */}
+              <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                {filteredValues.map(v => (
+                  <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={localChecked.has(v)}
+                      onChange={() => toggleOne(v)}
+                      className="accent-blue-600 rounded"
+                    />
+                    <span className="truncate text-xs">{v}</span>
+                  </label>
+                ))}
+                {filteredValues.length === 0 && (
+                  <div className="text-xs text-gray-400 py-1 text-center">—</div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+              >
+                {dict.clearFilters}
+              </button>
+              <button
+                type="button"
+                onClick={handleApply}
+                className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
       </th>
     )
   }
@@ -921,7 +1172,7 @@ export default function CashoutPage() {
                     <input
                       ref={headerCbRef}
                       type="checkbox"
-                      checked={rows.length > 0 && rows.every(r => !!selected[r.id])}
+                      checked={visibleRows.length > 0 && visibleRows.every(r => !!selected[r.id])}
                       onChange={toggleSelectAll}
                       className="h-4 w-4"
                       title={t.table.selectAll}
@@ -929,25 +1180,25 @@ export default function CashoutPage() {
                   ) : null}
                 </th>
 
-                <SortableHeader label={t.table.headers.date} colKey="date" className="w-[8.5rem] text-left" />
-                <th className="p-2 w-[6.5rem] text-left font-semibold">{t.table.headers.time}</th>
-                <SortableHeader label={t.table.headers.description} colKey="description" className="text-left" />
-                <SortableHeader label={t.table.headers.category} colKey="category" className="w-[12rem] text-left" />
-                <SortableHeader label={t.table.headers.amount} colKey="amount" className="w-[8rem] text-right" />
-                <SortableHeader label={t.table.headers.supplier} colKey="supplier_name" className="w-[12rem] text-left" />
-                <SortableHeader label={t.table.headers.invoice} colKey="invoice" className="w-[8rem] text-center" />
-                <SortableHeader label={t.table.headers.deliveryNote} colKey="deliveryNote" className="w-[10rem] text-center" />
-                <SortableHeader label={t.table.headers.branch} colKey="branch" className="w-[10rem] text-left" />
-                <SortableHeader label={t.table.headers.paidBy} colKey="paidBy" className="w-[11rem] text-left" />
+                <ColumnHeader colKey="date" label={t.table.headers.date} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.date || []} activeFilter={columnFilters.date || null} onFilter={(s) => applyColumnFilter('date', s)} onClear={() => clearColumnFilter('date')} open={openMenu === 'date'} onToggle={() => setOpenMenu(v => v === 'date' ? null : 'date')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8.5rem]" />
+                <ColumnHeader colKey="time" label={t.table.headers.time} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.time || []} activeFilter={columnFilters.time || null} onFilter={(s) => applyColumnFilter('time', s)} onClear={() => clearColumnFilter('time')} open={openMenu === 'time'} onToggle={() => setOpenMenu(v => v === 'time' ? null : 'time')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[6.5rem]" />
+                <ColumnHeader colKey="description" label={t.table.headers.description} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.description || []} activeFilter={columnFilters.description || null} onFilter={(s) => applyColumnFilter('description', s)} onClear={() => clearColumnFilter('description')} open={openMenu === 'description'} onToggle={() => setOpenMenu(v => v === 'description' ? null : 'description')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} />
+                <ColumnHeader colKey="category" label={t.table.headers.category} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.category || []} activeFilter={columnFilters.category || null} onFilter={(s) => applyColumnFilter('category', s)} onClear={() => clearColumnFilter('category')} open={openMenu === 'category'} onToggle={() => setOpenMenu(v => v === 'category' ? null : 'category')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[12rem]" />
+                <ColumnHeader colKey="amount" label={t.table.headers.amount} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.amount || []} activeFilter={columnFilters.amount || null} onFilter={(s) => applyColumnFilter('amount', s)} onClear={() => clearColumnFilter('amount')} open={openMenu === 'amount'} onToggle={() => setOpenMenu(v => v === 'amount' ? null : 'amount')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
+                <ColumnHeader colKey="supplier_name" label={t.table.headers.supplier} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.supplier_name || []} activeFilter={columnFilters.supplier_name || null} onFilter={(s) => applyColumnFilter('supplier_name', s)} onClear={() => clearColumnFilter('supplier_name')} open={openMenu === 'supplier_name'} onToggle={() => setOpenMenu(v => v === 'supplier_name' ? null : 'supplier_name')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[12rem]" />
+                <ColumnHeader colKey="invoice" label={t.table.headers.invoice} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.invoice || []} activeFilter={columnFilters.invoice || null} onFilter={(s) => applyColumnFilter('invoice', s)} onClear={() => clearColumnFilter('invoice')} open={openMenu === 'invoice'} onToggle={() => setOpenMenu(v => v === 'invoice' ? null : 'invoice')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} center className="w-[8rem]" />
+                <ColumnHeader colKey="deliveryNote" label={t.table.headers.deliveryNote} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.deliveryNote || []} activeFilter={columnFilters.deliveryNote || null} onFilter={(s) => applyColumnFilter('deliveryNote', s)} onClear={() => clearColumnFilter('deliveryNote')} open={openMenu === 'deliveryNote'} onToggle={() => setOpenMenu(v => v === 'deliveryNote' ? null : 'deliveryNote')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} center className="w-[10rem]" />
+                <ColumnHeader colKey="branch" label={t.table.headers.branch} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.branch || []} activeFilter={columnFilters.branch || null} onFilter={(s) => applyColumnFilter('branch', s)} onClear={() => clearColumnFilter('branch')} open={openMenu === 'branch'} onToggle={() => setOpenMenu(v => v === 'branch' ? null : 'branch')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[10rem]" />
+                <ColumnHeader colKey="paidBy" label={t.table.headers.paidBy} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.paidBy || []} activeFilter={columnFilters.paidBy || null} onFilter={(s) => applyColumnFilter('paidBy', s)} onClear={() => clearColumnFilter('paidBy')} open={openMenu === 'paidBy'} onToggle={() => setOpenMenu(v => v === 'paidBy' ? null : 'paidBy')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[11rem]" />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && !loading && (
-                <tr><td colSpan={11} className="text-center text-sm text-gray-500 py-6">{t.table.noRows}</td></tr>
+                <tr><td colSpan={11} className="text-center py-8 text-slate-400 text-xs italic font-semibold">{t.table.noRows}</td></tr>
               )}
               {rows.length > 0 && (
                 visibleRows.length === 0 && !loading ? (
-                  <tr><td colSpan={11} className="text-center text-sm text-gray-500 py-6">{t.table.noRows}</td></tr>
+                  <tr><td colSpan={11} className="text-center py-8 text-slate-400 text-xs italic font-semibold">{t.table.noRows}</td></tr>
                 ) : (
                   visibleRows.length > 0 && [...sortedRows].map(r => (
                     <tr
