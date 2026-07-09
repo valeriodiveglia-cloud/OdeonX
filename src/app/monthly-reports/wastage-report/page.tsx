@@ -289,7 +289,7 @@ export default function MonthlyWastageReportPage() {
                     <tbody>
                         {filtered.length === 0 && (
                             <tr>
-                                <td colSpan={12} className="text-center text-gray-500 py-6">
+                                <td colSpan={12} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                                     {t.table.empty}
                                 </td>
                             </tr>

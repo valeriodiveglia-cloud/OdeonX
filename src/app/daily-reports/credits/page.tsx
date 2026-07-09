@@ -8,9 +8,9 @@ import {
   CheckCircleIcon,
   ArrowUpTrayIcon,
   MagnifyingGlassIcon,
-  ArrowsUpDownIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
   EllipsisVerticalIcon,
   BanknotesIcon,
   ClockIcon,
@@ -816,7 +816,7 @@ function EditorModal({
   )
 }
 
-type SortKeyBase = 'date' | 'customer_name' | 'amount' | 'reference' | 'shift' | 'handledBy' | 'status'
+type SortKeyBase = 'date' | 'customer_name' | 'amount' | 'remaining' | 'reference' | 'shift' | 'handledBy' | 'status'
 type SortKeyWithBranch = SortKeyBase | 'branch'
 type SortState = { key: SortKeyWithBranch | null; dir: 'asc' | 'desc' }
 
@@ -902,6 +902,54 @@ export default function CreditsPage() {
   const [payingRow, setPayingRow] = useState<CreditRow | null>(null)
   const [historyRow, setHistoryRow] = useState<CreditRow | null>(null)
 
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<SortKeyWithBranch | 'remaining', Set<string>>>>({})
+  const [openMenu, setOpenMenu] = useState<SortKeyWithBranch | 'remaining' | null>(null)
+
+  const columnMenuDict = {
+    sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
+    sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort Descending',
+    selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select All',
+    deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect All',
+    filterPlaceholder: language === 'vi' ? 'Lọc...' : 'Filter...',
+    clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters',
+  }
+
+  function applySort(k: SortKeyWithBranch | 'remaining', asc: boolean) {
+    setSort({ key: k, dir: asc ? 'asc' : 'desc' })
+    setOpenMenu(null)
+  }
+
+  function applyColumnFilter(col: SortKeyWithBranch | 'remaining', vals: Set<string> | null) {
+    setColumnFilters(prev => ({ ...prev, [col]: vals }))
+    setOpenMenu(null)
+  }
+
+  function clearColumnFilter(col: SortKeyWithBranch | 'remaining') {
+    setColumnFilters(prev => {
+      const next = { ...prev }
+      delete next[col]
+      return next
+    })
+    setOpenMenu(null)
+  }
+
+  const displayValue = React.useCallback(
+    (x: { row: CreditRow; remaining: number; status: Totals['status'] }, key: SortKeyWithBranch | 'remaining'): string => {
+      switch (key) {
+        case 'date': return fmtDateDMY(x.row.date)
+        case 'customer_name': return x.row.customer_name || ''
+        case 'amount': return fmtInt(x.row.amount)
+        case 'remaining': return fmtInt(x.remaining)
+        case 'status': return x.status === 'Paid' ? t.status.paid : x.status === 'Unpaid' ? t.status.unpaid : t.status.open
+        case 'reference': return x.row.reference || ''
+        case 'branch': return x.row.branch || ''
+        case 'shift': return x.row.shift || ''
+        case 'handledBy': return x.row.handledBy || ''
+        default: return ''
+      }
+    },
+    [t.status]
+  )
 
   const monthInputValue = useMemo(() => `${year}-${String(month + 1).padStart(2, '0')}`, [year, month])
   const monthLabel = `${monthName(month)} ${year}`
@@ -956,35 +1004,56 @@ export default function CreditsPage() {
     })
   }, [rowsWithCalc, monthStart, monthEnd])
 
+  const columnValues = useMemo(() => {
+    const map: Partial<Record<SortKeyWithBranch | 'remaining', string[]>> = {}
+    const keys: (SortKeyWithBranch | 'remaining')[] = ['date', 'customer_name', 'amount', 'remaining', 'status', 'reference', 'branch', 'shift', 'handledBy']
+    keys.forEach(k => {
+      const s = new Set<string>()
+      nowMonthFiltered.forEach(x => { const v = displayValue(x, k); if (v) s.add(v) })
+      map[k] = Array.from(s).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    })
+    return map
+  }, [nowMonthFiltered, displayValue])
+
   const visibleRows = useMemo(() => {
     const branchName = (activeBranch || '').trim()
-    const base = branchName ? nowMonthFiltered.filter(x => (x.row.branch || '') === branchName) : nowMonthFiltered
+    let base = branchName ? nowMonthFiltered.filter(x => (x.row.branch || '') === branchName) : nowMonthFiltered
     const q = search.trim().toLowerCase()
-    if (!q) return base
-    return base.filter(x => {
-      const r = x.row
-      const dmy = fmtDateDMY(r.date).toLowerCase()
-      const iso = String(r.date || '').toLowerCase()
-      const amt = String(Math.round(r.amount || 0))
-      const cust = (r.customer_name || '').toLowerCase()
-      const ref = (r.reference || '').toLowerCase()
-      const shift = (r.shift || '').toLowerCase()
-      const by = (r.handledBy || '').toLowerCase()
-      const br = (r.branch || '').toLowerCase()
-      const stat = x.status.toLowerCase()
-      return (
-        cust.includes(q) ||
-        ref.includes(q) ||
-        shift.includes(q) ||
-        by.includes(q) ||
-        dmy.includes(q) ||
-        iso.includes(q) ||
-        amt.includes(q) ||
-        br.includes(q) ||
-        stat.includes(q)
-      )
-    })
-  }, [nowMonthFiltered, search, activeBranch])
+    if (q) {
+      base = base.filter(x => {
+        const r = x.row
+        const dmy = fmtDateDMY(r.date).toLowerCase()
+        const iso = String(r.date || '').toLowerCase()
+        const amt = String(Math.round(r.amount || 0))
+        const cust = (r.customer_name || '').toLowerCase()
+        const ref = (r.reference || '').toLowerCase()
+        const shift = (r.shift || '').toLowerCase()
+        const by = (r.handledBy || '').toLowerCase()
+        const br = (r.branch || '').toLowerCase()
+        const stat = x.status.toLowerCase()
+        return (
+          cust.includes(q) ||
+          ref.includes(q) ||
+          shift.includes(q) ||
+          by.includes(q) ||
+          dmy.includes(q) ||
+          iso.includes(q) ||
+          amt.includes(q) ||
+          br.includes(q) ||
+          stat.includes(q)
+        )
+      })
+    }
+
+    // Apply column checklist filters
+    for (const [col, allowed] of Object.entries(columnFilters)) {
+      if (allowed && allowed.size > 0) {
+        base = base.filter(x => allowed.has(displayValue(x, col as any)))
+      }
+    }
+
+    return base
+  }, [nowMonthFiltered, search, activeBranch, columnFilters, displayValue])
 
   function toggleSort(key: SortKeyWithBranch) {
     setSort(prev => (prev.key !== key ? { key, dir: 'asc' } : { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }))
@@ -996,6 +1065,7 @@ export default function CreditsPage() {
       const ra = a.row, rb = b.row
       switch (sort.key) {
         case 'amount': return (ra.amount - rb.amount) * dir
+        case 'remaining': return (a.remaining - b.remaining) * dir
         case 'date': return (new Date(ra.date).getTime() - new Date(rb.date).getTime()) * dir
         case 'customer_name': return (ra.customer_name || '').toLowerCase().localeCompare((rb.customer_name || '').toLowerCase()) * dir
         case 'reference': return (ra.reference || '').toLowerCase().localeCompare((rb.reference || '').toLowerCase()) * dir
@@ -1154,6 +1224,14 @@ export default function CreditsPage() {
             setHistoryRow={setHistoryRow}
             selectMode={selectMode}
             t={t}
+            columnFilters={columnFilters}
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+            columnValues={columnValues}
+            applySort={applySort}
+            applyColumnFilter={applyColumnFilter}
+            clearColumnFilter={clearColumnFilter}
+            columnMenuDict={columnMenuDict}
           />
         </div>
       </Card>
@@ -1258,6 +1336,14 @@ function CreditsTable({
   setHistoryRow,
   selectMode,
   t,
+  columnFilters,
+  openMenu,
+  setOpenMenu,
+  columnValues,
+  applySort,
+  applyColumnFilter,
+  clearColumnFilter,
+  columnMenuDict,
 }: {
   rows: CreditRow[]
   sortedRows: { row: CreditRow; remaining: number; status: Totals['status'] }[]
@@ -1274,25 +1360,18 @@ function CreditsTable({
   setHistoryRow: (r: CreditRow) => void
   selectMode: boolean
   t: ReturnType<typeof getDailyReportsDictionary>['credits']
+  columnFilters: Partial<Record<SortKeyWithBranch | 'remaining', Set<string>>>
+  openMenu: SortKeyWithBranch | 'remaining' | null
+  setOpenMenu: React.Dispatch<React.SetStateAction<SortKeyWithBranch | 'remaining' | null>>
+  columnValues: Partial<Record<SortKeyWithBranch | 'remaining', string[]>>
+  applySort: (k: SortKeyWithBranch | 'remaining', asc: boolean) => void
+  applyColumnFilter: (col: SortKeyWithBranch | 'remaining', vals: Set<string> | null) => void
+  clearColumnFilter: (col: SortKeyWithBranch | 'remaining') => void
+  columnMenuDict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
 }) {
   useEffect(() => {
     if (headerCbRef.current) headerCbRef.current.indeterminate = rows.some(r => !!selected[r.id]) && !rows.every(r => !!selected[r.id])
   }, [selected, rows])
-
-  const SortableHeader = ({ label, colKey, className }: { label: string; colKey: SortKeyWithBranch; className?: string }) => {
-    const active = sort.key === colKey
-    const dir = sort.dir
-    return (
-      <th className={`p-2 ${className || ''}`}>
-        <button type="button" onClick={() => setSort((prev: any) => (prev.key !== colKey ? { key: colKey, dir: 'asc' } : { key: colKey, dir: prev.dir === 'asc' ? 'desc' : 'asc' }))} className="inline-flex items-center gap-1 font-semibold text-left hover:opacity-80" title={t.table.sortTitle.replace('{label}', label)}>
-          <span>{label}</span>
-          {!active && <ArrowsUpDownIcon className="w-4 h-4 text-gray-400" />}
-          {active && dir === 'asc' && <ChevronUpIcon className="w-4 h-4 text-gray-700" />}
-          {active && dir === 'desc' && <ChevronDownIcon className="w-4 h-4 text-gray-700" />}
-        </button>
-      </th>
-    )
-  }
 
   const totalInitial = useMemo(() => sortedRows.reduce((s, x) => s + Math.round(x.row.amount || 0), 0), [sortedRows])
   const totalRemaining = useMemo(() => sortedRows.reduce((s, x) => s + Math.round(totalsMap[x.row.id]?.remaining ?? Math.round(x.row.amount || 0)), 0), [sortedRows, totalsMap])
@@ -1324,15 +1403,15 @@ function CreditsTable({
               />
             ) : null}
           </th>
-          <SortableHeader label={t.table.headers.date} colKey="date" className="w-[8.5rem] text-left" />
-          <SortableHeader label={t.table.headers.customer} colKey="customer_name" className="w-[22rem] text-left" />
-          <SortableHeader label={t.table.headers.initial} colKey="amount" className="w-[8rem] text-right" />
-          <th className="p-2 w-[8rem] text-right font-semibold">{t.table.headers.remaining}</th>
-          <SortableHeader label={t.table.headers.status} colKey="status" className="w-[8rem] text-left" />
-          <SortableHeader label={t.table.headers.reference} colKey="reference" className="w-[12rem] text-left" />
-          <SortableHeader label={t.table.headers.branch} colKey="branch" className="w-[10rem] text-left" />
-          <SortableHeader label={t.table.headers.shift} colKey="shift" className="w-[9rem] text-left" />
-          <SortableHeader label={t.table.headers.handledBy} colKey="handledBy" className="w-[11rem] text-left" />
+          <ColumnHeader colKey="date" label={t.table.headers.date} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.date || []} activeFilter={columnFilters.date || null} onFilter={(s) => applyColumnFilter('date', s)} onClear={() => clearColumnFilter('date')} open={openMenu === 'date'} onToggle={() => setOpenMenu(v => v === 'date' ? null : 'date')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8.5rem]" />
+          <ColumnHeader colKey="customer_name" label={t.table.headers.customer} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.customer_name || []} activeFilter={columnFilters.customer_name || null} onFilter={(s) => applyColumnFilter('customer_name', s)} onClear={() => clearColumnFilter('customer_name')} open={openMenu === 'customer_name'} onToggle={() => setOpenMenu(v => v === 'customer_name' ? null : 'customer_name')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[22rem]" />
+          <ColumnHeader colKey="amount" label={t.table.headers.initial} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.amount || []} activeFilter={columnFilters.amount || null} onFilter={(s) => applyColumnFilter('amount', s)} onClear={() => clearColumnFilter('amount')} open={openMenu === 'amount'} onToggle={() => setOpenMenu(v => v === 'amount' ? null : 'amount')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
+          <ColumnHeader colKey="remaining" label={t.table.headers.remaining} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.remaining || []} activeFilter={columnFilters.remaining || null} onFilter={(s) => applyColumnFilter('remaining', s)} onClear={() => clearColumnFilter('remaining')} open={openMenu === 'remaining'} onToggle={() => setOpenMenu(v => v === 'remaining' ? null : 'remaining')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
+          <ColumnHeader colKey="status" label={t.table.headers.status} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.status || []} activeFilter={columnFilters.status || null} onFilter={(s) => applyColumnFilter('status', s)} onClear={() => clearColumnFilter('status')} open={openMenu === 'status'} onToggle={() => setOpenMenu(v => v === 'status' ? null : 'status')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8rem]" />
+          <ColumnHeader colKey="reference" label={t.table.headers.reference} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.reference || []} activeFilter={columnFilters.reference || null} onFilter={(s) => applyColumnFilter('reference', s)} onClear={() => clearColumnFilter('reference')} open={openMenu === 'reference'} onToggle={() => setOpenMenu(v => v === 'reference' ? null : 'reference')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[12rem]" />
+          <ColumnHeader colKey="branch" label={t.table.headers.branch} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.branch || []} activeFilter={columnFilters.branch || null} onFilter={(s) => applyColumnFilter('branch', s)} onClear={() => clearColumnFilter('branch')} open={openMenu === 'branch'} onToggle={() => setOpenMenu(v => v === 'branch' ? null : 'branch')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[10rem]" />
+          <ColumnHeader colKey="shift" label={t.table.headers.shift} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.shift || []} activeFilter={columnFilters.shift || null} onFilter={(s) => applyColumnFilter('shift', s)} onClear={() => clearColumnFilter('shift')} open={openMenu === 'shift'} onToggle={() => setOpenMenu(v => v === 'shift' ? null : 'shift')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[9rem]" />
+          <ColumnHeader colKey="handledBy" label={t.table.headers.handledBy} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.handledBy || []} activeFilter={columnFilters.handledBy || null} onFilter={(s) => applyColumnFilter('handledBy', s)} onClear={() => clearColumnFilter('handledBy')} open={openMenu === 'handledBy'} onToggle={() => setOpenMenu(v => v === 'handledBy' ? null : 'handledBy')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[11rem]" />
           <th className="p-2 w-12 text-center">{t.table.headers.action}</th>
         </tr>
       </thead>
@@ -1400,7 +1479,7 @@ function CreditsTable({
         })}
         {sortedRows.length === 0 && (
           <tr>
-            <td colSpan={11} className="text-center text-sm text-gray-500 py-6">
+            <td colSpan={11} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
               {t.table.empty}
             </td>
           </tr>
@@ -1420,6 +1499,208 @@ function CreditsTable({
         </tfoot>
       )}
     </table>
+  )
+}
+
+/* --- Column Header with Excel-style dropdown --- */
+type ColumnHeaderProps = {
+  colKey: SortKeyWithBranch | 'remaining'
+  label: string
+  sortKey: SortKeyWithBranch | 'remaining'
+  sortAsc: boolean
+  onSort: (k: SortKeyWithBranch | 'remaining', asc: boolean) => void
+  values: string[]
+  activeFilter: Set<string> | null
+  onFilter: (s: Set<string> | null) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+  right?: boolean
+  center?: boolean
+  className?: string
+}
+
+function ColumnHeader({
+  colKey,
+  label,
+  sortKey,
+  sortAsc,
+  onSort,
+  values,
+  activeFilter,
+  onFilter,
+  onClear,
+  open,
+  onToggle,
+  onClose,
+  dict,
+  right,
+  center,
+  className = '',
+}: ColumnHeaderProps) {
+  const ref = useRef<HTMLTableCellElement>(null)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+  useEffect(() => {
+    if (open) {
+      setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+      setFilterSearch('')
+    }
+  }, [open, values, activeFilter])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open, onClose])
+
+  const isActive = sortKey === colKey
+  const hasFilter = !!activeFilter
+  const dropdownStyle = useMemo(() => {
+    if (!open || !ref.current) return undefined
+    const rect = ref.current.getBoundingClientRect()
+    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+  }, [open, right])
+
+  const filteredValues = filterSearch
+    ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+    : values
+
+  const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+  function toggleAll() {
+    const next = new Set(localChecked)
+    if (allVisibleChecked) {
+      filteredValues.forEach(v => next.delete(v))
+    } else {
+      filteredValues.forEach(v => next.add(v))
+    }
+    setLocalChecked(next)
+  }
+
+  function toggleOne(v: string) {
+    const next = new Set(localChecked)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    setLocalChecked(next)
+  }
+
+  function handleApply() {
+    let finalChecked = localChecked
+    if (filterSearch) {
+      finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+    }
+    if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+  }
+
+  return (
+    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <span className="select-none">{label}</span>
+        {isActive && (
+          sortAsc
+            ? <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+            : <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+        )}
+        {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggle() }}
+          className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+          aria-label={`Menu ${label}`}
+        >
+          <EllipsisVerticalIcon className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
+
+      {open && dropdownStyle && (
+        <div
+          className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700"
+          style={dropdownStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 space-y-1">
+            <button
+              type="button"
+              onClick={() => onSort(colKey, true)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+            >
+              <BarsArrowUpIcon className="w-4 h-4" />
+              {dict.sortAsc}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSort(colKey, false)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+            >
+              <BarsArrowDownIcon className="w-4 h-4" />
+              {dict.sortDesc}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              value={filterSearch}
+              onChange={e => setFilterSearch(e.target.value)}
+              placeholder={dict.filterPlaceholder}
+              className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-gray-900"
+            />
+
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+            >
+              {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+            </button>
+
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+              {filteredValues.map(v => (
+                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localChecked.has(v)}
+                    onChange={() => toggleOne(v)}
+                    className="accent-blue-600 rounded"
+                  />
+                  <span className="truncate text-xs">{v || '(Empty)'}</span>
+                </label>
+              ))}
+              {filteredValues.length === 0 && (
+                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-xs font-semibold cursor-pointer"
+            >
+              {dict.clearFilters}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors text-xs font-semibold cursor-pointer"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
+    </th>
   )
 }
 

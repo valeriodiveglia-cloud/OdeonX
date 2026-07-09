@@ -184,7 +184,7 @@ export default function CashLedgerPage() {
         return { deposited, pending }
     }, [rows])
 
-    const sortedRows = useMemo(() => {
+    const filtered = useMemo(() => {
         let out = [...rows]
         // Apply column filters
         for (const [col, allowed] of Object.entries(columnFilters)) {
@@ -224,7 +224,7 @@ export default function CashLedgerPage() {
         setSelectedRowKeys(next)
     }
 
-    const selectableRows = sortedRows.filter(r => r.cash_to_take > 0)
+    const selectableRows = filtered.filter(r => r.cash_to_take > 0)
     const allSelectableSelected = selectableRows.length > 0 && selectableRows.every(r => selectedRowKeys.has(`${r.date}|${r.branch}`))
 
     const toggleSelectAll = () => {
@@ -278,7 +278,7 @@ export default function CashLedgerPage() {
             { header: 'Deposit Date', key: 'depositDate', width: 15 },
         ]
 
-        const data = sortedRows.map(r => ({
+        const data = filtered.map(r => ({
             date: formatDMY(r.date),
             day: formatDay(new Date(r.date)),
             branch: r.branch,
@@ -427,14 +427,14 @@ export default function CashLedgerPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedRows.length === 0 && (
+                            {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="text-center text-gray-500 py-6">
-                                        No data found for this period.
+                                    <td colSpan={7} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+                                        {language === 'vi' ? 'Không tìm thấy dữ liệu cho khoảng thời gian này.' : 'No data found for this period.'}
                                     </td>
                                 </tr>
                             )}
-                            {sortedRows.map((row, idx) => {
+                            {filtered.map((row, idx) => {
                                 const dateObj = new Date(row.date)
                                 const rowKey = `${row.date}|${row.branch}`
                                 const isSelected = selectedRowKeys.has(rowKey)
@@ -501,12 +501,12 @@ export default function CashLedgerPage() {
                                     </tr>
                                 )
                             })}
-                            {sortedRows.length > 0 && (
+                            {filtered.length > 0 && (
                                 <tr className="border-t bg-gray-50 font-semibold">
                                     <td colSpan={1}></td>
                                     <td className="p-2" colSpan={3}>Totals</td>
                                     <td className="p-2 text-right tabular-nums text-gray-900">
-                                        {fmt(sortedRows.reduce((sum, r) => sum + r.cash_to_take, 0))}
+                                        {fmt(filtered.reduce((sum, r) => sum + r.cash_to_take, 0))}
                                     </td>
                                     <td className="p-2" colSpan={3}></td>
                                 </tr>

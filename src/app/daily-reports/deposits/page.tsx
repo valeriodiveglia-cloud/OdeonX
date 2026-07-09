@@ -7,9 +7,9 @@ import {
   XMarkIcon,
   ArrowUpTrayIcon,
   MagnifyingGlassIcon,
-  ArrowsUpDownIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
   EllipsisVerticalIcon,
   CheckCircleIcon,
   TrashIcon,
@@ -22,6 +22,9 @@ import {
   CreditCardIcon,
   WalletIcon,
   BuildingLibraryIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  ArrowsUpDownIcon,
 } from '@heroicons/react/24/outline'
 import CircularLoader from '@/components/CircularLoader'
 
@@ -1450,11 +1453,11 @@ function EditorModal({
 }
 /* ---------- Page main ---------- */
 
-type SortKeyBase = 'date' | 'customer_name' | 'amount' | 'reference' | 'shift' | 'handledBy' | 'status'
+type SortKeyBase = 'date' | 'customer_name' | 'amount' | 'paid' | 'remaining' | 'reference' | 'shift' | 'handledBy' | 'status'
 type SortKeyWithBranch = SortKeyBase | 'branch'
 type SortState = { key: SortKeyWithBranch | null; dir: 'asc' | 'desc' }
 
-type RowCalc = { row: DepositRow; remaining: number; status: TotalsStatus }
+type RowCalc = { row: DepositRow; paid: number; remaining: number; status: TotalsStatus }
 
 export default function DepositsPage() {
   // Month navigation (deve essere prima di useDeposits per passare year/month)
@@ -1513,6 +1516,55 @@ export default function DepositsPage() {
   const [payingRow, setPayingRow] = useState<DepositRow | null>(null)
   const [historyRow, setHistoryRow] = useState<DepositRow | null>(null)
 
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<SortKeyWithBranch, Set<string>>>>({})
+  const [openMenu, setOpenMenu] = useState<SortKeyWithBranch | null>(null)
+
+  const columnMenuDict = {
+    sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
+    sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort Descending',
+    selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select All',
+    deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect All',
+    filterPlaceholder: language === 'vi' ? 'Lọc...' : 'Filter...',
+    clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters',
+  }
+
+  function applySort(k: SortKeyWithBranch, asc: boolean) {
+    setSortState({ key: k, dir: asc ? 'asc' : 'desc' })
+    setOpenMenu(null)
+  }
+
+  function applyColumnFilter(col: SortKeyWithBranch, vals: Set<string> | null) {
+    setColumnFilters(prev => ({ ...prev, [col]: vals }))
+    setOpenMenu(null)
+  }
+
+  function clearColumnFilter(col: SortKeyWithBranch) {
+    setColumnFilters(prev => {
+      const next = { ...prev }
+      delete next[col]
+      return next
+    })
+    setOpenMenu(null)
+  }
+
+  const displayValue = React.useCallback(
+    (x: RowCalc, key: SortKeyWithBranch): string => {
+      switch (key) {
+        case 'date': return fmtDateDMY(x.row.date)
+        case 'customer_name': return x.row.customer_name || ''
+        case 'amount': return fmtInt(x.row.amount)
+        case 'paid': return fmtInt(x.paid)
+        case 'remaining': return fmtInt(x.remaining)
+        case 'status': return statusLabel(x.status, t.status)
+        case 'reference': return x.row.reference || ''
+        case 'branch': return x.row.branch || ''
+        case 'shift': return x.row.shift || ''
+        case 'handledBy': return x.row.handledBy || ''
+        default: return ''
+      }
+    },
+    [t.status]
+  )
 
   const monthInputValue = useMemo(
     () => `${year}-${String(month + 1).padStart(2, '0')}`,
@@ -1564,7 +1616,7 @@ export default function DepositsPage() {
         remaining: Math.round(r.amount || 0),
         status: (r.amount || 0) > 0 ? 'Unpaid' : 'Open',
       }
-      return { row: r, remaining: totals.remaining, status: totals.status }
+      return { row: r, paid: totals.paid, remaining: totals.remaining, status: totals.status }
     })
   }, [rows, totalsMap])
 
@@ -1581,10 +1633,7 @@ export default function DepositsPage() {
       const isUnpaid = x.remaining > 0
       // We only want to "carry over" strict past deposits. Future deposits (if any)
       // matching the filter might be weird but let's stick to "unpaid or in-month".
-      // Actually, standard logic:
-      // - Show ALL deposits of this month
-      // - PLUS show ALL deposits from previous months that are UNPAID
-
+      // Carry-over logic:
       if (inMonth) return true
       if (d < monthStart && isUnpaid) return true
 
@@ -1592,39 +1641,60 @@ export default function DepositsPage() {
     })
   }, [rowsWithCalc, monthStart, monthEnd])
 
+  const columnValues = useMemo(() => {
+    const map: Partial<Record<SortKeyWithBranch, string[]>> = {}
+    const keys: SortKeyWithBranch[] = ['date', 'customer_name', 'amount', 'paid', 'remaining', 'status', 'reference', 'branch', 'shift', 'handledBy']
+    keys.forEach(k => {
+      const s = new Set<string>()
+      monthFiltered.forEach(x => { const v = displayValue(x, k); if (v) s.add(v) })
+      map[k] = Array.from(s).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    })
+    return map
+  }, [monthFiltered, displayValue])
+
   const visibleRows = useMemo(() => {
     const branchName = (activeBranch || '').trim()
-    const base = branchName
+    let base = branchName
       ? monthFiltered.filter(x => (x.row.branch || '') === branchName)
       : monthFiltered
     const q = search.trim().toLowerCase()
-    if (!q) return base
-    return base.filter(x => {
-      const r = x.row
-      const dmy = fmtDateDMY(r.date).toLowerCase()
-      const iso = String(r.date || '').toLowerCase()
-      const amt = String(Math.round(r.amount || 0))
-      const cust = (r.customer_name || '').toLowerCase()
-      const ref = (r.reference || '').toLowerCase()
-      const shift = (r.shift || '').toLowerCase()
-      const by = (r.handledBy || '').toLowerCase()
-      const br = (r.branch || '').toLowerCase()
-      const note = (r.note || '').toLowerCase()
-      const stat = x.status.toLowerCase()
-      return (
-        cust.includes(q) ||
-        ref.includes(q) ||
-        shift.includes(q) ||
-        by.includes(q) ||
-        dmy.includes(q) ||
-        iso.includes(q) ||
-        amt.includes(q) ||
-        br.includes(q) ||
-        note.includes(q) ||
-        stat.includes(q)
-      )
-    })
-  }, [monthFiltered, search, activeBranch])
+    if (q) {
+      base = base.filter(x => {
+        const r = x.row
+        const dmy = fmtDateDMY(r.date).toLowerCase()
+        const iso = String(r.date || '').toLowerCase()
+        const amt = String(Math.round(r.amount || 0))
+        const cust = (r.customer_name || '').toLowerCase()
+        const ref = (r.reference || '').toLowerCase()
+        const shift = (r.shift || '').toLowerCase()
+        const by = (r.handledBy || '').toLowerCase()
+        const br = (r.branch || '').toLowerCase()
+        const note = (r.note || '').toLowerCase()
+        const stat = x.status.toLowerCase()
+        return (
+          cust.includes(q) ||
+          ref.includes(q) ||
+          shift.includes(q) ||
+          by.includes(q) ||
+          dmy.includes(q) ||
+          iso.includes(q) ||
+          amt.includes(q) ||
+          br.includes(q) ||
+          note.includes(q) ||
+          stat.includes(q)
+        )
+      })
+    }
+
+    // Apply column checklist filters
+    for (const [col, allowed] of Object.entries(columnFilters)) {
+      if (allowed && allowed.size > 0) {
+        base = base.filter(x => allowed.has(displayValue(x, col as SortKeyWithBranch)))
+      }
+    }
+
+    return base
+  }, [monthFiltered, search, activeBranch, columnFilters, displayValue])
 
   function toggleSort(key: SortKeyWithBranch) {
     setSortState(prev =>
@@ -1641,6 +1711,10 @@ export default function DepositsPage() {
       switch (sort.key) {
         case 'amount':
           return ((ra.amount || 0) - (rb.amount || 0)) * dir
+        case 'paid':
+          return (a.paid - b.paid) * dir
+        case 'remaining':
+          return (a.remaining - b.remaining) * dir
         case 'date':
           return (
             new Date(ra.date).getTime() - new Date(rb.date).getTime()
@@ -1873,6 +1947,14 @@ export default function DepositsPage() {
             setHistoryRow={setHistoryRow}
             monthStart={monthStart}
             t={t}
+            columnFilters={columnFilters}
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+            columnValues={columnValues}
+            applySort={applySort}
+            applyColumnFilter={applyColumnFilter}
+            clearColumnFilter={clearColumnFilter}
+            columnMenuDict={columnMenuDict}
           />
         </div>
       </Card>
@@ -2001,6 +2083,14 @@ function DepositsTable({
   setHistoryRow,
   monthStart,
   t,
+  columnFilters,
+  openMenu,
+  setOpenMenu,
+  columnValues,
+  applySort,
+  applyColumnFilter,
+  clearColumnFilter,
+  columnMenuDict,
 }: {
   rows: DepositRow[]
   sortedRows: RowCalc[]
@@ -2018,40 +2108,20 @@ function DepositsTable({
   setHistoryRow: (r: DepositRow) => void
   monthStart: Date
   t: any
+  columnFilters: Partial<Record<SortKeyWithBranch, Set<string>>>
+  openMenu: SortKeyWithBranch | null
+  setOpenMenu: React.Dispatch<React.SetStateAction<SortKeyWithBranch | null>>
+  columnValues: Partial<Record<SortKeyWithBranch, string[]>>
+  applySort: (k: SortKeyWithBranch, asc: boolean) => void
+  applyColumnFilter: (col: SortKeyWithBranch, vals: Set<string> | null) => void
+  clearColumnFilter: (col: SortKeyWithBranch) => void
+  columnMenuDict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
 }) {
   useEffect(() => {
     if (headerCbRef.current)
       headerCbRef.current.indeterminate =
         rows.some(r => !!selected[r.id]) && !rows.every(r => !!selected[r.id])
   }, [selected, rows, headerCbRef])
-
-  const SortableHeader = ({
-    label,
-    colKey,
-    className,
-  }: {
-    label: string
-    colKey: SortKeyWithBranch
-    className?: string
-  }) => {
-    const active = sort.key === colKey
-    const dir = sort.dir
-    return (
-      <th className={`p-2 ${className || ''}`}>
-        <button
-          type="button"
-          onClick={() => setSort(colKey)}
-          className="inline-flex items-center gap-1 font-semibold text-left hover:opacity-80"
-          title={t.table.sortBy.replace('{label}', label)}
-        >
-          <span>{label}</span>
-          {!active && <ArrowsUpDownIcon className="w-4 h-4 text-gray-400" />}
-          {active && dir === 'asc' && <ChevronUpIcon className="w-4 h-4 text-gray-700" />}
-          {active && dir === 'desc' && <ChevronDownIcon className="w-4 h-4 text-gray-700" />}
-        </button>
-      </th>
-    )
-  }
 
   const totalAmount = useMemo(
     () => sortedRows.reduce((s, x) => s + Math.round(x.row.amount || 0), 0),
@@ -2093,52 +2163,16 @@ function DepositsTable({
               />
             ) : null}
           </th>
-          <SortableHeader
-            label={t.columns.date}
-            colKey="date"
-            className="w-[8.5rem] text-left"
-          />
-          <SortableHeader
-            label={t.columns.customer}
-            colKey="customer_name"
-            className="w-[22rem] text-left"
-          />
-          <SortableHeader
-            label={t.columns.agreed}
-            colKey="amount"
-            className="w-[8rem] text-right"
-          />
-          <th className="p-2 w-[8rem] text-right font-semibold">
-            {t.columns.paid}
-          </th>
-          <th className="p-2 w-[8rem] text-right font-semibold">
-            {t.columns.remaining}
-          </th>
-          <SortableHeader
-            label={t.columns.status}
-            colKey="status"
-            className="w-[8rem] text-left"
-          />
-          <SortableHeader
-            label={t.columns.reference}
-            colKey="reference"
-            className="w-[12rem] text-left"
-          />
-          <SortableHeader
-            label={t.columns.branch}
-            colKey="branch"
-            className="w-[10rem] text-left"
-          />
-          <SortableHeader
-            label={t.columns.shift}
-            colKey="shift"
-            className="w-[9rem] text-left"
-          />
-          <SortableHeader
-            label={t.columns.handledBy}
-            colKey="handledBy"
-            className="w-[11rem] text-left"
-          />
+          <ColumnHeader colKey="date" label={t.columns.date} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.date || []} activeFilter={columnFilters.date || null} onFilter={(s) => applyColumnFilter('date', s)} onClear={() => clearColumnFilter('date')} open={openMenu === 'date'} onToggle={() => setOpenMenu(v => v === 'date' ? null : 'date')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8.5rem]" />
+          <ColumnHeader colKey="customer_name" label={t.columns.customer} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.customer_name || []} activeFilter={columnFilters.customer_name || null} onFilter={(s) => applyColumnFilter('customer_name', s)} onClear={() => clearColumnFilter('customer_name')} open={openMenu === 'customer_name'} onToggle={() => setOpenMenu(v => v === 'customer_name' ? null : 'customer_name')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[22rem]" />
+          <ColumnHeader colKey="amount" label={t.columns.agreed} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.amount || []} activeFilter={columnFilters.amount || null} onFilter={(s) => applyColumnFilter('amount', s)} onClear={() => clearColumnFilter('amount')} open={openMenu === 'amount'} onToggle={() => setOpenMenu(v => v === 'amount' ? null : 'amount')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
+          <ColumnHeader colKey="paid" label={t.columns.paid} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.paid || []} activeFilter={columnFilters.paid || null} onFilter={(s) => applyColumnFilter('paid', s)} onClear={() => clearColumnFilter('paid')} open={openMenu === 'paid'} onToggle={() => setOpenMenu(v => v === 'paid' ? null : 'paid')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
+          <ColumnHeader colKey="remaining" label={t.columns.remaining} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.remaining || []} activeFilter={columnFilters.remaining || null} onFilter={(s) => applyColumnFilter('remaining', s)} onClear={() => clearColumnFilter('remaining')} open={openMenu === 'remaining'} onToggle={() => setOpenMenu(v => v === 'remaining' ? null : 'remaining')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
+          <ColumnHeader colKey="status" label={t.columns.status} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.status || []} activeFilter={columnFilters.status || null} onFilter={(s) => applyColumnFilter('status', s)} onClear={() => clearColumnFilter('status')} open={openMenu === 'status'} onToggle={() => setOpenMenu(v => v === 'status' ? null : 'status')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8rem]" />
+          <ColumnHeader colKey="reference" label={t.columns.reference} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.reference || []} activeFilter={columnFilters.reference || null} onFilter={(s) => applyColumnFilter('reference', s)} onClear={() => clearColumnFilter('reference')} open={openMenu === 'reference'} onToggle={() => setOpenMenu(v => v === 'reference' ? null : 'reference')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[12rem]" />
+          <ColumnHeader colKey="branch" label={t.columns.branch} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.branch || []} activeFilter={columnFilters.branch || null} onFilter={(s) => applyColumnFilter('branch', s)} onClear={() => clearColumnFilter('branch')} open={openMenu === 'branch'} onToggle={() => setOpenMenu(v => v === 'branch' ? null : 'branch')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[10rem]" />
+          <ColumnHeader colKey="shift" label={t.columns.shift} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.shift || []} activeFilter={columnFilters.shift || null} onFilter={(s) => applyColumnFilter('shift', s)} onClear={() => clearColumnFilter('shift')} open={openMenu === 'shift'} onToggle={() => setOpenMenu(v => v === 'shift' ? null : 'shift')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[9rem]" />
+          <ColumnHeader colKey="handledBy" label={t.columns.handledBy} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.handledBy || []} activeFilter={columnFilters.handledBy || null} onFilter={(s) => applyColumnFilter('handledBy', s)} onClear={() => clearColumnFilter('handledBy')} open={openMenu === 'handledBy'} onToggle={() => setOpenMenu(v => v === 'handledBy' ? null : 'handledBy')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[11rem]" />
           <th className="p-2 w-12 text-center">{t.columns.action}</th>
         </tr>
       </thead>
@@ -2245,7 +2279,7 @@ function DepositsTable({
         })}
         {sortedRows.length === 0 && (
           <tr>
-            <td colSpan={12} className="text-center text-sm text-gray-500 py-6">
+            <td colSpan={12} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
               {t.table.noRows}
             </td>
           </tr>
@@ -2269,6 +2303,208 @@ function DepositsTable({
         </tfoot>
       )}
     </table>
+  )
+}
+
+/* --- Column Header with Excel-style dropdown --- */
+type ColumnHeaderProps = {
+  colKey: SortKeyWithBranch
+  label: string
+  sortKey: SortKeyWithBranch | null
+  sortAsc: boolean
+  onSort: (k: SortKeyWithBranch, asc: boolean) => void
+  values: string[]
+  activeFilter: Set<string> | null
+  onFilter: (s: Set<string> | null) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+  right?: boolean
+  center?: boolean
+  className?: string
+}
+
+function ColumnHeader({
+  colKey,
+  label,
+  sortKey,
+  sortAsc,
+  onSort,
+  values,
+  activeFilter,
+  onFilter,
+  onClear,
+  open,
+  onToggle,
+  onClose,
+  dict,
+  right,
+  center,
+  className = '',
+}: ColumnHeaderProps) {
+  const ref = useRef<HTMLTableCellElement>(null)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+  useEffect(() => {
+    if (open) {
+      setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+      setFilterSearch('')
+    }
+  }, [open, values, activeFilter])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open, onClose])
+
+  const isActive = sortKey === colKey
+  const hasFilter = !!activeFilter
+  const dropdownStyle = useMemo(() => {
+    if (!open || !ref.current) return undefined
+    const rect = ref.current.getBoundingClientRect()
+    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+  }, [open, right])
+
+  const filteredValues = filterSearch
+    ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+    : values
+
+  const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+  function toggleAll() {
+    const next = new Set(localChecked)
+    if (allVisibleChecked) {
+      filteredValues.forEach(v => next.delete(v))
+    } else {
+      filteredValues.forEach(v => next.add(v))
+    }
+    setLocalChecked(next)
+  }
+
+  function toggleOne(v: string) {
+    const next = new Set(localChecked)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    setLocalChecked(next)
+  }
+
+  function handleApply() {
+    let finalChecked = localChecked
+    if (filterSearch) {
+      finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+    }
+    if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+  }
+
+  return (
+    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <span className="select-none">{label}</span>
+        {isActive && (
+          sortAsc
+            ? <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+            : <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+        )}
+        {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggle() }}
+          className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+          aria-label={`Menu ${label}`}
+        >
+          <EllipsisVerticalIcon className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
+
+      {open && dropdownStyle && (
+        <div
+          className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700"
+          style={dropdownStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 space-y-1">
+            <button
+              type="button"
+              onClick={() => onSort(colKey, true)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+            >
+              <BarsArrowUpIcon className="w-4 h-4" />
+              {dict.sortAsc}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSort(colKey, false)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'}`}
+            >
+              <BarsArrowDownIcon className="w-4 h-4" />
+              {dict.sortDesc}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              value={filterSearch}
+              onChange={e => setFilterSearch(e.target.value)}
+              placeholder={dict.filterPlaceholder}
+              className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-gray-900"
+            />
+
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+            >
+              {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+            </button>
+
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+              {filteredValues.map(v => (
+                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localChecked.has(v)}
+                    onChange={() => toggleOne(v)}
+                    className="accent-blue-600 rounded"
+                  />
+                  <span className="truncate text-xs">{v || '(Empty)'}</span>
+                </label>
+              ))}
+              {filteredValues.length === 0 && (
+                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-xs font-semibold cursor-pointer"
+            >
+              {dict.clearFilters}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors text-xs font-semibold cursor-pointer"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
+    </th>
   )
 }
 

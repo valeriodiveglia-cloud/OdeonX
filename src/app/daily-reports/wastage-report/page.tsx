@@ -1,7 +1,7 @@
 // src/app/daily-reports/wastage-report/page.tsx
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import { useDRBranch } from '../_data/useDRBranch'
 import {
@@ -11,9 +11,9 @@ import {
   ChevronRightIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
-  ArrowsUpDownIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
   Squares2X2Icon,
   ArchiveBoxIcon,
   BeakerIcon,
@@ -954,6 +954,73 @@ export default function WastageReportPage() {
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortAsc, setSortAsc] = useState<boolean>(false)
 
+  // Column filter state: per-column set of allowed display values
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+  // Which column menu is currently open
+  const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
+
+  const columnMenuDict = {
+    sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
+    sortDesc: language === 'vi' ? 'Sắp xếp giảm dần' : 'Sort Descending',
+    selectAll: language === 'vi' ? 'Chọn tất cả' : 'Select All',
+    deselectAll: language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect All',
+    filterPlaceholder: language === 'vi' ? 'Lọc...' : 'Filter...',
+    clearFilters: language === 'vi' ? 'Xóa bộ lọc' : 'Clear Filters',
+  }
+
+  function applySort(k: SortKey, asc: boolean) {
+    setSortKey(k)
+    setSortAsc(asc)
+    setOpenMenu(null)
+  }
+
+  function applyColumnFilter(col: SortKey, vals: Set<string> | null) {
+    setColumnFilters(prev => ({ ...prev, [col]: vals }))
+    setOpenMenu(null)
+  }
+
+  function clearColumnFilter(col: SortKey) {
+    setColumnFilters(prev => {
+      const next = { ...prev }
+      delete next[col]
+      return next
+    })
+    setOpenMenu(null)
+  }
+
+  // Display value helper for filter checkboxes
+  const displayValue = useCallback((r: WastageRow, key: SortKey): string => {
+    switch (key) {
+      case 'date': return fmtDateDMY(r.date)
+      case 'dow': return dow3(r.date)
+      case 'time': return r.time
+      case 'type': return r.type
+      case 'category': return r.categoryName || ''
+      case 'item': return r.itemName
+      case 'unit': return r.unit || ''
+      case 'qty': return fmtInt(r.qty)
+      case 'unitCost': return fmtInt(r.unitCost)
+      case 'totalCost': return fmtInt(r.totalCost)
+      case 'chargeTo': return r.chargeTo
+      default: return ''
+    }
+  }, [])
+
+  // Unique filterable values per column
+  const columnValues = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    const keys: SortKey[] = ['date', 'dow', 'time', 'type', 'category', 'item', 'unit', 'qty', 'unitCost', 'totalCost', 'chargeTo']
+    keys.forEach(k => {
+      const s = new Set<string>()
+      rows.forEach(r => {
+        const v = displayValue(r, k)
+        if (v) s.add(v)
+      })
+      map[k] = Array.from(s).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    })
+    return map
+  }, [rows, displayValue])
+
   const [showTypePicker, setShowTypePicker] = useState(false)
 
   const [openEditor, setOpenEditor] = useState(false)
@@ -969,14 +1036,6 @@ export default function WastageReportPage() {
   const menuRef = useRef<HTMLDivElement>(null)
   const headerCbRef = useRef<HTMLInputElement>(null)
 
-  function toggleSort(k: SortKey) {
-    if (sortKey === k) setSortAsc(v => !v)
-    else {
-      setSortKey(k)
-      setSortAsc(true)
-    }
-  }
-
   function onPickMonth(val: string) {
     const [y, m] = val.split('-').map(Number)
     if (Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12) {
@@ -988,10 +1047,10 @@ export default function WastageReportPage() {
   const monthLabel = `${monthName(month)} ${year}`
 
   const visibleRows = useMemo(() => {
-    const s = qText.trim().toLowerCase()
-    const filtered = !s
-      ? rows
-      : rows.filter(r => {
+    let out = rows.slice()
+    if (qText.trim()) {
+      const s = qText.trim().toLowerCase()
+      out = out.filter(r => {
         return [
           fmtDateDMY(r.date).toLowerCase(),
           r.time,
@@ -1005,71 +1064,22 @@ export default function WastageReportPage() {
           r.chargeTo,
         ].some(v => v.toLowerCase().includes(s))
       })
-    const arr = [...filtered]
-    arr.sort((a, b) => {
-      const av = (() => {
-        switch (sortKey) {
-          case 'date':
-            return new Date(a.date).getTime()
-          case 'dow':
-            return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(dow3(a.date))
-          case 'time':
-            return Number(a.time.replace(':', ''))
-          case 'type':
-            return a.type
-          case 'category':
-            return a.categoryName || ''
-          case 'item':
-            return a.itemName || ''
-          case 'unit':
-            return a.unit || ''
-          case 'qty':
-            return a.qty
-          case 'unitCost':
-            return a.unitCost
-          case 'totalCost':
-            return a.totalCost
-          case 'chargeTo':
-            return a.chargeTo
-          default:
-            return 0
-        }
-      })()
-      const bv = (() => {
-        switch (sortKey) {
-          case 'date':
-            return new Date(b.date).getTime()
-          case 'dow':
-            return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(dow3(b.date))
-          case 'time':
-            return Number(b.time.replace(':', ''))
-          case 'type':
-            return b.type
-          case 'category':
-            return b.categoryName || ''
-          case 'item':
-            return b.itemName || ''
-          case 'unit':
-            return b.unit || ''
-          case 'qty':
-            return b.qty
-          case 'unitCost':
-            return b.unitCost
-          case 'totalCost':
-            return b.totalCost
-          case 'chargeTo':
-            return b.chargeTo
-          default:
-            return 0
-        }
-      })()
+    }
+    // Apply column filters
+    for (const [col, allowed] of Object.entries(columnFilters)) {
+      if (!allowed) continue
+      out = out.filter(r => allowed.has(displayValue(r, col as SortKey)))
+    }
+    out.sort((a, b) => {
+      const av = sortValue(a, sortKey)
+      const bv = sortValue(b, sortKey)
       let cmp: number
       if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv
       else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
       return sortAsc ? cmp : -cmp
     })
-    return arr
-  }, [rows, qText, sortKey, sortAsc])
+    return out
+  }, [rows, qText, sortKey, sortAsc, columnFilters, displayValue])
 
   const totals = useMemo(() => {
     let sumQty = 0
@@ -1266,23 +1276,43 @@ export default function WastageReportPage() {
                     <input ref={headerCbRef} type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="h-4 w-4" title={t.table.selectAll} />
                   ) : null}
                 </th>
-                <Th label={t.table.headers.date} active={sortKey === 'date'} asc={sortAsc} onClick={() => toggleSort('date')} />
-                <Th label={t.table.headers.day} active={sortKey === 'dow'} asc={sortAsc} onClick={() => toggleSort('dow')} />
-                <Th label={t.table.headers.time} active={sortKey === 'time'} asc={sortAsc} onClick={() => toggleSort('time')} />
-                <Th label={t.table.headers.type} active={sortKey === 'type'} asc={sortAsc} onClick={() => toggleSort('type')} />
-                <Th label={t.table.headers.category} active={sortKey === 'category'} asc={sortAsc} onClick={() => toggleSort('category')} />
-                <Th label={t.table.headers.item} active={sortKey === 'item'} asc={sortAsc} onClick={() => toggleSort('item')} />
-                <Th label={t.table.headers.unit} active={sortKey === 'unit'} asc={sortAsc} onClick={() => toggleSort('unit')} />
-                <Th label={t.table.headers.qty} active={sortKey === 'qty'} asc={sortAsc} onClick={() => toggleSort('qty')} right />
-                <Th label={t.table.headers.unitCost} active={sortKey === 'unitCost'} asc={sortAsc} onClick={() => toggleSort('unitCost')} right />
-                <Th label={t.table.headers.totalCost} active={sortKey === 'totalCost'} asc={sortAsc} onClick={() => toggleSort('totalCost')} right />
-                <Th label={t.table.headers.chargeTo} active={sortKey === 'chargeTo'} asc={sortAsc} onClick={() => toggleSort('chargeTo')} />
+                {([
+                  ['date', t.table.headers.date],
+                  ['dow', t.table.headers.day],
+                  ['time', t.table.headers.time],
+                  ['type', t.table.headers.type],
+                  ['category', t.table.headers.category],
+                  ['item', t.table.headers.item],
+                  ['unit', t.table.headers.unit],
+                  ['qty', t.table.headers.qty, true],
+                  ['unitCost', t.table.headers.unitCost, true],
+                  ['totalCost', t.table.headers.totalCost, true],
+                  ['chargeTo', t.table.headers.chargeTo]
+                ] as [SortKey, string, boolean?][]).map(([k, lbl, right]) => (
+                  <ColumnHeader
+                    key={k}
+                    colKey={k}
+                    label={lbl}
+                    sortKey={sortKey}
+                    sortAsc={sortAsc}
+                    onSort={applySort}
+                    values={columnValues[k] || []}
+                    activeFilter={columnFilters[k] || null}
+                    onFilter={(s) => applyColumnFilter(k, s)}
+                    onClear={() => clearColumnFilter(k)}
+                    open={openMenu === k}
+                    onToggle={() => setOpenMenu(openMenu === k ? null : k)}
+                    onClose={() => setOpenMenu(null)}
+                    dict={columnMenuDict}
+                    right={!!right}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
               {visibleRows.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={12} className="text-center text-gray-500 py-6">
+                  <td colSpan={12} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                     {t.table.empty}
                   </td>
                 </tr>
@@ -1356,23 +1386,242 @@ export default function WastageReportPage() {
   )
 }
 
-/* ---------- Small helpers for header + table ---------- */
-function Th({ label, active, asc, onClick, right }: { label: string; active: boolean; asc: boolean; onClick: () => void; right?: boolean }) {
+/* ---------- Column Header with Excel-style dropdown ---------- */
+type ColumnHeaderProps = {
+  colKey: SortKey
+  label: string
+  sortKey: SortKey
+  sortAsc: boolean
+  onSort: (k: SortKey, asc: boolean) => void
+  values: string[]
+  activeFilter: Set<string> | null
+  onFilter: (s: Set<string> | null) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  dict: { sortAsc: string; sortDesc: string; selectAll: string; deselectAll: string; filterPlaceholder: string; clearFilters: string }
+  right?: boolean
+  center?: boolean
+  className?: string
+}
+
+function ColumnHeader({
+  colKey,
+  label,
+  sortKey,
+  sortAsc,
+  onSort,
+  values,
+  activeFilter,
+  onFilter,
+  onClear,
+  open,
+  onToggle,
+  onClose,
+  dict,
+  right,
+  center,
+  className = '',
+}: ColumnHeaderProps) {
+  const ref = useRef<HTMLTableCellElement>(null)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+  useEffect(() => {
+    if (open) {
+      setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+      setFilterSearch('')
+    }
+  }, [open, values, activeFilter])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open, onClose])
+
+  const isActive = sortKey === colKey
+  const hasFilter = !!activeFilter
+  const dropdownStyle = useMemo(() => {
+    if (!open || !ref.current) return undefined
+    const rect = ref.current.getBoundingClientRect()
+    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+  }, [open, right])
+
+  const filteredValues = filterSearch
+    ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+    : values
+
+  const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+  function toggleAll() {
+    const next = new Set(localChecked)
+    if (allVisibleChecked) {
+      filteredValues.forEach(v => next.delete(v))
+    } else {
+      filteredValues.forEach(v => next.add(v))
+    }
+    setLocalChecked(next)
+  }
+
+  function toggleOne(v: string) {
+    const next = new Set(localChecked)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    setLocalChecked(next)
+  }
+
+  function handleApply() {
+    let finalChecked = localChecked
+    if (filterSearch) {
+      finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+    }
+    if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+  }
+
   return (
-    <th className={`p-2 ${right ? 'text-right' : 'text-left'}`}>
-      <button type="button" onClick={onClick} className="w-full cursor-pointer">
-        <div className={`flex items-center gap-1 font-semibold ${right ? 'justify-end' : ''}`}>
-          {right ? null : <SortIcon active={active} asc={asc} />}
-          <span>{label}</span>
-          {right ? <SortIcon active={active} asc={asc} /> : null}
+    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <span className="select-none">{label}</span>
+        {isActive && (
+          sortAsc ? (
+            <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          ) : (
+            <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          )
+        )}
+        {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation()
+            onToggle()
+          }}
+          className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+          aria-label={`Menu ${label}`}
+        >
+          <EllipsisVerticalIcon className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
+
+      {open && dropdownStyle && (
+        <div
+          className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case"
+          style={dropdownStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 space-y-1">
+            <button
+              type="button"
+              onClick={() => onSort(colKey, true)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowUpIcon className="w-4 h-4" />
+              {dict.sortAsc}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSort(colKey, false)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowDownIcon className="w-4 h-4" />
+              {dict.sortDesc}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              value={filterSearch}
+              onChange={e => setFilterSearch(e.target.value)}
+              placeholder={dict.filterPlaceholder}
+              className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium"
+            >
+              {allVisibleChecked
+                ? dict.deselectAll
+                : dict.selectAll}
+            </button>
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+              {filteredValues.map(v => (
+                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localChecked.has(v)}
+                    onChange={() => toggleOne(v)}
+                    className="accent-blue-600 rounded"
+                  />
+                  <span className="truncate text-xs">{v}</span>
+                </label>
+              ))}
+              {filteredValues.length === 0 && (
+                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+            >
+              {dict.clearFilters}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+            >
+              OK
+            </button>
+          </div>
         </div>
-      </button>
+      )}
     </th>
   )
 }
-function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
-  if (!active) return <ArrowsUpDownIcon className="w-4 h-4 text-gray-400" />
-  return asc ? <ChevronUpIcon className="w-4 h-4 text-gray-700" /> : <ChevronDownIcon className="w-4 h-4 text-gray-700" />
+
+function sortValue(r: WastageRow, key: SortKey) {
+  switch (key) {
+    case 'date':
+      return new Date(r.date).getTime()
+    case 'dow':
+      return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(dow3(r.date))
+    case 'time':
+      return Number(r.time.replace(':', ''))
+    case 'type':
+      return r.type
+    case 'category':
+      return r.categoryName || ''
+    case 'item':
+      return r.itemName || ''
+    case 'unit':
+      return r.unit || ''
+    case 'qty':
+      return r.qty
+    case 'unitCost':
+      return r.unitCost
+    case 'totalCost':
+      return r.totalCost
+    case 'chargeTo':
+      return r.chargeTo
+    default:
+      return 0
+  }
 }
 
 /* ---------- Month forward guard ---------- */

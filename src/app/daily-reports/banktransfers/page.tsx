@@ -1,7 +1,7 @@
 // src/app/daily-reports/banktransfers/page.tsx
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   CalendarDaysIcon,
   ChevronLeftIcon,
@@ -16,6 +16,9 @@ import {
   PlusIcon,
   TrashIcon,
   XMarkIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline'
 
 import { useDRBranch } from '../_data/useDRBranch'
@@ -199,37 +202,217 @@ function MonthNav({
   )
 }
 
-function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
-  if (!active) return <ArrowsUpDownIcon className="w-4 h-4 text-gray-400" />
-  return asc ? (
-    <ChevronUpIcon className="w-4 h-4 text-gray-700" />
-  ) : (
-    <ChevronDownIcon className="w-4 h-4 text-gray-700" />
-  )
+type SortKey = 'date' | 'amount' | 'note'
+
+interface ColumnHeaderProps {
+  colKey: SortKey
+  label: string
+  sortKey: SortKey
+  sortAsc: boolean
+  onSort: (key: SortKey, asc: boolean) => void
+  values: string[]
+  activeFilter: Set<string> | null
+  onFilter: (vals: Set<string> | null) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  dict: {
+    sortAsc: string
+    sortDesc: string
+    selectAll: string
+    deselectAll: string
+    filterPlaceholder: string
+    clearFilters: string
+  }
+  right?: boolean
+  center?: boolean
+  className?: string
 }
 
-function Th({
+function ColumnHeader({
+  colKey,
   label,
-  active,
-  asc,
-  onClick,
+  sortKey,
+  sortAsc,
+  onSort,
+  values,
+  activeFilter,
+  onFilter,
+  onClear,
+  open,
+  onToggle,
+  onClose,
+  dict,
   right,
-}: {
-  label: string
-  active: boolean
-  asc: boolean
-  onClick: () => void
-  right?: boolean
-}) {
+  center,
+  className = '',
+}: ColumnHeaderProps) {
+  const ref = useRef<HTMLTableCellElement>(null)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [localChecked, setLocalChecked] = useState<Set<string>>(new Set(values))
+
+  useEffect(() => {
+    if (open) {
+      setLocalChecked(activeFilter ? new Set(activeFilter) : new Set(values))
+      setFilterSearch('')
+    }
+  }, [open, values, activeFilter])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open, onClose])
+
+  const isActive = sortKey === colKey
+  const hasFilter = !!activeFilter
+  const dropdownStyle = useMemo(() => {
+    if (!open || !ref.current) return undefined
+    const rect = ref.current.getBoundingClientRect()
+    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+  }, [open, right])
+
+  const filteredValues = filterSearch
+    ? values.filter(v => v.toLowerCase().includes(filterSearch.toLowerCase()))
+    : values
+
+  const allVisibleChecked = filteredValues.length > 0 && filteredValues.every(v => localChecked.has(v))
+
+  function toggleAll() {
+    const next = new Set(localChecked)
+    if (allVisibleChecked) {
+      filteredValues.forEach(v => next.delete(v))
+    } else {
+      filteredValues.forEach(v => next.add(v))
+    }
+    setLocalChecked(next)
+  }
+
+  function toggleOne(v: string) {
+    const next = new Set(localChecked)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    setLocalChecked(next)
+  }
+
+  function handleApply() {
+    let finalChecked = localChecked
+    if (filterSearch) {
+      finalChecked = new Set([...localChecked].filter(x => filteredValues.includes(x)))
+    }
+    if (finalChecked.size >= values.length) onFilter(null); else onFilter(finalChecked)
+  }
+
   return (
-    <th className={`p-2 ${right ? 'text-right' : 'text-left'}`}>
-      <button type="button" onClick={onClick} className="w-full cursor-pointer">
-        <div className={`flex items-center gap-1 font-semibold ${right ? 'justify-end' : ''}`}>
-          {right ? null : <SortIcon active={active} asc={asc} />}
-          <span>{label}</span>
-          {right ? <SortIcon active={active} asc={asc} /> : null}
+    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <span className="select-none">{label}</span>
+        {isActive && (
+          sortAsc ? (
+            <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          ) : (
+            <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          )
+        )}
+        {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation()
+            onToggle()
+          }}
+          className="ml-0.5 p-0.5 rounded hover:bg-gray-200 transition-colors flex-shrink-0 cursor-pointer"
+          aria-label={`Menu ${label}`}
+        >
+          <EllipsisVerticalIcon className="w-3.5 h-3.5 text-gray-500" />
+        </button>
+      </div>
+
+      {open && dropdownStyle && (
+        <div
+          className="fixed bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[220px] text-left text-sm text-gray-700 normal-case font-normal"
+          style={dropdownStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 space-y-1">
+            <button
+              type="button"
+              onClick={() => onSort(colKey, true)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowUpIcon className="w-4 h-4" />
+              {dict.sortAsc}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSort(colKey, false)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                isActive && !sortAsc ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-100'
+              }`}
+            >
+              <BarsArrowDownIcon className="w-4 h-4" />
+              {dict.sortDesc}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200" />
+
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              value={filterSearch}
+              onChange={e => setFilterSearch(e.target.value)}
+              placeholder={dict.filterPlaceholder}
+              className="w-full mb-2 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-blue-600 hover:text-blue-800 mb-1 cursor-pointer font-medium text-left"
+            >
+              {allVisibleChecked ? dict.deselectAll : dict.selectAll}
+            </button>
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+              {filteredValues.map(v => (
+                <label key={v} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localChecked.has(v)}
+                    onChange={() => toggleOne(v)}
+                    className="accent-blue-600 rounded"
+                  />
+                  <span className="truncate text-xs">{v || '(Empty)'}</span>
+                </label>
+              ))}
+              {filteredValues.length === 0 && (
+                <div className="text-xs text-gray-400 py-1 text-center">—</div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer font-medium"
+            >
+              {dict.clearFilters}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-3 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer font-medium"
+            >
+              OK
+            </button>
+          </div>
         </div>
-      </button>
+      )}
     </th>
   )
 }
@@ -499,7 +682,6 @@ function BankTransferModal({
 }
 
 /* ---------- Page ---------- */
-type SortKey = 'date' | 'amount' | 'note'
 
 export default function BankTransfersPage() {
   const { language } = useSettings()
@@ -600,28 +782,74 @@ export default function BankTransfersPage() {
 
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortAsc, setSortAsc] = useState<boolean>(false)
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
+  const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
 
-  function toggleSort(k: SortKey) {
-    if (sortKey === k) setSortAsc(v => !v)
-    else {
-      setSortKey(k)
-      setSortAsc(true)
-    }
+  function applySort(k: SortKey, asc: boolean) {
+    setSortKey(k)
+    setSortAsc(asc)
+    setOpenMenu(null)
   }
+  function applyColumnFilter(col: SortKey, vals: Set<string> | null) {
+    setColumnFilters(prev => ({ ...prev, [col]: vals }))
+    setOpenMenu(null)
+  }
+  function clearColumnFilter(col: SortKey) {
+    setColumnFilters(prev => {
+      const n = { ...prev }
+      delete n[col]
+      return n
+    })
+    setOpenMenu(null)
+  }
+
+  const displayValue = useCallback((r: BankRow, key: SortKey): string => {
+    switch (key) {
+      case 'date':
+        return fmtDateDMY(r.date)
+      case 'amount':
+        return fmtInt(r.amount)
+      case 'note':
+        return r.note || ''
+      default:
+        return ''
+    }
+  }, [])
+
+  const columnValues = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    const keys: SortKey[] = ['date', 'amount', 'note']
+    keys.forEach(k => {
+      const s = new Set<string>()
+      monthRows.forEach(r => {
+        const v = displayValue(r, k)
+        if (v) s.add(v)
+      })
+      map[k] = Array.from(s).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    })
+    return map
+  }, [monthRows, displayValue])
 
   const [search, setSearch] = useState<string>('')
 
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return monthRows
-    return monthRows.filter(r => {
-      const dmy = fmtDateDMY(r.date).toLowerCase()
-      const iso = String(r.date || '').toLowerCase()
-      const amt = String(Math.round(r.amount || 0))
-      const note = (r.note || '').toLowerCase()
-      return dmy.includes(q) || iso.includes(q) || amt.includes(q) || note.includes(q)
-    })
-  }, [monthRows, search])
+    let out = monthRows
+    if (q) {
+      out = monthRows.filter(r => {
+        const dmy = fmtDateDMY(r.date).toLowerCase()
+        const iso = String(r.date || '').toLowerCase()
+        const amt = String(Math.round(r.amount || 0))
+        const note = (r.note || '').toLowerCase()
+        return dmy.includes(q) || iso.includes(q) || amt.includes(q) || note.includes(q)
+      })
+    }
+    for (const [col, allowed] of Object.entries(columnFilters)) {
+      if (!allowed) continue
+      out = out.filter(r => allowed.has(displayValue(r, col as SortKey)))
+    }
+    return out
+  }, [monthRows, search, columnFilters, displayValue])
 
   const sortedRows = useMemo(() => {
     const arr = [...visibleRows]
@@ -703,6 +931,24 @@ export default function BankTransfersPage() {
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState<ModalMode>('create')
   const [editingRow, setEditingRow] = useState<BankRow | null>(null)
+
+  const columnMenuDict = useMemo(() => {
+    return language === 'vi' ? {
+      sortAsc: 'Sắp xếp tăng dần',
+      sortDesc: 'Sắp xếp giảm dần',
+      selectAll: 'Chọn tất cả',
+      deselectAll: 'Bỏ chọn tất cả',
+      filterPlaceholder: 'Tìm kiếm...',
+      clearFilters: 'Xóa bộ lọc',
+    } : {
+      sortAsc: 'Sort Ascending',
+      sortDesc: 'Sort Descending',
+      selectAll: 'Select All',
+      deselectAll: 'Deselect All',
+      filterPlaceholder: 'Search...',
+      clearFilters: 'Clear Filters',
+    }
+  }, [language])
 
   return (
     <div className="max-w-none mx-auto p-4 text-gray-100">
@@ -859,31 +1105,58 @@ export default function BankTransfersPage() {
                     />
                   ) : null}
                 </th>
-                <Th
+                <ColumnHeader
+                  colKey="date"
                   label={t.table.headers.date}
-                  active={sortKey === 'date'}
-                  asc={sortAsc}
-                  onClick={() => toggleSort('date')}
+                  sortKey={sortKey}
+                  sortAsc={sortAsc}
+                  onSort={applySort}
+                  values={columnValues.date || []}
+                  activeFilter={columnFilters.date || null}
+                  onFilter={s => applyColumnFilter('date', s)}
+                  onClear={() => clearColumnFilter('date')}
+                  open={openMenu === 'date'}
+                  onToggle={() => setOpenMenu(openMenu === 'date' ? null : 'date')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnMenuDict}
                 />
-                <Th
+                <ColumnHeader
+                  colKey="amount"
                   label={t.table.headers.amount}
-                  active={sortKey === 'amount'}
-                  asc={sortAsc}
-                  onClick={() => toggleSort('amount')}
+                  sortKey={sortKey}
+                  sortAsc={sortAsc}
+                  onSort={applySort}
+                  values={columnValues.amount || []}
+                  activeFilter={columnFilters.amount || null}
+                  onFilter={s => applyColumnFilter('amount', s)}
+                  onClear={() => clearColumnFilter('amount')}
+                  open={openMenu === 'amount'}
+                  onToggle={() => setOpenMenu(openMenu === 'amount' ? null : 'amount')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnMenuDict}
                   right
                 />
-                <Th
+                <ColumnHeader
+                  colKey="note"
                   label={t.table.headers.note}
-                  active={sortKey === 'note'}
-                  asc={sortAsc}
-                  onClick={() => toggleSort('note')}
+                  sortKey={sortKey}
+                  sortAsc={sortAsc}
+                  onSort={applySort}
+                  values={columnValues.note || []}
+                  activeFilter={columnFilters.note || null}
+                  onFilter={s => applyColumnFilter('note', s)}
+                  onClear={() => clearColumnFilter('note')}
+                  open={openMenu === 'note'}
+                  onToggle={() => setOpenMenu(openMenu === 'note' ? null : 'note')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnMenuDict}
                 />
               </tr>
             </thead>
             <tbody>
               {!loading && sortedRows.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="text-center text-gray-500 py-6">
+                  <td colSpan={4} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                     {t.table.noRows}
                   </td>
                 </tr>
