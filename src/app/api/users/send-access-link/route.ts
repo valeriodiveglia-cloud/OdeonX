@@ -72,13 +72,23 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
 }
 
 export async function POST(req: Request) {
-  const supabase = await getAuthedClient(req)
+  console.log('[send-access-link] POST called')
+  let supabase
+  try {
+    supabase = await getAuthedClient(req)
+    console.log('[send-access-link] getAuthedClient OK')
+  } catch (e: any) {
+    console.error('[send-access-link] getAuthedClient FAILED:', e?.message)
+    return NextResponse.json({ error: 'Auth client creation failed: ' + (e?.message || 'unknown') }, { status: 500 })
+  }
 
   // must be logged-in and owner/admin
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: auth, error: authErr } = await supabase.auth.getUser()
+  console.log('[send-access-link] getUser:', auth?.user?.email || 'null', 'error:', authErr?.message || 'none')
+  if (!auth?.user) return NextResponse.json({ error: 'Unauthorized', detail: authErr?.message || 'no user' }, { status: 401 })
   const { data: isOwner } = await supabase.rpc('app_is_owner')
   const { data: isAdmin } = await supabase.rpc('app_is_admin')
+  console.log('[send-access-link] isOwner:', isOwner, 'isAdmin:', isAdmin)
   if (!isOwner && !isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // diagnosi rapida
@@ -148,14 +158,17 @@ export async function POST(req: Request) {
       }
     } catch {}
 
-    // --- Se l’utente ESISTE in Authentication → set needs_onboarding, collega user_id, manda reset
+    // --- Se l'utente ESISTE in Authentication → set needs_onboarding, collega user_id, manda reset
     const existsUid = await findAuthUserIdByEmail(email)
+    console.log('[send-access-link] existsUid:', existsUid, 'email:', email)
     if (existsUid) {
       try {
         await supabaseAdmin.auth.admin.updateUserById(existsUid, {
           user_metadata: { needs_onboarding: true, is_onboarded: false, full_name: userName },
         })
-      } catch {}
+      } catch (e) {
+        console.error('[send-access-link] Error updating existing user:', e)
+      }
 
       // ⬇️ collega subito la riga su app_accounts
       try {
@@ -166,7 +179,9 @@ export async function POST(req: Request) {
           .eq('email', email)
       } catch {}
 
+      console.log('[send-access-link] Sending resetPasswordForEmail to:', email, 'redirectTo:', redirectTo)
       const { error: resetErr } = await supabaseAnonServer.auth.resetPasswordForEmail(email, { redirectTo })
+      console.log('[send-access-link] resetPasswordForEmail result:', resetErr ? resetErr.message : 'OK')
       if (resetErr) {
         return NextResponse.json({ error: resetErr.message, redirectTo }, { status: 400 })
       }
@@ -179,6 +194,7 @@ export async function POST(req: Request) {
     }
 
     // --- Altrimenti invito nuovo utente (abbiamo già creato app_accounts)
+    console.log('[send-access-link] Sending invite to:', email, 'redirectTo:', redirectTo)
     const invite = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { 
       redirectTo,
       data: {
@@ -220,6 +236,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: invite.error.message || 'Invite failed', redirectTo }, { status: 400 })
   } catch (e: any) {
+    console.error('[send-access-link] CATCH ERROR:', e?.message, e?.stack)
     return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
   }
 }

@@ -8,6 +8,9 @@ export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
+  console.log('[auth/callback] HIT! Full URL:', url.toString())
+  console.log('[auth/callback] searchParams:', Object.fromEntries(url.searchParams.entries()))
+
   const rawRedirect = url.searchParams.get('redirect') || '/dashboard'
   const redirect =
     rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
@@ -17,8 +20,11 @@ export async function GET(req: NextRequest) {
   const code = url.searchParams.get('code')
   const error = url.searchParams.get('error')
 
+  console.log('[auth/callback] code:', code ? 'present' : 'null', 'error:', error || 'none', 'redirect:', redirect)
+
   // Se errore dal provider, torna a login mantenendo la destinazione
   if (error) {
+    console.log('[auth/callback] Error from provider, redirecting to login')
     const to = new URL('/login', req.url)
     to.searchParams.set('error', error)
     to.searchParams.set('redirect', redirect)
@@ -52,7 +58,9 @@ export async function GET(req: NextRequest) {
     )
 
     try {
-      await supabase.auth.exchangeCodeForSession(code)
+      console.log('[auth/callback] Exchanging code for session...')
+      const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
+      console.log('[auth/callback] Exchange result:', exchangeErr ? exchangeErr.message : 'OK')
 
       // Utente corrente dalla sessione cookie
       const { data: ures } = await supabase.auth.getUser()
@@ -87,9 +95,10 @@ export async function GET(req: NextRequest) {
         // non bloccare
       }
 
+      console.log('[auth/callback] SUCCESS - redirecting to:', redirect)
       return response
-    } catch (err) {
-      console.error('Error during exchangeCodeForSession:', err)
+    } catch (err: any) {
+      console.error('[auth/callback] EXCHANGE FAILED:', err?.message, err?.stack)
       const to = new URL('/login', req.url)
       to.searchParams.set('redirect', redirect)
       return NextResponse.redirect(to, 302)
@@ -97,6 +106,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Caso recovery/reset: il token è nel fragment (#access_token=...), il server non può leggerlo.
+  console.log('[auth/callback] No code param — serving HTML fragment handler for redirect:', redirect)
   // Rispondiamo con HTML che conserva l'hash e reindirizza alla pagina di destinazione.
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"><title>Redirecting</title></head>
