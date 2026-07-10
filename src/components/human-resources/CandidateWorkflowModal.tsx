@@ -2072,7 +2072,7 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                     {candidate.date_of_birth && (
                                                         <div className="space-y-0.5 text-left">
                                                             <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{isVI ? 'Ngày sinh' : 'Date of Birth'}</span>
-                                                            <span className="text-slate-800 flex items-center gap-1">🎂 {formatToDDMMYYYY(candidate.date_of_birth)}</span>
+                                                            <span className="text-slate-800 flex items-center gap-1">🎂 {candidate.date_of_birth.endsWith('-01-01') ? candidate.date_of_birth.substring(0, 4) : formatToDDMMYYYY(candidate.date_of_birth)}</span>
                                                         </div>
                                                     )}
                                                     {candidate.gender && (
