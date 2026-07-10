@@ -1043,6 +1043,9 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             interview_feedback: interviewFeedback,
             interviewed_by: currentUserId
         }
+        if (pass) {
+            payload.offer_approval_status = 'approved'
+        }
         if (!pass) {
             payload.offer_salary_amount = null
             payload.offer_salary_type = null
@@ -1068,10 +1071,7 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             const probationSalaryPctVal = probationSalaryPct ? parseFloat(probationSalaryPct) : 100
             const startVal = defineStartDate ? `${offerStartDate} ${offerStartTime}`.trim() : 'TBD'
 
-            const isAdminOrOwner = userRole === 'admin' || userRole === 'owner'
-            const nextStage = isAdminOrOwner 
-                ? (proceedToOnboard ? 'trial_shift' : 'offer_sent')
-                : candidate.stage
+            const nextStage = proceedToOnboard ? 'trial_shift' : 'offer_sent'
 
             const payload: any = {
                 offer_salary_amount: salaryAmtVal,
@@ -1080,20 +1080,13 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 probation_salary_pct: probationSalaryPctVal,
                 offer_start_date: startVal,
                 offer_branch_id: (defineStartDate && defineStartLocation) ? (offerBranchId || null) : null,
-                offer_expiry_date: offerExpiryDate || null
+                offer_expiry_date: offerExpiryDate || null,
+                offer_approval_status: 'approved'
             }
 
-            if (isAdminOrOwner) {
-                payload.offer_approval_status = 'approved'
-            } else {
-                payload.offer_approval_status = 'pending'
-            }
-
-            const activityMsg = proceedToOnboard && isAdminOrOwner
+            const activityMsg = proceedToOnboard
                 ? `Candidate ${candidate.full_name} accepted job offer and proceeded to onboarding / Ứng viên ${candidate.full_name} đã đồng ý offer và chuyển sang bước nhận việc`
-                : (isAdminOrOwner 
-                    ? `Job offer approved and sent for candidate ${candidate.full_name} / Thư mời nhận việc đã được duyệt và gửi cho ứng viên ${candidate.full_name}`
-                    : `Submitted job offer proposal for candidate ${candidate.full_name} / Đã nộp đề xuất thư mời nhận việc cho ứng viên ${candidate.full_name}`)
+                : `Job offer saved and sent for candidate ${candidate.full_name} / Thư mời nhận việc đã được lưu và gửi cho ứng viên ${candidate.full_name}`
 
             await handleUpdateStage(nextStage, payload, activityMsg)
         } catch (err: any) {
@@ -1161,15 +1154,6 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
         if (!candidate) return
         
         const isRejection = candidate.stage === 'rejected'
-        const isAdminOrOwner = userRole === 'admin' || userRole === 'owner'
-        
-        if (!isRejection && candidate.offer_approval_status !== 'approved' && !isAdminOrOwner) {
-            alert(isVI 
-                ? 'Không thể tải thư mời nhận việc do chưa được phê duyệt!' 
-                : 'Cannot download offer letter because it is not approved yet!'
-            )
-            return
-        }
 
         try {
             setSaving(true)
@@ -1783,7 +1767,7 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
     const handleRevertToOffer = async () => {
         if (!candidate) return
         const activityMsg = `Reverted onboarding and went back to Job Offer for candidate ${candidate.full_name} / Hủy onboarding và quay lại bước Offer cho ứng viên ${candidate.full_name}`
-        await handleUpdateStage('offer_sent', { offer_approval_status: 'none' }, activityMsg)
+        await handleUpdateStage('offer_sent', { offer_approval_status: 'approved' }, activityMsg)
     }
 
     const handleRevertInterviewEvaluation = async () => {
@@ -3139,7 +3123,7 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                             {/* Actions */}
                                                             {(() => {
                                                                 const isAdminOrOwner = userRole === 'admin' || userRole === 'owner';
-                                                                const isApproved = candidate?.offer_approval_status === 'approved';
+                                                                const isApproved = true; // No approval required, always treat as approved
                                                                 const isOfferFormInvalid = !offerExpiryDate || (defineStartDate && defineStartLocation && !offerBranchId);
                                                                 return (
                                                                     <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-2.5 border-t border-slate-100 font-bold">
