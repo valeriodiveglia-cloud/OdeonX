@@ -1,7 +1,7 @@
 // src/app/api/users/admin-upsert/route.ts
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
@@ -35,13 +35,33 @@ export async function POST(req: Request) {
     // Supporto sia Cookie (SSR) che Bearer (server-to-server)
     const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || ''
     const useBearer = /^Bearer\s+/.test(authHeader)
-    const supabase = useBearer
-      ? createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          { global: { headers: { Authorization: authHeader } } }
-        )
-      : createRouteHandlerClient({ cookies })
+    let supabase;
+    if (useBearer) {
+      supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+    } else {
+      const cookieStore = await cookies()
+      supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return cookieStore.get(name)?.value
+            },
+            set(name: string, value: string, options: any) {
+              try { cookieStore.set({ name, value, ...options }) } catch {}
+            },
+            remove(name: string, options: any) {
+              try { cookieStore.set({ name, value: '', ...options, maxAge: 0 }) } catch {}
+            },
+          },
+        }
+      )
+    }
 
     // Caller deve essere loggato
     const { data: auth, error: authErr } = await supabase.auth.getUser()

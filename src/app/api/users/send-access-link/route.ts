@@ -1,7 +1,7 @@
 // src/app/api/users/send-access-link/route.ts
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { supabaseAnonServer } from '@/lib/supabaseAnonServer'
@@ -23,16 +23,42 @@ function normalizeBaseUrl(input?: string | null): string | null {
 }
 
 // --- helper: auth client cookie o Bearer
-function getAuthedClient(req: Request) {
+async function getAuthedClient(req: Request) {
   const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || ''
   const useBearer = /^Bearer\s+/.test(authHeader)
-  return useBearer
-    ? createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { global: { headers: { Authorization: authHeader } } },
-      )
-    : createRouteHandlerClient({ cookies })
+  if (useBearer) {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: authHeader } } },
+    )
+  }
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set({ name, value, ...options })
+          } catch {
+            // Fallback silenzioso
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set({ name, value: '', ...options, maxAge: 0 })
+          } catch {
+            // Fallback silenzioso
+          }
+        },
+      },
+    }
+  )
 }
 
 // --- helper: trova utente in Authentication per email (listUsers paginato)
@@ -51,7 +77,7 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
 }
 
 export async function POST(req: Request) {
-  const supabase = getAuthedClient(req)
+  const supabase = await getAuthedClient(req)
 
   // must be logged-in and owner/admin
   const { data: auth } = await supabase.auth.getUser()
@@ -100,9 +126,9 @@ export async function POST(req: Request) {
     // best-effort: crea riga app_accounts se manca
     try {
       await srv.from('app_accounts').upsert(
-  { email },
-  { onConflict: 'email', ignoreDuplicates: true }
-)
+        { email },
+        { onConflict: 'email', ignoreDuplicates: true }
+      )
     } catch {}
 
     // --- Recupera il nome dell'utente da app_accounts o hr_staff

@@ -28,26 +28,29 @@ export async function GET(req: NextRequest) {
   // Caso PKCE/magic link: scambia il code sul server, aggiorna metadati e reindirizza
   if (code) {
     const cookieStore = await cookies()
+    const response = NextResponse.redirect(new URL(redirect, req.url), 302)
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name: string) {
-            return cookieStore.get(name)?.value
+            return response.cookies.get(name)?.value || cookieStore.get(name)?.value
           },
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options })
+              response.cookies.set({ name, value, ...options })
             } catch {
-              // Può fallire se chiamato in un contesto di sola lettura
+              // Fallback silenzioso
             }
           },
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options, maxAge: 0 })
+              response.cookies.set({ name, value: '', ...options, maxAge: 0 })
             } catch {
-              // Può fallire se chiamato in un contesto di sola lettura
+              // Fallback silenzioso
             }
           },
         },
@@ -90,8 +93,7 @@ export async function GET(req: NextRequest) {
         // non bloccare
       }
 
-      // Redirect finale pulito
-      return NextResponse.redirect(new URL(redirect, req.url), 302)
+      return response
     } catch (err) {
       console.error('Error during exchangeCodeForSession:', err)
       const to = new URL('/login', req.url)

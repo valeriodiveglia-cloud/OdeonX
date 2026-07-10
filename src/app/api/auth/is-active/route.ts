@@ -1,7 +1,7 @@
 // src/app/api/auth/is-active/route.ts
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
@@ -9,16 +9,42 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 // fallback: usato solo se non arriva userId
-function clientFromReq(req: Request) {
+async function clientFromReq(req: Request) {
   const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || ''
   const useBearer = /^Bearer\s+/i.test(authHeader)
-  return useBearer
-    ? createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { global: { headers: { Authorization: authHeader } } },
-      )
-    : createRouteHandlerClient({ cookies })
+  if (useBearer) {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: authHeader } } },
+    )
+  }
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set({ name, value, ...options })
+          } catch {
+            // Fallback silenzioso
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set({ name, value: '', ...options, maxAge: 0 })
+          } catch {
+            // Fallback silenzioso
+          }
+        },
+      },
+    }
+  )
 }
 
 export async function GET(req: Request) {
@@ -44,7 +70,7 @@ export async function GET(req: Request) {
 
     // Fallback: prova a dedurre l’utente dalla sessione (se la rotta viene
     // chiamata senza userId – utile per test manuali)
-    const supa = clientFromReq(req)
+    const supa = await clientFromReq(req)
     const { data: me } = await supa.auth.getUser()
     const uid = me?.user?.id || null
     if (!uid) return NextResponse.json({ active: false, reason: 'no-session' })
