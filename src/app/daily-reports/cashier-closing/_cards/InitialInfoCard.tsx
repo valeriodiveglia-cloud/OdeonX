@@ -6,7 +6,7 @@ import { useDRBranch } from '../../_data/useDRBranch'
 import { supabase } from '@/lib/supabase_shim'
 import { useDailyReportSettingsDB } from '../../_data/useDailyReportSettingsDB'
 import { creditsBus } from '@/lib/creditsSync'
-import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
+import { ChatBubbleOvalLeftEllipsisIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getDailyReportsDictionary } from '../../_i18n'
 
@@ -180,6 +180,9 @@ export type PaymentBreakdown = {
   grab?: number
   mpos?: number
   unpaid?: number
+  grossRevenue?: number
+  discount?: number
+  posUnpaid?: number
   // totali per algoritmo Net / Expected
   repaymentsCashCard?: number      // totale cash + card (per Net)
   repaymentsCashOnly?: number      // solo cash (per Expected cash)
@@ -404,9 +407,13 @@ export default function InitialInfoCard(props: {
   const thirdPartyLabels = useMemo(() => {
     const list = settings?.initialInfo?.thirdParties
     if (Array.isArray(list) && list.length > 0) {
-      return tpUnique(list.map(tpCleanStr), TP_MAX)
+      const filtered = list.map(tpCleanStr).filter(label => {
+        const l = label.toLowerCase()
+        return l !== 'gojek' && l !== 'capichi'
+      })
+      return tpUnique(filtered, TP_MAX)
     }
-    return ['Gojek', 'Grab', 'Capichi']
+    return ['Grab', 'Shopee Food']
   }, [settings])
 
   // Third-party amounts effettivi:
@@ -482,6 +489,61 @@ export default function InitialInfoCard(props: {
   /* ---------- Chiave base + bump locale/cross-tab ---------- */
   const queryKey = `${header.dateStr}@@${activeBranchName}`
   const [bump, setBump] = useState(0)
+  const [syncingPos, setSyncingPos] = useState(false)
+
+  async function handleSyncPOS() {
+    if (!header?.dateStr || !activeBranchName || readOnly) return
+    setSyncingPos(true)
+    try {
+      const res = await fetch(
+        `/api/pos/sync?branch=${encodeURIComponent(activeBranchName)}&date=${header.dateStr}&t=${Date.now()}`,
+        { cache: 'no-store' }
+      )
+      if (res.ok) {
+        const resData = await res.json()
+        if (resData.success) {
+          const total = resData.totalAmount || 0
+          const posUnpaid = typeof resData.posUnpaidAmount === 'number' ? resData.posUnpaidAmount : 0
+          
+          const nextThirdParty = Array.isArray(payments.thirdPartyAmounts) ? [...payments.thirdPartyAmounts] : []
+          
+          let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase() === 'grab')
+          if (grabIdx !== -1) {
+            nextThirdParty[grabIdx] = { ...nextThirdParty[grabIdx], amount: resData.posGrab || 0 }
+          } else if (typeof resData.posGrab === 'number' && resData.posGrab > 0) {
+            nextThirdParty.push({ label: 'Grab', amount: resData.posGrab })
+          }
+
+          let shopeeIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase().includes('shopee'))
+          if (shopeeIdx !== -1) {
+            nextThirdParty[shopeeIdx] = { ...nextThirdParty[shopeeIdx], amount: resData.posShopeeFood || 0 }
+          } else if (typeof resData.posShopeeFood === 'number' && resData.posShopeeFood > 0) {
+            nextThirdParty.push({ label: 'Shopee Food', amount: resData.posShopeeFood })
+          }
+
+          onChangePayments({
+            bankTransferEwallet: total,
+            mpos: typeof resData.posMpos === 'number' ? resData.posMpos : payments.mpos,
+            grab: typeof resData.posGrab === 'number' ? resData.posGrab : payments.grab,
+            thirdPartyAmounts: nextThirdParty,
+            grossRevenue: typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : payments.grossRevenue,
+            discount: typeof resData.posDiscount === 'number' ? resData.posDiscount : payments.discount,
+            posUnpaid: posUnpaid,
+            revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : payments.revenue
+          })
+        }
+      }
+      setBump(b => b + 1)
+      if (onReloadSaved) {
+        onReloadSaved()
+      }
+    } catch (err) {
+      console.error('Failed to trigger manual POS bank transfers sync:', err)
+      alert(language === 'vi' ? 'Đồng bộ hóa POS thất bại' : 'POS Sync failed')
+    } finally {
+      setSyncingPos(false)
+    }
+  }
 
   /* Central bus: segnali da qualsiasi pagina/tab (credits, payments, branch, deposits) */
   useEffect(() => {
@@ -630,6 +692,12 @@ export default function InitialInfoCard(props: {
     }
   }, [queryKey, bump, shouldAutoSync]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Teniamo traccia dell'oggetto payments corrente con un ref per evitare loop di dependency negli useEffect
+  const paymentsRef = useRef(payments)
+  useEffect(() => {
+    paymentsRef.current = payments
+  }, [payments])
+
   /* ---------- BANK TRANSFER / E-WALLET ---------- */
   const [bankTransferLoading, setBankTransferLoading] = useState(false)
   useEffect(() => {
@@ -639,23 +707,74 @@ export default function InitialInfoCard(props: {
       if (!shouldAutoSync) return
       setBankTransferLoading(true)
 
-      const { data, error } = await supabase
-        .from('daily_report_bank_transfers')
-        .select('amount')
-        .eq('branch', activeBranchName)
-        .eq('date', header.dateStr)
+      // Sincronizzazione automatica da CukCuk POS API (dal 9 Luglio 2026 in poi)
+      if (header.dateStr >= '2026-07-09') {
+        try {
+          const res = await fetch(
+            `/api/pos/sync?branch=${encodeURIComponent(activeBranchName)}&date=${header.dateStr}&t=${Date.now()}`,
+            { cache: 'no-store' }
+          )
+          if (res.ok && !cancelled) {
+            const resData = await res.json()
+            if (resData.success) {
+              const total = resData.totalAmount || 0
+              const posUnpaid = typeof resData.posUnpaidAmount === 'number' ? resData.posUnpaidAmount : 0
+              
+              const currentPayments = paymentsRef.current
+              const nextThirdParty = Array.isArray(currentPayments.thirdPartyAmounts) ? [...currentPayments.thirdPartyAmounts] : []
+              
+              let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase() === 'grab')
+              if (grabIdx !== -1) {
+                nextThirdParty[grabIdx] = { ...nextThirdParty[grabIdx], amount: resData.posGrab || 0 }
+              } else if (typeof resData.posGrab === 'number' && resData.posGrab > 0) {
+                nextThirdParty.push({ label: 'Grab', amount: resData.posGrab })
+              }
 
-      let total = 0
-      if (!error && Array.isArray(data)) {
-        total = data.reduce(
-          (s, r: any) => s + Math.round(Number(r?.amount || 0)),
-          0,
-        )
+              let shopeeIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase().includes('shopee'))
+              if (shopeeIdx !== -1) {
+                nextThirdParty[shopeeIdx] = { ...nextThirdParty[shopeeIdx], amount: resData.posShopeeFood || 0 }
+              } else if (typeof resData.posShopeeFood === 'number' && resData.posShopeeFood > 0) {
+                nextThirdParty.push({ label: 'Shopee Food', amount: resData.posShopeeFood })
+              }
+
+              onChangePayments({
+                bankTransferEwallet: total,
+                mpos: typeof resData.posMpos === 'number' ? resData.posMpos : currentPayments.mpos,
+                grab: typeof resData.posGrab === 'number' ? resData.posGrab : currentPayments.grab,
+                thirdPartyAmounts: nextThirdParty,
+                grossRevenue: typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : currentPayments.grossRevenue,
+                discount: typeof resData.posDiscount === 'number' ? resData.posDiscount : currentPayments.discount,
+                posUnpaid: posUnpaid,
+                revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : currentPayments.revenue
+              })
+            }
+          }
+        } catch (err) {
+          console.error('Failed to trigger POS sync on mount:', err)
+        }
+      } else {
+        // Fallback per date storiche
+        const { data, error } = await supabase
+          .from('daily_report_bank_transfers')
+          .select('amount')
+          .eq('branch', activeBranchName)
+          .eq('date', header.dateStr)
+
+        let total = 0
+        if (!error && Array.isArray(data)) {
+          total = data.reduce(
+            (s, r: any) => s + Math.round(Number(r?.amount || 0)),
+            0,
+          )
+        }
+
+        if (!cancelled) {
+          onChangePayments({ bankTransferEwallet: total })
+        }
       }
 
       if (!cancelled) {
         setBankTransferLoading(false)
-        onChangePayments({ bankTransferEwallet: total })
       }
     }
     fetchBankTransfers()
@@ -953,6 +1072,18 @@ export default function InitialInfoCard(props: {
                 </button>
               </div>
             )}
+            {!readOnly && header.dateStr >= '2026-07-09' && (
+              <button
+                type="button"
+                onClick={handleSyncPOS}
+                disabled={syncingPos}
+                className="relative inline-flex items-center justify-center h-8 px-2.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                title={language === 'vi' ? 'Đồng bộ hóa POS' : 'Sync POS'}
+              >
+                <ArrowPathIcon className={`w-4 h-4 mr-1 ${syncingPos ? 'animate-spin' : ''}`} />
+                {language === 'vi' ? 'Đồng bộ POS' : 'Sync POS'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowNotes(x => !x)}
@@ -1015,25 +1146,49 @@ export default function InitialInfoCard(props: {
             )}
           </div>
 
-          <div className="p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label className="flex flex-col gap-1 md:col-span-2">
-              <span className="text-xs text-gray-600">{t.revenue}</span>
-              <NumFmt
-                value={v(payments.revenue)}
-                onChange={x => onChangePayments({ revenue: x })}
-                placeholder="0"
-                disabled={readOnly}
-              />
-            </label>
+          <div className="p-3 grid grid-cols-1 md:grid-cols-4 gap-3">
+            {header.dateStr >= '2026-07-09' ? (
+              <>
+                <ReadOnlyMoney
+                  label={language === 'vi' ? 'Ricavo Lordo (POS)' : 'Gross Revenue (POS)'}
+                  value={v(payments.grossRevenue)}
+                />
+                <ReadOnlyMoney
+                  label={language === 'vi' ? 'Sconti (POS)' : 'Discount (POS)'}
+                  value={v(payments.discount)}
+                />
+                <ReadOnlyMoney
+                  label={language === 'vi' ? 'Ricavo Netto (POS)' : 'Net Revenue (POS)'}
+                  value={v(payments.revenue)}
+                  strong
+                />
+              </>
+            ) : (
+              <label className="flex flex-col gap-1 md:col-span-3">
+                <span className="text-xs text-gray-600">{t.revenue}</span>
+                <NumFmt
+                  value={v(payments.revenue)}
+                  onChange={x => onChangePayments({ revenue: x })}
+                  placeholder="0"
+                  disabled={readOnly}
+                />
+              </label>
+            )}
 
             <ReadOnlyMoney
               label={cashOutLoading ? t.cashOutLoading : t.cashOut}
               value={v(payments.cashOut)}
             />
           </div>
+        </section>
 
-          {/* Payment channels */}
-          <div className="px-3 pb-3 space-y-3">
+        {/* Payment channels */}
+        <section className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-3 py-2 border-b border-gray-200">
+            <h3 className="text-sm font-semibold">{language === 'vi' ? 'Kênh Thanh Toán' : 'Payment Channels'}</h3>
+          </div>
+
+          <div className="p-3 space-y-3">
             {/* Riga: Third-party payments dinamici o frozen */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {thirdPartyAmounts.length === 0 && (
@@ -1069,10 +1224,32 @@ export default function InitialInfoCard(props: {
                 onChange={x => onChangePayments({ mpos: x })}
                 readOnly={readOnly}
               />
-              <ReadOnlyMoney
-                label={unpaidLoading ? t.unpaidLoading : t.unpaid}
-                value={v(payments.unpaid)}
-              />
+              
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-gray-600">
+                  {unpaidLoading ? t.unpaidLoading : t.unpaid}
+                </span>
+                {header.dateStr >= '2026-07-09' && typeof payments.posUnpaid === 'number' && payments.posUnpaid !== v(payments.unpaid) ? (
+                  <>
+                    <div
+                      className="border rounded-lg px-2 h-9 bg-amber-50 border-amber-400 text-amber-800 flex items-center justify-end tabular-nums"
+                      title={language === 'vi' ? `POS có: ${fmt(payments.posUnpaid)}` : `POS has: ${fmt(payments.posUnpaid)}`}
+                    >
+                      {fmt(v(payments.unpaid))}
+                    </div>
+                    <span className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                      {language === 'vi' 
+                        ? `Lệch POS: ${fmt(payments.posUnpaid)}` 
+                        : `POS Diff: ${fmt(payments.posUnpaid)}`}
+                    </span>
+                  </>
+                ) : (
+                  <div className="border rounded-lg px-2 h-9 bg-gray-50 flex items-center justify-end tabular-nums text-gray-900">
+                    {fmt(v(payments.unpaid))}
+                  </div>
+                )}
+              </div>
+
               <ReadOnlyMoney
                 label={
                   bankTransferLoading

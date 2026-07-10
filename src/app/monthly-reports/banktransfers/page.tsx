@@ -19,7 +19,23 @@ import MonthPicker from '@/components/MonthPicker'
 
 import { exportToExcelTable, type ExcelColumn } from '@/lib/exportUtils'
 
-type SortKey = 'date' | 'amount' | 'note' | 'branch'
+type SortKey = 'date' | 'time' | 'info' | 'amount' | 'note' | 'branch'
+
+/* ---------- local i18n for time & info ---------- */
+const localI18n = {
+  en: {
+    time: 'Time',
+    info: 'Info (Bill / Table)',
+    timePlaceholder: 'hh:mm',
+    infoPlaceholder: 'e.g., Bill 2685006561 - Table 5',
+  },
+  vi: {
+    time: 'Giờ',
+    info: 'Thông tin (Hóa đơn / Bàn)',
+    timePlaceholder: 'hh:mm',
+    infoPlaceholder: 'vd: Hóa đơn 2685006561 - Bàn 5',
+  }
+}
 
 type Branch = { id: string; name: string }
 
@@ -65,11 +81,47 @@ export default function MonthlyBankTransfersPage() {
     }, [])
 
     // Data from hook
-    const { rows, loading } = useBankTransfers({
+    const { rows, loading, refresh } = useBankTransfers({
         year: monthCursor.getFullYear(),
         month: monthCursor.getMonth(),
         branchName: selectedBranchName,
     })
+
+    // Sincronizzazione automatica da CukCuk POS API per oggi e ieri (dal 9 Luglio 2026 in poi) per TUTTE le filiali
+    useEffect(() => {
+        const d = new Date()
+        const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        
+        const yest = new Date(d.getTime() - 86400000)
+        const yesterdayStr = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`
+
+        async function runPosSync() {
+            try {
+                const { data: branchesData } = await supabase.from('provider_branches').select('name')
+                if (!branchesData || branchesData.length === 0) return
+
+                const calls: Promise<any>[] = []
+                branchesData.forEach(b => {
+                    const bName = b.name
+                    if (todayStr >= '2026-07-09') {
+                        calls.push(fetch(`/api/pos/sync?branch=${encodeURIComponent(bName)}&date=${todayStr}`).catch(e => console.error(e)))
+                    }
+                    if (yesterdayStr >= '2026-07-09') {
+                        calls.push(fetch(`/api/pos/sync?branch=${encodeURIComponent(bName)}&date=${yesterdayStr}`).catch(e => console.error(e)))
+                    }
+                })
+
+                if (calls.length > 0) {
+                    await Promise.all(calls)
+                    refresh()
+                }
+            } catch (err) {
+                console.error('Error running batch POS sync in Monthly Reports:', err)
+            }
+        }
+
+        runPosSync()
+    }, [monthCursor, selectedBranchName, refresh])
 
     function applySort(k: SortKey, asc: boolean) {
         setSortKey(k); setSortAsc(asc); setOpenMenu(null)
@@ -85,6 +137,8 @@ export default function MonthlyBankTransfersPage() {
     const displayValue = useCallback((r: BankTransferRow, key: SortKey): string => {
         switch (key) {
             case 'date': return formatDMY(r.date)
+            case 'time': return r.time || ''
+            case 'info': return r.info || ''
             case 'amount': return fmt(r.amount)
             case 'note': return r.note || ''
             case 'branch': return r.branch || ''
@@ -95,7 +149,7 @@ export default function MonthlyBankTransfersPage() {
     // Unique filterable values per column
     const columnValues = useMemo(() => {
         const map: Record<string, string[]> = {}
-        const keys: SortKey[] = ['date', 'amount', 'note', 'branch']
+        const keys: SortKey[] = ['date', 'time', 'info', 'amount', 'note', 'branch']
         keys.forEach(k => {
             const s = new Set<string>()
             rows.forEach(r => { const v = displayValue(r, k); if (v) s.add(v) })
@@ -112,6 +166,8 @@ export default function MonthlyBankTransfersPage() {
             out = out.filter(r =>
                 (r.note || '').toLowerCase().includes(s) ||
                 (r.branch || '').toLowerCase().includes(s) ||
+                (r.time || '').toLowerCase().includes(s) ||
+                (r.info || '').toLowerCase().includes(s) ||
                 formatDMY(r.date).includes(s)
             )
         }
@@ -144,8 +200,12 @@ export default function MonthlyBankTransfersPage() {
     const columnMenuDict = t.table?.columnMenu || { sortAsc: 'Sort Ascending', sortDesc: 'Sort Descending', selectAll: 'Select All', deselectAll: 'Deselect All', filterPlaceholder: 'Search...', clearFilters: 'Clear Filters' }
 
     async function handleExport() {
+        const localT = language === 'vi' ? localI18n.vi : localI18n.en
+
         const columns: ExcelColumn[] = [
             { header: t.table?.headers?.date || 'Date', key: 'date', width: 12, total: 'Totals:' },
+            { header: localT.time, key: 'time', width: 10 },
+            { header: localT.info, key: 'info', width: 35 },
             { header: t.table?.headers?.amount || 'Amount', key: 'amount', width: 15, total: true, fmt: '#,##0' },
             { header: t.table?.headers?.note || 'Note', key: 'note', width: 40 },
             { header: t.table?.headers?.branch || 'Branch', key: 'branch', width: 20 },
@@ -153,6 +213,8 @@ export default function MonthlyBankTransfersPage() {
 
         const data = filtered.map(r => ({
             date: formatDMY(r.date),
+            time: r.time || '',
+            info: r.info || '',
             amount: r.amount,
             note: r.note || '',
             branch: r.branch || ''
@@ -237,7 +299,7 @@ export default function MonthlyBankTransfersPage() {
                 <table className="w-full table-auto text-sm text-gray-900">
                     <thead>
                         <tr>
-                            {([['date', t.table?.headers?.date || 'Date'], ['amount', t.table?.headers?.amount || 'Amount', true], ['note', t.table?.headers?.note || 'Note'], ['branch', t.table?.headers?.branch || 'Branch']] as [SortKey, string, boolean?][]).map(([k, lbl, right]) => (
+                            {([['date', t.table?.headers?.date || 'Date'], ['time', language === 'vi' ? localI18n.vi.time : localI18n.en.time], ['info', language === 'vi' ? localI18n.vi.info : localI18n.en.info], ['amount', t.table?.headers?.amount || 'Amount', true], ['note', t.table?.headers?.note || 'Note'], ['branch', t.table?.headers?.branch || 'Branch']] as [SortKey, string, boolean?][]).map(([k, lbl, right]) => (
                                 <ColumnHeader
                                     key={k}
                                     colKey={k}
@@ -261,7 +323,7 @@ export default function MonthlyBankTransfersPage() {
                     <tbody>
                         {filtered.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+                                <td colSpan={6} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                                     {t.table?.noRows || 'No bank transfers found.'}
                                 </td>
                             </tr>
@@ -269,6 +331,8 @@ export default function MonthlyBankTransfersPage() {
                         {filtered.map(r => (
                             <tr key={r.id} className="border-t hover:bg-blue-50/40">
                                 <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
+                                <td className="p-2 whitespace-nowrap">{r.time || ''}</td>
+                                <td className="p-2">{r.info || ''}</td>
                                 <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold">{fmt(r.amount)}</td>
                                 <td className="p-2 whitespace-nowrap">{r.note}</td>
                                 <td className="p-2 whitespace-nowrap text-gray-600">{r.branch}</td>
@@ -277,6 +341,8 @@ export default function MonthlyBankTransfersPage() {
                         {filtered.length > 0 && (
                             <tr className="border-t bg-gray-50 font-semibold">
                                 <td className="p-2">{t.table?.totals || 'Totals'}</td>
+                                <td className="p-2" />
+                                <td className="p-2" />
                                 <td className="p-2 text-right">{fmt(stats.totalAmount)}</td>
                                 <td className="p-2" colSpan={2}></td>
                             </tr>
@@ -481,6 +547,8 @@ function formatDMY(isoDate: string) {
 function sortValue(r: BankTransferRow, key: SortKey) {
     switch (key) {
         case 'date': return new Date(r.date).getTime()
+        case 'time': return r.time || ''
+        case 'info': return r.info || ''
         case 'amount': return r.amount
         case 'note': return r.note || ''
         case 'branch': return r.branch || ''

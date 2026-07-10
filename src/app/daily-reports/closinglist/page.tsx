@@ -14,6 +14,7 @@ import {
   BarsArrowUpIcon,
   BarsArrowDownIcon,
   FunnelIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
 import { useClosingList, type ClosingRow } from '../_data/useClosingList'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -488,7 +489,19 @@ export default function ClosingListPage() {
                 <td className="p-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[50px] text-center lowercase font-mono">{dow3(r.date)}</td>
                 <td className="p-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[70px] text-center">{r.time}</td>
                 <td className="p-2 truncate max-w-[180px] text-center" title={r.branch}>{r.branch}</td>
-                <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.unpaid)}</td>
+                <td className="p-2 whitespace-nowrap text-right tabular-nums">
+                  <div className="flex items-center justify-end gap-1.5">
+                    {r.date >= '2026-07-09' && typeof r.posUnpaid === 'number' && r.posUnpaid !== r.unpaid && (
+                      <ExclamationTriangleIcon 
+                        className="h-4 w-4 text-amber-500 cursor-help flex-shrink-0" 
+                        title={language === 'vi' 
+                          ? `Không khớp với POS! POS báo: ${fmt(r.posUnpaid)}` 
+                          : `Mismatch with POS! POS reports: ${fmt(r.posUnpaid)}`}
+                      />
+                    )}
+                    <span>{fmt(r.unpaid)}</span>
+                  </div>
+                </td>
                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.cashout)}</td>
                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.card)}</td>
                 <td className="p-2 whitespace-nowrap text-right tabular-nums">{fmt(r.transfer)}</td>

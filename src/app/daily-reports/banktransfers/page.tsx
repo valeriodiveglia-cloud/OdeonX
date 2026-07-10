@@ -30,6 +30,7 @@ import {
 import { useSettings } from '@/contexts/SettingsContext'
 import { getDailyReportsDictionary } from '../_i18n'
 import MonthPicker from '@/components/MonthPicker'
+import { supabase } from '@/lib/supabase_shim'
 
 /* ---------- Bridge (solo per nome branch, come Credits) ---------- */
 function useBridgeSafe() {
@@ -202,7 +203,7 @@ function MonthNav({
   )
 }
 
-type SortKey = 'date' | 'amount' | 'note'
+type SortKey = 'date' | 'time' | 'info' | 'amount' | 'note'
 
 interface ColumnHeaderProps {
   colKey: SortKey
@@ -480,10 +481,28 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
   )
 }
 
+/* ---------- local i18n for time & info ---------- */
+const localI18n = {
+  en: {
+    time: 'Time',
+    info: 'Info (Bill / Table)',
+    timePlaceholder: 'hh:mm',
+    infoPlaceholder: 'e.g., Bill 2685006561 - Table 5',
+  },
+  vi: {
+    time: 'Giờ',
+    info: 'Thông tin (Hóa đơn / Bàn)',
+    timePlaceholder: 'hh:mm',
+    infoPlaceholder: 'vd: Hóa đơn 2685006561 - Bàn 5',
+  }
+}
+
 /* ---------- Types locali ---------- */
 type BankRow = {
   id: string
   date: string
+  time?: string | null
+  info?: string | null
   amount: number
   note: string
   branch?: string | null
@@ -500,6 +519,8 @@ type ModalMode = 'create' | 'edit'
 type UpsertDraft = {
   id?: string
   date: string
+  time?: string | null
+  info?: string | null
   amount: number
   note: string
   branch: string | null
@@ -534,6 +555,8 @@ function BankTransferModal({
     }
     return todayISO()
   })
+  const [time, setTime] = useState<string>(() => row?.time || '')
+  const [info, setInfo] = useState<string>(() => row?.info || '')
   const [amount, setAmount] = useState<number>(() => (row ? Math.round(row.amount || 0) : 0))
   const [note, setNote] = useState<string>(() => row?.note || '')
 
@@ -546,6 +569,8 @@ function BankTransferModal({
     return {
       id: row?.id ?? uuid(),
       date,
+      time: time.trim() || null,
+      info: info.trim() || null,
       amount: Math.round(amount || 0),
       note: note.trim(),
       branch: (row?.branch ?? branch) || null,
@@ -559,6 +584,8 @@ function BankTransferModal({
     if (addNew && onSaveAndAddNew) {
       onSaveAndAddNew(draft)
       setAmount(0)
+      setTime('')
+      setInfo('')
       setNote('')
       return
     }
@@ -577,55 +604,82 @@ function BankTransferModal({
 
   const isCreate = mode === 'create'
 
-  return (
-    <Overlay onClose={onClose}>
-      <div className="h-full flex flex-col text-gray-900">
-        <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
-          <div className="text-xl font-bold">
-            {isCreate ? t.newTitle : t.editTitle}
-          </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <XMarkIcon className="w-7 h-7" />
-          </button>
-        </div>
+        const { language } = useSettings()
+        const localT = language === 'vi' ? localI18n.vi : localI18n.en
 
-        <div className="px-4 md:px-6 py-4 space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-800">{t.date}</label>
-              <input
-                type="date"
-                className={inputBase}
-                value={date}
-                disabled={disabled}
-                onChange={e => setDate(e.target.value)}
-              />
-              {!viewMode && dateError && (
-                <div className="mt-1 text-xs text-red-600">{dateError}</div>
-              )}
-            </div>
-            <div>
-              <label className="text-sm text-gray-800">{t.amount}</label>
-              <MoneyInput
-                value={amount}
-                onChange={setAmount}
-                className="h-11"
-                disabled={disabled}
-              />
-              {/* niente messaggi di errore: i pulsanti restano disabilitati */}
-            </div>
-          </div>
+        return (
+          <Overlay onClose={onClose}>
+            <div className="h-full flex flex-col text-gray-900">
+              <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
+                <div className="text-xl font-bold">
+                  {isCreate ? t.newTitle : t.editTitle}
+                </div>
+                <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+                  <XMarkIcon className="w-7 h-7" />
+                </button>
+              </div>
+      
+              <div className="px-4 md:px-6 py-4 space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-gray-800">{t.date}</label>
+                    <input
+                      type="date"
+                      className={inputBase}
+                      value={date}
+                      disabled={disabled}
+                      onChange={e => setDate(e.target.value)}
+                    />
+                    {!viewMode && dateError && (
+                      <div className="mt-1 text-xs text-red-600">{dateError}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-800">{t.amount}</label>
+                    <MoneyInput
+                      value={amount}
+                      onChange={setAmount}
+                      className="h-11"
+                      disabled={disabled}
+                    />
+                  </div>
+                </div>
 
-          <div>
-            <label className="text-sm text-gray-800">{t.notes}</label>
-            <input
-              className={inputBase}
-              value={note}
-              disabled={disabled}
-              onChange={e => setNote(e.target.value)}
-            />
-          </div>
-        </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-gray-800">{localT.time}</label>
+                    <input
+                      type="text"
+                      placeholder={localT.timePlaceholder}
+                      className={inputBase}
+                      value={time}
+                      disabled={disabled}
+                      onChange={e => setTime(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-800">{localT.info}</label>
+                    <input
+                      type="text"
+                      placeholder={localT.infoPlaceholder}
+                      className={inputBase}
+                      value={info}
+                      disabled={disabled}
+                      onChange={e => setInfo(e.target.value)}
+                    />
+                  </div>
+                </div>
+      
+                <div>
+                  <label className="text-sm text-gray-800">{t.notes}</label>
+                  <input
+                    className={inputBase}
+                    value={note}
+                    disabled={disabled}
+                    onChange={e => setNote(e.target.value)}
+                  />
+                </div>
+              </div>
 
         <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -711,10 +765,47 @@ export default function BankTransfersPage() {
     rows: dbRows,
     loading,
     error,
+    refresh,
     createTransfer,
     updateTransfer,
     deleteTransfers,
   } = useBankTransfers({ year, month })
+
+  // Sincronizzazione automatica da CukCuk POS API per oggi e ieri (dal 9 Luglio 2026 in poi) per TUTTE le filiali
+  useEffect(() => {
+    const d = new Date()
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    
+    const yest = new Date(d.getTime() - 86400000)
+    const yesterdayStr = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`
+
+    async function runPosSync() {
+      try {
+        const { data: branchesData } = await supabase.from('provider_branches').select('name')
+        if (!branchesData || branchesData.length === 0) return
+
+        const calls: Promise<any>[] = []
+        branchesData.forEach(b => {
+          const bName = b.name
+          if (todayStr >= '2026-07-09') {
+            calls.push(fetch(`/api/pos/sync?branch=${encodeURIComponent(bName)}&date=${todayStr}`).catch(e => console.error(e)))
+          }
+          if (yesterdayStr >= '2026-07-09') {
+            calls.push(fetch(`/api/pos/sync?branch=${encodeURIComponent(bName)}&date=${yesterdayStr}`).catch(e => console.error(e)))
+          }
+        })
+
+        if (calls.length > 0) {
+          await Promise.all(calls)
+          refresh()
+        }
+      } catch (err) {
+        console.error('Error running batch POS sync:', err)
+      }
+    }
+
+    runPosSync()
+  }, [year, month, refresh]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // adattiamo le righe DB al tipo locale (e ci portiamo dietro il branch)
   const baseRows: BankRow[] = useMemo(
@@ -722,6 +813,8 @@ export default function BankTransfersPage() {
       (dbRows || []).map((r: DbBankTransferRow) => ({
         id: r.id,
         date: r.date,
+        time: r.time,
+        info: r.info,
         amount: r.amount,
         note: r.note || '',
         branch: r.branch ?? null,
@@ -807,6 +900,10 @@ export default function BankTransfersPage() {
     switch (key) {
       case 'date':
         return fmtDateDMY(r.date)
+      case 'time':
+        return r.time || ''
+      case 'info':
+        return r.info || ''
       case 'amount':
         return fmtInt(r.amount)
       case 'note':
@@ -818,7 +915,7 @@ export default function BankTransfersPage() {
 
   const columnValues = useMemo(() => {
     const map: Record<string, string[]> = {}
-    const keys: SortKey[] = ['date', 'amount', 'note']
+    const keys: SortKey[] = ['date', 'time', 'info', 'amount', 'note']
     keys.forEach(k => {
       const s = new Set<string>()
       monthRows.forEach(r => {
@@ -839,9 +936,11 @@ export default function BankTransfersPage() {
       out = monthRows.filter(r => {
         const dmy = fmtDateDMY(r.date).toLowerCase()
         const iso = String(r.date || '').toLowerCase()
+        const time = (r.time || '').toLowerCase()
+        const info = (r.info || '').toLowerCase()
         const amt = String(Math.round(r.amount || 0))
         const note = (r.note || '').toLowerCase()
-        return dmy.includes(q) || iso.includes(q) || amt.includes(q) || note.includes(q)
+        return dmy.includes(q) || iso.includes(q) || time.includes(q) || info.includes(q) || amt.includes(q) || note.includes(q)
       })
     }
     for (const [col, allowed] of Object.entries(columnFilters)) {
@@ -860,6 +959,14 @@ export default function BankTransfersPage() {
         case 'date':
           av = new Date(a.date).getTime()
           bv = new Date(b.date).getTime()
+          break
+        case 'time':
+          av = a.time || ''
+          bv = b.time || ''
+          break
+        case 'info':
+          av = a.info || ''
+          bv = b.info || ''
           break
         case 'amount':
           av = a.amount
@@ -1020,7 +1127,7 @@ export default function BankTransfersPage() {
             </div>
 
             <button
-              onClick={() => void handleExport(sortedRows, t)}
+              onClick={() => void handleExport(sortedRows, t, language)}
               className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border border-blue-400/30"
               title={t.export.title}
             >
@@ -1073,7 +1180,7 @@ export default function BankTransfersPage() {
 
       <Card>
         <div className="p-3 overflow-x-auto">
-          {loading && (
+          {loading && sortedRows.length === 0 && (
             <div className="text-sm text-gray-500 py-2">{t.table.loading}</div>
           )}
           {error && !loading && (
@@ -1121,6 +1228,36 @@ export default function BankTransfersPage() {
                   dict={columnMenuDict}
                 />
                 <ColumnHeader
+                  colKey="time"
+                  label={language === 'vi' ? localI18n.vi.time : localI18n.en.time}
+                  sortKey={sortKey}
+                  sortAsc={sortAsc}
+                  onSort={applySort}
+                  values={columnValues.time || []}
+                  activeFilter={columnFilters.time || null}
+                  onFilter={s => applyColumnFilter('time', s)}
+                  onClear={() => clearColumnFilter('time')}
+                  open={openMenu === 'time'}
+                  onToggle={() => setOpenMenu(openMenu === 'time' ? null : 'time')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnMenuDict}
+                />
+                <ColumnHeader
+                  colKey="info"
+                  label={language === 'vi' ? localI18n.vi.info : localI18n.en.info}
+                  sortKey={sortKey}
+                  sortAsc={sortAsc}
+                  onSort={applySort}
+                  values={columnValues.info || []}
+                  activeFilter={columnFilters.info || null}
+                  onFilter={s => applyColumnFilter('info', s)}
+                  onClear={() => clearColumnFilter('info')}
+                  open={openMenu === 'info'}
+                  onToggle={() => setOpenMenu(openMenu === 'info' ? null : 'info')}
+                  onClose={() => setOpenMenu(null)}
+                  dict={columnMenuDict}
+                />
+                <ColumnHeader
                   colKey="amount"
                   label={t.table.headers.amount}
                   sortKey={sortKey}
@@ -1156,7 +1293,7 @@ export default function BankTransfersPage() {
             <tbody>
               {!loading && sortedRows.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+                  <td colSpan={6} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                     {t.table.noRows}
                   </td>
                 </tr>
@@ -1194,6 +1331,8 @@ export default function BankTransfersPage() {
                       ) : null}
                     </td>
                     <td className="p-2 whitespace-nowrap">{fmtDateDMY(r.date)}</td>
+                    <td className="p-2 whitespace-nowrap">{r.time || ''}</td>
+                    <td className="p-2">{r.info || ''}</td>
                     <td className="p-2 text-right tabular-nums">{fmtInt(r.amount)}</td>
                     <td className="p-2">{r.note}</td>
                   </tr>
@@ -1205,6 +1344,8 @@ export default function BankTransfersPage() {
                 <tr className="border-t bg-blue-50/30">
                   <td className="p-2 w-7" />
                   <td className="p-2 text-right font-semibold">{t.table.totals}</td>
+                  <td className="p-2" />
+                  <td className="p-2" />
                   <td className="p-2 text-right font-semibold tabular-nums">
                     {fmtInt(totalAmount)}
                   </td>
@@ -1226,6 +1367,8 @@ export default function BankTransfersPage() {
             if (modalMode === 'create') {
               void createTransfer({
                 date: draft.date,
+                time: draft.time || null,
+                info: draft.info || null,
                 amount: draft.amount,
                 note: draft.note || null,
               })
@@ -1233,6 +1376,8 @@ export default function BankTransfersPage() {
               void updateTransfer({
                 id: draft.id,
                 date: draft.date,
+                time: draft.time || null,
+                info: draft.info || null,
                 amount: draft.amount,
                 note: draft.note || null,
               })
@@ -1243,6 +1388,8 @@ export default function BankTransfersPage() {
               ? draft => {
                 void createTransfer({
                   date: draft.date,
+                  time: draft.time || null,
+                  info: draft.info || null,
                   amount: draft.amount,
                   note: draft.note || null,
                 })
@@ -1265,7 +1412,7 @@ export default function BankTransfersPage() {
 }
 
 /* ---------- Export ---------- */
-async function handleExport(rows: BankRow[], t: ReturnType<typeof getDailyReportsDictionary>['banktransfers']) {
+async function handleExport(rows: BankRow[], t: ReturnType<typeof getDailyReportsDictionary>['banktransfers'], language: 'en' | 'vi') {
   if (!rows.length) {
     alert(t.export.empty)
     return
@@ -1274,8 +1421,12 @@ async function handleExport(rows: BankRow[], t: ReturnType<typeof getDailyReport
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet(t.export.sheetName)
 
+  const localT = language === 'vi' ? localI18n.vi : localI18n.en
+
   ws.columns = [
     { header: t.export.columns.date, key: 'date', width: 12 },
+    { header: localT.time, key: 'time', width: 10 },
+    { header: localT.info, key: 'info', width: 35 },
     { header: t.export.columns.amount, key: 'amount', width: 14 },
     { header: t.export.columns.notes, key: 'notes', width: 40 },
   ]
@@ -1283,6 +1434,8 @@ async function handleExport(rows: BankRow[], t: ReturnType<typeof getDailyReport
   rows.forEach(r => {
     ws.addRow({
       date: fmtDateDMY(r.date),
+      time: r.time || '',
+      info: r.info || '',
       amount: Math.round(r.amount || 0),
       notes: r.note || '',
     })
@@ -1291,6 +1444,8 @@ async function handleExport(rows: BankRow[], t: ReturnType<typeof getDailyReport
   const totalAmount = rows.reduce((s, r) => s + Math.round(r.amount || 0), 0)
   ws.addRow({
     date: '',
+    time: '',
+    info: '',
     amount: totalAmount,
     notes: t.export.totalLabel,
   })

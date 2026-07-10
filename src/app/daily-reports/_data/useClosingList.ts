@@ -21,6 +21,9 @@ export type ClosingRow = {
   grab: number
   capichi: number
   thirdPartyAmounts: { label: string; amount: number }[]
+  grossRevenue?: number
+  discount?: number
+  posUnpaid?: number
 }
 
 export type UseClosingListArgs = {
@@ -107,6 +110,9 @@ export function useClosingList({ year, month, branchName }: UseClosingListArgs) 
             'float_plan_json',
             'cashier_name',
             'created_at',
+            'gross_revenue_vnd',
+            'discount_vnd',
+            'pos_unpaid_vnd',
           ].join(',')
         )
         .gte('report_date', startISO)
@@ -330,6 +336,9 @@ function mapDbRowToClosingRow(r: any): ClosingRow {
     grab: toNum(r.grab_vnd),
     capichi: toNum(r.capichi_vnd),
     thirdPartyAmounts: Array.isArray(r.third_party_amounts_json) ? r.third_party_amounts_json : [],
+    grossRevenue: toNum(r.gross_revenue_vnd),
+    discount: toNum(r.discount_vnd),
+    posUnpaid: toNum(r.pos_unpaid_vnd),
   }
 }
 

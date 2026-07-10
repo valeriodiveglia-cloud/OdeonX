@@ -726,6 +726,136 @@ export default function CashierClosingPage() {
 
   const sigServer = serverSigOverride ?? sigServerRawRef.current
   const [coldStartSilence, setColdStartSilence] = useState(true)
+  const [isValidated, setIsValidated] = useState(false)
+  const [syncingPos, setSyncingPos] = useState(false)
+
+  // Firma dello stato escludendo i campi sincronizzati da POS per evitare loop di reset validazione
+  const sigDraftWithoutPOS = useMemo(() => {
+    const { 
+      bankTransferEwallet, 
+      revenue, 
+      grossRevenue, 
+      discount, 
+      posUnpaid, 
+      mpos,
+      grab,
+      thirdPartyAmounts,
+      ...otherPayments 
+    } = payments
+    return signatureOfState({
+      header,
+      floatTarget,
+      payments: otherPayments,
+      payouts,
+      deposits,
+      cash,
+      floatPlan,
+    })
+  }, [header, floatTarget, payments, payouts, deposits, cash, floatPlan])
+
+  // Resetta lo stato validato ogni volta che l'operatore fa qualsiasi modifica manuale (escluso il sync POS)
+  useEffect(() => {
+    setIsValidated(false)
+  }, [sigDraftWithoutPOS])
+
+  const handleValidatePOS = useCallback(async () => {
+    const branchNameForClosing = activeBranchName || header.branch || ''
+    if (!branchNameForClosing || !header.dateStr) return
+
+    setSyncingPos(true)
+    try {
+      let total = 0
+      let fetchedFromApi = false
+
+      if (header.dateStr >= '2026-07-09') {
+        const res = await fetch(
+          `/api/pos/sync?branch=${encodeURIComponent(branchNameForClosing)}&date=${header.dateStr}&t=${Date.now()}`,
+          { cache: 'no-store' }
+        )
+        if (res.ok) {
+          const resData = await res.json()
+          if (resData.success) {
+            total = resData.totalAmount || 0
+            const posUnpaid = typeof resData.posUnpaidAmount === 'number' ? resData.posUnpaidAmount : 0
+            const currentUnpaid = payments.unpaid || 0
+
+            if (posUnpaid !== currentUnpaid) {
+              const diff = posUnpaid - currentUnpaid
+              const msg = language === 'vi'
+                ? `Cảnh báo: Số tiền chưa thanh toán (Unpaid) trên CukCuk POS (${new Intl.NumberFormat('vi-VN').format(posUnpaid)} VND) không khớp với số tiền trên OddsOff (${new Intl.NumberFormat('vi-VN').format(currentUnpaid)} VND).\nChênh lệch: ${new Intl.NumberFormat('vi-VN').format(diff)} VND.`
+                : `Warning: Unpaid amount on CukCuk POS (${new Intl.NumberFormat('en-US').format(posUnpaid)} VND) does not match the amount on OddsOff (${new Intl.NumberFormat('en-US').format(currentUnpaid)} VND).\nDifference: ${new Intl.NumberFormat('en-US').format(diff)} VND.`
+              alert(msg)
+            }
+
+            setPayments(p => {
+              const nextThirdParty = Array.isArray(p.thirdPartyAmounts) ? [...p.thirdPartyAmounts] : []
+              
+              let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase() === 'grab')
+              if (grabIdx !== -1) {
+                nextThirdParty[grabIdx] = { ...nextThirdParty[grabIdx], amount: resData.posGrab || 0 }
+              } else if (typeof resData.posGrab === 'number' && resData.posGrab > 0) {
+                nextThirdParty.push({ label: 'Grab', amount: resData.posGrab })
+              }
+
+              let shopeeIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase().includes('shopee'))
+              if (shopeeIdx !== -1) {
+                nextThirdParty[shopeeIdx] = { ...nextThirdParty[shopeeIdx], amount: resData.posShopeeFood || 0 }
+              } else if (typeof resData.posShopeeFood === 'number' && resData.posShopeeFood > 0) {
+                nextThirdParty.push({ label: 'Shopee Food', amount: resData.posShopeeFood })
+              }
+
+              return {
+                ...p,
+                bankTransferEwallet: total,
+                mpos: typeof resData.posMpos === 'number' ? resData.posMpos : p.mpos,
+                grab: typeof resData.posGrab === 'number' ? resData.posGrab : p.grab,
+                thirdPartyAmounts: nextThirdParty,
+                grossRevenue: typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : p.grossRevenue,
+                discount: typeof resData.posDiscount === 'number' ? resData.posDiscount : p.discount,
+                posUnpaid: posUnpaid,
+                revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : p.revenue
+              }
+            })
+            fetchedFromApi = true
+          } else {
+            console.error('API sync success was false:', resData)
+            alert(`POS Sync Error: ${resData.error || resData.message || 'Unknown error'}`)
+          }
+        } else {
+          const errText = await res.text()
+          console.error('API sync failed with status:', res.status, errText)
+          alert(`POS HTTP Error ${res.status}: ${errText}`)
+        }
+      }
+
+      if (!fetchedFromApi) {
+        const { data, error } = await supabase
+          .from('daily_report_bank_transfers')
+          .select('amount')
+          .eq('branch', branchNameForClosing)
+          .eq('date', header.dateStr)
+
+        if (!error && Array.isArray(data)) {
+          total = data.reduce((s, r: any) => s + Math.round(Number(r?.amount || 0)), 0)
+        }
+
+        setPayments(p => ({
+          ...p,
+          bankTransferEwallet: total,
+          grossRevenue: 0,
+          discount: 0,
+          posUnpaid: 0
+        }))
+      }
+
+      setIsValidated(true)
+    } catch (err) {
+      console.error('Validation sync failed:', err)
+      alert(language === 'vi' ? 'Sincronizzazione di verifica fallita' : 'Verification sync failed')
+    } finally {
+      setSyncingPos(false)
+    }
+  }, [activeBranchName, header.dateStr, header.branch, language, payments.unpaid, setPayments])
 
   useEffect(() => {
     const id = setTimeout(() => setColdStartSilence(false), 900)
@@ -734,7 +864,8 @@ export default function CashierClosingPage() {
 
   const [suppressingDirty, setSuppressingDirty] = useState(false)
   const displayDirty = !coldStartSilence && !suppressingDirty && sigDraft !== sigServer
-  const disableSave = !displayDirty || lukeSaving
+  const disableSave = !displayDirty || lukeSaving || !isValidated
+  const disableValidate = lukeSaving || syncingPos
 
   // Keep ref in sync for handleReloadSaved
   useEffect(() => {
@@ -960,13 +1091,24 @@ export default function CashierClosingPage() {
               <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-xs border rounded bg-gray-50 text-gray-600">
                 {t.saveBar.shortcut}
               </kbd>
-              <button
-                className="h-9 px-3 rounded bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 disabled:hover:bg-blue-600"
-                onClick={onSaveAll}
-                disabled={disableSave}
-              >
-                {t.saveBar.save}
-              </button>
+              {!isValidated ? (
+                <button
+                  className="h-9 px-3 rounded bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 disabled:hover:bg-blue-600 flex items-center gap-1.5 font-semibold text-xs transition-colors duration-200"
+                  onClick={handleValidatePOS}
+                  disabled={disableValidate}
+                >
+                  {syncingPos && <ArrowPathIcon className="w-4 h-4 animate-spin" />}
+                  {language === 'vi' ? 'Kiểm tra & Xác nhận' : 'Verify & Validate'}
+                </button>
+              ) : (
+                <button
+                  className="h-9 px-3 rounded bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 disabled:hover:bg-emerald-600 font-semibold text-xs transition-colors duration-200"
+                  onClick={onSaveAll}
+                  disabled={disableSave}
+                >
+                  {language === 'vi' ? 'Xác nhận & Lưu' : 'Confirm & Save'}
+                </button>
+              )}
             </div>
           </div>
         </div>

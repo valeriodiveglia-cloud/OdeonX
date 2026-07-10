@@ -7,8 +7,11 @@ export type BankTransferRow = {
   id: string
   branch: string | null
   date: string          // yyyy-mm-dd
+  time: string | null   // hh:mm
+  info: string | null   // bill & table info
   amount: number
   note: string | null
+  pos_ref_id: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -16,6 +19,8 @@ export type BankTransferRow = {
 type UpsertInput = {
   id?: string
   date: string
+  time?: string | null
+  info?: string | null
   amount: number
   note?: string | null
 }
@@ -115,8 +120,11 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
         id: String(r.id),
         branch: r.branch ?? null,
         date: r.date,
+        time: r.time ?? null,
+        info: r.info ?? null,
         amount: Number(r.amount || 0),
         note: r.note ?? null,
+        pos_ref_id: r.pos_ref_id ?? null,
         created_at: r.created_at ?? null,
         updated_at: r.updated_at ?? null,
       }))
@@ -170,6 +178,8 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
     const payload = {
       branch: effectiveBranchName,
       date: input.date,
+      time: input.time ?? null,
+      info: input.info ?? null,
       amount: Math.round(input.amount || 0),
       note: input.note ?? null,
     }
@@ -191,8 +201,11 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
       id: String(data.id),
       branch: data.branch ?? null,
       date: data.date,
+      time: data.time ?? null,
+      info: data.info ?? null,
       amount: Number(data.amount || 0),
       note: data.note ?? null,
+      pos_ref_id: data.pos_ref_id ?? null,
       created_at: data.created_at ?? null,
       updated_at: data.updated_at ?? null,
     }
@@ -206,6 +219,8 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
 
     const payload: any = {
       date: input.date,
+      time: input.time ?? null,
+      info: input.info ?? null,
       amount: Math.round(input.amount || 0),
       note: input.note ?? null,
     }
@@ -235,8 +250,11 @@ export function useBankTransfers(params?: { year?: number; month?: number; branc
       id: String(data.id),
       branch: data.branch ?? null,
       date: data.date,
+      time: data.time ?? null,
+      info: data.info ?? null,
       amount: Number(data.amount || 0),
       note: data.note ?? null,
+      pos_ref_id: data.pos_ref_id ?? null,
       created_at: data.created_at ?? null,
       updated_at: data.updated_at ?? null,
     }
