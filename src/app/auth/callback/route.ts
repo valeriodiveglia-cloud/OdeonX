@@ -34,23 +34,17 @@ export async function GET(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return response.cookies.get(name)?.value || cookieStore.get(name)?.value
+          getAll() {
+            return cookieStore.getAll()
           },
-          set(name: string, value: string, options: any) {
+          setAll(cookiesToSet) {
             try {
-              cookieStore.set({ name, value, ...options })
-              response.cookies.set({ name, value, ...options })
+              cookiesToSet.forEach(({ name, value, options }) => {
+                cookieStore.set(name, value, options)
+                response.cookies.set(name, value, options)
+              })
             } catch {
-              // Fallback silenzioso
-            }
-          },
-          remove(name: string, options: any) {
-            try {
-              cookieStore.set({ name, value: '', ...options, maxAge: 0 })
-              response.cookies.set({ name, value: '', ...options, maxAge: 0 })
-            } catch {
-              // Fallback silenzioso
+              // ignore
             }
           },
         },
