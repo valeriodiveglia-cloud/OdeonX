@@ -1,6 +1,6 @@
 // src/app/api/users/admin-delete/route.ts
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 
@@ -56,7 +56,29 @@ export async function POST(req: Request) {
     // 1) Auth del chiamante: cookie o Bearer
     const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || ''
     const useBearer = /^Bearer\s+/.test(authHeader)
-    const userClient = useBearer ? anonWithBearer(authHeader) : createRouteHandlerClient({ cookies })
+    let userClient;
+    if (useBearer) {
+      userClient = anonWithBearer(authHeader)
+    } else {
+      const cookieStore = await cookies()
+      userClient = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return cookieStore.get(name)?.value
+            },
+            set(name: string, value: string, options: any) {
+              try { cookieStore.set({ name, value, ...options }) } catch {}
+            },
+            remove(name: string, options: any) {
+              try { cookieStore.set({ name, value: '', ...options, maxAge: 0 }) } catch {}
+            },
+          },
+        }
+      )
+    }
 
     const { data: meAuth, error: meAuthErr } = await userClient.auth.getUser()
     if (meAuthErr || !meAuth?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
