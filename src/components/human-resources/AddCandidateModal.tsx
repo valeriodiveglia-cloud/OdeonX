@@ -32,6 +32,8 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
         city: '',
         date_of_birth: ''
     })
+    const [onlyYear, setOnlyYear] = useState(false)
+    const [birthYear, setBirthYear] = useState('')
     const [file, setFile] = useState<File | null>(null)
     const [currentCvUrl, setCurrentCvUrl] = useState<string | null>(null)
     const [shouldRemoveCv, setShouldRemoveCv] = useState(false)
@@ -86,6 +88,14 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 city: candidateToEdit.city || '',
                 date_of_birth: candidateToEdit.date_of_birth || ''
             })
+            const dob = candidateToEdit.date_of_birth || ''
+            if (dob && dob.endsWith('-01-01')) {
+                setOnlyYear(true)
+                setBirthYear(dob.substring(0, 4))
+            } else {
+                setOnlyYear(false)
+                setBirthYear('')
+            }
             setSelectedPostingId(candidateToEdit.recruitment_posting_id || '')
             setSelectedRequestId(candidateToEdit.hiring_request_id || '')
             setCurrentCvUrl(candidateToEdit.cv_url || null)
@@ -106,6 +116,8 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 city: '',
                 date_of_birth: ''
             })
+            setOnlyYear(false)
+            setBirthYear('')
             setSelectedPostingId('')
             setSelectedRequestId('')
             setCurrentCvUrl(null)
@@ -309,6 +321,15 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 .filter(Boolean)
                 .join(' ')
 
+            let dobValue: string | null = null
+            if (onlyYear) {
+                if (birthYear && birthYear.trim()) {
+                    dobValue = `${birthYear.trim()}-01-01`
+                }
+            } else {
+                dobValue = formData.date_of_birth || null
+            }
+
             if (candidateToEdit) {
                 const { error } = await supabase
                     .from('candidates')
@@ -326,7 +347,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                         gender: formData.gender || null,
                         address: formData.address || null,
                         city: formData.city || null,
-                        date_of_birth: formData.date_of_birth || null,
+                        date_of_birth: dobValue,
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', candidateToEdit.id)
@@ -359,7 +380,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                         gender: formData.gender || null,
                         address: formData.address || null,
                         city: formData.city || null,
-                        date_of_birth: formData.date_of_birth || null,
+                        date_of_birth: dobValue,
                         stage: 'new'
                     }])
 
@@ -532,17 +553,40 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                         <div>
                                             <label htmlFor="date_of_birth" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                                                {isVI ? 'Ngày sinh' : 'Date of Birth'} <span className="text-red-500">*</span>
+                                                {isVI ? 'Ngày sinh' : 'Date of Birth'}
                                             </label>
-                                            <input
-                                                type="date"
-                                                name="date_of_birth"
-                                                id="date_of_birth"
-                                                required
-                                                value={formData.date_of_birth}
-                                                onChange={handleChange}
-                                                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
-                                            />
+                                            {onlyYear ? (
+                                                <input
+                                                    type="number"
+                                                    min="1940"
+                                                    max={new Date().getFullYear()}
+                                                    placeholder="YYYY"
+                                                    value={birthYear}
+                                                    onChange={(e) => setBirthYear(e.target.value)}
+                                                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
+                                                />
+                                            ) : (
+                                                <input
+                                                    type="date"
+                                                    name="date_of_birth"
+                                                    id="date_of_birth"
+                                                    value={formData.date_of_birth}
+                                                    onChange={handleChange}
+                                                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold"
+                                                />
+                                            )}
+                                            <div className="mt-1 flex items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    id="only_year"
+                                                    checked={onlyYear}
+                                                    onChange={(e) => setOnlyYear(e.target.checked)}
+                                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                />
+                                                <label htmlFor="only_year" className="ml-2 text-[10px] font-bold text-slate-500 cursor-pointer select-none">
+                                                    {isVI ? 'Chỉ nhập năm sinh' : 'Only year of birth'}
+                                                </label>
+                                            </div>
                                         </div>
                                         <div>
                                             <label htmlFor="gender" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
@@ -786,7 +830,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                         </button>
                                         <button
                                             type="submit"
-                                            disabled={submitting || !lastName.trim() || !firstName.trim() || !formData.date_of_birth || !formData.gender || !formData.city || !!duplicateCandidate || checkingDuplicates}
+                                            disabled={submitting || !lastName.trim() || !firstName.trim() || !formData.gender || !formData.city || !!duplicateCandidate || checkingDuplicates}
                                             className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-all cursor-pointer h-10 flex items-center justify-center disabled:opacity-40"
                                         >
                                             {submitting ? (isVI ? 'Đang lưu...' : 'Saving...') : candidateToEdit ? (isVI ? 'Lưu thay đổi' : 'Save Changes') : (isVI ? 'Thêm ứng viên' : 'Add Candidate')}

@@ -503,7 +503,12 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             setDocumentType(candidate.document_type || 'id_card')
             setDocumentNumber(candidate.document_number || '')
             setStaffCode('')
-            setDateOfBirth(candidate.date_of_birth || '')
+            const candidateDob = candidate.date_of_birth || ''
+            if (candidateDob && candidateDob.endsWith('-01-01')) {
+                setDateOfBirth('')
+            } else {
+                setDateOfBirth(candidateDob)
+            }
             setGender(candidate.gender || 'Nam')
             setMaritalStatus('Độc thân')
             setBankBranch('')
@@ -1272,6 +1277,13 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             alert(isVI
                 ? 'Vui lòng điền đầy đủ các trường bắt buộc (Họ, Tên, Số điện thoại, Email, Thành phố, Địa chỉ).'
                 : 'Please fill in all required fields (Last name, First name, Phone, Email, City, Address).');
+            return
+        }
+
+        if (!dateOfBirth || dateOfBirth.trim() === '') {
+            alert(isVI
+                ? 'Vui lòng nhập đầy đủ ngày sinh (ngày, tháng, năm) của nhân viên.'
+                : 'Please enter the complete date of birth (day, month, year) for the staff member.');
             return
         }
 
@@ -3327,8 +3339,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                     {/* DOB + Gender + Marital Status */}
                                                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                                         <div>
-                                                                            <label className="block text-xs font-bold text-slate-500 mb-1.5">{isVI ? 'Ngày sinh' : 'Date of Birth'}</label>
-                                                                            <input type="date" value={dateOfBirth} onChange={e => setDateOfBirth(e.target.value)}
+                                                                            <label className="block text-xs font-bold text-slate-500 mb-1.5">{isVI ? 'Ngày sinh *' : 'Date of Birth *'}</label>
+                                                                            <input required type="date" value={dateOfBirth} onChange={e => setDateOfBirth(e.target.value)}
                                                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-semibold bg-white h-10" />
                                                                         </div>
                                                                         <div>
