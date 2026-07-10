@@ -1,7 +1,7 @@
 // src/app/auth/callback/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
@@ -27,7 +27,33 @@ export async function GET(req: NextRequest) {
 
   // Caso PKCE/magic link: scambia il code sul server, aggiorna metadati e reindirizza
   if (code) {
-    const supabase = createRouteHandlerClient({ cookies })
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+          set(name: string, value: string, options: any) {
+            try {
+              cookieStore.set({ name, value, ...options })
+            } catch {
+              // Può fallire se chiamato in un contesto di sola lettura
+            }
+          },
+          remove(name: string, options: any) {
+            try {
+              cookieStore.set({ name, value: '', ...options, maxAge: 0 })
+            } catch {
+              // Può fallire se chiamato in un contesto di sola lettura
+            }
+          },
+        },
+      }
+    )
+
     try {
       await supabase.auth.exchangeCodeForSession(code)
 
@@ -66,7 +92,8 @@ export async function GET(req: NextRequest) {
 
       // Redirect finale pulito
       return NextResponse.redirect(new URL(redirect, req.url), 302)
-    } catch {
+    } catch (err) {
+      console.error('Error during exchangeCodeForSession:', err)
       const to = new URL('/login', req.url)
       to.searchParams.set('redirect', redirect)
       return NextResponse.redirect(to, 302)
@@ -81,9 +108,7 @@ export async function GET(req: NextRequest) {
 <script>
 (function(){
   var dest = ${JSON.stringify(redirect)};
-  // preserva solo l'hash, i query code/state/error/redirect non servono alla destinazione
   var hash = window.location.hash || '';
-  // opzionale: se vuoi mantenere eventuali query extra, puoi estrarle qui.
   window.location.replace(dest + hash);
 })();
 </script>
