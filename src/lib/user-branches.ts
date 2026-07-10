@@ -22,7 +22,7 @@ export async function getCurrentUserPermissions(): Promise<UserPermissions> {
     if (!acc) return { role: null, branches: [], userBranches: [], isAdminOrOwner: false }
     const role = acc.role || null
     const branches = acc.branches || []
-    const isAdminOrOwner = ['admin', 'owner'].includes(role || '')
+    const isAdminOrOwner = ['admin', 'owner', 'hr manager'].includes(role || '')
     return {
       role,
       branches,
