@@ -257,6 +257,259 @@ function getYesterdayDateStr(dateStr: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/* ---------- Formatter Helpers for Live Inputs ---------- */
+const nfLive = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const clampIntLive = (n: number) => (Number.isFinite(n) ? Math.round(n) : 0)
+const digitsOnlyLive = (s: string) => s.replace(/[^\d]/g, '')
+const toNumLive = (s: string) => clampIntLive(Number(digitsOnlyLive(s)))
+const fmtLive = (n: number) => {
+  try {
+    return nfLive.format(clampIntLive(n))
+  } catch {
+    return String(clampIntLive(n))
+  }
+}
+
+function NumFmt({
+  value,
+  onChange,
+  className = '',
+  disabled = false,
+  placeholder = '0',
+}: {
+  value: number
+  onChange: (v: number) => void
+  className?: string
+  disabled?: boolean
+  placeholder?: string
+}) {
+  const [text, setText] = useState<string>(fmtLive(value))
+  const [focused, setFocused] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!focused) setText(fmtLive(value))
+  }, [value, focused])
+
+  function applyFormatAndMoveCaret(raw: string) {
+    const n = toNumLive(raw)
+    const f = fmtLive(n)
+    setText(f)
+    onChange(n)
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+      if (el) {
+        const L = f.length
+        el.setSelectionRange(L, L)
+      }
+    })
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="numeric"
+      value={text}
+      onChange={e => applyFormatAndMoveCaret(e.target.value)}
+      onFocus={() => {
+        setFocused(true)
+        if (toNumLive(text) === 0) setText('')
+      }}
+      onBlur={() => {
+        setFocused(false)
+        setText(fmtLive(toNumLive(text)))
+      }}
+      placeholder={placeholder}
+      disabled={disabled}
+      className={`w-full text-right focus:outline-none disabled:text-slate-400 bg-transparent ${className}`}
+    />
+  )
+}
+
+function ListEditMoney(props: {
+  label: string
+  value: number
+  onChange: (v: number) => void
+  disabled?: boolean
+  color?: string
+}) {
+  const { label, value, onChange, disabled, color } = props
+
+  if (disabled) {
+    return (
+      <ListReadOnlyMoney
+        label={label}
+        value={value}
+        color={color}
+      />
+    )
+  }
+
+  return (
+    <div className="flex items-center justify-between py-1 border-b border-slate-100 text-xs min-h-[38px] w-full overflow-hidden">
+      <div className="flex items-center gap-1.5 min-w-0 flex-grow">
+        {color && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />}
+        <span 
+          className="font-bold text-slate-700 whitespace-nowrap" 
+          title={label}
+        >
+          {label}
+        </span>
+      </div>
+      <NumFmt
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className="w-24 px-1.5 text-right font-extrabold text-slate-900 border border-transparent bg-transparent hover:border-slate-200 hover:bg-slate-50/50 rounded-md py-0.5 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-none hover:shadow-2xs flex-shrink-0"
+      />
+    </div>
+  )
+}
+
+function ListReadOnlyMoney(props: {
+  label: string
+  value: number
+  color?: string
+  emphasis?: 'neutral' | 'positive' | 'negative'
+  strong?: boolean
+}) {
+  const { label, value, color, emphasis = 'neutral', strong } = props
+  const cls =
+    emphasis === 'neutral'
+      ? 'text-slate-950'
+      : emphasis === 'positive'
+        ? 'text-emerald-700 font-extrabold'
+        : 'text-red-600 font-extrabold'
+  return (
+    <div className="flex items-center justify-between py-1 border-b border-slate-100 text-xs min-h-[38px] w-full overflow-hidden">
+      <div className="flex items-center gap-1.5 min-w-0 flex-grow">
+        {color && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />}
+        <span 
+          className="font-bold text-slate-700 whitespace-nowrap" 
+          title={label}
+        >
+          {label}
+        </span>
+      </div>
+      <span className={`w-28 px-1.5 text-right font-extrabold tabular-nums flex-shrink-0 ${strong ? 'text-blue-755 font-black text-[13px]' : ''} ${cls}`}>
+        {fmtLive(value)} ₫
+      </span>
+    </div>
+  )
+}
+
+function getChannelBrandDetails(label: string) {
+  const norm = label.toLowerCase()
+  const icon = (
+    <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  )
+
+  if (norm.includes('grab')) {
+    return {
+      bgIcon: 'bg-emerald-600 text-white',
+      icon
+    }
+  }
+  if (norm.includes('shopee')) {
+    return {
+      bgIcon: 'bg-orange-500 text-white',
+      icon
+    }
+  }
+  if (norm.includes('beamin')) {
+    return {
+      bgIcon: 'bg-cyan-500 text-white',
+      icon
+    }
+  }
+  if (norm.includes('gofood') || norm.includes('gojek')) {
+    return {
+      bgIcon: 'bg-red-600 text-white',
+      icon
+    }
+  }
+  if (norm.includes('loship')) {
+    return {
+      bgIcon: 'bg-rose-500 text-white',
+      icon
+    }
+  }
+  return {
+    bgIcon: 'bg-slate-400 text-white',
+    icon
+  }
+}
+
+function PaymentRow(props: {
+  icon: React.ReactNode
+  bgIcon: string
+  label: string
+  subtitle?: string
+  value: number
+  percent: number
+  roundedFull?: boolean
+}) {
+  const { icon, bgIcon, label, subtitle, value, percent, roundedFull } = props
+  const shapeClass = roundedFull ? 'rounded-full' : 'rounded-xl'
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-slate-100 w-full min-h-[54px]">
+      <div className="flex items-center gap-3 min-w-0 flex-grow">
+        <div className={`w-8 h-8 ${shapeClass} flex items-center justify-center flex-shrink-0 ${bgIcon}`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex flex-col justify-center">
+          <span className="text-xs font-bold text-slate-800 leading-tight">{label}</span>
+          {subtitle && (
+            <span className="text-[10px] text-slate-400 font-semibold mt-0.5 leading-tight">
+              {subtitle}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-col items-end flex-shrink-0 pl-3 justify-center">
+        <span className="text-xs font-bold text-slate-800 tabular-nums leading-tight">{fmtLive(value)} ₫</span>
+        <span className="text-[10px] font-semibold text-blue-600 mt-0.5 leading-tight">{percent.toFixed(1)}%</span>
+      </div>
+    </div>
+  )
+}
+
+function AdjustmentRow(props: {
+  icon: React.ReactNode
+  bgIcon: string
+  label: string
+  subtitle?: string
+  value: number
+  textClass: string
+}) {
+  const { icon, bgIcon, label, subtitle, value, textClass } = props
+  return (
+    <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-white shadow-2xs hover:shadow-sm transition-all w-full min-h-[54px]">
+      <div className="flex items-center gap-2.5 min-w-0 flex-grow">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${bgIcon}`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex flex-col justify-center">
+          <span className="text-[11px] font-bold text-slate-800 leading-tight" title={label}>
+            {label}
+          </span>
+          {subtitle && (
+            <span className="text-[9px] text-slate-450 text-slate-500 font-semibold mt-0.5 leading-tight">
+              {subtitle}
+            </span>
+          )}
+        </div>
+      </div>
+      <span className={`text-[11px] font-bold tabular-nums pl-2 flex-shrink-0 ${textClass}`}>
+        {fmtLive(value)} ₫
+      </span>
+    </div>
+  )
+}
+
 /* ---------- Main Component ---------- */
 export default function CashierClosingPage() {
   const router = useRouter()
@@ -268,7 +521,7 @@ export default function CashierClosingPage() {
   const dict = getDailyReportsDictionary(language).cashierClosing
   const t = dict
 
-  const { branch, validating } = useDRBranch({ validate: true })
+  const { branch, validating, invalid } = useDRBranch({ validate: true })
   const bridge = useBridgeSafe()
 
   const officialName = branch?.name || ''
@@ -340,6 +593,17 @@ export default function CashierClosingPage() {
   const readOnlyParam = searchParams.get('mode') === 'readonly'
   const isReadOnly = initialIdFromUrl ? readOnlyParam : false
   const [liveMode, setLiveMode] = useState<boolean>(() => !initialIdFromUrl && !isReadOnly)
+
+  function handleSavedClick() {
+    if (initialIdFromUrl && liveMode && handleReloadSaved) {
+      handleReloadSaved()
+    }
+    setLiveMode(false)
+  }
+
+  function handleLiveClick() {
+    setLiveMode(true)
+  }
 
   const [lastEditorName, setLastEditorName] = useState<string>('')
   const [currentUserName, setCurrentUserName] = useState<string>('')
@@ -1176,55 +1440,30 @@ export default function CashierClosingPage() {
   const repayVal = useMemo(() => round(payments.repaymentsCashOnly), [payments.repaymentsCashOnly])
   const depositVal = useMemo(() => round(payments.depositCash), [payments.depositCash])
 
-  const paymentData = useMemo(() => {
-    return [
-      { label: language === 'vi' ? 'Thanh toán Grab' : 'Grab Payments', amount: grabVal, color: '#10B981' }, // emerald
-      { label: 'ShopeeFood', amount: shopeeVal, color: '#F97316' }, // orange
-      { label: language === 'vi' ? 'Thanh toán Thẻ' : 'Card Payments', amount: cardVal, color: '#3B82F6' }, // blue
-      { label: language === 'vi' ? 'Chuyển khoản / Ví' : 'Bank Transfer / E-wallet', amount: bankVal, color: '#6366F1' }, // indigo
-      { label: language === 'vi' ? 'Đơn chưa thanh toán' : 'Unpaid Orders', amount: unpaidVal, color: '#EF4444' }, // red
-      { label: language === 'vi' ? 'Thu nợ (Tiền mặt)' : 'Repayment (Cash)', amount: repayVal, color: '#EC4899' }, // pink
-      { label: language === 'vi' ? 'Đặt cọc / Số dư' : 'Deposits/Balances', amount: depositVal, color: '#EAB308' }, // yellow
-      { label: language === 'vi' ? 'Kênh khác' : 'Other Channels', amount: otherTpVal, color: '#8B5CF6' }, // purple
-    ].filter(item => item.amount > 0)
-  }, [grabVal, shopeeVal, otherTpVal, cardVal, bankVal, unpaidVal, repayVal, depositVal, language])
-
   const totalCollectedChart = useMemo(() => {
-    return grabVal + shopeeVal + otherTpVal + cardVal + bankVal + unpaidVal + repayVal + depositVal
-  }, [grabVal, shopeeVal, otherTpVal, cardVal, bankVal, unpaidVal, repayVal, depositVal])
+    return cardVal + bankVal + thirdPartyAmounts.reduce((sum, item) => sum + item.amount, 0)
+  }, [cardVal, bankVal, thirdPartyAmounts])
 
-  const conicGradientStr = useMemo(() => {
-    if (totalCollectedChart === 0) return 'conic-gradient(#E2E8F0 0% 100%)'
-    let cumulativePercent = 0
-    const parts = paymentData.map(item => {
-      const percent = (item.amount / totalCollectedChart) * 105 // slight adjustment for slice separation
-      const start = cumulativePercent
-      cumulativePercent += percent
-      return `${item.color} ${start}% ${cumulativePercent}%`
-    })
-    return `conic-gradient(${parts.join(', ')})`
-  }, [paymentData, totalCollectedChart])
+  const thirdPartyTotal = useMemo(
+    () => thirdPartyAmounts.reduce((sum, item) => sum + round(item.amount), 0),
+    [thirdPartyAmounts]
+  )
 
-  const paymentListLeft = useMemo(() => [
-    { label: language === 'vi' ? 'Thanh toán Grab' : 'Grab Payments', amount: grabVal, color: '#10B981' },
-    { label: 'ShopeeFood', amount: shopeeVal, color: '#F97316' },
-    { label: language === 'vi' ? 'Thanh toán Thẻ' : 'Card Payments', amount: cardVal, color: '#3B82F6' },
-    { label: language === 'vi' ? 'Chuyển khoản / Ví' : 'Bank Transfer / E-wallet', amount: bankVal, color: '#6366F1' },
-  ], [grabVal, shopeeVal, cardVal, bankVal, language])
+  const nonCash = useMemo(
+    () => thirdPartyTotal + round(payments.mpos) + round(payments.bankTransferEwallet),
+    [thirdPartyTotal, payments.mpos, payments.bankTransferEwallet]
+  )
 
-  const paymentListLeftWithOther = useMemo(() => {
-    const base = [...paymentListLeft]
-    if (otherTpVal > 0) {
-      base.push({ label: language === 'vi' ? 'Kênh khác' : 'Other Channels', amount: otherTpVal, color: '#8B5CF6' })
-    }
-    return base
-  }, [paymentListLeft, otherTpVal, language])
-
-  const paymentListRight = useMemo(() => [
-    { label: language === 'vi' ? 'Đơn chưa thanh toán' : 'Unpaid Orders', amount: unpaidVal, color: '#EF4444' },
-    { label: language === 'vi' ? 'Thu nợ (Tiền mặt)' : 'Repayment (Cash)', amount: repayVal, color: '#EC4899' },
-    { label: language === 'vi' ? 'Đặt cọc / Số dư' : 'Deposits/Balances', amount: depositVal, color: '#EAB308' },
-  ], [unpaidVal, repayVal, depositVal, language])
+  const netVal = useMemo(
+    () =>
+      round(payments.revenue) -
+      nonCash -
+      round(payments.unpaid) -
+      round(payments.cashOut) +
+      round(payments.repaymentsCashCard) +
+      round(deposits),
+    [payments, nonCash, deposits]
+  )
 
   /* ---------- Summary Accounting Data ---------- */
   const nonCashTotal = useMemo(() => {
@@ -1758,34 +1997,69 @@ export default function CashierClosingPage() {
   return (
     <div className="max-w-[1000px] mx-auto px-6 py-6 pb-28" data-cashier-pdf-root="1">
       
-      {/* ─── Intestazione ─── */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6 pb-2">
+      {/* Header come in Versione 1 (in stile chiaro) */}
+      <div className="mb-6 flex items-center justify-between no-print border-b border-slate-800/60 pb-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-800">
-            {language === 'vi' ? 'Bảng chốt ca' : 'Cashier Closing'}
-          </h1>
-          {activeBranchName && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 shadow-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              {activeBranchName}
-            </span>
-          )}
+          <h1 className="text-2xl font-bold text-white">{t.title}</h1>
+
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-600/15 px-3 py-1 text-xs text-blue-100">
+            {validating ? (
+              <span>{t.branch.checking}</span>
+            ) : invalid && !officialName ? (
+              <span>{t.branch.local}</span>
+            ) : (
+              <>
+                <span className="h-2 w-2 rounded-full bg-green-400" />
+                <span className="font-medium">{activeBranchName}</span>
+              </>
+            )}
+          </div>
+
+          {lukeLoading && <span className="text-xs text-slate-300 font-medium">{t.header.loading}</span>}
         </div>
 
-        <div className="flex items-center gap-2.5 no-print">
-          <button
-            type="button"
-            onClick={handleValidatePOS}
-            disabled={disableValidate}
-            className="inline-flex items-center h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-colors shadow-xs"
-          >
-            <ArrowPathIcon className={`w-4 h-4 mr-1.5 ${syncingPos ? 'animate-spin' : ''}`} />
-            {language === 'vi' ? 'Đồng bộ POS' : 'Sync POS'}
-          </button>
+        <div className="flex items-center gap-2">
+          {!!initialIdFromUrl && (
+            <div className="inline-flex items-center rounded-lg border border-slate-350 bg-white text-xs overflow-hidden shadow-xs">
+              <button
+                type="button"
+                className={`px-3 py-1.5 font-bold transition-colors ${!liveMode
+                  ? 'bg-blue-650 text-white bg-blue-600'
+                  : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                onClick={handleSavedClick}
+              >
+                {t.initialInfo.saved}
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-1.5 font-bold border-l border-slate-300 transition-colors ${liveMode
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                onClick={handleLiveClick}
+              >
+                {t.initialInfo.live}
+              </button>
+            </div>
+          )}
+
+          {!isReadOnly && header.dateStr >= '2026-07-09' && (
+            <button
+              type="button"
+              onClick={handleValidatePOS}
+              disabled={syncingPos}
+              className="inline-flex items-center justify-center h-9 px-3 rounded-lg border border-slate-350 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 shadow-xs"
+            >
+              <ArrowPathIcon className={`w-4 h-4 mr-1.5 ${syncingPos ? 'animate-spin' : ''}`} />
+              {language === 'vi' ? 'Đồng bộ POS' : 'Sync POS'}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={exportPDF}
-            className="inline-flex items-center h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-750 text-white font-bold text-xs transition-colors shadow-sm"
+            className="inline-flex items-center justify-center h-9 px-3 rounded-lg bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-sm"
           >
             <ArrowDownTrayIcon className="w-4 h-4 mr-1.5" />
             {language === 'vi' ? 'Xuất Báo Cáo' : 'Export Report'}
@@ -1797,8 +2071,8 @@ export default function CashierClosingPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {/* Date Selector */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            {language === 'vi' ? 'Ngày chốt ca' : 'Date'}
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            {t.initialInfo.date}
           </label>
           <input
             type="date"
@@ -1811,121 +2085,254 @@ export default function CashierClosingPage() {
 
         {/* Branch (read only) */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            {language === 'vi' ? 'Chi nhánh' : 'Branch'}
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            {t.initialInfo.branch}
           </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={activeBranchName}
-              readOnly
-              className="w-full h-10 pl-3 pr-16 text-sm font-semibold text-slate-500 border border-slate-300 bg-slate-50 rounded-lg focus:outline-none shadow-xs"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
-              {language === 'vi' ? 'đọc duy nhất' : 'read only'}
-            </span>
-          </div>
+          <input
+            type="text"
+            value={activeBranchName}
+            readOnly
+            className="w-full h-10 px-3 text-sm font-semibold text-slate-500 border border-slate-300 bg-slate-50 rounded-lg focus:outline-none shadow-xs"
+          />
         </div>
 
-        {/* Closed by (read only) */}
+        {/* Created by (read only) */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            {language === 'vi' ? 'Người chốt ca' : 'Closed by'}
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            {language === 'vi' ? 'Người tạo' : 'Created by'}
           </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={header.cashier || 'N/A'}
-              readOnly
-              className="w-full h-10 pl-3 pr-16 text-sm font-semibold text-slate-500 border border-slate-300 bg-slate-50 rounded-lg focus:outline-none shadow-xs"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
-              {language === 'vi' ? 'đọc duy nhất' : 'read only'}
+          <input
+            type="text"
+            value={header.cashier || 'N/A'}
+            readOnly
+            className="w-full h-10 px-3 text-sm font-semibold text-slate-500 border border-slate-300 bg-slate-50 rounded-lg focus:outline-none shadow-xs"
+          />
+        </div>
+      </div>
+
+      {/* ─── Sezione 1: Revenue Overview ─── */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm mb-6">
+        <h2 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">
+          {t.initialInfo.revenueTitle}
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+          <div className="flex flex-col justify-center">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              {language === 'vi' ? 'Doanh thu gộp (POS)' : 'Gross Revenue (POS)'}
             </span>
+            <span className="text-lg font-black text-slate-800 tabular-nums mt-1">
+              {fmtLive(round(payments.grossRevenue))} ₫
+            </span>
+          </div>
+
+          <div className="flex flex-col justify-center md:pl-6 pt-3 md:pt-0">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              {language === 'vi' ? 'Chiết khấu (POS)' : 'Discount (POS)'}
+            </span>
+            <span className="text-lg font-black text-red-650 text-red-600 tabular-nums mt-1">
+              -{fmtLive(round(payments.discount))} ₫
+            </span>
+          </div>
+
+          <div className="flex flex-col justify-center md:pl-6 pt-3 md:pt-0">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              {language === 'vi' ? 'Doanh thu ròng (POS)' : 'Net Revenue (POS)'}
+            </span>
+            {header.dateStr >= '2026-07-09' ? (
+              <span className="text-lg font-black text-slate-900 tabular-nums mt-1">
+                {fmtLive(round(payments.revenue))} ₫
+              </span>
+            ) : (
+              <div className="mt-1">
+                <NumFmt
+                  value={round(payments.revenue)}
+                  onChange={x => setPayments(p => ({ ...p, revenue: x }))}
+                  disabled={isReadOnly}
+                  className="w-32 font-black text-slate-900 border border-slate-200/80 hover:border-slate-355 focus:border-blue-500 focus:bg-white rounded-md px-2 py-0.5 bg-slate-50/50 disabled:bg-transparent disabled:border-transparent disabled:text-slate-950 disabled:shadow-none transition-all text-right focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ─── Sezione 1: Overview ─── */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm mb-6">
-        <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
-          <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-          </svg>
-          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            {language === 'vi' ? 'Tổng Quan' : 'Overview'}
-          </h2>
+      {/* ─── Sezione 1b: Payment Channels & Drawer Adjustments ─── */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm mb-6">
+        {/* Header Block */}
+        <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-base font-extrabold text-slate-800 tracking-tight leading-none">
+              {language === 'vi' ? 'Kênh Thanh Toán & Điều Chỉnh Cassa' : 'Payment Channels & Drawer Adjustments'}
+            </h2>
+            <span className="text-[11px] text-slate-400 font-bold block mt-1.5 leading-none">
+              {language === 'vi' ? 'Tổng quan về thu chi và các điều chỉnh két' : 'Overview of collections and drawer movements'}
+            </span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-          {[
-            {
-              label: language === 'vi' ? 'Doanh thu gộp' : 'Gross Revenue',
-              value: formatVND(payments.grossRevenue ?? 0) + ' ₫',
-              delta: deltaGross,
-            },
-            {
-              label: language === 'vi' ? 'Chiết khấu' : 'Discounts',
-              value: formatVND(payments.discount ?? 0) + ' ₫',
-              delta: deltaDiscount,
-            },
-            {
-              label: language === 'vi' ? 'Doanh thu ròng' : 'Net Revenue',
-              value: formatVND(payments.revenue ?? 0) + ' ₫',
-              delta: deltaNet,
-              color: 'text-blue-600',
-            },
-            {
-              label: language === 'vi' ? 'Thực tế két' : 'Cash Collected',
-              value: formatVND(countedCash) + ' ₫',
-              delta: deltaCash,
-            },
-            {
-              label: language === 'vi' ? 'Sai lệch' : 'Variance',
-              value: formatVND(cashDiff) + ' ₫',
-              color: cashDiff === 0 ? 'text-slate-700' : cashDiff > 0 ? 'text-emerald-600' : 'text-red-600',
-              delta: 0,
-              showDelta: false,
-            },
-          ].map((kpi, idx) => (
-            <div key={idx} className="bg-slate-50/50 rounded-xl border border-slate-200 p-3.5 flex flex-col justify-between min-h-[92px] transition-all hover:border-slate-300">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">{kpi.label}</span>
-              <div className="mt-auto pt-2">
-                <span className={`text-base font-bold tabular-nums truncate block ${kpi.color || 'text-slate-800'}`}>
-                  {kpi.value}
-                </span>
-                
-                {kpi.showDelta !== false && yesterdayClosing && (
-                  <div className="flex items-center gap-0.5 mt-0.5">
-                    {kpi.delta > 0 ? (
-                      <>
-                        <ArrowLongUpIcon className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                        <span className="text-[10px] font-semibold text-emerald-600">
-                          {language === 'vi' ? 'so với hôm qua' : 'vs yesterday'} +{Math.round(kpi.delta)}%
-                        </span>
-                      </>
-                    ) : kpi.delta < 0 ? (
-                      <>
-                        <ArrowLongDownIcon className="w-3 h-3 text-red-500 flex-shrink-0" />
-                        <span className="text-[10px] font-semibold text-red-500">
-                          {language === 'vi' ? 'so với hôm qua' : 'vs yesterday'} {Math.round(kpi.delta)}%
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-[10px] font-medium text-slate-400">
-                        {language === 'vi' ? 'so với hôm qua' : 'vs yesterday'} 0%
-                      </span>
-                    )}
-                  </div>
-                )}
-                {kpi.showDelta !== false && !yesterdayClosing && (
-                  <span className="text-[10px] font-medium text-slate-350 block mt-0.5">
-                    {language === 'vi' ? 'so với hôm qua' : 'vs yesterday'} --%
-                  </span>
-                )}
+        {/* Two Column Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+          {/* Column 1: Digital Channels & Delivery */}
+          <div className="flex flex-col h-full justify-between gap-4">
+            <div className="flex-shrink-0">
+              <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-widest mb-2">
+                {language === 'vi' ? 'KÊNH THANH TOÁN (KHÔNG TIỀN MẶT)' : 'PAYMENT CHANNELS (NON-CASH)'}
+              </h3>
+
+              <PaymentRow
+                icon={
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                }
+                bgIcon="bg-blue-600 text-white"
+                label={t.initialInfo.cardPayments}
+                value={cardVal}
+                percent={totalCollectedChart > 0 ? (cardVal / totalCollectedChart) * 100 : 0}
+              />
+
+              <PaymentRow
+                icon={
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                }
+                bgIcon="bg-indigo-600 text-white"
+                label={t.initialInfo.bankTransfer}
+                value={bankVal}
+                percent={totalCollectedChart > 0 ? (bankVal / totalCollectedChart) * 100 : 0}
+              />
+            </div>
+
+            <div className="flex-grow flex flex-col min-h-0">
+              <div className="flex items-center mb-2 flex-shrink-0">
+                <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">
+                  {language === 'vi' ? 'ĐỐI TÁC GIAO HÀNG (THIRD-PARTY)' : 'THIRD-PARTY DELIVERY'}
+                </h3>
+              </div>
+              {/* Scrollable list for third parties */}
+              <div className="flex-grow overflow-y-auto pr-1 custom-scrollbar min-h-0 border-b border-slate-100">
+                {thirdPartyAmounts.map((item, idx) => {
+                  const brand = getChannelBrandDetails(item.label)
+                  return (
+                    <PaymentRow
+                      key={`tp-${idx}`}
+                      icon={brand.icon}
+                      bgIcon={brand.bgIcon}
+                      label={item.label || t.initialInfo.thirdPartyFallback.replace('{n}', String(idx + 1))}
+                      value={item.amount}
+                      percent={totalCollectedChart > 0 ? (item.amount / totalCollectedChart) * 100 : 0}
+                      roundedFull={true}
+                    />
+                  )
+                })}
               </div>
             </div>
-          ))}
+          </div>
+
+          {/* Column 2: Cash Out & Drawer Adjustments */}
+          <div className="flex flex-col gap-3">
+            <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-widest mb-1">
+              {language === 'vi' ? 'CHI PHÍ & ĐIỀU CHỈNH' : 'CASH OUT & DRAWER ADJUSTMENTS'}
+            </h3>
+
+            <AdjustmentRow
+              icon={
+                <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              }
+              bgIcon="bg-slate-100 text-slate-600"
+              label={t.initialInfo.cashOut}
+              value={round(payments.cashOut)}
+              textClass="text-slate-800"
+            />
+
+            {header.dateStr >= '2026-07-09' && typeof payments.posUnpaid === 'number' && payments.posUnpaid !== round(payments.unpaid) ? (
+              <div className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50/50 shadow-2xs w-full min-h-[54px]">
+                <div className="flex items-center gap-2.5 min-w-0 flex-grow">
+                  <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex flex-col justify-center">
+                    <span className="text-[11px] font-bold text-slate-800 leading-tight" title={t.initialInfo.unpaid}>
+                      {t.initialInfo.unpaid}
+                    </span>
+                    <span className="text-[9px] text-amber-600 font-semibold truncate mt-0.5 leading-tight">
+                      POS: {fmtLive(payments.posUnpaid)}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[11px] font-bold text-red-650 text-red-600 tabular-nums pl-2 flex-shrink-0">
+                  {fmtLive(round(payments.unpaid))} ₫
+                </span>
+              </div>
+            ) : (
+              <AdjustmentRow
+                icon={
+                  <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                }
+                bgIcon="bg-red-50 text-red-500"
+                label={t.initialInfo.unpaid}
+                value={round(payments.unpaid)}
+                textClass="text-red-600 font-bold"
+              />
+            )}
+
+            <AdjustmentRow
+              icon={
+                <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+              bgIcon="bg-pink-50 text-pink-500"
+              label={t.initialInfo.repaymentsLabel.replace(/\s*\(.*?\)\s*/g, '')}
+              subtitle={language === 'vi' ? '(tiền mặt/thẻ)' : '(cash/card)'}
+              value={round(payments.repaymentsCashCard)}
+              textClass="text-pink-600 font-bold"
+            />
+
+            <AdjustmentRow
+              icon={
+                <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+              bgIcon="bg-amber-50 text-amber-500"
+              label={t.initialInfo.depositsLabel.replace(/\s*\(.*?\)\s*/g, '')}
+              subtitle={language === 'vi' ? '(tiền mặt/thẻ)' : '(cash/card)'}
+              value={round(deposits)}
+              textClass="text-amber-500 font-bold"
+            />
+
+            {/* expected net cash drawer box (bottom right) */}
+            <div className="mt-4 p-4 rounded-2xl bg-blue-50/45 border border-blue-100 flex items-center justify-between shadow-3xs">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-widest">
+                  {language === 'vi' ? 'TIỀN MẶT THỰC THU (NET CASH)' : 'NET CASH'}
+                </span>
+                <span className="text-2xl font-black text-blue-700 mt-1.5 tabular-nums">
+                  {fmtLive(netVal)} ₫
+                </span>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-blue-100/50 border border-blue-200 flex items-center justify-center text-blue-600 flex-shrink-0">
+                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7H4M20 7a2 2 0 012 2v9a2 2 0 01-2 2H4a2 2 0 01-2-2V9a2 2 0 012-2m16 0V5a2 2 0 00-2-2H6a2 2 0 00-2 2v2m11 5h-4" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -2098,66 +2505,7 @@ export default function CashierClosingPage() {
         </div>
       </div>
 
-      {/* ─── Sezione 3: Payment Channels Summary ─── */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm mb-6">
-        <div className="flex items-center gap-2 mb-5 border-b border-slate-100 pb-3">
-          <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            {language === 'vi' ? 'Tổng Hợp Các Kênh Thanh Toán' : 'Payment Channels Summary'}
-          </h2>
-        </div>
 
-        <div className="flex flex-col md:flex-row items-center gap-8 pl-4 pr-2">
-          {/* Donut Chart Container */}
-          <div className="flex-shrink-0 flex flex-col items-center justify-center">
-            <div 
-              className="relative w-36 h-36 rounded-full flex items-center justify-center shadow-inner"
-              style={{ background: conicGradientStr }}
-            >
-              <div className="absolute w-28 h-28 bg-white rounded-full flex flex-col items-center justify-center p-3 text-center">
-                <span className="text-[20px] font-bold text-gray-800 tracking-tight">100%</span>
-                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Total</span>
-                <span className="text-xs font-bold text-blue-600 truncate max-w-full">{formatVND(totalCollectedChart)} ₫</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Details Lists */}
-          <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3.5 w-full text-xs">
-            {/* Column 1: Non-Cash / Digital Channels */}
-            <div className="space-y-2.5">
-              {paymentListLeftWithOther.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between py-1.5 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="font-bold text-slate-700">{item.label}</span>
-                  </div>
-                  <span className="font-extrabold text-slate-900 tabular-nums">{formatVND(item.amount)} ₫</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Column 2: Adjustments, Unpaid, and Cash operations */}
-            <div className="space-y-2.5">
-              {paymentListRight.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between py-1.5 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="font-bold text-slate-700">{item.label}</span>
-                  </div>
-                  <span className="font-extrabold text-slate-900 tabular-nums">{formatVND(item.amount)} ₫</span>
-                </div>
-              ))}
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-between font-bold text-slate-800">
-                <span className="text-blue-755 text-blue-700">{language === 'vi' ? 'Tổng Thu Về' : 'Total Collected'}</span>
-                <span className="text-blue-755 text-blue-700 font-extrabold tabular-nums">{formatVND(totalCollectedChart)} ₫</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ─── Sezione 4: Summary ─── */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm mb-6">
