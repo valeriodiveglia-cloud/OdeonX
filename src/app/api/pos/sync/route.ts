@@ -6,10 +6,6 @@ import { authOr401 } from '@/lib/routeAuth'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const APP_ID = process.env.CUKCUK_APP_ID
-const PASS_CODE = process.env.CUKCUK_PASS_CODE
-const DOMAIN = process.env.CUKCUK_DOMAIN
-
 // Data limite di sicurezza (Activation Date)
 const ACTIVATION_DATE = '2026-07-09'
 
@@ -28,6 +24,10 @@ function getCukCukBranchId(name: string): string | null {
 }
 
 export async function GET(req: Request) {
+  const APP_ID = process.env.CUKCUK_APP_ID
+  const PASS_CODE = process.env.CUKCUK_PASS_CODE
+  const DOMAIN = process.env.CUKCUK_DOMAIN
+
   try {
     // 1. Autenticazione utente tramite helper di progetto
     const auth = await authOr401()
