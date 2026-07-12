@@ -4,9 +4,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import type {
-  Header as HeaderInfo,
+  HeaderInfo,
   PaymentBreakdown,
-} from '../cashier-closing/_cards/InitialInfoCard'
+} from '../cashier-closing/page'
 
 type CashShape = Record<string, number>
 
@@ -154,6 +154,9 @@ export function useCashierLuke(initialId?: string | null) {
           grab: num(row.grab_vnd),
           mpos: num(row.mpos_vnd),
           unpaid: num(row.unpaid_vnd),
+          grossRevenue: num(row.gross_revenue_vnd),
+          discount: num(row.discount_vnd),
+          posUnpaid: num(row.pos_unpaid_vnd),
           repaymentsCashCard: num(row.repayments_cash_card_vnd),
           // opzionale: se non esiste nel tipo, rimane ignorato a runtime
           // @ts-expect-error possibile campo extra
@@ -242,6 +245,9 @@ export function useCashierLuke(initialId?: string | null) {
           grab_vnd: num(payload.payments.grab),
           mpos_vnd: num(payload.payments.mpos),
           unpaid_vnd: num(payload.payments.unpaid),
+          gross_revenue_vnd: num(payload.payments.grossRevenue),
+          discount_vnd: num(payload.payments.discount),
+          pos_unpaid_vnd: num(payload.payments.posUnpaid),
           repayments_cash_card_vnd: num(payload.payments.repaymentsCashCard),
           // @ts-expect-error possibile campo extra
           set_off_debt_vnd: num(payload.payments.setOffDebt),

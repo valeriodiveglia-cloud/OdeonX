@@ -30,38 +30,17 @@ import {
 import { useDailyReportSettings } from '@/app/daily-reports/_data/useDailyReportSettings'
 import { useSettings } from '@/contexts/SettingsContext'
 import MonthPicker from '@/components/MonthPicker'
+import Button from '@/components/Button'
+import { TableContainer, Table, TableHead, TableHeadRow, TableBody, TableRow, TableCell } from '@/components/Table'
+import PageHeader from '@/components/PageHeader'
 import { getDailyReportsDictionary } from '../_i18n'
+import { SupplierCombobox } from '@/app/finance/components/SupplierComponents'
 
 /* ---------- Const usate per util locali ---------- */
 const SETTINGS_LS_KEY = 'dailysettings.initialInfo.v1'
 
-/* ---------- Primitives ---------- */
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow">{children}</div>
-}
 
-function PageHeader({
-  title,
-  left,
-  after,
-  right,
-}: {
-  title: string
-  left?: React.ReactNode
-  after?: React.ReactNode
-  right?: React.ReactNode
-}) {
-  return (
-    <div className="mb-3 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        {left}
-        <h1 className="text-2xl font-bold text-white">{title}</h1>
-        {after}
-      </div>
-      <div className="flex items-center gap-2">{right}</div>
-    </div>
-  )
-}
+
 
 function SectionCard({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
@@ -117,7 +96,7 @@ function parseDigits(s: string): number {
 }
 
 /* ---------- Money input ---------- */
-function MoneyInput({ value, onChange, className = '' }: { value: number; onChange: (v: number) => void; className?: string }) {
+function MoneyInput({ value, onChange, className = '', disabled }: { value: number; onChange: (v: number) => void; className?: string; disabled?: boolean }) {
   const [raw, setRaw] = useState<string>(fmtInt(value))
   const lastRef = useRef<number>(value)
   useEffect(() => {
@@ -128,11 +107,12 @@ function MoneyInput({ value, onChange, className = '' }: { value: number; onChan
       type="text"
       inputMode="numeric"
       value={raw}
+      disabled={disabled}
       onChange={e => { const n = parseDigits(e.target.value); setRaw(fmtInt(n)); onChange(n) }}
       onFocus={() => { if (parseDigits(raw) === 0) setRaw('') }}
       onBlur={() => { if (!raw || parseDigits(raw) === 0) { setRaw('0'); onChange(0) } }}
       placeholder="0"
-      className={`border rounded-lg px-2 h-10 w-full text-right bg-white tabular-nums ${className}`}
+      className={`border rounded-lg px-2 h-10 w-full text-right bg-white disabled:bg-slate-50 disabled:text-slate-500 tabular-nums ${className}`}
     />
   )
 }
@@ -174,10 +154,20 @@ function toTitleCase(s: string) {
 }
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    const original = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = original
+    }
+  }, [])
+
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-full max-w-3xl h-full bg-white shadow-xl overflow-y-auto">{children}</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={onClose} />
+      <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] z-10 animate-in fade-in zoom-in-95 duration-200">
+        {children}
+      </div>
     </div>
   )
 }
@@ -267,6 +257,15 @@ function EditorModal({
     }
   }
 
+  async function handleSupplierAddNew(queryName: string) {
+    const clean = String(queryName || '').trim()
+    if (!clean) return
+    const created = await onCreateSupplier(toTitleCase(clean))
+    if (created?.id) {
+      setSupplierId(created.id)
+    }
+  }
+
   function buildRow(): CashoutRow {
     const combinedTs = combineDateAndTimeToISO(String(date), timeHHMM || '00:00')
     return {
@@ -345,116 +344,206 @@ function EditorModal({
   }
   return (
     <Overlay onClose={onClose}>
-      <div className="h-full flex flex-col text-gray-900">
-        <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
-          <div className="text-xl font-bold">
+      <div className="flex flex-col text-slate-900 bg-white p-6 sm:p-8">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+          <div className="text-lg font-bold text-slate-800">
             {viewMode ? tm.viewTitle : (initial.id ? tm.editTitle : tm.newTitle)}
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100"><XMarkIcon className="w-7 h-7" /></button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-full text-slate-400 hover:text-slate-650 hover:bg-slate-100 transition-colors"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
         </div>
-        <div className="px-4 md:px-6 py-4 flex-1 overflow-y-auto">
-          <SectionCard>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <label className="text-sm text-gray-800">{tm.branch}</label>
-                <input className="mt-1 w-full border rounded-lg px-3 h-11 bg-gray-50" value={selectedBranchName || ''} readOnly />
-              </div>
 
-              <div className="md:col-span-2 grid gap-4 md:grid-cols-3">
-                <div>
-                  <label className="text-sm text-gray-800">{tm.date}</label>
-                  <input
-                    type="date"
-                    className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
-                    value={date}
-                    onChange={e => setDate(e.target.value)}
-                    disabled={viewMode}
-                    max={todayISO()}
-                  />
-                </div>
+        {/* Content & Form */}
+        <div className="mt-5 space-y-5 flex-1 overflow-y-auto pr-1">
+          {/* Branch display */}
+          <div className="flex items-center gap-2.5 pb-2.5 border-b border-slate-100">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{tm.branch}</span>
+            <div className="h-3 w-px bg-slate-200" />
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+              {selectedBranchName || '-'}
+            </span>
+          </div>
 
-                <div>
-                  <label className="text-sm text-gray-800">{tm.time}</label>
-                  <input
-                    type="time"
-                    className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
-                    value={timeHHMM}
-                    onChange={e => setTimeHHMM(e.target.value)}
-                    disabled={viewMode}
-                  />
-                </div>
+          {/* Date, Time, Amount (3 columns) */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{tm.date}</label>
+              <input
+                type="date"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                disabled={viewMode}
+                max={todayISO()}
+              />
+            </div>
 
-                <div>
-                  <label className="text-sm text-gray-800">{tm.amount}</label>
-                  <div className="mt-1">
-                    <MoneyInput value={amount} onChange={setAmount} className="h-11" />
-                  </div>
-                </div>
-              </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{tm.time}</label>
+              <input
+                type="time"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                value={timeHHMM}
+                onChange={e => setTimeHHMM(e.target.value)}
+                disabled={viewMode}
+              />
+            </div>
 
-              <div className="md:col-span-2">
-                <label className="text-sm text-gray-800">{tm.description}</label>
-                <input className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={description} onChange={e => { const v = e.target.value; setDescription(v.charAt(0).toUpperCase() + v.slice(1)) }} disabled={viewMode} />
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-sm text-gray-800">{tm.category}</label>
-                <select className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={category || ''} onChange={e => setCategory(e.target.value)} disabled={viewMode}>
-                  <option value="">{catOpts.length ? tm.categorySelect : tm.categoryEmpty}</option>
-                  {catOpts.map((c, i) => <option key={`${c}-${i}`} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-sm text-gray-800">{tm.supplier}</label>
-                <select
-                  className="mt-1 w-full border rounded-lg px-3 h-11 bg-white"
-                  value={supplierId}
-                  onChange={e => handleSupplierSelect(e.target.value)}
-                  disabled={viewMode}
-                >
-                  <option value="">{tm.supplierSelect}</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  <option value="__add__">{tm.supplierAddPrefix}</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-800">{tm.shift}</label>
-                <select className="mt-1 w-full border rounded-lg px-3 h-11 bg-white" value={shift || ''} onChange={e => setShift(e.target.value)} disabled={viewMode}>
-                  {shiftOpts.map((s, i) => <option key={`${s}-${i}`} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-800">{tm.paidBy}</label>
-                <input className="mt-1 w-full border rounded-lg px-3 h-11 bg-gray-50" value={paidBy || currentUserName || ''} readOnly />
-              </div>
-              <div className="md:col-span-2 flex flex-wrap items-center gap-x-12 gap-y-3 pt-1">
-                <div className="flex items-center gap-3"><span className="text-sm text-gray-800">{tm.vatInvoice}</span><Toggle id="invoice_toggle" checked={invoice} onChange={setInvoice} disabled={viewMode} yesLabel={yesNo.yes} noLabel={yesNo.no} /></div>
-                <div className="flex items-center gap-3"><span className="text-sm text-gray-800">{tm.deliveryNote}</span><Toggle id="delivery_toggle" checked={deliveryNote} onChange={setDeliveryNote} disabled={viewMode} yesLabel={yesNo.yes} noLabel={yesNo.no} /></div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{tm.amount}</label>
+              <div className="mt-0">
+                <MoneyInput value={amount} onChange={setAmount} className="h-10 border border-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 rounded-xl" disabled={viewMode} />
               </div>
             </div>
-          </SectionCard>
-        </div>
-        <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {viewMode ? (
-              <button type="button" onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80">{tm.buttons.edit}</button>
-            ) : (
-              initial.id && <button type="button" onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{tm.buttons.delete}</button>
-            )}
           </div>
+
+          {/* Description */}
           <div>
-            <button type="button" onClick={onClose} disabled={isSaving} className="px-4 py-2 rounded-lg border hover:opacity-80 disabled:opacity-50">{tm.buttons.close}</button>
-            {!viewMode && (
-              <>
-                {onSaveAndAdd && !initial.id && (
-                  <button type="button" onClick={handleSaveAndAdd} disabled={!canSave || isSaving} className="ml-2 px-4 py-2 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:opacity-50">
-                    {isSaving ? 'Saving...' : ((t as any).buttons?.saveAndAdd || 'Save & Add New')}
-                  </button>
-                )}
-                <button type="button" onClick={handleSave} disabled={!canSave || isSaving} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50">
-                  {isSaving ? 'Saving...' : tm.buttons.save}
-                </button>
-              </>
-            )}
+            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{tm.description}</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+              value={description}
+              onChange={e => { const v = e.target.value; setDescription(v.charAt(0).toUpperCase() + v.slice(1)) }}
+              disabled={viewMode}
+            />
+          </div>
+
+          {/* Category, Supplier (2 columns) */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{tm.category}</label>
+              <select
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold cursor-pointer"
+                value={category || ''}
+                onChange={e => setCategory(e.target.value)}
+                disabled={viewMode}
+              >
+                <option value="">{catOpts.length ? tm.categorySelect : tm.categoryEmpty}</option>
+                {catOpts.map((c, i) => <option key={`${c}-${i}`} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{tm.supplier}</label>
+              {viewMode ? (
+                <div className="h-10 flex items-center text-slate-900 font-semibold text-sm px-1 gap-2">
+                  <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  <span>{supplierName || '-'}</span>
+                </div>
+              ) : (
+                <SupplierCombobox
+                  suppliers={suppliers}
+                  selectedId={supplierId || null}
+                  onChange={id => setSupplierId(id || '')}
+                  onAddNew={handleSupplierAddNew}
+                  placeholder={tm.supplierSelect}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Shift, Paid by (2 columns) */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{tm.shift}</label>
+              <select
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold cursor-pointer"
+                value={shift || ''}
+                onChange={e => setShift(e.target.value)}
+                disabled={viewMode}
+              >
+                {shiftOpts.map((s, i) => <option key={`${s}-${i}`} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            {/* Paid By display */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{tm.paidBy}</label>
+              <div className="h-10 flex items-center text-slate-900 font-semibold text-sm px-1 gap-2">
+                <svg className="w-4 h-4 text-slate-405 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>{paidBy || currentUserName || '-'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Toggles (2 columns) */}
+          <div className="grid grid-cols-2 gap-4 pt-1">
+            <div className="flex items-center gap-3">
+              <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{tm.vatInvoice}</span>
+              <Toggle id="invoice_toggle" checked={invoice} onChange={setInvoice} disabled={viewMode} yesLabel={yesNo.yes} noLabel={yesNo.no} />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{tm.deliveryNote}</span>
+              <Toggle id="delivery_toggle" checked={deliveryNote} onChange={setDeliveryNote} disabled={viewMode} yesLabel={yesNo.yes} noLabel={yesNo.no} />
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex justify-between items-center gap-3 pt-4 border-t border-slate-100 mt-5">
+            <div className="flex items-center gap-2">
+              {viewMode ? (
+                <Button
+                  variant="primary"
+                  onClick={(e) => { e.preventDefault(); setViewMode(false) }}
+                  className="h-10 text-xs font-semibold px-4"
+                >
+                  {tm.buttons.edit}
+                </Button>
+              ) : (
+                initial.id && (
+                  <Button
+                    variant="danger"
+                    onClick={handleDelete}
+                    className="h-10 text-xs font-semibold px-4"
+                  >
+                    {tm.buttons.delete}
+                  </Button>
+                )
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={onClose}
+                disabled={isSaving}
+                className="h-10 text-xs font-semibold px-4"
+              >
+                {tm.buttons.close}
+              </Button>
+              {!viewMode && (
+                <>
+                  {onSaveAndAdd && !initial.id && (
+                    <Button
+                      variant="outline"
+                      onClick={handleSaveAndAdd}
+                      disabled={!canSave || isSaving}
+                      className="h-10 text-xs font-semibold px-4"
+                    >
+                      {isSaving ? 'Saving...' : ((t as any).buttons?.saveAndAdd || 'Save & Add New')}
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    onClick={handleSave}
+                    disabled={!canSave || isSaving}
+                    className="h-10 text-xs font-semibold px-4"
+                  >
+                    {isSaving ? 'Saving...' : tm.buttons.save}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -529,7 +618,6 @@ export default function CashoutPage() {
     [cashOutCategories],
   )
 
-  const [search, setSearch] = useState<string>('')
 
   const columnMenuDict = {
     sortAsc: language === 'vi' ? 'Sắp xếp tăng dần' : 'Sort Ascending',
@@ -721,27 +809,6 @@ export default function CashoutPage() {
     const branchName = (selectedBranchName || '').trim()
     let out = branchName ? monthFiltered.filter(r => (r.branch || '') === branchName) : monthFiltered
 
-    const q = search.trim().toLowerCase()
-    if (q) {
-      out = out.filter(r => {
-        const dmy = fmtDateDMY(r.date).toLowerCase()
-        const iso = String(r.date || '').toLowerCase()
-        const amt = String(Math.round(r.amount || 0))
-        const desc = (r.description || '').toLowerCase()
-        const cat = (r.category || '').toLowerCase()
-        const supp = (r.supplier_name || '').toLowerCase()
-        const shift = (r.shift || '').toLowerCase()
-        const by = (r.paidBy || '').toLowerCase()
-        const br = (r.branch || '').toLowerCase()
-        const inv = r.invoice ? 'yes' : 'no'
-        const deln = r.deliveryNote ? 'yes' : 'no'
-        return (
-          desc.includes(q) || cat.includes(q) || supp.includes(q) || shift.includes(q) || by.includes(q) ||
-          inv.includes(q) || deln.includes(q) || dmy.includes(q) || iso.includes(q) || amt.includes(q) || br.includes(q)
-        )
-      })
-    }
-
     // Apply column checklist filters
     for (const [col, allowed] of Object.entries(columnFilters)) {
       if (allowed && allowed.size > 0) {
@@ -750,7 +817,7 @@ export default function CashoutPage() {
     }
 
     return out
-  }, [rows, search, selectedBranchName, monthStart, monthEnd, columnFilters, displayValue])
+  }, [rows, selectedBranchName, monthStart, monthEnd, columnFilters, displayValue])
 
   /* ---------- Totali (solo valore, niente conteggio) ---------- */
   const totalAmount = useMemo(() => {
@@ -917,9 +984,9 @@ export default function CashoutPage() {
     }
 
     return (
-      <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <th className={`px-6 py-4 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
         <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
-          <span className="select-none">{label}</span>
+          <span className="select-none text-slate-500 uppercase tracking-wider text-xs">{label}</span>
           {isActive && (
             sortAsc
               ? <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
@@ -1042,102 +1109,80 @@ export default function CashoutPage() {
     <div className="max-w-none mx-auto p-4 text-gray-100">
       <PageHeader
         title={t.title}
+        subtitle={language === 'vi'
+          ? 'Xem và quản lý chi phí tiền mặt hàng ngày.'
+          : 'View and manage cash expenses.'}
+        badgeText={selectedBranchName || (language === 'vi' ? 'Tất cả chi nhánh' : 'All branches')}
         left={
-          <>
-            {selectMode && (
-              <div className="relative" ref={menuRef}>
-                <button
-                  onClick={() => setMenuOpen(v => !v)}
-                  aria-label={t.menu.moreActions}
-                  className="p-0 h-auto w-auto bg-transparent border-0 outline-none text-blue-200 hover:text-white focus:outline-none"
-                  title={t.menu.moreActions}
-                >
-                  <EllipsisVerticalIcon className="h-6 w-6" />
-                </button>
-
-                {menuOpen && (
-                  <div className="absolute z-10 mt-2 min-w-[12rem] rounded-xl border bg-white text-gray-800 shadow-lg py-1">
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 hover:bg-blue-200 hover:text-red-700 disabled:opacity-50"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        const ids = Object.keys(selected).filter(id => selected[id])
-                        if (ids.length) {
-                          bulkDelete()
-                        }
-                      }}
-                      disabled={selectedIds.length === 0}
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                      <span>{t.menu.delete}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        }
-        after={
-          <div
-            className="ml-2 inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-600/15 px-3 py-1 text-xs text-blue-100"
-            title={t.branchPill.tooltip}
-          >
-            <span className="h-2 w-2 rounded-full bg-green-400" />
-            <span className="font-medium">{selectedBranchName ? selectedBranchName : t.branchPill.all}</span>
-          </div>
-        }
-        right={
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-2.5 h-5 w-5 text-blue-200" />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder={t.search.placeholder}
-                className="pl-9 pr-8 h-9 rounded-lg border border-blue-400/30 bg-blue-600/15 text-blue-50 placeholder-blue-200
-                           focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-2 top-2 h-5 w-5 text-blue-200 hover:text-white"
-                  aria-label={t.search.clear}
-                  title={t.search.clear}
-                >
-                  ×
-                </button>
+          selectMode ? (
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen(v => !v)}
+                aria-label={t.menu.moreActions}
+                className="p-0 h-auto w-auto bg-transparent border-0 outline-none text-blue-200 hover:text-white focus:outline-none cursor-pointer flex items-center"
+                title={t.menu.moreActions}
+              >
+                <EllipsisVerticalIcon className="h-6 w-6" />
+              </button>
+              {menuOpen && (
+                <div className="absolute left-0 z-10 mt-2 min-w-[12rem] rounded-xl border border-slate-150 bg-white text-slate-800 shadow-lg py-1">
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-655 hover:bg-red-50 text-left text-xs font-semibold disabled:opacity-50"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      const ids = Object.keys(selected).filter(id => selected[id])
+                      if (ids.length) {
+                        bulkDelete()
+                      }
+                    }}
+                    disabled={selectedIds.length === 0}
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                    <span>{t.menu.delete}</span>
+                  </button>
+                </div>
               )}
             </div>
-
-            <button
+          ) : null
+        }
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Export */}
+            <Button
+              variant="secondary-dark"
+              size="md"
+              icon={ArrowUpTrayIcon}
               onClick={handleExport}
-              className="inline-flex items-center gap-2 px-3 h-9 rounded-lg
-                           bg-blue-600/15 text-blue-200 hover:bg-blue-600/25
-                           border border-blue-400/30"
+              className="h-9 px-3 text-xs font-semibold"
               title={t.export.title}
             >
-              <ArrowUpTrayIcon className="w-5 h-5" />
               {t.export.label}
-            </button>
+            </Button>
 
-            <button
-              onClick={() => { setSelectMode(s => !s); setMenuOpen(false) }}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-                }`}
+            {/* Toggle Select */}
+            <Button
+              variant={selectMode ? 'primary' : 'secondary-dark'}
+              size="md"
+              icon={CheckCircleIcon}
+              onClick={() => { setSelectMode(s => !s); setMenuOpen(false); setSelected({}) }}
+              className="h-9 px-3 text-xs font-semibold"
               title={selectMode ? t.select.exitTitle : t.select.enterTitle}
             >
-              <CheckCircleIcon className="w-5 h-5" />
               {selectMode ? t.select.active : t.select.inactive}
-            </button>
+            </Button>
 
-            <button
+            {/* New Expense */}
+            <Button
+              variant="primary"
+              size="md"
+              icon={PlusIcon}
               onClick={openCreate}
-              className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
+              className="h-9 px-3 text-xs font-semibold"
             >
-              <PlusIcon className="w-5 h-5" /> {t.actions.newExpense}
-            </button>
+              {t.actions.newExpense}
+            </Button>
           </div>
         }
       />
@@ -1161,94 +1206,89 @@ export default function CashoutPage() {
         className="mt-3 mb-4"
       />
 
-      <Card>
-        <div className="p-3 overflow-x-auto">
-          {loading && <div className="text-sm text-gray-500 py-2">{t.table.loading}</div>}
-          <table className="w-full table-auto text-sm text-gray-900">
-            <thead>
-              <tr>
-                <th className="p-2 w-7">
-                  {selectMode ? (
-                    <input
-                      ref={headerCbRef}
-                      type="checkbox"
-                      checked={visibleRows.length > 0 && visibleRows.every(r => !!selected[r.id])}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4"
-                      title={t.table.selectAll}
-                    />
-                  ) : null}
+      <TableContainer>
+        {loading && <div className="text-sm text-slate-500 p-4">{t.table.loading}</div>}
+        <Table>
+          <TableHead>
+            <TableHeadRow>
+              {selectMode && (
+                <th className="px-6 py-4 w-7 text-center">
+                  <input
+                    ref={headerCbRef}
+                    type="checkbox"
+                    checked={visibleRows.length > 0 && visibleRows.every(r => !!selected[r.id])}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    title={t.table.selectAll}
+                  />
                 </th>
-
-                <ColumnHeader colKey="date" label={t.table.headers.date} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.date || []} activeFilter={columnFilters.date || null} onFilter={(s) => applyColumnFilter('date', s)} onClear={() => clearColumnFilter('date')} open={openMenu === 'date'} onToggle={() => setOpenMenu(v => v === 'date' ? null : 'date')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8.5rem]" />
-                <ColumnHeader colKey="time" label={t.table.headers.time} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.time || []} activeFilter={columnFilters.time || null} onFilter={(s) => applyColumnFilter('time', s)} onClear={() => clearColumnFilter('time')} open={openMenu === 'time'} onToggle={() => setOpenMenu(v => v === 'time' ? null : 'time')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[6.5rem]" />
-                <ColumnHeader colKey="description" label={t.table.headers.description} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.description || []} activeFilter={columnFilters.description || null} onFilter={(s) => applyColumnFilter('description', s)} onClear={() => clearColumnFilter('description')} open={openMenu === 'description'} onToggle={() => setOpenMenu(v => v === 'description' ? null : 'description')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} />
-                <ColumnHeader colKey="category" label={t.table.headers.category} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.category || []} activeFilter={columnFilters.category || null} onFilter={(s) => applyColumnFilter('category', s)} onClear={() => clearColumnFilter('category')} open={openMenu === 'category'} onToggle={() => setOpenMenu(v => v === 'category' ? null : 'category')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[12rem]" />
-                <ColumnHeader colKey="amount" label={t.table.headers.amount} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.amount || []} activeFilter={columnFilters.amount || null} onFilter={(s) => applyColumnFilter('amount', s)} onClear={() => clearColumnFilter('amount')} open={openMenu === 'amount'} onToggle={() => setOpenMenu(v => v === 'amount' ? null : 'amount')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
-                <ColumnHeader colKey="supplier_name" label={t.table.headers.supplier} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.supplier_name || []} activeFilter={columnFilters.supplier_name || null} onFilter={(s) => applyColumnFilter('supplier_name', s)} onClear={() => clearColumnFilter('supplier_name')} open={openMenu === 'supplier_name'} onToggle={() => setOpenMenu(v => v === 'supplier_name' ? null : 'supplier_name')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[12rem]" />
-                <ColumnHeader colKey="invoice" label={t.table.headers.invoice} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.invoice || []} activeFilter={columnFilters.invoice || null} onFilter={(s) => applyColumnFilter('invoice', s)} onClear={() => clearColumnFilter('invoice')} open={openMenu === 'invoice'} onToggle={() => setOpenMenu(v => v === 'invoice' ? null : 'invoice')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} center className="w-[8rem]" />
-                <ColumnHeader colKey="deliveryNote" label={t.table.headers.deliveryNote} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.deliveryNote || []} activeFilter={columnFilters.deliveryNote || null} onFilter={(s) => applyColumnFilter('deliveryNote', s)} onClear={() => clearColumnFilter('deliveryNote')} open={openMenu === 'deliveryNote'} onToggle={() => setOpenMenu(v => v === 'deliveryNote' ? null : 'deliveryNote')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} center className="w-[10rem]" />
-                <ColumnHeader colKey="branch" label={t.table.headers.branch} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.branch || []} activeFilter={columnFilters.branch || null} onFilter={(s) => applyColumnFilter('branch', s)} onClear={() => clearColumnFilter('branch')} open={openMenu === 'branch'} onToggle={() => setOpenMenu(v => v === 'branch' ? null : 'branch')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[10rem]" />
-                <ColumnHeader colKey="paidBy" label={t.table.headers.paidBy} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.paidBy || []} activeFilter={columnFilters.paidBy || null} onFilter={(s) => applyColumnFilter('paidBy', s)} onClear={() => clearColumnFilter('paidBy')} open={openMenu === 'paidBy'} onToggle={() => setOpenMenu(v => v === 'paidBy' ? null : 'paidBy')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[11rem]" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && !loading && (
-                <tr><td colSpan={11} className="text-center py-8 text-slate-400 text-xs italic font-semibold">{t.table.noRows}</td></tr>
               )}
-              {rows.length > 0 && (
-                visibleRows.length === 0 && !loading ? (
-                  <tr><td colSpan={11} className="text-center py-8 text-slate-400 text-xs italic font-semibold">{t.table.noRows}</td></tr>
-                ) : (
-                  visibleRows.length > 0 && [...sortedRows].map(r => (
-                    <tr
-                      key={r.id}
-                      className="border-t hover:bg-blue-50/40 cursor-pointer"
-                      onClick={() => openView(r)}
-                      onDoubleClick={() => openEdit(r)}
-                    >
-                      <td className="p-2 w-7" onClick={e => e.stopPropagation()}>
-                        {selectMode ? (
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4"
-                            checked={!!selected[r.id]}
-                            onChange={e => setSelected(prev => ({ ...prev, [r.id]: e.target.checked }))}
-                            title={t.table.selectRow}
-                          />
-                        ) : null}
-                      </td>
-                      <td className="p-2 whitespace-nowrap">{fmtDateDMY(r.date)}</td>
-                      <td className="p-2 whitespace-nowrap">{r.created_at ? extractHHMM(r.created_at) : ''}</td>
-                      <td className="p-2 whitespace-normal break-words min-w-[15rem] max-w-sm">{r.description}</td>
-                      <td className="p-2 whitespace-nowrap">{r.category || '-'}</td>
-                      <td className="p-2 text-right tabular-nums">{fmtInt(r.amount)}</td>
-                      <td className="p-2 whitespace-nowrap">{r.supplier_name || '-'}</td>
-                      <td className="p-2 text-center">{r.invoice ? yesNo.yes : yesNo.no}</td>
-                      <td className="p-2 text-center">{r.deliveryNote ? yesNo.yes : yesNo.no}</td>
-                      <td className="p-2 whitespace-nowrap">{r.branch || '-'}</td>
-                      <td className="p-2 whitespace-nowrap">{r.paidBy || '-'}</td>
-                    </tr>
-                  ))
-                )
-              )}
-            </tbody>
 
-            <tfoot>
-              <tr className="border-t bg-blue-50/50">
-                <td className="p-2 w-7" />
-                <td className="p-2 text-right font-semibold" colSpan={4}>
-                  {t.table.totals}
-                </td>
-                <td className="p-2 text-right font-semibold tabular-nums">
-                  {fmtInt(totalAmount)}
-                </td>
-                <td className="p-2" colSpan={5} />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Card>
+              <ColumnHeader colKey="date" label={t.table.headers.date} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.date || []} activeFilter={columnFilters.date || null} onFilter={(s) => applyColumnFilter('date', s)} onClear={() => clearColumnFilter('date')} open={openMenu === 'date'} onToggle={() => setOpenMenu(v => v === 'date' ? null : 'date')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[120px]" />
+              <ColumnHeader colKey="time" label={t.table.headers.time} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.time || []} activeFilter={columnFilters.time || null} onFilter={(s) => applyColumnFilter('time', s)} onClear={() => clearColumnFilter('time')} open={openMenu === 'time'} onToggle={() => setOpenMenu(v => v === 'time' ? null : 'time')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[100px]" />
+              <ColumnHeader colKey="description" label={t.table.headers.description} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.description || []} activeFilter={columnFilters.description || null} onFilter={(s) => applyColumnFilter('description', s)} onClear={() => clearColumnFilter('description')} open={openMenu === 'description'} onToggle={() => setOpenMenu(v => v === 'description' ? null : 'description')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="min-w-[200px]" />
+              <ColumnHeader colKey="category" label={t.table.headers.category} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.category || []} activeFilter={columnFilters.category || null} onFilter={(s) => applyColumnFilter('category', s)} onClear={() => clearColumnFilter('category')} open={openMenu === 'category'} onToggle={() => setOpenMenu(v => v === 'category' ? null : 'category')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[180px]" />
+              <ColumnHeader colKey="amount" label={t.table.headers.amount} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.amount || []} activeFilter={columnFilters.amount || null} onFilter={(s) => applyColumnFilter('amount', s)} onClear={() => clearColumnFilter('amount')} open={openMenu === 'amount'} onToggle={() => setOpenMenu(v => v === 'amount' ? null : 'amount')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[140px]" />
+              <ColumnHeader colKey="supplier_name" label={t.table.headers.supplier} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.supplier_name || []} activeFilter={columnFilters.supplier_name || null} onFilter={(s) => applyColumnFilter('supplier_name', s)} onClear={() => clearColumnFilter('supplier_name')} open={openMenu === 'supplier_name'} onToggle={() => setOpenMenu(v => v === 'supplier_name' ? null : 'supplier_name')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[180px]" />
+              <ColumnHeader colKey="invoice" label={t.table.headers.invoice} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.invoice || []} activeFilter={columnFilters.invoice || null} onFilter={(s) => applyColumnFilter('invoice', s)} onClear={() => clearColumnFilter('invoice')} open={openMenu === 'invoice'} onToggle={() => setOpenMenu(v => v === 'invoice' ? null : 'invoice')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} center className="w-[100px]" />
+              <ColumnHeader colKey="deliveryNote" label={t.table.headers.deliveryNote} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.deliveryNote || []} activeFilter={columnFilters.deliveryNote || null} onFilter={(s) => applyColumnFilter('deliveryNote', s)} onClear={() => clearColumnFilter('deliveryNote')} open={openMenu === 'deliveryNote'} onToggle={() => setOpenMenu(v => v === 'deliveryNote' ? null : 'deliveryNote')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} center className="w-[120px]" />
+              <ColumnHeader colKey="paidBy" label={t.table.headers.paidBy} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.paidBy || []} activeFilter={columnFilters.paidBy || null} onFilter={(s) => applyColumnFilter('paidBy', s)} onClear={() => clearColumnFilter('paidBy')} open={openMenu === 'paidBy'} onToggle={() => setOpenMenu(v => v === 'paidBy' ? null : 'paidBy')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[160px]" />
+            </TableHeadRow>
+          </TableHead>
+          <TableBody>
+            {rows.length === 0 && !loading && (
+              <TableRow><TableCell colSpan={selectMode ? 10 : 9} className="text-center py-8 text-slate-400 text-xs italic font-semibold">{t.table.noRows}</TableCell></TableRow>
+            )}
+            {rows.length > 0 && (
+              visibleRows.length === 0 && !loading ? (
+                <TableRow><TableCell colSpan={selectMode ? 10 : 9} className="text-center py-8 text-slate-400 text-xs italic font-semibold">{t.table.noRows}</TableCell></TableRow>
+              ) : (
+                visibleRows.length > 0 && [...sortedRows].map(r => (
+                  <TableRow
+                    key={r.id}
+                    onClick={() => openView(r)}
+                    onDoubleClick={() => openEdit(r)}
+                  >
+                    {selectMode && (
+                      <TableCell className="px-6 py-4 w-7 text-center" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          checked={!!selected[r.id]}
+                          onChange={e => setSelected(prev => ({ ...prev, [r.id]: e.target.checked }))}
+                          title={t.table.selectRow}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell className="whitespace-nowrap">{fmtDateDMY(r.date)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{r.created_at ? extractHHMM(r.created_at) : ''}</TableCell>
+                    <TableCell className="whitespace-normal break-words min-w-[200px] max-w-sm">{r.description}</TableCell>
+                    <TableCell className="whitespace-nowrap">{r.category || '-'}</TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold text-slate-900">{fmtInt(r.amount)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{r.supplier_name || '-'}</TableCell>
+                    <TableCell className="text-center">{r.invoice ? yesNo.yes : yesNo.no}</TableCell>
+                    <TableCell className="text-center">{r.deliveryNote ? yesNo.yes : yesNo.no}</TableCell>
+                    <TableCell className="whitespace-nowrap">{r.paidBy || '-'}</TableCell>
+                  </TableRow>
+                ))
+              )
+            )}
+          </TableBody>
+
+          <tfoot>
+            <TableRow className="border-t border-slate-200 bg-slate-50/80 font-semibold text-slate-900">
+              {selectMode && <TableCell className="px-6 py-4 w-7">{null}</TableCell>}
+              <TableCell className="text-right py-4 px-6 text-xs font-semibold uppercase text-slate-500 tracking-wider" colSpan={4}>
+                {t.table.totals}
+              </TableCell>
+              <TableCell className="text-right py-4 px-6 tabular-nums text-sm font-bold text-slate-900">
+                {fmtInt(totalAmount)}
+              </TableCell>
+              <TableCell className="px-6 py-4" colSpan={4}>{null}</TableCell>
+            </TableRow>
+          </tfoot>
+        </Table>
+      </TableContainer>
 
       {openEditor && initialRow && (
         <EditorModal

@@ -1,28 +1,39 @@
 // app/daily-reports/dailyreportsettings/SettingsCashOut.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { useEffect, useState } from 'react'
+import { TrashIcon, TagIcon } from '@heroicons/react/24/outline'
 import { useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
 import { DailyReportsDictionary } from '../_i18n'
+import Button from '@/components/Button'
+import { useSettings } from '@/contexts/SettingsContext'
 
 const SECTION_KEY = 'cashout'
 
 /* ===== Card primitives ===== */
 function Card(props: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       {props.children}
     </div>
   )
 }
-function CardHeader(props: { title: string; right?: React.ReactNode }) {
+function CardHeader(props: { title: string; subtitle: string; icon: React.ComponentType<{ className?: string }>; right?: React.ReactNode }) {
+  const Icon = props.icon
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 gap-3 flex-wrap">
-      <div className="flex items-center gap-2">
-        <h2 className="text-base font-semibold">{props.title}</h2>
+    <div className="flex items-center gap-3 border-b border-slate-100 pb-3.5 mb-5 flex-wrap">
+      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+        <Icon className="w-5.5 h-5.5" />
       </div>
-      <div className="flex items-center gap-2">{props.right}</div>
+      <div className="flex-1 min-w-[200px]">
+        <h2 className="text-base font-extrabold text-slate-800 tracking-tight leading-none">
+          {props.title}
+        </h2>
+        <span className="text-[11px] text-slate-400 font-bold block mt-1.5 leading-none">
+          {props.subtitle}
+        </span>
+      </div>
+      {props.right && <div className="flex items-center gap-2">{props.right}</div>}
     </div>
   )
 }
@@ -42,61 +53,9 @@ function uniqueCaseInsensitive(list: string[]) {
   return out
 }
 
-/* ===== Broadcast helper (verso pagina cashout) ===== */
-function broadcastCashOutCategories(value: string[]) {
-  try {
-    const cache = JSON.parse(localStorage.getItem('dr.settings.cache') || '{}')
-    localStorage.setItem(
-      'dr.settings.cache',
-      JSON.stringify({ ...cache, cashOutCategories: value }),
-    )
-    localStorage.setItem('dr.settings.bump', String(Date.now()))
-  } catch { }
-
-  try {
-    window.dispatchEvent(
-      new CustomEvent('dr:settings:cashOutCategories', { detail: { value } }),
-    )
-  } catch { }
-
-  try {
-    const bc = new BroadcastChannel('dr-settings')
-    bc.postMessage({ type: 'cashOutCategories', value })
-    bc.close()
-  } catch { }
-}
-
-/* ===== Input row ===== */
-function RowInput(props: {
-  value: string
-  placeholder?: string
-  onChange: (v: string) => void
-  onRemove: () => void
-  t?: DailyReportsDictionary['dailyreportsettings']['cashOut']
-}) {
-  const { value, placeholder, onChange, onRemove, t } = props
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        className="border rounded-lg px-2 h-9 flex-1 bg-white"
-        placeholder={placeholder}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-      />
-      <button
-        type="button"
-        className="p-2 rounded-lg text-red-600 hover:text-red-500 hover:bg-red-50"
-        title={t?.common.remove}
-        onClick={onRemove}
-      >
-        <TrashIcon className="w-5 h-5" />
-      </button>
-    </div>
-  )
-}
-
 /* ===== Main card ===== */
 export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['dailyreportsettings']['cashOut'] }) {
+  const { language } = useSettings()
   const {
     settings,
     loading,
@@ -108,6 +67,7 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
 
   const [data, setData] = useState<string[]>([])
   const [initialLoadDone, setInitialLoadDone] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
 
   // Sync da server → stato locale
   useEffect(() => {
@@ -127,10 +87,6 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
     updateDraft('cashOut', { categories: toSave })
     announceDirty(true)
   }
-
-  const isDirty = useMemo(() => {
-    return true // Placeholder, relying on global save button
-  }, [])
 
   const announceDirty = (dirty: boolean) => {
     try {
@@ -163,10 +119,17 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
     }
   }, [refresh])
 
-  const addCategory = () => {
-    const next = [...data, '']
+  const handleAddCategory = () => {
+    const name = newCatName.trim()
+    if (!name) return
+    if (data.map(c => c.toLowerCase()).includes(name.toLowerCase())) {
+      setNewCatName('')
+      return
+    }
+    const next = [...data, name]
     setData(next)
     syncToContext(next)
+    setNewCatName('')
   }
 
   const updCategory = (i: number, v: string) => {
@@ -185,49 +148,76 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
     <Card>
       <CardHeader
         title={t.title}
-      // Removed local dirty indicator
+        subtitle={language === 'vi' ? 'Cấu hình các danh mục/lý do chi tiền mặt' : 'Configure categories and reasons for daily store cash out withdrawals'}
+        icon={TagIcon}
       />
-      <div className="p-3 space-y-4">
-        {/* Removed local error display as page handles it */}
-
-        <section className="rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">{t.sectionTitle}</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-600">
-                {t.countLabel.replace('{count}', String(data.length))}
-              </span>
-              <button
-                type="button"
-                onClick={addCategory}
-                className="inline-flex items-center gap-2 px-3 h-8 rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
-                title={t.addTitle}
-              >
-                <PlusIcon className="w-4 h-4" />
-                {t.common.add}
-              </button>
-            </div>
+      <div className="space-y-4">
+        <section className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/20 shadow-3xs">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <h3 className="text-sm font-extrabold text-slate-700 tracking-tight leading-none">{t.sectionTitle}</h3>
           </div>
 
-          <div className="p-3">
-            {/* Max altezza per circa 3–4 righe, poi scroll interno */}
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-              {data.length === 0 && (
-                <div className="text-sm text-gray-500">
-                  {t.empty}
-                </div>
-              )}
-              {data.map((c, i) => (
-                <RowInput
-                  key={`cashout-${i}`}
-                  value={c}
+          <div className="p-4 bg-white space-y-4">
+            {/* Add Category Section */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 max-w-sm w-full">
+                <input
+                  type="text"
                   placeholder={t.placeholder}
-                  onChange={v => updCategory(i, v)}
-                  onRemove={() => delCategory(i)}
-                  t={t}
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleAddCategory()
+                    }
+                  }}
+                  className="border border-slate-200 rounded-lg px-3 h-9 flex-1 bg-white text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all text-sm"
                 />
-              ))}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleAddCategory}
+                  disabled={!newCatName.trim()}
+                  className="h-9 px-3"
+                >
+                  {t.common.add}
+                </Button>
+              </div>
+              <span className="text-xs text-slate-500 font-extrabold">
+                {t.countLabel.replace('{count}', String(data.length))}
+              </span>
             </div>
+
+            {/* Categories Tag Grid */}
+            {data.length === 0 ? (
+              <div className="text-sm text-slate-450 italic font-medium py-3 text-center bg-slate-50/30 rounded-lg border border-dashed border-slate-200">{t.empty}</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {data.map((category, idx) => (
+                  <div
+                    key={`cashout-cat-${idx}`}
+                    className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50/10 hover:border-blue-200 hover:shadow-2xs transition-all shadow-3xs group"
+                  >
+                    <input
+                      type="text"
+                      value={category}
+                      onChange={(e) => updCategory(idx, e.target.value)}
+                      placeholder={t.placeholder}
+                      className="bg-transparent font-bold text-slate-800 text-xs focus:outline-none transition-all flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => delCategory(idx)}
+                      className="p-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors opacity-60 group-hover:opacity-100 cursor-pointer"
+                      title={t.common.remove}
+                    >
+                      <TrashIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       </div>

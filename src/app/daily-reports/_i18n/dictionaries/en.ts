@@ -580,6 +580,7 @@ const en = {
 
   credits: {
     title: 'Credits',
+    subtitle: 'View and manage daily credits, customer outstanding balances, and repayment history.',
     branchPill: { tooltip: 'Branch selected', all: '(all)' },
     search: { placeholder: 'Search', clear: 'Clear' },
     menu: { more: 'More actions', delete: 'Delete', bulkConfirm: 'Delete {count} selected record(s)?' },
@@ -719,6 +720,7 @@ const en = {
   deposits: {
     title: 'Deposits',
     pageTitle: 'Deposits',
+    subtitle: 'View and manage customer deposits, advance payments, and reconciliation status.',
 
     branchPill: { tooltip: 'Branch selected', all: '(all)' },
 

@@ -9,24 +9,8 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { drI18n } from '../_i18n'
 import { DailyReportSettingsProvider, useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
 import { useBranchUnified } from '../_data/useBranchUnified'
-
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow">{children}</div>
-}
-function CardHeader({ title, right, after }: { title: string; right?: React.ReactNode; after?: React.ReactNode }) {
-  return (
-    <div className="mb-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-white">{title}</h1>
-          {after}
-        </div>
-        <div className="flex items-center gap-2">{right}</div>
-      </div>
-      <div className="mt-3 border-t border-white/15" />
-    </div>
-  )
-}
+import PageHeader from '@/components/PageHeader'
+import Button from '@/components/Button'
 
 export default function DailyReportSettingsPage() {
   return (
@@ -39,11 +23,25 @@ export default function DailyReportSettingsPage() {
 function DailyReportSettingsContent() {
   const [dirtySections, setDirtySections] = useState<Record<string, boolean>>({})
   const savingRef = useRef(false)
+  const [activeTab, setActiveTab] = useState<'closing' | 'cashout'>('closing')
 
-  const { loading, error, saveAll, refresh, isDirty: contextDirty, settings } = useDailyReportSettingsContext()
+  const { loading, error, saveAll, refresh, isDirty: contextDirty } = useDailyReportSettingsContext()
   const { language } = useSettings()
   const { name: branchName } = useBranchUnified()
   const t = drI18n(language).dailyreportsettings
+
+  const textDict = {
+    en: {
+      tabClosing: 'Cashier & Closing',
+      tabCashOut: 'Cash Out',
+    },
+    vi: {
+      tabClosing: 'Thu ngân & Chốt ca',
+      tabCashOut: 'Chi tiền',
+    }
+  }
+
+  const labels = textDict[language === 'vi' ? 'vi' : 'en']
 
   useEffect(() => {
     const onDirty = (e: Event) => {
@@ -101,60 +99,39 @@ function DailyReportSettingsContent() {
 
   return (
     <div className="max-w-7xl mx-auto p-4 text-gray-100">
-      <CardHeader
+      <PageHeader
         title={t.pageTitle}
-        after={
-          <div
-            className="hidden md:inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-600/15 px-3 py-1 text-xs text-blue-100"
-            title={t.branch.tooltip}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${loading ? 'bg-yellow-400' : 'bg-green-400'
-                }`}
-            />
-            <span className="font-medium">{branchName || t.branch.none}</span>
-          </div>
-        }
-        right={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
+        badgeText={branchName || t.branch.none}
+        badgeLoading={loading}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="secondary-dark"
               onClick={handleDefaults}
               disabled={loading}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border border-blue-400/30
-                         ${loading
-                  ? 'bg-blue-600/10 text-blue-300 cursor-not-allowed'
-                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25'
-                }`}
               title={t.actions.resetTitle}
+              className="h-9 px-3 text-xs font-semibold"
             >
               {t.actions.reset}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary-dark"
               onClick={handleReload}
               disabled={loading}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border border-blue-400/30
-                         ${loading
-                  ? 'bg-blue-600/10 text-blue-300 cursor-not-allowed'
-                  : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25'
-                }`}
               title={t.actions.reloadTitle}
+              className="h-9 px-3 text-xs font-semibold"
             >
               {t.actions.reload}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
               onClick={handleSaveAll}
               disabled={!anyDirty || loading}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg ${anyDirty && !loading
-                ? 'bg-blue-600 text-white hover:opacity-80'
-                : 'bg-blue-600/15 text-blue-200 border border-blue-400/30 cursor-not-allowed'
-                }`}
               title={t.actions.saveAllTitle}
+              className="h-9 px-3 text-xs font-semibold"
             >
               {t.actions.saveAll}
-            </button>
+            </Button>
           </div>
         }
       />
@@ -165,23 +142,43 @@ function DailyReportSettingsContent() {
         </div>
       )}
 
-      <div className="space-y-3">
-        <Card>
-          <div className="p-3">
-            <SettingsInitialInfoCard t={t.initialInfo} />
-          </div>
-        </Card>
-        <Card>
-          <div className="p-3">
-            <SettingsCashCountCard t={t.cashCount} />
-          </div>
-        </Card>
-        <Card>
-          <div className="p-3">
-            <SettingsCashOutCard t={t.cashOut} />
-          </div>
-        </Card>
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-slate-800/80 mb-6 gap-6 px-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('closing')}
+          className={`pb-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'closing'
+              ? 'border-blue-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          {labels.tabClosing}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('cashout')}
+          className={`pb-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'cashout'
+              ? 'border-blue-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          {labels.tabCashOut}
+        </button>
       </div>
+
+      {activeTab === 'closing' ? (
+        <div className="space-y-6">
+          <SettingsInitialInfoCard t={t.initialInfo} />
+          <SettingsCashCountCard t={t.cashCount} />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <SettingsCashOutCard t={t.cashOut} />
+        </div>
+      )}
     </div>
   )
 }
+

@@ -16,14 +16,27 @@ import {
   ClockIcon,
   PencilSquareIcon,
   TrashIcon,
+  UserIcon,
   CalendarDaysIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CreditCardIcon,
   WalletIcon,
   BuildingLibraryIcon,
+  EllipsisHorizontalIcon,
 } from '@heroicons/react/24/outline'
 import CircularLoader from '@/components/CircularLoader'
+import PageHeader from '@/components/PageHeader'
+import { Button } from '@/components/Button'
+import {
+  TableContainer,
+  Table,
+  TableHead,
+  TableHeadRow,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '@/components/Table'
 
 import {
   useCredits,
@@ -132,21 +145,7 @@ function aheadIsFutureGuard(y: number, m: number) {
   return y > ny || (y === ny && m >= nm)
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow">{children}</div>
-}
-function PageHeader({ title, left, after, right }: { title: string; left?: React.ReactNode; after?: React.ReactNode; right?: React.ReactNode }) {
-  return (
-    <div className="mb-3 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        {left}
-        <h1 className="text-2xl font-bold text-white">{title}</h1>
-        {after}
-      </div>
-      <div className="flex items-center gap-2">{right}</div>
-    </div>
-  )
-}
+
 function SectionCard({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border p-4 bg-white shadow-sm min-h-full">
@@ -197,11 +196,21 @@ function MoneyInput({ value, onChange, className = '', disabled = false }: { val
   )
 }
 
-function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function Overlay({ children, onClose, maxWidth = 'max-w-2xl' }: { children: React.ReactNode; onClose: () => void; maxWidth?: string }) {
+  useEffect(() => {
+    const orig = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = orig
+    }
+  }, [])
+
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-full max-w-3xl h-full bg-white shadow-xl overflow-y-auto">{children}</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-300" onClick={onClose} />
+      <div className={`relative w-full bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] ${maxWidth}`}>
+        {children}
+      </div>
     </div>
   )
 }
@@ -221,34 +230,50 @@ function PaymentEditModal({ creditId, payment, onClose, onSaved, updatePayment, 
     if (saved) onSaved(saved)
   }
   return (
-    <Overlay onClose={onClose}>
-      <div className="h-full flex flex-col text-gray-900">
-        <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
-          <div className="text-xl font-bold">{t.editPayment}</div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <XMarkIcon className="w-7 h-7" />
+    <Overlay onClose={onClose} maxWidth="max-w-lg">
+      <div className="flex flex-col text-gray-900">
+        <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div className="text-lg font-bold text-slate-800">{t.editPayment}</div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
-        <div className="px-4 md:px-6 py-4 space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
+        <div className="px-8 py-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm text-gray-800">{t.dateTime}</label>
-              <input type="datetime-local" className={inputBase} value={date} onChange={e => setDate(e.target.value)} />
-              <div className="text-xs text-gray-500 mt-1">{t.dateHint}</div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.dateTime}</label>
+              <input
+                type="datetime-local"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+              />
+              <div className="text-[10px] text-slate-400 mt-1 font-semibold">{t.dateHint}</div>
             </div>
             <div>
-              <label className="text-sm text-gray-800">{t.amount}</label>
-              <MoneyInput value={amount} onChange={setAmount} className="h-11" />
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.amount}</label>
+              <MoneyInput
+                value={amount}
+                onChange={setAmount}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+              />
             </div>
           </div>
           <div>
-            <label className="text-sm text-gray-800">{t.note}</label>
-            <input className={inputBase} value={note} onChange={e => setNote(e.target.value)} />
+            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.note}</label>
+            <input
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+            />
           </div>
         </div>
-        <div className="px-4 md:px-6 py-4 border-t flex items-center justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border hover:opacity-80">{t.cancel}</button>
-          <button onClick={handleSave} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50">{t.saveChanges}</button>
+        <div className="px-8 py-5 border-t border-slate-100 flex items-center justify-end bg-slate-50/30 gap-2">
+          <Button variant="outline" onClick={onClose} className="px-4 py-2 h-10 text-xs font-semibold">{t.cancel}</Button>
+          <Button variant="primary" onClick={handleSave} disabled={!canSave} className="px-4 py-2 h-10 text-xs font-semibold">{t.saveChanges}</Button>
         </div>
       </div>
     </Overlay>
@@ -316,64 +341,78 @@ function HistoryModal({
   const headers = useMemo(() => t?.headers || t?.table || {}, [t])
 
   return (
-    <Overlay onClose={onClose}>
-      <div className="h-full flex flex-col text-gray-900">
-        <div className="px-4 md:px-6 pt-handlebars tm-uqs-grid-vertical pb-3 flex items-center justify-between border-b">
+    <Overlay onClose={onClose} maxWidth="max-w-3xl">
+      <div className="flex flex-col text-gray-900 max-h-[85vh]">
+        <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="text-xl font-bold">{t.title}</div>
-            <span className={`text-xs px-2 py-1 rounded-full ${summary.left === 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+            <div className="text-lg font-bold text-slate-800">{t.title}</div>
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+              summary.left === 0 
+                ? 'bg-green-50 text-green-700 border-green-100' 
+                : 'bg-yellow-50 text-yellow-750 border-yellow-100'
+            }`}>
               {summary.left === 0 ? t.badge.paid : t.badge.unpaid}
             </span>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <XMarkIcon className="w-7 h-7" />
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="px-4 md:px-6 py-4">
-          <div className="mb-4 grid grid-cols-3 gap-3">
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-gray-500">{t.summary.initial}</div>
-              <div className="text-lg font-semibold">{fmtInt(summary.total)}</div>
+        <div className="px-8 py-5 flex-1 overflow-y-auto">
+          {/* Metadata Row */}
+          <div className="flex flex-wrap items-center gap-y-2 gap-x-6 pb-4 border-b border-slate-100 mb-6 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.summary.initial}</span>
+              <span className="font-semibold text-slate-800 tabular-nums">{fmtInt(summary.total)} ₫</span>
             </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-gray-500">{t.summary.paid}</div>
-              <div className="text-lg font-semibold">{fmtInt(summary.paid)}</div>
+            <div className="h-3.5 w-px bg-slate-200 hidden sm:block" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.summary.paid}</span>
+              <span className="font-semibold text-slate-800 tabular-nums">{fmtInt(summary.paid)} ₫</span>
             </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-gray-500">{t.summary.remaining}</div>
-              <div className="text-lg font-semibold">{fmtInt(summary.left)}</div>
+            <div className="h-3.5 w-px bg-slate-200 hidden sm:block" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.summary.remaining}</span>
+              <span className="font-bold text-slate-900 tabular-nums">{fmtInt(summary.left)} ₫</span>
             </div>
           </div>
 
           {items.length === 0 ? (
-            <div className="text-sm text-gray-600">{t.empty}</div>
+            <div className="text-center py-8 text-slate-400 text-xs italic font-semibold">{t.empty || 'No payments recorded.'}</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-600">
-                    <th className="text-left p-2 w-[14rem]">{headers.dateTime || t.table?.dateTime || 'Date and time'}</th>
-                    <th className="text-right p-2 w-[10rem]">{headers.amount || t.table?.amount || 'Amount'}</th>
-                    <th className="text-left p-2">{headers.methodNote || headers.note || t.table?.methodNote || t.table?.note || 'Method / Note'}</th>
-                    <th className="text-center p-2 w-16">{headers.edit || 'Edit'}</th>
-                    <th className="text-center p-2 w-16">{headers.delete || 'Delete'}</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableHeadRow>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-[13rem]">{headers.dateTime || t.table?.dateTime || 'Date and time'}</th>
+                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider w-[9rem]">{headers.amount || t.table?.amount || 'Amount'}</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">{headers.methodNote || headers.note || t.table?.methodNote || t.table?.note || 'Method / Note'}</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-16">{headers.edit || 'Edit'}</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-16">{headers.delete || 'Delete'}</th>
+                  </TableHeadRow>
+                </TableHead>
+                <TableBody>
                   {items.map(p => (
-                    <tr key={p.id} className="border-t">
-                      <td className="p-2 whitespace-nowrap">{fmtDateTimeDMYHM(p.date)}</td>
-                      <td className="p-2 text-right tabular-nums">{fmtInt(p.amount)}</td>
-                      <td className="p-2">{p.note || '-'}</td>
-                      <td className="p-2 text-center">
-                        <button className="p-0 h-auto w-auto bg-transparent hover:opacity-80" title={headers.edit || 'Edit'} onClick={() => setEditing(p)}>
-                          <PencilSquareIcon className="w-5 h-5 text-blue-700" />
-                        </button>
-                      </td>
-                      <td className="p-2 text-center">
+                    <TableRow key={p.id}>
+                      <TableCell className="px-4 py-3.5 whitespace-nowrap">{fmtDateTimeDMYHM(p.date)}</TableCell>
+                      <TableCell className="px-4 py-3.5 text-right tabular-nums font-semibold text-slate-800">{fmtInt(p.amount)} ₫</TableCell>
+                      <TableCell className="px-4 py-3.5 text-slate-600">{p.note || '-'}</TableCell>
+                      <TableCell className="px-4 py-3.5 text-center">
                         <button
-                          className="p-0 h-auto w-auto bg-transparent hover:opacity-80 disabled:opacity-50"
+                          className="p-1 rounded-full text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition-colors"
+                          title={headers.edit || 'Edit'}
+                          onClick={() => setEditing(p)}
+                        >
+                          <PencilSquareIcon className="w-4 h-4" />
+                        </button>
+                      </TableCell>
+                      <TableCell className="px-4 py-3.5 text-center">
+                        <button
+                          className="p-1 rounded-full text-slate-400 hover:text-red-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
                           title={headers.delete || 'Delete'}
                           disabled={deletingId === p.id}
                           onClick={async () => {
@@ -403,31 +442,31 @@ function HistoryModal({
                             }
                           }}
                         >
-                          <TrashIcon className={`w-5 h-5 ${deletingId === p.id ? 'text-gray-400' : 'text-red-600'}`} />
+                          <TrashIcon className="w-4 h-4" />
                         </button>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </div>
-
-        {editing && (
-          <PaymentEditModal
-            creditId={credit.id}
-            payment={editing}
-            onClose={() => setEditing(null)}
-            onSaved={async _p => {
-              setEditing(null)
-              await refetch()
-            }}
-            updatePayment={updatePayment}
-            t={paymentsT}
-          />
-        )}
       </div>
+
+      {editing && (
+        <PaymentEditModal
+          creditId={credit.id}
+          payment={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async _p => {
+            setEditing(null)
+            await refetch()
+          }}
+          updatePayment={updatePayment}
+          t={paymentsT}
+        />
+      )}
     </Overlay>
   )
 }
@@ -447,12 +486,15 @@ function MethodButton({ active, onClick, children, title, icon: Icon }: { active
     <button
       type="button"
       onClick={onClick}
-      className={`w-full inline-flex items-center justify-center gap-2 px-3 h-11 rounded-xl border transition ${active ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-600/10 text-blue-900 border-blue-300 hover:bg-blue-600/20'
-        }`}
+      className={`w-full inline-flex items-center justify-center gap-2.5 px-3 h-11 rounded-xl text-xs font-semibold transition-all ${
+        active 
+          ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700' 
+          : 'bg-[#eef0f6] text-slate-700 hover:bg-slate-200/80'
+      }`}
       title={title}
     >
-      <Icon className="w-5 h-5" />
-      <span className="font-medium">{children}</span>
+      <Icon className={`w-5 h-5 ${active ? 'text-white' : 'text-slate-450'}`} />
+      <span>{children}</span>
     </button>
   )
 }
@@ -512,96 +554,132 @@ function PaymentModal({
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <div className="h-full flex flex-col text-gray-900">
-        <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
-          <div className="text-xl font-bold">{t.confirmPayment}</div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <XMarkIcon className="w-7 h-7" />
+    <Overlay onClose={onClose} maxWidth="max-w-3xl">
+      <div className="flex flex-col text-gray-900">
+        <div className="px-8 pt-6 pb-2 flex items-center justify-between">
+          <div className="text-xl font-bold text-slate-800">{t.confirmPayment}</div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <XMarkIcon className="w-5.5 h-5.5" />
           </button>
         </div>
 
-        <div className="px-4 md:px-6 py-4 space-y-4">
-          <div className="grid md:grid-cols-3 gap-3">
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-gray-500">{t.customer}</div>
-              <div className="font-medium truncate">{credit.customer_name || '-'}</div>
+        <div className="px-8 py-4 space-y-6">
+          {/* Metadata Row */}
+          <div className="flex flex-wrap items-center gap-y-2 gap-x-6 pb-4 border-b border-slate-100 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.customer}</span>
+              <span className="font-semibold text-slate-850 truncate max-w-[240px]">{credit.customer_name || '-'}</span>
             </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-gray-500">{t.initial}</div>
-              <div className="font-semibold">{fmtInt(credit.amount)}</div>
+            <div className="h-3.5 w-px bg-slate-200 hidden sm:block" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.initial}</span>
+              <span className="font-semibold text-slate-800 tabular-nums">{fmtInt(credit.amount)} ₫</span>
             </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-gray-500">{t.remaining}</div>
-              <div className="font-semibold">{fmtInt(remaining)}</div>
+            <div className="h-3.5 w-px bg-slate-200 hidden sm:block" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.remaining}</span>
+              <span className="font-bold text-slate-900 tabular-nums">{fmtInt(remaining)} ₫</span>
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <SectionCard title={t.details.title}>
-              <div className="grid gap-4">
-                <div>
-                  <label className="text-sm text-gray-800">{t.details.dateTime}</label>
-                  <input type="datetime-local" className={inputBase} value={date} onChange={e => setDate(e.target.value)} />
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Column 1: Details */}
+            <div className="space-y-4">
+              <div className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4">{t.details.title}</div>
+              <div className="space-y-4">
+                {/* Row 1: Date */}
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 text-slate-455 pointer-events-none">
+                    <CalendarDaysIcon className="w-5 h-5" />
+                  </span>
+                  <input
+                    type="datetime-local"
+                    className="w-full !mt-0 pl-10 pr-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                    value={date}
+                    onChange={e => setDate(e.target.value)}
+                  />
                 </div>
+                {/* Row 2: Amount Input Box */}
                 <div>
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm text-gray-800">{t.details.amount}</label>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{t.details.amount}</label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-sm font-semibold text-slate-400 pointer-events-none">
+                      ₫
+                    </span>
+                    <MoneyInput
+                      value={amount}
+                      onChange={setAmount}
+                      className="w-full !mt-0 pl-8 pr-16 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold !text-left"
+                    />
                     <button
                       type="button"
                       onClick={() => setAmount(remaining)}
-                      className="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                      className="absolute right-2 px-3 py-1 text-[10px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors h-6.5 flex items-center"
                       title={t.details.maxTitle}
                     >
                       {t.details.max}
                     </button>
                   </div>
-                  <MoneyInput value={amount} onChange={setAmount} className="h-11" />
-                  <div className="mt-1 flex items-center justify-between text-xs">
-                    <span className="text-gray-500">{t.details.maxLabel.replace('{amount}', fmtInt(remaining))}</span>
-                    {amountError && <span className="text-red-600">{amountError}</span>}
+                  <div className="mt-1 flex items-center justify-between text-[10px] font-semibold">
+                    <span className="text-slate-400">{t.details.maxLabel.replace('{amount}', fmtInt(remaining))}</span>
+                    {amountError && <span className="text-red-650">{amountError}</span>}
                   </div>
                 </div>
               </div>
-            </SectionCard>
+            </div>
 
-            <SectionCard title={t.method.title}>
-              <div className="grid grid-cols-2 gap-2">
-                <MethodButton active={method === 'cash'} onClick={() => setMethod('cash')} title={t.methods.cash} icon={BanknotesIcon}>{t.methods.cash}</MethodButton>
-                <MethodButton active={method === 'card'} onClick={() => setMethod('card')} title={t.methods.card} icon={CreditCardIcon}>{t.methods.card}</MethodButton>
-                <MethodButton active={method === 'bank'} onClick={() => setMethod('bank')} title={t.methods.bank} icon={BuildingLibraryIcon}>{t.methods.bank}</MethodButton>
-                <MethodButton active={method === 'other'} onClick={() => setMethod('other')} title={t.methods.other} icon={WalletIcon}>{t.methods.other}</MethodButton>
-              </div>
-              {method === 'other' && (
-                <div className="mt-3">
-                  <label className="text-sm text-gray-800">{t.method.otherLabel}</label>
-                  <input className={inputBase} placeholder={t.method.otherPlaceholder} value={otherText} onChange={e => setOtherText(e.target.value)} />
+            {/* Column 2: Method */}
+            <div className="space-y-4">
+              <div className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4">{t.method.title}</div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <MethodButton active={method === 'cash'} onClick={() => setMethod('cash')} title={t.methods.cash} icon={BanknotesIcon}>{t.methods.cash}</MethodButton>
+                  <MethodButton active={method === 'card'} onClick={() => setMethod('card')} title={t.methods.card} icon={CreditCardIcon}>{t.methods.card}</MethodButton>
+                  <MethodButton active={method === 'bank'} onClick={() => setMethod('bank')} title={t.methods.bank} icon={BuildingLibraryIcon}>{t.methods.bank}</MethodButton>
+                  <MethodButton active={method === 'other'} onClick={() => setMethod('other')} title={t.methods.other} icon={EllipsisHorizontalIcon}>{t.methods.other}</MethodButton>
                 </div>
-              )}
-              {methodError && <div className="mt-2 text-xs text-red-600">{methodError}</div>}
-            </SectionCard>
+                {method === 'other' && (
+                  <div className="animate-fadeIn">
+                    <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{t.method.otherLabel}</label>
+                    <input
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                      placeholder={t.method.otherPlaceholder}
+                      value={otherText}
+                      onChange={e => setOtherText(e.target.value)}
+                    />
+                  </div>
+                )}
+                {methodError && <div className="text-xs font-bold text-red-650">{methodError}</div>}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="px-4 md:px-6 py-4 border-t flex items-center justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border hover:opacity-80">{t.cancel}</button>
-          <button
+        <div className="px-8 pt-4 pb-6 flex items-center justify-end gap-2.5">
+          <Button variant="outline" onClick={onClose} className="px-4 py-2 h-10 text-xs font-semibold">{t.cancel}</Button>
+          <Button
+            variant="primary"
             onClick={handleSave}
             disabled={hasError || saving}
-            className={`ml-2 px-4 py-2 rounded-lg text-white hover:opacity-80 ${hasError || saving ? 'bg-blue-400' : 'bg-blue-600'}`}
+            className="px-4 py-2 h-10 text-xs font-semibold"
             title={hasError ? t.method.fixErrors : t.method.saveTitle}
           >
             {saving ? t.saving : t.savePayment}
-          </button>
+          </Button>
         </div>
       </div>
     </Overlay>
   )
 }
 
+
 function EditorModal({
   mode,
   staffOpts,
+  shiftOpts,
   selectedBranchName,
   initial,
   onClose,
@@ -619,6 +697,7 @@ function EditorModal({
 }: {
   mode: 'create' | 'view' | 'edit'
   staffOpts: string[]
+  shiftOpts: string[]
   selectedBranchName: string
   initial: Partial<CreditRow>
   onClose: () => void
@@ -645,8 +724,9 @@ function EditorModal({
   const [amount, setAmount] = useState<number>(Number(initial.amount || 0))
   const [reference, setReference] = useState<string>(initial.reference || '')
 
-  const defaultShift = useMemo(() => currentShiftName || '', [currentShiftName])
-  const [shift, setShift] = useState<string>(initial.shift || defaultShift)
+  const finalShiftOpts = useMemo(() => (shiftOpts && shiftOpts.length) ? shiftOpts : ['Lunch', 'Dinner', 'All day'], [shiftOpts])
+  const defaultShift = useMemo(() => (initial.shift || currentShiftName || finalShiftOpts[0] || ''), [initial.shift, currentShiftName, finalShiftOpts])
+  const [shift, setShift] = useState<string>(defaultShift)
 
   const [handledBy, setHandledBy] = useState<string>(initial.handledBy || currentUserName || staffOpts[0] || '')
   const [note, setNote] = useState<string>(initial.note || '')
@@ -654,6 +734,10 @@ function EditorModal({
   const [isPaid, setIsPaid] = useState<boolean>(false)
   const [remaining, setRemaining] = useState<number>(0)
   const [showHistory, setShowHistory] = useState(false)
+
+  useEffect(() => {
+    if (!shift && defaultShift) setShift(defaultShift)
+  }, [defaultShift, shift])
 
   useEffect(() => {
     ; (async () => {
@@ -705,96 +789,205 @@ function EditorModal({
 
   return (
     <>
-      <Overlay onClose={onClose}>
-        <div className="h-full flex flex-col text-gray-900">
-          <div className="px-4 md:px-6 pt-4 pb-3 flex items-center justify-between border-b">
-            <div className="text-xl font-bold">{viewMode ? t.title.view : initial.id ? t.title.edit : t.title.new}</div>
+      <Overlay onClose={onClose} maxWidth="max-w-3xl">
+        <div className="flex flex-col text-gray-900">
+          <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-lg font-bold text-slate-800">
+                {viewMode ? t.title.view : initial.id ? t.title.edit : t.title.new}
+              </div>
+              {!branchOk && <span className="text-xs text-red-650 font-semibold">{errors.branch}</span>}
+            </div>
             <div className="flex items-center gap-2">
               {initial.id && (
-                <button onClick={() => setShowHistory(true)} className="inline-flex items-center gap-2 px-3 h-9 rounded-lg border hover:bg-gray-50" title={t.history}>
-                  <ClockIcon className="w-5 h-5" /> {t.history}
-                </button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowHistory(true)}
+                  className="px-3 h-8.5 text-xs font-semibold"
+                  title={t.history}
+                  icon={ClockIcon}
+                >
+                  <span>{t.history}</span>
+                </Button>
               )}
-              <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-                <XMarkIcon className="w-7 h-7" />
+              <button
+                onClick={onClose}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          <div className="px-4 md:px-6 py-4 flex-1 overflow-y-auto">
-            <SectionCard>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="md:col-span-2">
-                  <label className="text-sm text-gray-800">{t.fields.branch}</label>
-                  <input className={`${inputBase} ${branchOk ? 'bg-gray-50' : 'bg-red-50 border-red-400'}`} value={selectedBranchName || ''} readOnly />
-                  {!branchOk && <div className="mt-1 text-xs text-red-600">{errors.branch}</div>}
-                </div>
-                <div>
-                  <label className="text-sm text-gray-800">{t.fields.date}</label>
-                  <input type="date" className={inputBase} value={date} onChange={e => setDate(e.target.value)} disabled={viewMode} />
+          <div className="px-8 py-6 space-y-5 flex-1">
+            {/* Branch display */}
+            <div className="flex items-center gap-2.5 pb-2.5 border-b border-slate-100">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Branch</span>
+              <div className="h-3 w-px bg-slate-200" />
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                {selectedBranchName || '-'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.date}</label>
+                {viewMode ? (
+                  <div className="h-10 flex items-center text-sm font-semibold text-slate-850">{fmtDateDMY(date)}</div>
+                ) : (
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                    value={date}
+                    onChange={e => setDate(e.target.value)}
+                  />
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.shift}</label>
+                {viewMode ? (
+                  <div className="h-10 flex items-center text-sm font-semibold text-slate-855">{shift || '-'}</div>
+                ) : (
+                  <select
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                    value={shift}
+                    onChange={e => setShift(e.target.value)}
+                  >
+                    {finalShiftOpts.map((s, i) => (
+                      <option key={`${s}-${i}`} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-4">
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.customer}</label>
+                {viewMode ? (
+                  <div className="h-10 flex items-center text-sm font-semibold text-slate-850 truncate">{customerName || '-'}</div>
+                ) : (
+                  <input
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                  />
+                )}
+              </div>
+              <div className="col-span-3">
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.phone}</label>
+                {viewMode ? (
+                  <div className="h-10 flex items-center text-sm font-semibold text-slate-850">{customerPhone || '-'}</div>
+                ) : (
+                  <input
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                    value={customerPhone}
+                    onChange={e => setCustomerPhone(e.target.value)}
+                  />
+                )}
+              </div>
+              <div className="col-span-5">
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.email}</label>
+                {viewMode ? (
+                  <div className="h-10 flex items-center text-sm font-semibold text-slate-855 truncate">{customerEmail || '-'}</div>
+                ) : (
+                  <input
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                    value={customerEmail}
+                    onChange={e => setCustomerEmail(e.target.value)}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-4">
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.initial}</label>
+                {viewMode ? (
+                  <div className="h-10 flex items-center text-sm font-bold text-slate-800 tabular-nums">{fmtInt(amount)} ₫</div>
+                ) : (
+                  <MoneyInput
+                    value={amount}
+                    onChange={setAmount}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                  />
+                )}
+              </div>
+              <div className="col-span-3">
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.remaining}</label>
+                <div className="h-10 flex items-center text-sm font-bold text-slate-800 tabular-nums">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    remaining === 0 
+                      ? 'bg-green-50 text-green-700 border border-green-100' 
+                      : 'bg-yellow-50 text-yellow-750 border border-yellow-100'
+                  }`}>
+                    {fmtInt(remaining)} ₫
+                  </span>
                 </div>
               </div>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <div>
-                  <label className="text-sm text-gray-800">{t.fields.customer}</label>
-                  <input className={inputBase} value={customerName} onChange={e => setCustomerName(e.target.value)} disabled={viewMode} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-800">{t.fields.phone}</label>
-                  <input className={inputBase} value={customerPhone || ''} onChange={e => setCustomerPhone(e.target.value)} disabled={viewMode} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-800">{t.fields.email}</label>
-                  <input className={inputBase} value={customerEmail || ''} onChange={e => setCustomerEmail(e.target.value)} disabled={viewMode} />
-                </div>
+              <div className="col-span-5">
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.reference}</label>
+                {viewMode ? (
+                  <div className="h-10 flex items-center text-sm font-semibold text-slate-800 truncate">{reference || '-'}</div>
+                ) : (
+                  <input
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-10 text-slate-900 font-semibold"
+                    value={reference}
+                    onChange={e => setReference(e.target.value)}
+                  />
+                )}
               </div>
+            </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <div>
-                  <label className="text-sm text-gray-800">{t.fields.initial}</label>
-                  <MoneyInput value={amount} onChange={setAmount} className="h-11" disabled={viewMode} />
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.handledBy}</label>
+              <div className="flex items-center gap-2 py-1.5">
+                <div className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                  <UserIcon className="w-4 h-4" />
                 </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm text-gray-800">{t.fields.remaining}</label>
-                  <input className={`${inputBase} bg-gray-50`} value={fmtInt(remaining)} readOnly />
-                </div>
+                <span className="text-sm font-semibold text-slate-800">{handledBy || currentUserName || '-'}</span>
               </div>
+            </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <div>
-                  <label className="text-sm text-gray-800">{t.fields.reference}</label>
-                  <input className={inputBase} value={reference} onChange={e => setReference(e.target.value)} disabled={viewMode} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-800">{t.fields.shift}</label>
-                  <input className={inputBase} value={shift} onChange={e => setShift(e.target.value)} disabled={viewMode} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-800">{t.fields.handledBy}</label>
-                  <input className={`${inputBase} bg-gray-50`} value={handledBy || currentUserName || ''} readOnly />
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <label className="text-sm text-gray-800">{t.fields.notes}</label>
-                <textarea className={`${inputBase} h-24`} value={note || ''} onChange={e => setNote(e.target.value)} placeholder={t.fields.notesPlaceholder} disabled={viewMode} />
-              </div>
-            </SectionCard>
-          </div>
-
-          <div className="px-4 md:px-6 py-4 border-t flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{t.fields.notes}</label>
               {viewMode ? (
-                <button onClick={() => setViewMode(false)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80">{t.actions.edit}</button>
+                <div className="text-sm text-slate-700 bg-slate-50/50 rounded-xl border border-slate-150 p-3.5 min-h-[4.5rem] whitespace-pre-wrap font-medium">
+                  {note || '-'}
+                </div>
               ) : (
-                initial.id && <button onClick={handleDelete} className="px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{t.actions.delete}</button>
+                <textarea
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-sm focus:outline-none h-20 text-slate-900 font-medium resize-none"
+                  value={note || ''}
+                  onChange={e => setNote(e.target.value)}
+                  placeholder={t.fields.notesPlaceholder}
+                />
               )}
             </div>
-            <div>
-              <button onClick={onClose} className="px-4 py-2 rounded-lg border hover:opacity-80">{t.actions.close}</button>
+          </div>
+
+          <div className="px-8 py-5 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
+            <div className="flex items-center gap-2">
+              {viewMode ? (
+                <Button variant="primary" onClick={() => setViewMode(false)} className="px-4 py-2 h-10 text-xs font-semibold">{t.actions.edit}</Button>
+              ) : (
+                initial.id && (
+                  <Button
+                    variant="danger-light"
+                    onClick={handleDelete}
+                    className="px-4 py-2 h-10 text-xs font-semibold"
+                  >
+                    {t.actions.delete}
+                  </Button>
+                )
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={onClose} className="px-4 py-2 h-10 text-xs font-semibold">{t.actions.close}</Button>
               {!viewMode && (
-                <button onClick={handleSave} disabled={!canSave} className="ml-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:opacity-80 disabled:opacity-50">{t.actions.save}</button>
+                <Button variant="primary" onClick={handleSave} disabled={!canSave} className="px-4 py-2 h-10 text-xs font-semibold">{t.actions.save}</Button>
               )}
             </div>
           </div>
@@ -853,6 +1046,7 @@ export default function CreditsPage() {
     rows,
     totalsMap,
     staffOpts,
+    shiftOpts,
     currentUserName,
     currentShiftName,
     loading,
@@ -888,7 +1082,6 @@ export default function CreditsPage() {
     return () => { if (t) clearTimeout(t) }
   }, [loading])
 
-  const [search, setSearch] = useState<string>('')
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const selectedIds = useMemo(() => Object.keys(selected).filter(id => selected[id]), [selected])
@@ -1018,32 +1211,6 @@ export default function CreditsPage() {
   const visibleRows = useMemo(() => {
     const branchName = (activeBranch || '').trim()
     let base = branchName ? nowMonthFiltered.filter(x => (x.row.branch || '') === branchName) : nowMonthFiltered
-    const q = search.trim().toLowerCase()
-    if (q) {
-      base = base.filter(x => {
-        const r = x.row
-        const dmy = fmtDateDMY(r.date).toLowerCase()
-        const iso = String(r.date || '').toLowerCase()
-        const amt = String(Math.round(r.amount || 0))
-        const cust = (r.customer_name || '').toLowerCase()
-        const ref = (r.reference || '').toLowerCase()
-        const shift = (r.shift || '').toLowerCase()
-        const by = (r.handledBy || '').toLowerCase()
-        const br = (r.branch || '').toLowerCase()
-        const stat = x.status.toLowerCase()
-        return (
-          cust.includes(q) ||
-          ref.includes(q) ||
-          shift.includes(q) ||
-          by.includes(q) ||
-          dmy.includes(q) ||
-          iso.includes(q) ||
-          amt.includes(q) ||
-          br.includes(q) ||
-          stat.includes(q)
-        )
-      })
-    }
 
     // Apply column checklist filters
     for (const [col, allowed] of Object.entries(columnFilters)) {
@@ -1053,7 +1220,7 @@ export default function CreditsPage() {
     }
 
     return base
-  }, [nowMonthFiltered, search, activeBranch, columnFilters, displayValue])
+  }, [nowMonthFiltered, activeBranch, columnFilters, displayValue])
 
   function toggleSort(key: SortKeyWithBranch) {
     setSort(prev => (prev.key !== key ? { key, dir: 'asc' } : { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }))
@@ -1096,85 +1263,67 @@ export default function CreditsPage() {
   }, [someSelected, allSelected, rows.length])
 
   return (
-    <div className="max-w-none mx-auto p-4 text-gray-100">
+    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
       <PageHeader
         title={t.title}
+        subtitle={t.subtitle}
+        badgeText={activeBranch ? activeBranch : t.branchPill.all}
         left={
-          <>
-            {selectMode && (
-              <div className="relative" ref={menuRef}>
-                <button
-                  onClick={() => setMenuOpen(v => !v)}
-                  aria-label={t.menu.more}
-                  className="p-0 h-auto w-auto bg-transparent border-0 outline-none text-blue-200 hover:text-white focus:outline-none"
-                  title={t.menu.more}
-                >
-                  <EllipsisVerticalIcon className="h-6 w-6" />
-                </button>
-                {menuOpen && (
-                  <div className="absolute z-10 mt-2 min-w-[12rem] rounded-xl border bg-white text-gray-800 shadow-lg py-1">
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 hover:bg-blue-200 hover:text-red-700 disabled:opacity-50"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        if (selectedIds.length) bulkDelete()
-                      }}
-                      disabled={selectedIds.length === 0}
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                      <span>{t.menu.delete}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        }
-        after={
-          <div className="ml-2 inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-600/15 px-3 py-1 text-xs text-blue-100" title={t.branchPill.tooltip}>
-            <span className="h-2 w-2 rounded-full bg-green-400" />
-            <span className="font-medium">{activeBranch ? activeBranch : t.branchPill.all}</span>
-          </div>
-        }
-        right={
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-2.5 h-5 w-5 text-blue-200" />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder={t.search.placeholder}
-                className="pl-9 pr-8 h-9 rounded-lg border border-blue-400/30 bg-blue-600/15 text-blue-50 placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-              />
-              {search && (
-                <button onClick={() => setSearch('')} className="absolute right-2 top-2 h-5 w-5 text-blue-200 hover:text-white" aria-label={t.search.clear} title={t.search.clear}>
-                  ×
-                </button>
+          selectMode ? (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(v => !v)}
+                aria-label={t.menu.more}
+                className="p-0 h-auto w-auto bg-transparent border-0 outline-none text-blue-200 hover:text-white focus:outline-none"
+                title={t.menu.more}
+              >
+                <EllipsisVerticalIcon className="h-6 w-6" />
+              </button>
+              {menuOpen && (
+                <div className="absolute z-10 mt-2 min-w-[12rem] rounded-xl border bg-white text-gray-800 shadow-lg py-1">
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 hover:bg-slate-100 disabled:opacity-50 text-xs font-semibold text-left"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      if (selectedIds.length) bulkDelete()
+                    }}
+                    disabled={selectedIds.length === 0}
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                    <span>{t.menu.delete}</span>
+                  </button>
+                </div>
               )}
             </div>
-
-            <button
+          ) : undefined
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary-dark"
               onClick={() => void handleExport(sortedRows, totalsMap)}
-              className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border border-blue-400/30"
+              className="px-3 h-9 text-xs font-semibold"
               title={t.export.title}
+              icon={ArrowUpTrayIcon}
             >
-              <ArrowUpTrayIcon className="w-5 h-5" /> {t.export.label}
-            </button>
+              <span>{t.export.label}</span>
+            </Button>
 
-            <button
+            <Button
+              variant={selectMode ? 'primary' : 'secondary-dark'}
               onClick={() => {
                 setSelectMode(s => !s)
                 setMenuOpen(false)
               }}
-              className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg border ${selectMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-600/15 text-blue-200 hover:bg-blue-600/25 border-blue-400/30'
-                }`}
+              className="px-3 h-9 text-xs font-semibold"
               title={selectMode ? t.select.exitTitle : t.select.enterTitle}
+              icon={CheckCircleIcon}
             >
-              <CheckCircleIcon className="w-5 h-5" />
-              {selectMode ? t.select.active : t.select.inactive}
-            </button>
+              <span>{selectMode ? t.select.active : t.select.inactive}</span>
+            </Button>
 
-            <button
+            <Button
+              variant="primary"
               onClick={() => {
                 setEditorMode('create')
                 setInitialRow({
@@ -1184,63 +1333,66 @@ export default function CreditsPage() {
                 })
                 setOpenEditor(true)
               }}
-              className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:opacity-80"
+              className="px-3 h-9 text-xs font-semibold"
               title={t.actions.newTitle}
+              icon={PlusIcon}
             >
-              <PlusIcon className="w-5 h-5" /> {t.actions.new}
-            </button>
+              <span>{t.actions.new}</span>
+            </Button>
           </div>
         }
       />
 
-      <div className="mt-3 border-t border-white/15" />
-
-      <MonthNav
-        monthLabel={monthLabel}
-        monthInputValue={monthInputValue}
-        onPickMonth={onPickMonth}
-        prevMonth={prevMonth}
-        nextMonth={nextMonth}
-        guardDisabled={aheadIsFutureGuard(year, month)}
-        t={t.monthNav}
+      <MonthPicker
+        value={monthInputValue}
+        onChange={val => {
+          if (val > monthInputValue && aheadIsFutureGuard(year, month)) {
+            return
+          }
+          onPickMonth(val)
+        }}
+        language={language}
+        colorClass="text-blue-100 hover:text-white"
+        labelColorClass="text-white"
+        iconColorClass="text-blue-200 hover:text-white"
+        className="mb-4"
       />
 
-      <Card>
-        <div className="p-3 overflow-x-auto">
-          {showLoading && rows.length === 0 && <CircularLoader />}
-          <CreditsTable
-            rows={rows}
-            sortedRows={sortedRows}
-            totalsMap={totalsMap}
-            sort={sort}
-            setSort={setSort}
-            selected={selected}
-            setSelected={setSelected}
-            headerCbRef={headerCbRef}
-            setEditorMode={setEditorMode}
-            setInitialRow={r => setInitialRow(r)}
-            setOpenEditor={setOpenEditor}
-            setPayingRow={setPayingRow}
-            setHistoryRow={setHistoryRow}
-            selectMode={selectMode}
-            t={t}
-            columnFilters={columnFilters}
-            openMenu={openMenu}
-            setOpenMenu={setOpenMenu}
-            columnValues={columnValues}
-            applySort={applySort}
-            applyColumnFilter={applyColumnFilter}
-            clearColumnFilter={clearColumnFilter}
-            columnMenuDict={columnMenuDict}
-          />
-        </div>
-      </Card>
+      <TableContainer>
+        {showLoading && rows.length === 0 && <CircularLoader />}
+        <CreditsTable
+          rows={rows}
+          sortedRows={sortedRows}
+          totalsMap={totalsMap}
+          sort={sort}
+          setSort={setSort}
+          selected={selected}
+          setSelected={setSelected}
+          headerCbRef={headerCbRef}
+          setEditorMode={setEditorMode}
+          setInitialRow={r => setInitialRow(r)}
+          setOpenEditor={setOpenEditor}
+          setPayingRow={setPayingRow}
+          setHistoryRow={setHistoryRow}
+          selectMode={selectMode}
+          t={t}
+          columnFilters={columnFilters}
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
+          columnValues={columnValues}
+          applySort={applySort}
+          applyColumnFilter={applyColumnFilter}
+          clearColumnFilter={clearColumnFilter}
+          columnMenuDict={columnMenuDict}
+        />
+      </TableContainer>
 
       {openEditor && initialRow && (
         <EditorModal
           mode={editorMode}
           initial={initialRow}
           staffOpts={staffOpts.length ? staffOpts : ['Staff']}
+          shiftOpts={shiftOpts}
           selectedBranchName={activeBranch}
           onClose={() => setOpenEditor(false)}
           onSaved={async row => {
@@ -1294,29 +1446,6 @@ export default function CreditsPage() {
         />
       )}
     </div>
-  )
-}
-
-function MonthNav({ monthLabel, monthInputValue, onPickMonth, prevMonth, nextMonth, guardDisabled, t }: { monthLabel: string; monthInputValue: string; onPickMonth: (v: string) => void; prevMonth: () => void; nextMonth: () => void; guardDisabled: boolean; t: ReturnType<typeof getDailyReportsDictionary>['credits']['monthNav'] }) {
-  const { language } = useSettings()
-
-  const handleMonthChange = (newVal: string) => {
-    if (newVal > monthInputValue && guardDisabled) {
-      return
-    }
-    onPickMonth(newVal)
-  }
-
-  return (
-    <MonthPicker
-      value={monthInputValue}
-      onChange={handleMonthChange}
-      language={language}
-      colorClass="text-blue-100 hover:text-white"
-      labelColorClass="text-white"
-      iconColorClass="text-blue-200 hover:text-white"
-      className="mt-3 mb-4"
-    />
   )
 }
 
@@ -1377,11 +1506,11 @@ function CreditsTable({
   const totalRemaining = useMemo(() => sortedRows.reduce((s, x) => s + Math.round(totalsMap[x.row.id]?.remaining ?? Math.round(x.row.amount || 0)), 0), [sortedRows, totalsMap])
 
   return (
-    <table className="w-full table-auto text-sm text-gray-900">
-      <thead>
-        <tr>
-          <th className="p-2 w-7">
-            {selectMode ? (
+    <Table className="text-sm text-gray-900 border-t border-slate-100">
+      <TableHead>
+        <TableHeadRow>
+          {selectMode && (
+            <th className="px-6 py-4 w-12 text-left bg-gray-50/75 border-b border-gray-200">
               <input
                 ref={headerCbRef}
                 type="checkbox"
@@ -1398,24 +1527,23 @@ function CreditsTable({
                     setSelected(next)
                   }
                 }}
-                className="h-4 w-4"
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 title={t.table.selectAll}
               />
-            ) : null}
-          </th>
-          <ColumnHeader colKey="date" label={t.table.headers.date} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.date || []} activeFilter={columnFilters.date || null} onFilter={(s) => applyColumnFilter('date', s)} onClear={() => clearColumnFilter('date')} open={openMenu === 'date'} onToggle={() => setOpenMenu(v => v === 'date' ? null : 'date')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8.5rem]" />
-          <ColumnHeader colKey="customer_name" label={t.table.headers.customer} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.customer_name || []} activeFilter={columnFilters.customer_name || null} onFilter={(s) => applyColumnFilter('customer_name', s)} onClear={() => clearColumnFilter('customer_name')} open={openMenu === 'customer_name'} onToggle={() => setOpenMenu(v => v === 'customer_name' ? null : 'customer_name')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[22rem]" />
-          <ColumnHeader colKey="amount" label={t.table.headers.initial} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.amount || []} activeFilter={columnFilters.amount || null} onFilter={(s) => applyColumnFilter('amount', s)} onClear={() => clearColumnFilter('amount')} open={openMenu === 'amount'} onToggle={() => setOpenMenu(v => v === 'amount' ? null : 'amount')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
-          <ColumnHeader colKey="remaining" label={t.table.headers.remaining} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.remaining || []} activeFilter={columnFilters.remaining || null} onFilter={(s) => applyColumnFilter('remaining', s)} onClear={() => clearColumnFilter('remaining')} open={openMenu === 'remaining'} onToggle={() => setOpenMenu(v => v === 'remaining' ? null : 'remaining')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[8rem]" />
+            </th>
+          )}
+          <ColumnHeader colKey="date" label={t.table.headers.date} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.date || []} activeFilter={columnFilters.date || null} onFilter={(s) => applyColumnFilter('date', s)} onClear={() => clearColumnFilter('date')} open={openMenu === 'date'} onToggle={() => setOpenMenu(v => v === 'date' ? null : 'date')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8rem]" />
+          <ColumnHeader colKey="customer_name" label={t.table.headers.customer} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.customer_name || []} activeFilter={columnFilters.customer_name || null} onFilter={(s) => applyColumnFilter('customer_name', s)} onClear={() => clearColumnFilter('customer_name')} open={openMenu === 'customer_name'} onToggle={() => setOpenMenu(v => v === 'customer_name' ? null : 'customer_name')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[16rem]" />
+          <ColumnHeader colKey="amount" label={t.table.headers.initial} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.amount || []} activeFilter={columnFilters.amount || null} onFilter={(s) => applyColumnFilter('amount', s)} onClear={() => clearColumnFilter('amount')} open={openMenu === 'amount'} onToggle={() => setOpenMenu(v => v === 'amount' ? null : 'amount')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[11rem]" />
+          <ColumnHeader colKey="remaining" label={t.table.headers.remaining} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.remaining || []} activeFilter={columnFilters.remaining || null} onFilter={(s) => applyColumnFilter('remaining', s)} onClear={() => clearColumnFilter('remaining')} open={openMenu === 'remaining'} onToggle={() => setOpenMenu(v => v === 'remaining' ? null : 'remaining')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} right className="w-[11rem]" />
           <ColumnHeader colKey="status" label={t.table.headers.status} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.status || []} activeFilter={columnFilters.status || null} onFilter={(s) => applyColumnFilter('status', s)} onClear={() => clearColumnFilter('status')} open={openMenu === 'status'} onToggle={() => setOpenMenu(v => v === 'status' ? null : 'status')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[8rem]" />
-          <ColumnHeader colKey="reference" label={t.table.headers.reference} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.reference || []} activeFilter={columnFilters.reference || null} onFilter={(s) => applyColumnFilter('reference', s)} onClear={() => clearColumnFilter('reference')} open={openMenu === 'reference'} onToggle={() => setOpenMenu(v => v === 'reference' ? null : 'reference')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[12rem]" />
-          <ColumnHeader colKey="branch" label={t.table.headers.branch} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.branch || []} activeFilter={columnFilters.branch || null} onFilter={(s) => applyColumnFilter('branch', s)} onClear={() => clearColumnFilter('branch')} open={openMenu === 'branch'} onToggle={() => setOpenMenu(v => v === 'branch' ? null : 'branch')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[10rem]" />
-          <ColumnHeader colKey="shift" label={t.table.headers.shift} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.shift || []} activeFilter={columnFilters.shift || null} onFilter={(s) => applyColumnFilter('shift', s)} onClear={() => clearColumnFilter('shift')} open={openMenu === 'shift'} onToggle={() => setOpenMenu(v => v === 'shift' ? null : 'shift')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[9rem]" />
-          <ColumnHeader colKey="handledBy" label={t.table.headers.handledBy} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.handledBy || []} activeFilter={columnFilters.handledBy || null} onFilter={(s) => applyColumnFilter('handledBy', s)} onClear={() => clearColumnFilter('handledBy')} open={openMenu === 'handledBy'} onToggle={() => setOpenMenu(v => v === 'handledBy' ? null : 'handledBy')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[11rem]" />
-          <th className="p-2 w-12 text-center">{t.table.headers.action}</th>
-        </tr>
-      </thead>
-      <tbody>
+          <ColumnHeader colKey="reference" label={t.table.headers.reference} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.reference || []} activeFilter={columnFilters.reference || null} onFilter={(s) => applyColumnFilter('reference', s)} onClear={() => clearColumnFilter('reference')} open={openMenu === 'reference'} onToggle={() => setOpenMenu(v => v === 'reference' ? null : 'reference')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[10rem]" />
+          <ColumnHeader colKey="shift" label={t.table.headers.shift} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.shift || []} activeFilter={columnFilters.shift || null} onFilter={(s) => applyColumnFilter('shift', s)} onClear={() => clearColumnFilter('shift')} open={openMenu === 'shift'} onToggle={() => setOpenMenu(v => v === 'shift' ? null : 'shift')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[7.5rem]" />
+          <ColumnHeader colKey="handledBy" label={t.table.headers.handledBy} sortKey={sort.key || 'date'} sortAsc={sort.dir === 'asc'} onSort={applySort} values={columnValues.handledBy || []} activeFilter={columnFilters.handledBy || null} onFilter={(s) => applyColumnFilter('handledBy', s)} onClear={() => clearColumnFilter('handledBy')} open={openMenu === 'handledBy'} onToggle={() => setOpenMenu(v => v === 'handledBy' ? null : 'handledBy')} onClose={() => setOpenMenu(null)} dict={columnMenuDict} className="w-[9.5rem]" />
+          <th className="px-6 py-4 w-12 text-center bg-gray-50/75 border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-slate-500">{t.table.headers.action}</th>
+        </TableHeadRow>
+      </TableHead>
+      <TableBody>
         {sortedRows.map(x => {
           const r = x.row
           const rem = totalsMap[r.id]?.remaining ?? Math.round(r.amount || 0)
@@ -1423,9 +1551,8 @@ function CreditsTable({
           const statusRaw = totalsMap[r.id]?.status || (isPaid ? 'Paid' : 'Unpaid')
           const statusText = statusRaw === 'Paid' ? t.status.paid : statusRaw === 'Unpaid' ? t.status.unpaid : t.status.open
           return (
-            <tr
+            <TableRow
               key={r.id}
-              className="border-t hover:bg-blue-50/40 cursor-pointer"
               onClick={() => {
                 setEditorMode('view')
                 setInitialRow(r)
@@ -1436,69 +1563,69 @@ function CreditsTable({
                 setInitialRow(r)
                 setOpenEditor(true)
               }}
-              role="button"
             >
-              <td className="p-2 w-7" onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-                {selectMode ? (
+              {selectMode && (
+                <TableCell onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} className="w-12">
                   <input
                     type="checkbox"
-                    className="h-4 w-4"
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     checked={!!selected[r.id]}
                     onChange={e => setSelected((prev: any) => ({ ...prev, [r.id]: e.target.checked }))}
                     title={t.table.selectRow}
                   />
-                ) : null}
-              </td>
-              <td className="p-2 whitespace-nowrap">{fmtDateDMY(r.date)}</td>
-              <td className="p-2 whitespace-nowrap">{r.customer_name || '-'}</td>
-              <td className="p-2 text-right tabular-nums">{fmtInt(r.amount)}</td>
-              <td className="p-2 text-right tabular-nums">{fmtInt(rem)}</td>
-              <td className="p-2 whitespace-nowrap">
-                <span className={`px-2 py-0.5 rounded-full text-xs ${isPaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                </TableCell>
+              )}
+              <TableCell className="whitespace-nowrap font-medium text-slate-600">{fmtDateDMY(r.date)}</TableCell>
+              <TableCell className="whitespace-nowrap font-semibold text-slate-805">{r.customer_name || '-'}</TableCell>
+              <TableCell className="text-right font-bold text-slate-800 tabular-nums">{fmtInt(r.amount)} ₫</TableCell>
+              <TableCell className="text-right font-bold text-slate-800 tabular-nums">{fmtInt(rem)} ₫</TableCell>
+              <TableCell className="whitespace-nowrap">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                  isPaid 
+                    ? 'bg-green-50 text-green-700 border-green-100' 
+                    : 'bg-yellow-50 text-yellow-750 border-yellow-100'
+                }`}>
                   {statusText}
                 </span>
-              </td>
-              <td className="p-2 whitespace-nowrap">{r.reference || '-'}</td>
-              <td className="p-2 whitespace-nowrap">{r.branch || '-'}</td>
-              <td className="p-2 whitespace-nowrap">{r.shift || '-'}</td>
-              <td className="p-2 whitespace-nowrap">{r.handledBy || '-'}</td>
-              <td className="p-2 text-center" onClick={e => e.stopPropagation()}>
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-slate-600 font-medium">{r.reference || '-'}</TableCell>
+              <TableCell className="whitespace-nowrap text-slate-600 font-medium">{r.shift || '-'}</TableCell>
+              <TableCell className="whitespace-nowrap text-slate-600 font-medium">{r.handledBy || '-'}</TableCell>
+              <TableCell className="text-center" onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
                 <button
-                  className={`p-0 h-auto w-auto bg-transparent ${isPaid ? 'opacity-60 hover:opacity-80' : 'hover:opacity-80'}`}
+                  className="p-1 rounded-full text-slate-450 hover:text-blue-600 hover:bg-slate-100 transition-colors"
                   title={isPaid ? t.table.action.history : t.table.action.record}
                   onClick={() => {
                     if (isPaid) setHistoryRow(r)
                     else setPayingRow(r)
                   }}
                 >
-                  <BanknotesIcon className={`w-6 h-6 ${isPaid ? 'text-gray-500' : 'text-blue-700'}`} />
+                  <BanknotesIcon className="w-5 h-5 text-slate-500" />
                 </button>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )
         })}
         {sortedRows.length === 0 && (
-          <tr>
-            <td colSpan={11} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+          <TableRow>
+            <TableCell colSpan={selectMode ? 10 : 9} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
               {t.table.empty}
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         )}
-      </tbody>
+      </TableBody>
 
-      {sortedRows.length > 0 && (
-        <tfoot>
-          <tr className="border-t bg-blue-50/30">
-            <td className="p-2 w-7" />
-            <td className="p-2" />
-            <td className="p-2 text-right font-semibold">{t.table.totals}</td>
-            <td className="p-2 text-right font-semibold tabular-nums">{fmtInt(totalInitial)}</td>
-            <td className="p-2 text-right font-semibold tabular-nums">{fmtInt(totalRemaining)}</td>
-            <td className="p-2" colSpan={6} />
+        <tfoot className="bg-slate-50/50">
+          <tr className="border-t border-slate-200">
+            {selectMode && <td className="px-6 py-4" />}
+            <td className="px-6 py-4" />
+            <td className="px-6 py-4 text-right font-bold text-slate-500 text-xs uppercase tracking-wider">{t.table.totals}</td>
+            <td className="px-6 py-4 text-right font-extrabold text-slate-800 tabular-nums whitespace-nowrap">{fmtInt(totalInitial)} ₫</td>
+            <td className="px-6 py-4 text-right font-extrabold text-slate-800 tabular-nums whitespace-nowrap">{fmtInt(totalRemaining)} ₫</td>
+            <td className="px-6 py-4" colSpan={5} />
           </tr>
         </tfoot>
-      )}
-    </table>
+    </Table>
   )
 }
 
@@ -1599,8 +1726,8 @@ function ColumnHeader({
   }
 
   return (
-    <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
-      <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+    <th className={`px-6 py-4 bg-gray-50/75 border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-slate-500 ${right ? 'text-right' : ''} ${className} relative`} ref={ref}>
+      <div className={`flex items-center gap-1 font-bold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
         <span className="select-none">{label}</span>
         {isActive && (
           sortAsc

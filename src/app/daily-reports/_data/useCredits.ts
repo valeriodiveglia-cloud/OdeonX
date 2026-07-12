@@ -46,6 +46,7 @@ export function useCredits(params?: { year?: number; month?: number; branchName?
   const [staffOpts, setStaffOpts] = useState<string[]>([])
   const [currentUserName, setCurrentUserName] = useState<string>('')
   const [currentShiftName, setCurrentShiftName] = useState<string>('')
+  const [shiftOpts, setShiftOpts] = useState<string[]>([])
 
   const isActiveRef = useRef<boolean>(true)
   const editorOpenRef = useRef<boolean>(false)
@@ -56,11 +57,14 @@ export function useCredits(params?: { year?: number; month?: number; branchName?
   // Fetch settings from DB
   const { settings: dbSettings } = useDailyReportSettingsDB(params?.branchName)
 
-  // Update current shift from DB settings
+  // Update current shift and shift options from DB settings
   useEffect(() => {
     if (dbSettings?.initialInfo?.shifts) {
       const current = pickCurrentShiftName(dbSettings.initialInfo.shifts)
       if (current && isActiveRef.current) setCurrentShiftName(current)
+
+      const names = dbSettings.initialInfo.shifts.map((x: any) => x.name || '').filter(Boolean)
+      if (names.length && isActiveRef.current) setShiftOpts(names)
     }
   }, [dbSettings])
 
@@ -598,7 +602,7 @@ export function useCredits(params?: { year?: number; month?: number; branchName?
 
   return {
     rows, customers, totalsMap,
-    staffOpts, currentUserName, currentShiftName,
+    staffOpts, shiftOpts, currentUserName, currentShiftName,
     loading,
     upsertCredit, deleteCredit, bulkDeleteCredits,
     fetchPayments, addPayment, updatePayment, deletePayment,
