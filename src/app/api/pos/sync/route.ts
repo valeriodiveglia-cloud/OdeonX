@@ -91,7 +91,11 @@ export async function GET(req: Request) {
     }
 
     if (!APP_ID || !PASS_CODE || !DOMAIN) {
-      return NextResponse.json({ error: 'CukCuk integration environment variables are not configured' }, { status: 500 })
+      const missing = []
+      if (!APP_ID) missing.push('CUKCUK_APP_ID')
+      if (!PASS_CODE) missing.push('CUKCUK_PASS_CODE')
+      if (!DOMAIN) missing.push('CUKCUK_DOMAIN')
+      return NextResponse.json({ error: `CukCuk integration environment variables are not configured. Missing: ${missing.join(', ')}` }, { status: 500 })
     }
 
     // 5. Login CukCuk Open Platform
