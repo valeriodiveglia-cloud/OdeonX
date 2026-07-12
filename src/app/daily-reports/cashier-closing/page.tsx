@@ -226,8 +226,13 @@ function buildThirdPartyAmounts(
     let amount = 0
     if (byKey.has(key)) {
       amount = byKey.get(key) || 0
-    } else if (legacyMap.has(key)) {
-      amount = legacyMap.get(key) || 0
+    } else {
+      for (const [legacyKey, legacyVal] of legacyMap.entries()) {
+        if (key.includes(legacyKey) || legacyKey.includes(key)) {
+          amount = legacyVal
+          break
+        }
+      }
     }
     out.push({ label, amount })
   })
@@ -1265,7 +1270,7 @@ export default function CashierClosingPage() {
               const currentPayments = paymentsRef.current
               const nextThirdParty = Array.isArray(currentPayments.thirdPartyAmounts) ? [...currentPayments.thirdPartyAmounts] : []
               
-              let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase() === 'grab')
+              let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase().includes('grab'))
               if (grabIdx !== -1) {
                 nextThirdParty[grabIdx] = { ...nextThirdParty[grabIdx], amount: resData.posGrab || 0 }
               } else if (typeof resData.posGrab === 'number' && resData.posGrab > 0) {
@@ -1895,10 +1900,10 @@ export default function CashierClosingPage() {
   }
 
   /* ---------- Payment Channels Chart Data & SVG ---------- */
-  const grabVal = useMemo(() => thirdPartyAmounts.find(tp => tp.label.toLowerCase() === 'grab')?.amount || 0, [thirdPartyAmounts])
+  const grabVal = useMemo(() => thirdPartyAmounts.find(tp => tp.label.toLowerCase().includes('grab'))?.amount || 0, [thirdPartyAmounts])
   const shopeeVal = useMemo(() => thirdPartyAmounts.find(tp => tp.label.toLowerCase().includes('shopee'))?.amount || 0, [thirdPartyAmounts])
   const otherTpVal = useMemo(() => thirdPartyAmounts
-    .filter(tp => tp.label.toLowerCase() !== 'grab' && !tp.label.toLowerCase().includes('shopee'))
+    .filter(tp => !tp.label.toLowerCase().includes('grab') && !tp.label.toLowerCase().includes('shopee'))
     .reduce((sum, tp) => sum + tp.amount, 0), [thirdPartyAmounts])
 
   const cardVal = useMemo(() => round(payments.mpos), [payments.mpos])
@@ -1934,10 +1939,10 @@ export default function CashierClosingPage() {
 
   /* ---------- Summary Accounting Data ---------- */
   const nonCashTotal = useMemo(() => {
-    const grabVal = thirdPartyAmounts.find(tp => tp.label.toLowerCase() === 'grab')?.amount || 0
+    const grabVal = thirdPartyAmounts.find(tp => tp.label.toLowerCase().includes('grab'))?.amount || 0
     const shopeeVal = thirdPartyAmounts.find(tp => tp.label.toLowerCase().includes('shopee'))?.amount || 0
     const otherTpVal = thirdPartyAmounts
-      .filter(tp => tp.label.toLowerCase() !== 'grab' && !tp.label.toLowerCase().includes('shopee'))
+      .filter(tp => !tp.label.toLowerCase().includes('grab') && !tp.label.toLowerCase().includes('shopee'))
       .reduce((sum, tp) => sum + tp.amount, 0)
 
     const repayCard = Math.max(0, round(payments.repaymentsCashCard) - round(payments.repaymentsCashOnly))
@@ -2268,7 +2273,7 @@ export default function CashierClosingPage() {
             setPayments(p => {
               const nextThirdParty = Array.isArray(p.thirdPartyAmounts) ? [...p.thirdPartyAmounts] : []
               
-              let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase() === 'grab')
+              let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase().includes('grab'))
               if (grabIdx !== -1) {
                 nextThirdParty[grabIdx] = { ...nextThirdParty[grabIdx], amount: resData.posGrab || 0 }
               } else if (typeof resData.posGrab === 'number' && resData.posGrab > 0) {
@@ -2510,7 +2515,7 @@ export default function CashierClosingPage() {
         const posGross = typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : (payments.grossRevenue || 0)
         const posDisc = typeof resData.posDiscount === 'number' ? resData.posDiscount : (payments.discount || 0)
 
-        let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase() === 'grab')
+        let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase().includes('grab'))
         if (grabIdx !== -1) {
           nextThirdParty[grabIdx] = { ...nextThirdParty[grabIdx], amount: posGrab }
         } else if (posGrab > 0) {
