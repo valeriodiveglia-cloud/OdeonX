@@ -629,6 +629,7 @@ export const en = {
 
     credits: {
         title: 'Monthly Credits',
+        subtitle: 'View and manage monthly credits, outstanding balances, and repayment history.',
         branchPill: { tooltip: 'Branch selected', all: '(all)' },
         search: { placeholder: 'Search', clear: 'Clear' },
         menu: { more: 'More actions', delete: 'Delete', bulkConfirm: 'Delete {count} selected record(s)?' },

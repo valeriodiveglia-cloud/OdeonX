@@ -626,6 +626,7 @@ export const vi = {
 
     credits: {
         title: 'Công nợ tháng',
+        subtitle: 'Xem và quản lý công nợ hàng tháng, số dư nợ và lịch sử thanh toán.',
         branchPill: { tooltip: 'Chi nhánh đã chọn', all: '(tất cả)' },
         search: { placeholder: 'Tìm kiếm', clear: 'Xóa' },
         menu: { more: 'Thao tác khác', delete: 'Xóa', bulkConfirm: 'Xóa {count} dòng đã chọn?' },

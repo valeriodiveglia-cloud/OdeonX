@@ -16,6 +16,17 @@ import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
 import MonthPicker from '@/components/MonthPicker'
+import PageHeader from '@/components/PageHeader'
+import { Button } from '@/components/Button'
+import {
+    TableContainer,
+    Table,
+    TableHead,
+    TableHeadRow,
+    TableBody,
+    TableRow,
+    TableCell,
+} from '@/components/Table'
 
 import { exportToExcelTable, type ExcelColumn } from '@/lib/exportUtils'
 
@@ -35,7 +46,6 @@ export default function MonthlyCreditsPage() {
         }
     }
 
-    const [qText, setQText] = useState('')
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortAsc, setSortAsc] = useState(false)
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
@@ -113,17 +123,6 @@ export default function MonthlyCreditsPage() {
     // Search & Sort
     const filtered = useMemo(() => {
         let out = rows.slice()
-        if (qText.trim()) {
-            const s = qText.trim().toLowerCase()
-            out = out.filter(r =>
-                (r.customer_name || '').toLowerCase().includes(s) ||
-                (r.reference || '').toLowerCase().includes(s) ||
-                (r.branch || '').toLowerCase().includes(s) ||
-                (r.shift || '').toLowerCase().includes(s) ||
-                (r.handledBy || '').toLowerCase().includes(s) ||
-                formatDMY(r.date).includes(s)
-            )
-        }
         // Apply column filters
         for (const [col, allowed] of Object.entries(columnFilters)) {
             if (!allowed) continue
@@ -138,7 +137,7 @@ export default function MonthlyCreditsPage() {
             return sortAsc ? cmp : -cmp
         })
         return out
-    }, [rows, qText, sortKey, sortAsc, totalsMap, columnFilters, displayValue])
+    }, [rows, sortKey, sortAsc, totalsMap, columnFilters, displayValue])
 
     // KPI
     const stats = useMemo(() => {
@@ -190,54 +189,37 @@ export default function MonthlyCreditsPage() {
     if (loading && branches.length === 0) return <CircularLoader />
 
     return (
-        <div className="max-w-none mx-auto p-4 text-gray-100">
-            {/* Header */}
-            <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold text-white">{t.title || 'Credits'}</h1>
-                </div>
+        <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+            <PageHeader
+                title={t.title || 'Credits'}
+                subtitle={t.subtitle}
+                actions={
+                    <div className="flex items-center gap-2">
+                        {/* Branch Picker */}
+                        <select
+                            value={selectedBranchId}
+                            onChange={(e) => setSelectedBranchId(e.target.value)}
+                            className="h-9 rounded-xl border border-blue-400/30 bg-blue-600/15 text-blue-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/40 px-3 font-semibold"
+                        >
+                            <option value="all" className="text-gray-900">All Branches</option>
+                            {branches.map(b => (
+                                <option key={b.id} value={b.id} className="text-gray-900">{b.name}</option>
+                            ))}
+                        </select>
 
-                <div className="flex items-center gap-2">
-                    {/* Branch Picker */}
-                    <select
-                        value={selectedBranchId}
-                        onChange={(e) => setSelectedBranchId(e.target.value)}
-                        className="h-9 rounded-lg border border-blue-400/30 bg-blue-600/15 text-blue-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                    >
-                        <option value="all">All Branches</option>
-                        {branches.map(b => (
-                            <option key={b.id} value={b.id} className="text-gray-900">{b.name}</option>
-                        ))}
-                    </select>
-
-                    {/* Search box */}
-                    <div className="relative">
-                        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300" />
-                        <input
-                            type="text"
-                            placeholder="Search..."
-                            value={qText}
-                            onChange={e => setQText(e.target.value)}
-                            className="h-9 pl-9 pr-3 rounded-lg border border-blue-400/30 bg-blue-600/15
-                         text-blue-100 placeholder-blue-300 caret-blue-200
-                         focus:outline-none focus:ring-2 focus:ring-blue-400/40 w-[200px]"
-                        />
+                        {/* Export Button */}
+                        <Button
+                            variant="secondary-dark"
+                            onClick={handleExport}
+                            className="px-3 h-9 text-xs font-semibold"
+                            title="Export to CSV"
+                            icon={ArrowDownTrayIcon}
+                        >
+                            <span>Export</span>
+                        </Button>
                     </div>
-
-                    {/* Export Button */}
-                    <button
-                        onClick={handleExport}
-                        className="flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors"
-                        title="Export to CSV"
-                    >
-                        <ArrowDownTrayIcon className="w-4 h-4" />
-                        <span className="hidden sm:inline">Export</span>
-                    </button>
-                </div>
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-blue-400/20 my-3"></div>
+                }
+            />
 
             <MonthPicker
                 value={monthInputValue}
@@ -249,11 +231,11 @@ export default function MonthlyCreditsPage() {
                 colorClass="text-blue-100 hover:text-white"
                 labelColorClass="text-white"
                 iconColorClass="text-blue-200 hover:text-white"
-                className="mb-3"
+                className="mb-4"
             />
 
             {/* KPI */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <StatPill label="Total Credits" value={stats.count} />
                 <StatPill label="Total Amount" value={stats.totalAmount} money />
                 <StatPill label="Total Paid" value={stats.totalPaid} money />
@@ -261,10 +243,10 @@ export default function MonthlyCreditsPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
-                <table className="w-full table-auto text-sm text-gray-900">
-                    <thead>
-                        <tr>
+            <TableContainer>
+                <Table className="text-sm text-gray-900">
+                    <TableHead>
+                        <TableHeadRow>
                             {([
                                 ['date', t.table?.headers?.date || 'Date'],
                                 ['customer', t.table?.headers?.customer || 'Customer'],
@@ -295,49 +277,58 @@ export default function MonthlyCreditsPage() {
                                     right={!!right}
                                 />
                             ))}
-                        </tr>
-                    </thead>
-                    <tbody>
+                        </TableHeadRow>
+                    </TableHead>
+                    <TableBody>
                         {filtered.length === 0 && (
-                            <tr>
-                                <td colSpan={10} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+                            <TableRow>
+                                <TableCell colSpan={10} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                                     {t.table?.empty || 'No credits found.'}
-                                </td>
-                            </tr>
+                                </TableCell>
+                            </TableRow>
                         )}
                         {filtered.map(r => {
                             const tot = totalsMap[r.id]
+                            const isPaid = tot?.status === 'Paid'
                             return (
-                                <tr key={r.id} className="border-t hover:bg-blue-50/40">
-                                    <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
-                                    <td className="p-2 whitespace-nowrap font-medium">{r.customer_name}</td>
-                                    <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold">{fmt(r.amount)}</td>
-                                    <td className="p-2 whitespace-nowrap text-right tabular-nums text-gray-600">{fmt(tot?.paid)}</td>
-                                    <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold">{fmt(tot?.remaining)}</td>
-                                    <td className="p-2 whitespace-nowrap">
-                                        <span className={`px-2 py-0.5 rounded text-xs ${tot?.status === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                <TableRow key={r.id}>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-slate-650">{formatDMY(r.date)}</TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap font-semibold text-slate-805">{r.customer_name}</TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap text-right tabular-nums font-bold text-slate-800">{fmt(r.amount)} ₫</TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap text-right tabular-nums text-slate-500 font-medium">{fmt(tot?.paid)} ₫</TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap text-right tabular-nums font-bold text-slate-800">{fmt(tot?.remaining)} ₫</TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                                            isPaid 
+                                                ? 'bg-green-50 text-green-700 border-green-100' 
+                                                : 'bg-yellow-50 text-yellow-750 border-yellow-100'
+                                        }`}>
                                             {tot?.status}
                                         </span>
-                                    </td>
-                                    <td className="p-2 whitespace-nowrap text-gray-600">{r.branch}</td>
-                                    <td className="p-2 whitespace-nowrap text-gray-600">{r.shift}</td>
-                                    <td className="p-2 whitespace-nowrap text-gray-600">{r.handledBy}</td>
-                                    <td className="p-2 whitespace-nowrap text-gray-500">{r.reference}</td>
-                                </tr>
+                                    </TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{r.branch}</TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{r.shift}</TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{r.handledBy}</TableCell>
+                                    <TableCell className="px-6 py-4 whitespace-nowrap text-slate-500 font-medium">{r.reference || '-'}</TableCell>
+                                </TableRow>
                             )
                         })}
-                        {filtered.length > 0 && (
-                            <tr className="border-t bg-gray-50 font-semibold">
-                                <td className="p-2" colSpan={2}>{t.table?.totals || 'Totals'}</td>
-                                <td className="p-2 text-right">{fmt(stats.totalAmount)}</td>
-                                <td className="p-2 text-right">{fmt(stats.totalPaid)}</td>
-                                <td className="p-2 text-right">{fmt(stats.totalRemaining)}</td>
-                                <td className="p-2" colSpan={5}></td>
+                    </TableBody>
+                    {filtered.length > 0 && (
+                        <tfoot className="bg-slate-50/50">
+                            <tr className="border-t border-slate-200">
+                                <td className="px-6 py-4" colSpan={2}>
+                                    <span className="font-bold text-slate-500 text-xs uppercase tracking-wider">{t.table?.totals || 'Totals'}</span>
+                                </td>
+                                <td className="px-6 py-4 text-right font-extrabold text-slate-800 tabular-nums">{fmt(stats.totalAmount)} ₫</td>
+                                <td className="px-6 py-4 text-right font-extrabold text-slate-800 tabular-nums">{fmt(stats.totalPaid)} ₫</td>
+                                <td className="px-6 py-4 text-right font-extrabold text-slate-800 tabular-nums">{fmt(stats.totalRemaining)} ₫</td>
+                                <td className="px-6 py-4" colSpan={5}></td>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                        </tfoot>
+                    )}
+                </Table>
+            </TableContainer>
         </div>
     )
 }
@@ -387,8 +378,8 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
     }
 
     return (
-        <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
-            <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <th className={`px-6 py-4 bg-gray-50/75 border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-slate-500 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
+            <div className={`flex items-center gap-1 font-bold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
                 <span className="select-none">{label}</span>
                 {isActive && (sortAsc ? <BarsArrowUpIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" /> : <BarsArrowDownIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />)}
                 {hasFilter && <FunnelIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />}
@@ -422,9 +413,9 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
 }
 function StatPill({ label, value, money }: { label: string; value: number; money?: boolean }) {
     return (
-        <div className="text-left rounded-xl border border-blue-400/30 bg-blue-600/10 text-blue-100 px-3 py-2">
-            <div className="text-[11px] uppercase tracking-wide opacity-80">{label}</div>
-            <div className="text-base font-semibold tabular-nums">{money ? fmt(value) : value}</div>
+        <div className="text-left rounded-2xl border border-blue-400/30 bg-blue-600/10 text-blue-100 p-4">
+            <div className="text-[10px] uppercase font-bold tracking-wider opacity-85 text-blue-200 mb-1">{label}</div>
+            <div className="text-lg font-extrabold tabular-nums text-white">{money ? fmt(value) + " ₫" : value}</div>
         </div>
     )
 }

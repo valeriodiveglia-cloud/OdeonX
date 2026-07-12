@@ -16,10 +16,28 @@ import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
 import CircularLoader from '@/components/CircularLoader'
 import MonthPicker from '@/components/MonthPicker'
-
+import Button from '@/components/Button'
+import PageHeader from '@/components/PageHeader'
+import { TableContainer, Table, TableHead, TableHeadRow, TableBody, TableRow, TableCell } from '@/components/Table'
 import { exportToExcelTable, type ExcelColumn } from '@/lib/exportUtils'
 
-type SortKey = 'date' | 'amount' | 'note' | 'branch'
+type SortKey = 'date' | 'time' | 'info' | 'amount' | 'note' | 'branch'
+
+/* ---------- local i18n for time & info ---------- */
+const localI18n = {
+  en: {
+    time: 'Time',
+    info: 'Info (Bill / Table)',
+    timePlaceholder: 'hh:mm',
+    infoPlaceholder: 'e.g., Bill 2685006561 - Table 5',
+  },
+  vi: {
+    time: 'Giờ',
+    info: 'Thông tin (Hóa đơn / Bàn)',
+    timePlaceholder: 'hh:mm',
+    infoPlaceholder: 'vd: Hóa đơn 2685006561 - Bàn 5',
+  }
+}
 
 type Branch = { id: string; name: string }
 
@@ -36,7 +54,6 @@ export default function MonthlyBankTransfersPage() {
         }
     }
 
-    const [qText, setQText] = useState('')
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortAsc, setSortAsc] = useState(false)
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
@@ -65,11 +82,47 @@ export default function MonthlyBankTransfersPage() {
     }, [])
 
     // Data from hook
-    const { rows, loading } = useBankTransfers({
+    const { rows, loading, refresh } = useBankTransfers({
         year: monthCursor.getFullYear(),
         month: monthCursor.getMonth(),
         branchName: selectedBranchName,
     })
+
+    // Sincronizzazione automatica da CukCuk POS API per oggi e ieri (dal 9 Luglio 2026 in poi) per TUTTE le filiali
+    useEffect(() => {
+        const d = new Date()
+        const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        
+        const yest = new Date(d.getTime() - 86400000)
+        const yesterdayStr = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`
+
+        async function runPosSync() {
+            try {
+                const { data: branchesData } = await supabase.from('provider_branches').select('name')
+                if (!branchesData || branchesData.length === 0) return
+
+                const calls: Promise<any>[] = []
+                branchesData.forEach(b => {
+                    const bName = b.name
+                    if (todayStr >= '2026-07-09') {
+                        calls.push(fetch(`/api/pos/sync?branch=${encodeURIComponent(bName)}&date=${todayStr}`).catch(e => console.error(e)))
+                    }
+                    if (yesterdayStr >= '2026-07-09') {
+                        calls.push(fetch(`/api/pos/sync?branch=${encodeURIComponent(bName)}&date=${yesterdayStr}`).catch(e => console.error(e)))
+                    }
+                })
+
+                if (calls.length > 0) {
+                    await Promise.all(calls)
+                    refresh()
+                }
+            } catch (err) {
+                console.error('Error running batch POS sync in Monthly Reports:', err)
+            }
+        }
+
+        runPosSync()
+    }, [monthCursor, selectedBranchName, refresh])
 
     function applySort(k: SortKey, asc: boolean) {
         setSortKey(k); setSortAsc(asc); setOpenMenu(null)
@@ -85,6 +138,8 @@ export default function MonthlyBankTransfersPage() {
     const displayValue = useCallback((r: BankTransferRow, key: SortKey): string => {
         switch (key) {
             case 'date': return formatDMY(r.date)
+            case 'time': return r.time || ''
+            case 'info': return r.info || ''
             case 'amount': return fmt(r.amount)
             case 'note': return r.note || ''
             case 'branch': return r.branch || ''
@@ -95,7 +150,7 @@ export default function MonthlyBankTransfersPage() {
     // Unique filterable values per column
     const columnValues = useMemo(() => {
         const map: Record<string, string[]> = {}
-        const keys: SortKey[] = ['date', 'amount', 'note', 'branch']
+        const keys: SortKey[] = ['date', 'time', 'info', 'amount', 'note', 'branch']
         keys.forEach(k => {
             const s = new Set<string>()
             rows.forEach(r => { const v = displayValue(r, k); if (v) s.add(v) })
@@ -104,17 +159,9 @@ export default function MonthlyBankTransfersPage() {
         return map
     }, [rows, displayValue])
 
-    // Search & Sort
+    // Filter & Sort
     const filtered = useMemo(() => {
         let out = rows.slice()
-        if (qText.trim()) {
-            const s = qText.trim().toLowerCase()
-            out = out.filter(r =>
-                (r.note || '').toLowerCase().includes(s) ||
-                (r.branch || '').toLowerCase().includes(s) ||
-                formatDMY(r.date).includes(s)
-            )
-        }
         // Apply column filters
         for (const [col, allowed] of Object.entries(columnFilters)) {
             if (!allowed) continue
@@ -129,7 +176,7 @@ export default function MonthlyBankTransfersPage() {
             return sortAsc ? cmp : -cmp
         })
         return out
-    }, [rows, qText, sortKey, sortAsc, columnFilters, displayValue])
+    }, [rows, sortKey, sortAsc, columnFilters, displayValue])
 
     // KPI
     const stats = useMemo(() => {
@@ -144,8 +191,12 @@ export default function MonthlyBankTransfersPage() {
     const columnMenuDict = t.table?.columnMenu || { sortAsc: 'Sort Ascending', sortDesc: 'Sort Descending', selectAll: 'Select All', deselectAll: 'Deselect All', filterPlaceholder: 'Search...', clearFilters: 'Clear Filters' }
 
     async function handleExport() {
+        const localT = language === 'vi' ? localI18n.vi : localI18n.en
+
         const columns: ExcelColumn[] = [
             { header: t.table?.headers?.date || 'Date', key: 'date', width: 12, total: 'Totals:' },
+            { header: localT.time, key: 'time', width: 10 },
+            { header: localT.info, key: 'info', width: 35 },
             { header: t.table?.headers?.amount || 'Amount', key: 'amount', width: 15, total: true, fmt: '#,##0' },
             { header: t.table?.headers?.note || 'Note', key: 'note', width: 40 },
             { header: t.table?.headers?.branch || 'Branch', key: 'branch', width: 20 },
@@ -153,6 +204,8 @@ export default function MonthlyBankTransfersPage() {
 
         const data = filtered.map(r => ({
             date: formatDMY(r.date),
+            time: r.time || '',
+            info: r.info || '',
             amount: r.amount,
             note: r.note || '',
             branch: r.branch || ''
@@ -164,55 +217,37 @@ export default function MonthlyBankTransfersPage() {
     if (loading && branches.length === 0) return <CircularLoader />
 
     return (
-        <div className="max-w-none mx-auto p-4 text-gray-100">
+        <div className="p-6 max-w-[1600px] mx-auto space-y-6 text-gray-900">
             {/* Header */}
-            <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold text-white">{t.title || 'Bank Transfers'}</h1>
-                </div>
+            <PageHeader
+                title={t.title || 'Bank Transfers'}
+                subtitle={language === 'vi' ? 'Lịch sử chuyển khoản ngân hàng' : 'Bank transfer records history'}
+                actions={
+                    <div className="flex items-center gap-3">
+                        <select
+                            value={selectedBranchId}
+                            onChange={(e) => setSelectedBranchId(e.target.value)}
+                            className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                        >
+                            <option value="all">{language === 'vi' ? 'Tất cả chi nhánh' : 'All Branches'}</option>
+                            {branches.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                        </select>
 
-                <div className="flex items-center gap-2">
-                    {/* Branch Picker */}
-                    <select
-                        value={selectedBranchId}
-                        onChange={(e) => setSelectedBranchId(e.target.value)}
-                        className="h-9 rounded-lg border border-blue-400/30 bg-blue-600/15 text-blue-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                    >
-                        <option value="all">All Branches</option>
-                        {branches.map(b => (
-                            <option key={b.id} value={b.id} className="text-gray-900">{b.name}</option>
-                        ))}
-                    </select>
-
-                    {/* Search box */}
-                    <div className="relative">
-                        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300" />
-                        <input
-                            type="text"
-                            placeholder="Search..."
-                            value={qText}
-                            onChange={e => setQText(e.target.value)}
-                            className="h-9 pl-9 pr-3 rounded-lg border border-blue-400/30 bg-blue-600/15
-                         text-blue-100 placeholder-blue-300 caret-blue-200
-                         focus:outline-none focus:ring-2 focus:ring-blue-400/40 w-[200px]"
-                        />
+                        <Button
+                            variant="primary"
+                            onClick={handleExport}
+                            className="flex items-center gap-2 h-9 text-xs font-semibold px-4"
+                        >
+                            <ArrowDownTrayIcon className="w-4 h-4" />
+                            <span>{language === 'vi' ? 'Xuất Excel' : 'Export'}</span>
+                        </Button>
                     </div>
+                }
+            />
 
-                    {/* Export Button */}
-                    <button
-                        onClick={handleExport}
-                        className="flex items-center gap-2 px-3 h-9 rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors"
-                        title="Export to CSV"
-                    >
-                        <ArrowDownTrayIcon className="w-4 h-4" />
-                        <span className="hidden sm:inline">Export</span>
-                    </button>
-                </div>
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-blue-400/20 my-3"></div>
-
+            {/* Month Navigation */}
             <MonthPicker
                 value={monthInputValue}
                 onChange={(val) => {
@@ -220,24 +255,20 @@ export default function MonthlyBankTransfersPage() {
                     if (d) setMonthCursor(d)
                 }}
                 language={language}
-                colorClass="text-blue-100 hover:text-white"
-                labelColorClass="text-white"
-                iconColorClass="text-blue-200 hover:text-white"
-                className="mb-3"
             />
 
             {/* KPI */}
-            <div className="grid grid-cols-2 md:grid-cols-2 gap-2 mb-3">
-                <StatPill label="Total Transfers" value={stats.count} />
-                <StatPill label="Total Amount" value={stats.totalAmount} money />
+            <div className="grid grid-cols-2 gap-4">
+                <StatPill label={language === 'vi' ? 'Tổng số chuyển khoản' : 'Total Transfers'} value={stats.count} />
+                <StatPill label={language === 'vi' ? 'Tổng số tiền' : 'Total Amount'} value={stats.totalAmount} money />
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl shadow p-3 overflow-x-auto">
-                <table className="w-full table-auto text-sm text-gray-900">
-                    <thead>
-                        <tr>
-                            {([['date', t.table?.headers?.date || 'Date'], ['amount', t.table?.headers?.amount || 'Amount', true], ['note', t.table?.headers?.note || 'Note'], ['branch', t.table?.headers?.branch || 'Branch']] as [SortKey, string, boolean?][]).map(([k, lbl, right]) => (
+            <TableContainer>
+                <Table>
+                    <TableHead>
+                        <TableHeadRow>
+                            {([['date', t.table?.headers?.date || 'Date'], ['time', language === 'vi' ? localI18n.vi.time : localI18n.en.time], ['info', language === 'vi' ? localI18n.vi.info : localI18n.en.info], ['amount', t.table?.headers?.amount || 'Amount', true], ['note', t.table?.headers?.note || 'Note'], ['branch', t.table?.headers?.branch || 'Branch']] as [SortKey, string, boolean?][]).map(([k, lbl, right]) => (
                                 <ColumnHeader
                                     key={k}
                                     colKey={k}
@@ -256,34 +287,38 @@ export default function MonthlyBankTransfersPage() {
                                     right={!!right}
                                 />
                             ))}
-                        </tr>
-                    </thead>
-                    <tbody>
+                        </TableHeadRow>
+                    </TableHead>
+                    <TableBody>
                         {filtered.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+                                <td colSpan={6} className="text-center py-8 text-slate-400 text-xs italic font-semibold">
                                     {t.table?.noRows || 'No bank transfers found.'}
                                 </td>
                             </tr>
                         )}
                         {filtered.map(r => (
-                            <tr key={r.id} className="border-t hover:bg-blue-50/40">
-                                <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
-                                <td className="p-2 whitespace-nowrap text-right tabular-nums font-semibold">{fmt(r.amount)}</td>
-                                <td className="p-2 whitespace-nowrap">{r.note}</td>
-                                <td className="p-2 whitespace-nowrap text-gray-600">{r.branch}</td>
-                            </tr>
+                            <TableRow key={r.id}>
+                                <TableCell className="whitespace-nowrap">{formatDMY(r.date)}</TableCell>
+                                <TableCell className="whitespace-nowrap">{r.time || ''}</TableCell>
+                                <TableCell>{r.info || ''}</TableCell>
+                                <TableCell className="whitespace-nowrap text-right tabular-nums font-semibold text-slate-800">{fmt(r.amount)}</TableCell>
+                                <TableCell className="whitespace-nowrap">{r.note}</TableCell>
+                                <TableCell className="whitespace-nowrap text-gray-500">{r.branch}</TableCell>
+                            </TableRow>
                         ))}
                         {filtered.length > 0 && (
-                            <tr className="border-t bg-gray-50 font-semibold">
-                                <td className="p-2">{t.table?.totals || 'Totals'}</td>
-                                <td className="p-2 text-right">{fmt(stats.totalAmount)}</td>
-                                <td className="p-2" colSpan={2}></td>
-                            </tr>
+                            <TableRow className="bg-slate-50/50 font-semibold">
+                                <TableCell>{t.table?.totals || 'Totals'}</TableCell>
+                                <TableCell>{null}</TableCell>
+                                <TableCell>{null}</TableCell>
+                                <TableCell className="text-right tabular-nums text-slate-800">{fmt(stats.totalAmount)}</TableCell>
+                                <TableCell colSpan={2}>{null}</TableCell>
+                            </TableRow>
                         )}
-                    </tbody>
-                </table>
-            </div>
+                    </TableBody>
+                </Table>
+            </TableContainer>
         </div>
     )
 }
@@ -367,8 +402,8 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
     }
 
     return (
-        <th className={`p-2 ${right ? 'text-right' : ''} ${className} relative`} ref={ref as any}>
-            <div className={`flex items-center gap-1 font-semibold ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
+        <th className={`px-6 py-4 text-slate-500 text-xs uppercase tracking-wider font-semibold ${right ? 'text-right' : 'text-left'} ${className} relative`} ref={ref as any}>
+            <div className={`flex items-center gap-1.5 ${center ? 'justify-center' : right ? 'justify-end' : 'justify-start'}`}>
                 <span className="select-none">{label}</span>
                 {isActive && (
                     sortAsc
@@ -481,6 +516,8 @@ function formatDMY(isoDate: string) {
 function sortValue(r: BankTransferRow, key: SortKey) {
     switch (key) {
         case 'date': return new Date(r.date).getTime()
+        case 'time': return r.time || ''
+        case 'info': return r.info || ''
         case 'amount': return r.amount
         case 'note': return r.note || ''
         case 'branch': return r.branch || ''

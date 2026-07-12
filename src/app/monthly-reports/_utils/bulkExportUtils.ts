@@ -255,6 +255,8 @@ async function buildBankTransfers(year: number, month: number): Promise<Blob> {
 
     const columns: ExcelColumn[] = [
         { header: 'Date', key: 'date', width: 12, total: 'Totals:' },
+        { header: 'Time', key: 'time', width: 10 },
+        { header: 'Info', key: 'info', width: 35 },
         { header: 'Amount', key: 'amount', width: 15, total: true, fmt: '#,##0' },
         { header: 'Note', key: 'note', width: 40 },
         { header: 'Branch', key: 'branch', width: 20 },
@@ -262,6 +264,8 @@ async function buildBankTransfers(year: number, month: number): Promise<Blob> {
 
     const excelData = (data || []).map((r: any) => ({
         date: formatDMY(r.date),
+        time: r.time || '',
+        info: r.info || '',
         amount: toNum(r.amount),
         note: r.note || '',
         branch: r.branch || '',

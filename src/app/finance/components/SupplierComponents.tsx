@@ -27,7 +27,7 @@ export function SupplierCombobox({
     const finalPlaceholder = placeholder || defaultPlaceholder
 
     return (
-        <Combobox value={selectedSupplier} onChange={(s: any) => onChange(s ? s.id : null)}>
+        <Combobox value={selectedSupplier} onChange={(s: any) => onChange(s ? s.id : null)} onClose={() => setQuery('')}>
             <div className="relative flex-1">
                 <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-left border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500 sm:text-sm">
                     <Combobox.Input
@@ -35,41 +35,46 @@ export function SupplierCombobox({
                         displayValue={(supplier: any) => supplier?.name || ''}
                         onChange={(event) => setQuery(event.target.value)}
                         placeholder={finalPlaceholder}
+                        autoComplete="off"
+                        name="supplier_prevent_autofill"
+                        data-lpignore="true"
                     />
                     <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2">
                         <ChevronsUpDown className="h-4 w-4 text-slate-400" aria-hidden="true" />
                     </Combobox.Button>
                 </div>
-                <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0" afterLeave={() => setQuery('')}>
-                    <Combobox.Options anchor="bottom start" className="z-[100] mt-1 max-h-60 w-[var(--input-width)] overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm">
-                        {filteredSuppliers.length === 0 && query !== '' ? (
-                            <div className="relative cursor-default select-none px-4 py-2 text-slate-700 flex flex-col gap-2">
-                                <span>{language === 'vi' ? 'Không tìm thấy nhà cung cấp.' : 'No supplier found.'}</span>
-                                <button type="button" onClick={() => onAddNew(query)} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs font-semibold hover:bg-blue-100 transition text-left">
-                                    {language === 'vi' ? `+ Thêm "${query}" làm nhà cung cấp mới` : `+ Add "${query}" as new supplier`}
-                                </button>
-                            </div>
-                        ) : (
-                            filteredSuppliers.map((supplier) => (
-                                <Combobox.Option key={supplier.id} className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? 'bg-blue-600 text-white' : 'text-slate-900'}`} value={supplier}>
-                                    {({ selected, active }) => (
-                                        <>
-                                            <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>{supplier.name}</span>
-                                            {selected ? <span className={`absolute inset-y-0 left-0 flex items-center pl-3 ${active ? 'text-white' : 'text-blue-600'}`}><Check className="h-4 w-4" aria-hidden="true" /></span> : null}
-                                        </>
-                                    )}
-                                </Combobox.Option>
-                            ))
-                        )}
-                        {filteredSuppliers.length > 0 && (
-                            <div className="border-t border-slate-100 mt-1 pt-1">
-                                <button type="button" onClick={() => onAddNew(query)} className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 font-medium">
-                                    {language === 'vi' ? '+ Thêm nhà cung cấp mới' : '+ Add New Supplier'}
-                                </button>
-                            </div>
-                        )}
-                    </Combobox.Options>
-                </Transition>
+                <Combobox.Options
+                    anchor={{ to: 'bottom start', gap: 4 }}
+                    transition
+                    className="z-[100] mt-1 max-h-60 w-[var(--input-width)] overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0"
+                >
+                    {filteredSuppliers.length === 0 && query !== '' ? (
+                        <div className="relative cursor-default select-none px-4 py-2 text-slate-700 flex flex-col gap-2">
+                            <span>{language === 'vi' ? 'Không tìm thấy nhà cung cấp.' : 'No supplier found.'}</span>
+                            <button type="button" onClick={() => onAddNew(query)} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs font-semibold hover:bg-blue-100 transition text-left">
+                                {language === 'vi' ? `+ Thêm "${query}" làm nhà cung cấp mới` : `+ Add "${query}" as new supplier`}
+                            </button>
+                        </div>
+                    ) : (
+                        filteredSuppliers.map((supplier) => (
+                            <Combobox.Option key={supplier.id} className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? 'bg-blue-600 text-white' : 'text-slate-900'}`} value={supplier}>
+                                {({ selected, active }) => (
+                                    <>
+                                        <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>{supplier.name}</span>
+                                        {selected ? <span className={`absolute inset-y-0 left-0 flex items-center pl-3 ${active ? 'text-white' : 'text-blue-600'}`}><Check className="h-4 w-4" aria-hidden="true" /></span> : null}
+                                    </>
+                                )}
+                            </Combobox.Option>
+                        ))
+                    )}
+                    {filteredSuppliers.length > 0 && (
+                        <div className="border-t border-slate-100 mt-1 pt-1">
+                            <button type="button" onClick={() => onAddNew(query)} className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 font-medium">
+                                {language === 'vi' ? '+ Thêm nhà cung cấp mới' : '+ Add New Supplier'}
+                            </button>
+                        </div>
+                    )}
+                </Combobox.Options>
             </div>
         </Combobox>
     )
