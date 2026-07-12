@@ -1255,7 +1255,7 @@ export default function CashierClosingPage() {
     async function fetchBankTransfers() {
       if (!header?.dateStr || !activeBranchName || !shouldAutoSync) return
 
-      if (header.dateStr >= '2026-07-09') {
+      if (header.dateStr >= '2026-07-12') {
         try {
           const res = await fetch(
             `/api/pos/sync?branch=${encodeURIComponent(activeBranchName)}&date=${header.dateStr}&t=${Date.now()}`,
@@ -2250,7 +2250,7 @@ export default function CashierClosingPage() {
       let total = 0
       let fetchedFromApi = false
 
-      if (header.dateStr >= '2026-07-09') {
+      if (header.dateStr >= '2026-07-12') {
         const res = await fetch(
           `/api/pos/sync?branch=${encodeURIComponent(branchNameForClosing)}&date=${header.dateStr}&t=${Date.now()}`,
           { cache: 'no-store' }
@@ -2491,7 +2491,7 @@ export default function CashierClosingPage() {
       let posUnpaid = 0
       let resData: any = null
 
-      if (header.dateStr >= '2026-07-09') {
+      if (header.dateStr >= '2026-07-12') {
         const res = await fetch(
           `/api/pos/sync?branch=${encodeURIComponent(branchNameForClosing)}&date=${header.dateStr}&t=${Date.now()}`,
           { cache: 'no-store' }
@@ -2739,7 +2739,7 @@ export default function CashierClosingPage() {
               {language === 'vi' ? 'Xuất' : 'Export'}
             </Button>
 
-            {!isReadOnly && header.dateStr >= '2026-07-09' && (
+            {!isReadOnly && header.dateStr >= '2026-07-12' && (
               <Button
                 variant="primary"
                 size="md"
@@ -2887,7 +2887,7 @@ export default function CashierClosingPage() {
             <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
               {language === 'vi' ? 'DOANH THU RÒNG' : 'NET REVENUE'}
             </span>
-            {header.dateStr >= '2026-07-09' ? (
+            {header.dateStr >= '2026-07-12' ? (
               <span className="text-3xl font-black text-emerald-800 tabular-nums mt-0.5">
                 {fmtLive(round(payments.revenue))} ₫
               </span>
@@ -2945,7 +2945,7 @@ export default function CashierClosingPage() {
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                     {language === 'vi' ? 'DOANH THU RÒNG' : 'NET REVENUE'}
                   </span>
-                  {header.dateStr >= '2026-07-09' ? (
+                  {header.dateStr >= '2026-07-12' ? (
                     <span className="text-[32px] font-black text-emerald-800 tabular-nums mt-1 leading-none">
                       {fmtLive(round(payments.revenue))} ₫
                     </span>
@@ -3153,7 +3153,7 @@ export default function CashierClosingPage() {
               textClass="text-slate-800"
             />
 
-            {header.dateStr >= '2026-07-09' && typeof payments.posUnpaid === 'number' && payments.posUnpaid !== round(payments.unpaid) ? (
+            {header.dateStr >= '2026-07-12' && typeof payments.posUnpaid === 'number' && payments.posUnpaid !== round(payments.unpaid) ? (
               <div className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50/50 shadow-2xs w-full min-h-[54px]">
                 <div className="flex items-center gap-2.5 min-w-0 flex-grow">
                   <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0">

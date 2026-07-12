@@ -466,7 +466,7 @@ export default function ClosingListPage() {
                 <TableCell className="text-center whitespace-nowrap">{r.branch}</TableCell>
                 <TableCell className="whitespace-nowrap text-right tabular-nums">
                   <div className="flex items-center justify-end gap-1.5">
-                    {r.date >= '2026-07-09' && typeof r.posUnpaid === 'number' && r.posUnpaid !== r.unpaid && (
+                    {r.date >= '2026-07-12' && typeof r.posUnpaid === 'number' && r.posUnpaid !== r.unpaid && (
                       <ExclamationTriangleIcon
                         className="h-4 w-4 text-amber-500 cursor-help flex-shrink-0"
                         title={language === 'vi'
