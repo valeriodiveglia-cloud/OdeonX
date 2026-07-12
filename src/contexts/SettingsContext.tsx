@@ -539,6 +539,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       try { window.dispatchEvent(new CustomEvent('settings-hydrated')) } catch {}
     })()
 
+    // Listen for auth state changes to re-fetch settings once authenticated
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (mounted && (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session))) {
+        void hydrateFromSources()
+      }
+    })
+
     // Sync via storage
     const onStorage = (ev: StorageEvent) => {
       if (ev.key === 'app_lang' && ev.newValue) {
@@ -594,6 +601,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       mounted = false
       window.removeEventListener('storage', onStorage)
       window.removeEventListener('settings-changed' as any, onSettingsChanged)
+      authListener?.subscription.unsubscribe()
       try { bc?.close() } catch {}
     }
   }, [])

@@ -1,21 +1,12 @@
 // app/daily-reports/dailyreportsettings/SettingsInitialInfoCard.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { PlusIcon, TrashIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline'
+import { useEffect, useState } from 'react'
+import { PlusIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon, ClockIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { DailyReportsDictionary } from '../_i18n'
 import { useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
-
-/**
- * SettingsInitialInfoCard
- * - Shifts with name + start/end time
- * - Third-party payment labels
- * - Persistence in localStorage
- * - Real-time broadcast after Save (same-tab + cross-tab)
- * - Save Bar events:
- *   - dailysettings:dirty { section: 'initialinfo', dirty }
- *   - dailysettings:save / :reload / :reset-to-defaults
- */
+import Button from '@/components/Button'
+import { useSettings } from '@/contexts/SettingsContext'
 
 type ShiftItem = {
   name: string
@@ -29,20 +20,33 @@ type SettingsShape = {
 }
 
 const SECTION_KEY = 'initialinfo'
-const LS_KEY = 'dailysettings.initialInfo.v1'
 const MAX_THIRD_PARTIES = 6
 
 /* ===== Card primitives ===== */
 function Card(props: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow">{props.children}</div>
-}
-function CardHeader(props: { title: string; right?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 gap-3 flex-wrap">
-      <div className="flex items-center gap-2">
-        <h2 className="text-base font-semibold">{props.title}</h2>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      {props.children}
+    </div>
+  )
+}
+
+function CardHeader(props: { title: string; subtitle: string; icon: React.ComponentType<{ className?: string }>; right?: React.ReactNode }) {
+  const Icon = props.icon
+  return (
+    <div className="flex items-center gap-3 border-b border-slate-100 pb-3.5 mb-5 flex-wrap">
+      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+        <Icon className="w-5.5 h-5.5" />
       </div>
-      <div className="flex items-center gap-2">{props.right}</div>
+      <div className="flex-1 min-w-[200px]">
+        <h2 className="text-base font-extrabold text-slate-800 tracking-tight leading-none">
+          {props.title}
+        </h2>
+        <span className="text-[11px] text-slate-400 font-bold block mt-1.5 leading-none">
+          {props.subtitle}
+        </span>
+      </div>
+      {props.right && <div className="flex items-center gap-2">{props.right}</div>}
     </div>
   )
 }
@@ -52,8 +56,8 @@ const TIME_RE = /^\d{2}:\d{2}$/
 const toTime = (v: string) => (TIME_RE.test((v ?? '').trim()) ? v.trim() : '')
 const cleanStr = (v: string) => String(v ?? '').trim()
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function migrateShifts(raw: any): ShiftItem[] {
-  // Accepts: ['Lunch','Dinner'] or [{ name, start, end }]
   if (!Array.isArray(raw)) return []
   return raw
     .map((it) => {
@@ -68,29 +72,7 @@ function migrateShifts(raw: any): ShiftItem[] {
     .filter((s: ShiftItem) => !!s.name)
 }
 
-function loadFromLS(): SettingsShape | null {
-  try {
-    const raw = localStorage.getItem(LS_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    const shifts = migrateShifts(parsed?.shifts)
-    const thirdParties = Array.isArray(parsed?.thirdParties)
-      ? parsed.thirdParties.map(cleanStr).filter(Boolean).slice(0, MAX_THIRD_PARTIES)
-      : []
-    return { shifts, thirdParties }
-  } catch {
-    return null
-  }
-}
-
-function saveToLS(v: SettingsShape) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(v))
-  } catch { }
-}
-
 function defaultSettings(): SettingsShape {
-  // Empty times are valid; user can set them later
   return {
     shifts: [
       { name: 'Lunch', start: '', end: '' },
@@ -124,74 +106,7 @@ function uniqueCaseInsensitive(list: string[], max?: number) {
   return out
 }
 
-/* ===== Real-time broadcast helper ===== */
-function broadcastInitialInfo(value: SettingsShape) {
-  // cache for same-tab quick reads
-  try {
-    const cache = JSON.parse(localStorage.getItem('dr.settings.cache') || '{}')
-    localStorage.setItem('dr.settings.cache', JSON.stringify({ ...cache, initialInfo: value }))
-    localStorage.setItem('dr.settings.bump', String(Date.now()))
-  } catch { }
-  // same-tab
-  try {
-    window.dispatchEvent(new CustomEvent('dr:settings:initialInfo', { detail: { value } }))
-  } catch { }
-  // cross-tab
-  try {
-    const bc = new BroadcastChannel('dr-settings')
-    bc.postMessage({ type: 'initialInfo', value })
-    bc.close()
-  } catch { }
-}
-
-/* ===== Input rows ===== */
-function RowInput(props: {
-  value: string
-  placeholder?: string
-  onChange: (v: string) => void
-  onRemove: () => void
-  onMoveUp?: () => void
-  onMoveDown?: () => void
-  canMoveUp?: boolean
-  canMoveDown?: boolean
-  t?: DailyReportsDictionary['dailyreportsettings']['initialInfo']
-}) {
-  const { value, placeholder, onChange, onRemove, onMoveUp, onMoveDown, canMoveUp, canMoveDown, t } = props
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        className="border rounded-lg px-2 h-9 flex-1 bg-white"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {(onMoveUp || onMoveDown) && (
-        <div className="flex items-center">
-          <button
-            type="button"
-            title={t?.common.reorder}
-            className="p-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
-            onClick={() => {
-              if (canMoveUp && onMoveUp) onMoveUp()
-              else if (canMoveDown && onMoveDown) onMoveDown()
-            }}
-          >
-            <ArrowsUpDownIcon className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-      <button
-        type="button"
-        className="p-2 rounded-lg text-red-600 hover:text-red-500 hover:bg-red-50"
-        title={t?.common.remove}
-        onClick={onRemove}
-      >
-        <TrashIcon className="w-5 h-5" />
-      </button>
-    </div>
-  )
-}
-
+/* ===== Shift Card Component ===== */
 function RowShift(props: {
   value: ShiftItem
   onChange: (v: ShiftItem) => void
@@ -204,53 +119,69 @@ function RowShift(props: {
 }) {
   const { value, onChange, onRemove, onMoveUp, onMoveDown, canMoveUp, canMoveDown, t } = props
   return (
-    <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-      <input
-        className="border rounded-lg px-2 h-9 flex-1 bg-white min-w-[12rem]"
-        placeholder={t.shifts.placeholderName}
-        value={value.name}
-        onChange={(e) => onChange({ ...value, name: e.target.value })}
-      />
-      <div className="flex items-center gap-2">
+    <div className="border border-slate-200 rounded-xl bg-slate-50/10 p-4 relative group hover:border-blue-200 hover:shadow-2xs transition-all flex flex-col gap-3 shadow-3xs">
+      {/* Header: Shift Name & Actions */}
+      <div className="flex items-center justify-between gap-3">
         <input
-          type="time"
-          className="border rounded-lg px-2 h-9 bg-white"
-          placeholder={t.shifts.placeholderStart}
-          value={value.start}
-          onChange={(e) => onChange({ ...value, start: toTime(e.target.value) })}
+          className="bg-transparent border-b border-transparent hover:border-slate-350 focus:border-blue-500 font-bold text-slate-800 text-sm focus:outline-none transition-all px-1 py-0.5 flex-1"
+          placeholder={t.shifts.placeholderName}
+          value={value.name}
+          onChange={(e) => onChange({ ...value, name: e.target.value })}
         />
-        <span className="text-gray-500 text-sm">{t.shifts.to}</span>
-        <input
-          type="time"
-          className="border rounded-lg px-2 h-9 bg-white"
-          placeholder={t.shifts.placeholderEnd}
-          value={value.end}
-          onChange={(e) => onChange({ ...value, end: toTime(e.target.value) })}
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
-        {(onMoveUp || onMoveDown) && (
+        <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+          {onMoveUp && (
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={!canMoveUp}
+              className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+              title={t.common.reorder}
+            >
+              <ArrowUpIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onMoveDown && (
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={!canMoveDown}
+              className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+              title={t.common.reorder}
+            >
+              <ArrowDownIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             type="button"
-            title={t.common.reorder}
-            className="p-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
-            onClick={() => {
-              if (canMoveUp && onMoveUp) onMoveUp()
-              else if (canMoveDown && onMoveDown) onMoveDown()
-            }}
+            onClick={onRemove}
+            className="p-1.5 rounded-md text-red-500 hover:text-red-750 hover:bg-red-50 transition-colors cursor-pointer"
+            title={t.common.remove}
           >
-            <ArrowsUpDownIcon className="w-4 h-4" />
+            <TrashIcon className="w-4 h-4" />
           </button>
-        )}
-        <button
-          type="button"
-          className="p-2 rounded-lg text-red-600 hover:text-red-500 hover:bg-red-50"
-          title={t.common.remove}
-          onClick={onRemove}
-        >
-          <TrashIcon className="w-5 h-5" />
-        </button>
+        </div>
+      </div>
+
+      {/* Time range grid */}
+      <div className="grid grid-cols-2 gap-3 mt-1">
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] text-slate-400 font-extrabold tracking-wider uppercase">{t.shifts.placeholderStart}</span>
+          <input
+            type="time"
+            className="border border-slate-200 rounded-lg px-2 py-1.5 w-full bg-white text-slate-800 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all"
+            value={value.start}
+            onChange={(e) => onChange({ ...value, start: toTime(e.target.value) })}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] text-slate-400 font-extrabold tracking-wider uppercase">{t.shifts.placeholderEnd}</span>
+          <input
+            type="time"
+            className="border border-slate-200 rounded-lg px-2 py-1.5 w-full bg-white text-slate-800 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all"
+            value={value.end}
+            onChange={(e) => onChange({ ...value, end: toTime(e.target.value) })}
+          />
+        </div>
       </div>
     </div>
   )
@@ -258,6 +189,7 @@ function RowShift(props: {
 
 /* ===== Main card ===== */
 export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictionary['dailyreportsettings']['initialInfo'] }) {
+  const { language } = useSettings()
   const {
     settings,
     loading,
@@ -269,6 +201,7 @@ export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictiona
 
   const [data, setData] = useState<SettingsShape>(defaultSettings())
   const [initialLoadDone, setInitialLoadDone] = useState(false)
+  const [newTPName, setNewTPName] = useState('')
 
   // Sync from server
   useEffect(() => {
@@ -287,18 +220,6 @@ export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictiona
       setData(final)
       return
     }
-
-    // If we wanted to sync external updates while editing, we'd need more complex logic.
-    // For now, we assume context is the source of truth and we write to it.
-    // But if we are typing, we don't want to be overwritten by our own updates coming back.
-    // The context 'settings' is the draft, so it should reflect what we just wrote.
-
-    // Actually, if we updateDraft, 'settings' changes. 
-    // We should probably just rely on 'settings' if we want controlled component, 
-    // but for performance we might keep local state and debounce sync?
-    // For simplicity, let's update context immediately and rely on local state for UI, 
-    // syncing from context only on initial load or reload.
-
   }, [serverInitialInfo, loading, initialLoadDone])
 
   const syncToContext = (newData: SettingsShape) => {
@@ -315,14 +236,6 @@ export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictiona
     updateDraft('initialInfo', toSave)
     announceDirty(true)
   }
-
-  const isDirty = useMemo(() => {
-    // We can't easily know if it's dirty compared to DB without original settings.
-    // But the page handles the "Save All" button state based on context.isDirty.
-    // The local "Dirty" badge might be inaccurate if we don't have original.
-    // Let's rely on the page's save button.
-    return true // Placeholder
-  }, [])
 
   const announceDirty = (dirty: boolean) => {
     try {
@@ -341,8 +254,6 @@ export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictiona
       setData(snap)
       syncToContext(snap)
     }
-    // We don't need onSave anymore because the page calls context.saveAll()
-    // But we might want to listen to 'dailysettings:saved' to reset dirty flags if we had them.
 
     window.addEventListener('dailysettings:reload', onReload)
     window.addEventListener('dailysettings:reset-to-defaults', onDefaults)
@@ -352,7 +263,6 @@ export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictiona
     }
   }, [refresh])
 
-  // Handlers - live normalization
   const addShift = () => {
     const next = { ...data, shifts: [...data.shifts, { name: '', start: '', end: '' }] }
     setData(next)
@@ -362,7 +272,7 @@ export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictiona
   const updShiftSafe = (i: number, v: ShiftItem) => {
     const nextShifts = [...data.shifts]
     nextShifts[i] = {
-      name: v.name, // Allow empty while typing
+      name: v.name,
       start: toTime(v.start),
       end: toTime(v.end),
     }
@@ -389,106 +299,136 @@ export default function SettingsInitialInfoCard({ t }: { t: DailyReportsDictiona
     syncToContext(next)
   }
 
-  const addTP = () => {
-    if (data.thirdParties.length >= MAX_THIRD_PARTIES) return
-    const next = { ...data, thirdParties: [...data.thirdParties, ''] }
-    setData(next)
-    syncToContext(next)
+  const handleAddTP = () => {
+    const name = newTPName.trim()
+    if (!name || data.thirdParties.length >= MAX_THIRD_PARTIES) return
+    if (data.thirdParties.map(t => t.toLowerCase()).includes(name.toLowerCase())) {
+      setNewTPName('')
+      return
+    }
+    const next = [...data.thirdParties, name]
+    const nextData = { ...data, thirdParties: next }
+    setData(nextData)
+    syncToContext(nextData)
+    setNewTPName('')
   }
 
-  const updTP = (i: number, v: string) => {
-    const nextTP = data.thirdParties.map((s, idx) => (idx === i ? v : s))
-    const next = { ...data, thirdParties: nextTP }
-    setData(next)
-    syncToContext(next)
-  }
-
-  const delTP = (i: number) => {
-    const next = { ...data, thirdParties: data.thirdParties.filter((_, idx) => idx !== i) }
-    setData(next)
-    syncToContext(next)
+  const handleRemoveTP = (index: number) => {
+    const next = data.thirdParties.filter((_, i) => i !== index)
+    const nextData = { ...data, thirdParties: next }
+    setData(nextData)
+    syncToContext(nextData)
   }
 
   return (
     <Card>
       <CardHeader
         title={t.title}
-      // Removed local dirty indicator for simplicity as we rely on global save button
+        subtitle={language === 'vi' ? 'Cấu hình ca làm việc và cổng thanh toán bên thứ ba' : 'Configure shift hours and third-party payment provider labels'}
+        icon={ClockIcon}
       />
-      <div className="p-3 space-y-4">
+      <div className="space-y-6">
         {/* Shifts */}
-        <section className="rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">{t.shifts.title}</h3>
-            <button
-              type="button"
+        <section className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/20 shadow-3xs">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <h3 className="text-sm font-extrabold text-slate-700 tracking-tight leading-none">{t.shifts.title}</h3>
+            <Button
+              variant="outline"
+              size="sm"
+              icon={PlusIcon}
               onClick={addShift}
-              className="inline-flex items-center gap-2 px-3 h-8 rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
               title={t.shifts.addTitle}
+              className="h-8 px-2.5 text-xs font-semibold"
             >
-              <PlusIcon className="w-4 h-4" />
               {t.common.add}
-            </button>
+            </Button>
           </div>
-          <div className="p-3 space-y-3">
-            {data.shifts.length === 0 && (
-              <div className="text-sm text-gray-500">{t.shifts.empty}</div>
+          <div className="p-4 bg-white">
+            {data.shifts.length === 0 ? (
+              <div className="text-sm text-slate-450 italic font-medium py-3 text-center bg-slate-50/30 rounded-lg border border-dashed border-slate-200">{t.shifts.empty}</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {data.shifts.map((s, i) => (
+                  <RowShift
+                    key={`shift-${i}`}
+                    value={s}
+                    onChange={(v) => updShiftSafe(i, v)}
+                    onRemove={() => delShift(i)}
+                    onMoveUp={() => moveShiftUp(i)}
+                    onMoveDown={() => moveShiftDown(i)}
+                    canMoveUp={i > 0}
+                    canMoveDown={i < data.shifts.length - 1}
+                    t={t}
+                  />
+                ))}
+              </div>
             )}
-            {data.shifts.map((s, i) => (
-              <RowShift
-                key={`shift-${i}`}
-                value={s}
-                onChange={(v) => updShiftSafe(i, v)}
-                onRemove={() => delShift(i)}
-                onMoveUp={() => moveShiftUp(i)}
-                onMoveDown={() => moveShiftDown(i)}
-                canMoveUp={i > 0}
-                canMoveDown={i < data.shifts.length - 1}
-                t={t}
-              />
-            ))}
-            <div className="text-xs text-gray-500">
+            <div className="text-[11px] text-slate-400 font-semibold italic pt-3 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               {t.shifts.hint}
             </div>
           </div>
         </section>
 
         {/* Third party payments */}
-        <section className="rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">{t.thirdParties.title}</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-600">
-                {t.thirdParties.countLabel
-                  .replace('{count}', String(data.thirdParties.length))
-                  .replace('{max}', String(MAX_THIRD_PARTIES))}
-              </span>
-              <button
-                type="button"
-                onClick={addTP}
-                disabled={data.thirdParties.length >= MAX_THIRD_PARTIES}
-                className="inline-flex items-center gap-2 px-3 h-8 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
-                title={t.thirdParties.addTitle}
-              >
-                <PlusIcon className="w-4 h-4" />
-                {t.common.add}
-              </button>
-            </div>
+        <section className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/20 shadow-3xs">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <h3 className="text-sm font-extrabold text-slate-700 tracking-tight leading-none">{t.thirdParties.title}</h3>
+            <span className="text-xs text-slate-500 font-bold">
+              {t.thirdParties.countLabel
+                .replace('{count}', String(data.thirdParties.length))
+                .replace('{max}', String(MAX_THIRD_PARTIES))}
+            </span>
           </div>
-          <div className="p-3 space-y-2">
-            {data.thirdParties.length === 0 && (
-              <div className="text-sm text-gray-500">{t.thirdParties.empty}</div>
-            )}
-            {data.thirdParties.map((s, i) => (
-              <RowInput
-                key={`tp-${i}`}
-                value={s}
+          <div className="p-4 bg-white space-y-4">
+            <div className="flex items-center gap-2 max-w-sm">
+              <input
+                type="text"
                 placeholder={t.thirdParties.placeholder}
-                onChange={(v) => updTP(i, v)}
-                onRemove={() => delTP(i)}
-                t={t}
+                value={newTPName}
+                onChange={(e) => setNewTPName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleAddTP()
+                  }
+                }}
+                disabled={data.thirdParties.length >= MAX_THIRD_PARTIES}
+                className="border border-slate-200 rounded-lg px-3 h-9 flex-1 bg-white text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-400"
               />
-            ))}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleAddTP}
+                disabled={!newTPName.trim() || data.thirdParties.length >= MAX_THIRD_PARTIES}
+                className="h-9 px-3"
+              >
+                {t.common.add}
+              </Button>
+            </div>
+
+            {data.thirdParties.length === 0 ? (
+              <div className="text-sm text-slate-450 italic font-medium py-3 text-center bg-slate-50/30 rounded-lg border border-dashed border-slate-200">{t.thirdParties.empty}</div>
+            ) : (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {data.thirdParties.map((tp, idx) => (
+                  <div
+                    key={`tp-tag-${idx}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-extrabold transition-all hover:bg-blue-100"
+                  >
+                    <span>{tp}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTP(idx)}
+                      className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-blue-200 text-blue-500 hover:text-blue-700 transition-colors cursor-pointer"
+                      title={t.common.remove}
+                    >
+                      <XMarkIcon className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       </div>

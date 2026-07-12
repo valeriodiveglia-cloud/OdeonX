@@ -4,9 +4,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase_shim'
 import type {
-  Header as HeaderInfo,
+  HeaderInfo,
   PaymentBreakdown,
-} from '../cashier-closing/_cards/InitialInfoCard'
+} from '../cashier-closing/page'
 
 type CashShape = Record<string, number>
 

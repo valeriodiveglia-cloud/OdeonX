@@ -273,7 +273,7 @@ const vi = {
       adjustments: 'Điều chỉnh và di chuyển',
       reportInfo: 'Thông tin báo cáo',
       labels: {
-        revenue: 'Doanh thu (gross)',
+        revenue: 'Doanh thu',
         openingFloat: 'Quỹ đầu ca',
         expectedDrawer: 'Tiền kỳ vọng trong két',
         countedCash: 'Tiền mặt đếm được',
@@ -578,6 +578,7 @@ const vi = {
 
   credits: {
     title: 'Công nợ',
+    subtitle: 'Xem và quản lý công nợ hàng ngày, số dư nợ của khách hàng và lịch sử thanh toán.',
     branchPill: { tooltip: 'Chi nhánh đã chọn', all: '(tất cả)' },
     search: { placeholder: 'Tìm kiếm', clear: 'Xóa' },
     menu: { more: 'Thao tác khác', delete: 'Xóa', bulkConfirm: 'Xóa {count} dòng đã chọn?' },
@@ -717,6 +718,7 @@ const vi = {
   deposits: {
     title: 'Đặt cọc',
     pageTitle: 'Đặt cọc',
+    subtitle: 'Xem và quản lý tiền đặt cọc của khách hàng, thanh toán trước và trạng thái đối chiếu.',
 
     branchPill: { tooltip: 'Chi nhánh đã chọn', all: '(tất cả)' },
 
