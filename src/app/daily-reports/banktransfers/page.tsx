@@ -718,10 +718,10 @@ export default function BankTransfersPage() {
         const calls: Promise<any>[] = []
         branchesData.forEach(b => {
           const bName = b.name
-          if (todayStr >= '2026-07-09') {
+          if (todayStr >= '2026-07-12') {
             calls.push(fetch(`/api/pos/sync?branch=${encodeURIComponent(bName)}&date=${todayStr}`).catch(e => console.error(e)))
           }
-          if (yesterdayStr >= '2026-07-09') {
+          if (yesterdayStr >= '2026-07-12') {
             calls.push(fetch(`/api/pos/sync?branch=${encodeURIComponent(bName)}&date=${yesterdayStr}`).catch(e => console.error(e)))
           }
         })

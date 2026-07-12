@@ -7,7 +7,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 // Data limite di sicurezza (Activation Date)
-const ACTIVATION_DATE = '2026-07-09'
+const ACTIVATION_DATE = '2026-07-12'
 
 function getCukCukBranchId(name: string): string | null {
   const norm = name.toLowerCase().trim()
