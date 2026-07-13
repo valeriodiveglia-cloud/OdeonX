@@ -4548,13 +4548,32 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                         {pdfLanguageMode === 'vi' ? 'Thời gian thử việc' : pdfLanguageMode === 'en' ? 'Probation Period' : 'Thời gian thử việc / Probation Period'}
                                     </p>
                                     <p className="text-xs font-bold text-slate-800">
-                                        {probationMonths && Number(probationMonths) > 0 ? (
-                                            pdfLanguageMode === 'vi' ? `${probationMonths} tháng - ${probationSalaryPct || '100'}% lương` :
-                                            pdfLanguageMode === 'en' ? `${probationMonths} month(s) - ${probationSalaryPct || '100'}% salary` :
-                                            `${probationMonths} tháng - ${probationSalaryPct || '100'}% lương / ${probationMonths} month(s) - ${probationSalaryPct || '100'}% salary`
-                                        ) : (
-                                            pdfLanguageMode === 'vi' ? 'Không thử việc' : pdfLanguageMode === 'en' ? 'None' : 'Không thử việc / None'
-                                        )}
+                                        {(() => {
+                                            const m = parseInt(probationMonths, 10);
+                                            if (isNaN(m) || m <= 0) {
+                                                return pdfLanguageMode === 'vi' ? 'Không thử việc' : 
+                                                       pdfLanguageMode === 'en' ? 'None' : 
+                                                       'Không thử việc / None';
+                                            }
+                                            
+                                            const pcts = Array.from({ length: m }).map((_, idx) => {
+                                                return probationSalaryPcts[idx] || probationSalaryPct || '100';
+                                            });
+
+                                            if (m === 1) {
+                                                const pctStr = `${pcts[0]}%`;
+                                                return pdfLanguageMode === 'vi' ? `1 tháng - ${pctStr} lương` :
+                                                       pdfLanguageMode === 'en' ? `1 month - ${pctStr} salary` :
+                                                       `1 tháng - ${pctStr} lương / 1 month - ${pctStr} salary`;
+                                            }
+
+                                            const viDetails = pcts.map((p, i) => `T${i + 1}: ${p}%`).join(', ');
+                                            const enDetails = pcts.map((p, i) => `M${i + 1}: ${p}%`).join(', ');
+
+                                            return pdfLanguageMode === 'vi' ? `${m} tháng (${viDetails}) lương` :
+                                                   pdfLanguageMode === 'en' ? `${m} months (${enDetails}) salary` :
+                                                   `${m} tháng (${viDetails}) lương / ${m} months (${enDetails}) salary`;
+                                        })()}
                                     </p>
                                 </div>
                             </div>
