@@ -4,25 +4,12 @@ import Link from 'next/link'
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Asset, AssetLogEntry, calculateCurrentValue, getConditionColor, getStatusColor } from '../types'
-import { MOCK_ASSETS, STORAGE_KEY, LOG_STORAGE_KEY } from '../_data/mockData'
+import { supabase } from '@/lib/supabase_shim'
 import {
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend,
     BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts'
 import { Clock, AlertTriangle, CheckCircle2, Package, TrendingUp, History, ArrowRight } from 'lucide-react'
-
-// Helper functions (same as layout)
-const loadAssets = (defaults: Asset[]) => {
-    if (typeof window === 'undefined') return defaults
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : defaults
-}
-
-const loadLogs = () => {
-    if (typeof window === 'undefined') return []
-    const stored = localStorage.getItem(LOG_STORAGE_KEY)
-    return stored ? JSON.parse(stored) : []
-}
 
 // FORMATTTER
 const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(val)
@@ -35,10 +22,72 @@ export default function AssetDashboard() {
     const [assets, setAssets] = useState<Asset[]>([])
     const [logs, setLogs] = useState<AssetLogEntry[]>([])
 
+    const fetchAssets = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('assets')
+                .select('*')
+                .order('name', { ascending: true })
+            if (error) throw error
+            
+            const mapped: Asset[] = (data || []).map((row: any) => ({
+                id: row.id,
+                name: row.name,
+                sku: row.sku,
+                category: row.category,
+                branch: row.branch,
+                location: row.location,
+                type: row.type,
+                status: row.status,
+                condition: row.condition,
+                quantity: row.quantity,
+                parLevel: row.par_level,
+                serialNumber: row.serial_number,
+                images: row.images || [],
+                financials: {
+                    purchasePrice: row.financials?.purchasePrice || 0,
+                    purchaseDate: row.financials?.purchaseDate || '',
+                    usefulLifeYears: row.financials?.usefulLifeYears || 1,
+                    salvageValue: row.financials?.salvageValue,
+                    warrantyYears: row.financials?.warrantyYears
+                },
+                targetBranch: row.target_branch,
+                transferDate: row.transfer_date,
+                transferBy: row.transfer_by,
+                cateringEvent: row.catering_event
+            }))
+            setAllAssets(mapped)
+        } catch (err) {
+            console.error('Error loading assets:', err)
+        }
+    }
+
+    const fetchLogs = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('asset_logs')
+                .select('*')
+                .order('timestamp', { ascending: false })
+            if (error) throw error
+            
+            const mapped: AssetLogEntry[] = (data || []).map((row: any) => ({
+                id: row.id,
+                timestamp: row.timestamp,
+                action: row.action,
+                details: row.details,
+                user: row.user,
+                assetId: row.asset_id,
+                assetName: row.asset_name
+            }))
+            setLogs(mapped)
+        } catch (err) {
+            console.error('Error loading asset logs:', err)
+        }
+    }
+
     useEffect(() => {
-        const loaded = loadAssets(MOCK_ASSETS)
-        setAllAssets(loaded)
-        setLogs(loadLogs())
+        fetchAssets()
+        fetchLogs()
     }, [])
 
     // Filter Logic

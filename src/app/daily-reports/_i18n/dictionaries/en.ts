@@ -103,18 +103,23 @@ const en = {
       resetTitle: 'Reset to defaults',
       reload: 'Reload',
       reloadTitle: 'Reload saved settings',
-      saveAll: 'Save all',
-      saveAllTitle: 'Save all sections',
+      saveAll: 'Save',
+      saveAllTitle: 'Save changes',
     },
     errors: {
-      loadFailed: 'Failed to load settings. You can edit with defaults and try Save all.',
+      loadFailed: 'Failed to load settings. You can edit with defaults and try Save.',
+    },
+    tabs: {
+      shifts: 'Shifts',
+      closing: 'Cashier Closing',
+      cashOut: 'Cash Out',
     },
     initialInfo: {
       title: 'Initial Info Settings',
       status: { dirty: 'Unsaved changes', clean: 'Up to date' },
       common: { add: 'Add', remove: 'Remove', reorder: 'Reorder' },
       shifts: {
-        title: 'Selectable shifts',
+        title: 'Shifts',
         addTitle: 'Add shift',
         empty: 'No shifts. Add at least one.',
         hint: 'Set times in HH:MM. Leave empty for custom behavior in other pages.',

@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react'
 import { PlusIcon, DocumentMagnifyingGlassIcon, ClipboardDocumentCheckIcon, EllipsisVerticalIcon, TrashIcon, CubeIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
 import { Asset, AssetType, InventorySession, InventorySessionItem } from '../types'
-import { MOCK_ASSETS, STORAGE_KEY } from '../_data/mockData'
 import BlindCountModal from './_components/BlindCountModal'
 import InventorySessionDetailModal from './_components/InventorySessionDetailModal'
 import InventoryTypeSelectionModal from './_components/InventoryTypeSelectionModal'
@@ -12,12 +11,6 @@ import { supabase } from '@/lib/supabase_shim'
 
 const SESSION_STORAGE_KEY = 'mock_inventory_sessions_v1'
 const DRAFT_STORAGE_KEY = 'INVENTORY_DRAFT'
-
-const loadAssets = (defaults: Asset[]): Asset[] => {
-    if (typeof window === 'undefined') return defaults
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : defaults
-}
 
 export default function InventoryReportsPage() {
     const searchParams = useSearchParams()
@@ -31,17 +24,68 @@ export default function InventoryReportsPage() {
     const [activeTab, setActiveTab] = useState<AssetType>('fixed')
     const [countingType, setCountingType] = useState<AssetType | null>(null)
     const [role, setRole] = useState<string | null>(null)
+    const [currentUser, setCurrentUser] = useState<string>('')
 
-    // Load User Role
+    const fetchAssets = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('assets')
+                .select('*')
+                .order('name', { ascending: true })
+            if (error) throw error
+            
+            const mapped: Asset[] = (data || []).map((row: any) => ({
+                id: row.id,
+                name: row.name,
+                sku: row.sku,
+                category: row.category,
+                branch: row.branch,
+                location: row.location,
+                type: row.type,
+                status: row.status,
+                condition: row.condition,
+                quantity: row.quantity,
+                parLevel: row.par_level,
+                serialNumber: row.serial_number,
+                images: row.images || [],
+                financials: {
+                    purchasePrice: row.financials?.purchasePrice || 0,
+                    purchaseDate: row.financials?.purchaseDate || '',
+                    usefulLifeYears: row.financials?.usefulLifeYears || 1,
+                    salvageValue: row.financials?.salvageValue,
+                    warrantyYears: row.financials?.warrantyYears
+                },
+                targetBranch: row.target_branch,
+                transferDate: row.transfer_date,
+                transferBy: row.transfer_by,
+                cateringEvent: row.catering_event
+            }))
+            
+            if (branchName && branchName !== 'all') {
+                setAssets(mapped.filter(a => a.branch === branchName && a.status === 'active'))
+            } else {
+                setAssets([])
+            }
+        } catch (err) {
+            console.error('Error loading assets for reports:', err)
+        }
+    }
+
+    // Load User info
     useEffect(() => {
-        const fetchRole = async () => {
+        const fetchUserInfo = async () => {
             const { data: user } = await supabase.auth.getUser()
             if (user?.user) {
-                const { data } = await supabase.from('app_accounts').select('role').eq('user_id', user.user.id).single()
+                const { data } = await supabase
+                    .from('app_accounts')
+                    .select('name, role')
+                    .eq('user_id', user.user.id)
+                    .single()
                 setRole(data?.role || 'staff')
+                setCurrentUser(data?.name || user.user.email || 'Staff')
             }
         }
-        fetchRole()
+        fetchUserInfo()
     }, [])
 
     // Load Data
@@ -52,14 +96,7 @@ export default function InventoryReportsPage() {
             setSessions(JSON.parse(storedSessions))
         }
 
-        // Load assets for counting
-        const loadedAssets = loadAssets(MOCK_ASSETS)
-        // Only can count for a specific branch
-        if (branchName && branchName !== 'all') {
-            setAssets(loadedAssets.filter(a => a.branch === branchName && a.status === 'active')) // Only count active?
-        } else {
-            setAssets([])
-        }
+        fetchAssets()
     }, [branchName])
 
     // Check for Draft on Mount
@@ -99,7 +136,7 @@ export default function InventoryReportsPage() {
         setIsCountModalOpen(true)
     }
 
-    const handleSubmitInventory = (items: InventorySessionItem[]) => {
+    const handleSubmitInventory = async (items: InventorySessionItem[]) => {
         if (!countingType) return
 
         const newSession: InventorySession = {
@@ -109,7 +146,7 @@ export default function InventoryReportsPage() {
             assetType: countingType,
             status: 'completed',
             items: items,
-            createdBy: 'Current User', // TODO: Get read user
+            createdBy: currentUser || 'Staff',
             totalDiscrepancyCost: 0 // Calculate later
         }
 
@@ -118,36 +155,37 @@ export default function InventoryReportsPage() {
         setSessions(newSessions)
         localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newSessions))
 
-        // 2. Sync to Assets (Update Quantity & Condition)
-        if (typeof window !== 'undefined') {
-            const currentAssetsStr = localStorage.getItem(STORAGE_KEY)
-            const currentAssets: Asset[] = currentAssetsStr ? JSON.parse(currentAssetsStr) : MOCK_ASSETS
+        // 2. Sync to Assets in database
+        try {
+            for (const item of items) {
+                const { error: updateErr } = await supabase
+                    .from('assets')
+                    .update({
+                        quantity: item.countedQuantity,
+                        condition: item.condition
+                    })
+                    .eq('id', item.assetId)
 
-            let hasUpdates = false
-            const updatedAssets = currentAssets.map(asset => {
-                const scannedItem = items.find(i => i.assetId === asset.id)
-                if (scannedItem) {
-                    hasUpdates = true
-                    return {
-                        ...asset,
-                        quantity: scannedItem.countedQuantity,
-                        condition: scannedItem.condition
-                    }
-                }
-                return asset
-            })
+                if (updateErr) throw updateErr
 
-            if (hasUpdates) {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAssets))
-                // Update local state if we are viewing the same branch
-                // Re-filtering is handled by the useEffect on branchName, 
-                // but we can trigger a reload or just let the next navigation handle it.
-                // Since this page uses 'assets' state for the *count*, updating it here 
-                // ensures validation uses new values if they start another count immediately (though unlikely for same branch).
-                if (branchName && branchName !== 'all') {
-                    setAssets(updatedAssets.filter(a => a.branch === branchName && a.status === 'active'))
-                }
+                // Log activity in Supabase
+                const { error: logErr } = await supabase
+                    .from('asset_logs')
+                    .insert({
+                        action: 'UPDATE',
+                        details: `Inventory Count: Updated quantity to ${item.countedQuantity} and condition to ${item.condition}`,
+                        user: currentUser || 'Staff',
+                        asset_id: item.assetId,
+                        asset_name: item.assetName
+                    })
+
+                if (logErr) throw logErr
             }
+            
+            // Reload assets from Supabase
+            await fetchAssets()
+        } catch (err) {
+            console.error('Error syncing inventory count to Supabase:', err)
         }
 
         setIsCountModalOpen(false)

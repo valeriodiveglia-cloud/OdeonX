@@ -1,6 +1,7 @@
+// app/daily-reports/dailyreportsettings/SettingsCashCountCard.tsx
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
 import { DailyReportsDictionary } from '../_i18n'
 import Button from '@/components/Button'
@@ -13,15 +14,16 @@ const DEFAULT_FLOAT = 3_000_000
 /* ===== Card primitives ===== */
 function Card(props: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden text-slate-800">
       {props.children}
     </div>
   )
 }
+
 function CardHeader(props: { title: string; subtitle: string; icon: React.ComponentType<{ className?: string }>; right?: React.ReactNode }) {
   const Icon = props.icon
   return (
-    <div className="flex items-center gap-3 border-b border-slate-100 pb-3.5 mb-5 flex-wrap">
+    <div className="flex items-center gap-3 border-b border-slate-100 px-6 py-4 bg-slate-50/50 flex-wrap">
       <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
         <Icon className="w-5.5 h-5.5" />
       </div>
@@ -35,6 +37,39 @@ function CardHeader(props: { title: string; subtitle: string; icon: React.Compon
       </div>
       {props.right && <div className="flex items-center gap-2">{props.right}</div>}
     </div>
+  )
+}
+
+/* ===== Input Field coerente col design system del portale ===== */
+function Field({
+  label,
+  value,
+  onChange,
+  suffix,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  suffix?: string
+}) {
+  return (
+    <label className="flex flex-col">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
+      <div className="relative mt-1.5 w-full flex items-center">
+        <input
+          className="w-full border border-slate-200 rounded-xl px-3.5 h-11 text-slate-800 bg-white placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm font-bold outline-none shadow-sm pr-14 tabular-nums"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          type="text"
+          inputMode="numeric"
+        />
+        {suffix && (
+          <span className="absolute right-4 text-xs font-extrabold text-slate-400 select-none pointer-events-none">
+            {suffix}
+          </span>
+        )}
+      </div>
+    </label>
   )
 }
 
@@ -54,61 +89,6 @@ function parseDigits(s: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/* ===== Money input con formattazione live ===== */
-function MoneyInput(props: {
-  value: number
-  onChange: (v: number) => void
-  className?: string
-  min?: number
-}) {
-  const { value, onChange, className = '', min = 0 } = props
-  const [raw, setRaw] = useState<string>(fmt(value))
-  const lastValueRef = useRef<number>(value)
-
-  useEffect(() => {
-    if (value !== lastValueRef.current) {
-      lastValueRef.current = value
-      setRaw(fmt(value))
-    }
-  }, [value])
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const nextNum = parseDigits(e.target.value)
-    setRaw(fmt(nextNum))
-    onChange(Math.max(min, nextNum))
-  }
-
-  function handleFocus(e: React.FocusEvent<HTMLInputElement>) {
-    const el = e.currentTarget
-    requestAnimationFrame(() => {
-      try {
-        el?.select()
-      } catch { }
-    })
-  }
-
-  function preventWheel(e: React.WheelEvent<HTMLInputElement>) {
-    if (document.activeElement === e.currentTarget) e.currentTarget.blur()
-  }
-  function preventArrow(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault()
-  }
-
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={raw}
-      onChange={handleChange}
-      onFocus={handleFocus}
-      onWheel={preventWheel}
-      onKeyDown={preventArrow}
-      className={`border-b-2 border-slate-200 focus:border-blue-500 bg-transparent text-slate-800 text-center font-black text-2xl h-12 w-64 focus:outline-none focus:ring-0 transition-all tabular-nums ${className}`}
-      placeholder="0"
-    />
-  )
-}
-
 /* ===== Main ===== */
 export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary['dailyreportsettings']['cashCount'] }) {
   const { language } = useSettings()
@@ -118,12 +98,18 @@ export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary
     updateDraft,
     refresh,
     error,
-    isDirty,
   } = useDailyReportSettingsContext()
 
-  const [data, setData] = useState<number>(DEFAULT_FLOAT)
+  const [rawVal, setRawVal] = useState<string>(fmt(DEFAULT_FLOAT))
   const serverFloatVND = settings?.cashCount?.cashFloatVND
   const [initialLoadDone, setInitialLoadDone] = useState(false)
+
+  // Resetta initialLoadDone all'inizio del caricamento
+  useEffect(() => {
+    if (loading) {
+      setInitialLoadDone(false)
+    }
+  }, [loading])
 
   useEffect(() => {
     if (loading) return
@@ -131,7 +117,7 @@ export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary
     const safe = Number.isFinite(v) && v > 0 ? Math.round(v) : DEFAULT_FLOAT
     if (!initialLoadDone) {
       setInitialLoadDone(true)
-      setData(safe)
+      setRawVal(fmt(safe))
     }
   }, [serverFloatVND, loading, initialLoadDone])
 
@@ -141,10 +127,7 @@ export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary
       setInitialLoadDone(false)
     }
     function onDefaults() {
-      const snap = DEFAULT_FLOAT
-      setData(snap)
-      updateDraft('cashCount', { cashFloatVND: snap })
-      announceDirty(true)
+      resetToDefault()
     }
     window.addEventListener('dailysettings:reload', onReload)
     window.addEventListener('dailysettings:reset-to-defaults', onDefaults)
@@ -154,10 +137,17 @@ export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary
     }
   }, [refresh])
 
-  const setFloat = (v: number) => {
-    const val = Math.max(0, Math.round(v))
-    setData(val)
+  const handleRawChange = (valStr: string) => {
+    const nextNum = parseDigits(valStr)
+    setRawVal(fmt(nextNum))
+    const val = Math.max(0, Math.round(nextNum))
     updateDraft('cashCount', { cashFloatVND: val })
+    announceDirty(true)
+  }
+
+  const resetToDefault = () => {
+    setRawVal(fmt(DEFAULT_FLOAT))
+    updateDraft('cashCount', { cashFloatVND: DEFAULT_FLOAT })
     announceDirty(true)
   }
 
@@ -177,128 +167,37 @@ export default function SettingsCashCountCard({ t }: { t: DailyReportsDictionary
         title={t.title}
         subtitle={language === 'vi' ? 'Cấu hình số tiền quỹ cassa mặc định hàng ngày' : 'Configure default daily cash float amount for cashier'}
         icon={BanknotesIcon}
-        right={
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full font-bold transition-all ${loading
-              ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
-              : isDirty
-                ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200 animate-pulse'
-                : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
-              }`}
-          >
-            {loading ? t.status.loading : t.status.clean}
-          </span>
-        }
       />
 
-      <div className="space-y-4">
+      <div className="p-6 bg-white space-y-6">
         {error && (
           <div className="rounded-lg border border-red-300 bg-red-50 text-red-800 px-3 py-2 text-sm font-medium">
             {error || 'Load Error'}
           </div>
         )}
 
-        <section className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/20 shadow-3xs">
-          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/50">
-            <h3 className="text-sm font-extrabold text-slate-700 tracking-tight leading-none">{t.sectionTitle}</h3>
-          </div>
+        {/* Input principale allineato a sinistra con label superiore */}
+        <div className="max-w-xs">
+          <Field
+            label={t.label}
+            value={rawVal}
+            onChange={handleRawChange}
+            suffix="VND"
+          />
+        </div>
 
-          <div className="p-6 bg-white flex flex-col items-center justify-center gap-5">
-            <div className="flex flex-col items-center gap-1.5">
-              <span className="text-xs text-slate-400 font-extrabold tracking-wider uppercase">{t.label}</span>
-              <div className="flex items-center gap-2">
-                <MoneyInput value={data} onChange={setFloat} />
-                <span className="text-sm font-extrabold text-slate-400 self-end mb-1">VND</span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-4 mt-2 max-w-lg w-full border-t border-slate-100 pt-4">
-              <div className="flex flex-col gap-2 items-center">
-                <span className="text-[10px] text-slate-400 font-extrabold tracking-wider uppercase">
-                  {language === 'vi' ? 'Giảm' : 'Decrease'}
-                </span>
-                <div className="flex gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setFloat(data - 100_000)}
-                    title={t.buttons.minus100k}
-                    className="h-8 px-2.5 text-[10px] font-semibold"
-                  >
-                    -100K
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setFloat(data - 500_000)}
-                    title={t.buttons.minus500k}
-                    className="h-8 px-2.5 text-[10px] font-semibold"
-                  >
-                    -500K
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setFloat(data - 1_000_000)}
-                    title={t.buttons.minus1m}
-                    className="h-8 px-2.5 text-[10px] font-semibold"
-                  >
-                    -1M
-                  </Button>
-                </div>
-              </div>
-
-              <div className="hidden sm:block w-px h-10 bg-slate-200 self-end mb-1" />
-
-              <div className="flex flex-col gap-2 items-center">
-                <span className="text-[10px] text-slate-400 font-extrabold tracking-wider uppercase">
-                  {language === 'vi' ? 'Tăng' : 'Increase'}
-                </span>
-                <div className="flex gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setFloat(data + 100_000)}
-                    title={t.buttons.plus100k}
-                    className="h-8 px-2.5 text-[10px] font-semibold"
-                  >
-                    +100K
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setFloat(data + 500_000)}
-                    title={t.buttons.plus500k}
-                    className="h-8 px-2.5 text-[10px] font-semibold"
-                  >
-                    +500K
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setFloat(data + 1_000_000)}
-                    title={t.buttons.plus1m}
-                    className="h-8 px-2.5 text-[10px] font-semibold"
-                  >
-                    +1M
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-100 w-full my-1" />
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setFloat(DEFAULT_FLOAT)}
-              title={t.buttons.defaultTitle}
-              className="text-xs text-blue-600 hover:text-blue-750 bg-white hover:bg-slate-50 border-slate-200 h-9 px-4 font-bold"
-            >
-              {language === 'vi' ? 'Đặt về mặc định (3,000,000 VND)' : 'Reset to default (3,000,000 VND)'}
-            </Button>
-          </div>
-        </section>
+        {/* Footer con ripristino default pulito */}
+        <div className="border-t border-slate-100 pt-5 flex justify-end">
+          <Button
+            variant="danger-light"
+            size="sm"
+            onClick={resetToDefault}
+            title={t.buttons.defaultTitle}
+            className="text-xs font-bold rounded-xl"
+          >
+            {language === 'vi' ? 'Mặc định' : 'Default'}
+          </Button>
+        </div>
       </div>
     </Card>
   )

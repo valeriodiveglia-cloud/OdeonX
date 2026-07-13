@@ -60,6 +60,7 @@ export interface Candidate {
   offer_salary_type?: string | null;
   probation_months?: number | null;
   probation_salary_pct?: number | null;
+  probation_salary_pcts?: number[] | null;
   offer_start_date?: string | null;
   offer_branch_id?: string | null;
   offer_expiry_date?: string | null;
@@ -220,6 +221,7 @@ export interface HRStaffMember {
   skill_level: number;
   probation_months: number;
   probation_salary_pct: number;
+  probation_salary_pcts?: number[] | null;
   probation_end_date: string | null;
   contract_doc_url: string | null;
   cv_doc_url: string | null;

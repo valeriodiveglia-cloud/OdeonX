@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { X, Star } from 'lucide-react'
 import { HRStaffMember, HRDepartment, HRPosition, EmploymentType, SalaryType, StaffStatus } from '@/types/human-resources'
 import { supabase } from '@/lib/supabase'
@@ -32,6 +32,7 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
     const [startDate, setStartDate]           = useState('')
     const [probationMonths, setProbationMonths] = useState('')
     const [probationSalaryPct, setProbationSalaryPct] = useState('100')
+    const [probationSalaryPcts, setProbationSalaryPcts] = useState<string[]>([])
     const [status, setStatus]                 = useState<StaffStatus>('active')
     const [notes, setNotes]                   = useState('')
     const [city, setCity]                     = useState('')
@@ -133,6 +134,7 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                 setStartDate('')
                 setProbationMonths('')
                 setProbationSalaryPct('100')
+                setProbationSalaryPcts([])
                 setStatus('active')
                 setNotes('')
                 setSelectedBranches([])
@@ -149,6 +151,14 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                 setStartDate(staff.start_date || '')
                 setProbationMonths(staff.probation_months ? staff.probation_months.toString() : '')
                 setProbationSalaryPct(staff.probation_salary_pct ? staff.probation_salary_pct.toString() : '100')
+                const staffPcts = (staff as any).probation_salary_pcts
+                if (staffPcts && Array.isArray(staffPcts) && staffPcts.length > 0) {
+                    setProbationSalaryPcts(staffPcts.map(String))
+                } else if (staff.probation_months && staff.probation_salary_pct !== undefined && staff.probation_salary_pct !== null) {
+                    setProbationSalaryPcts(Array(staff.probation_months).fill(staff.probation_salary_pct.toString()))
+                } else {
+                    setProbationSalaryPcts([])
+                }
                 setStatus(staff.status)
                 setNotes(staff.notes || '')
                 const branchIds = staff.hr_staff_branches?.map(b => b.branch_id) || []
@@ -162,7 +172,7 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
             setLastName(''); setMiddleName(''); setFirstName('')
             setDepartmentId(''); setPositionId(''); setPhone(''); setEmail('')
             setEmploymentType('full_time'); setSalaryType('fixed'); setSalaryAmount('')
-            setStartDate(''); setProbationMonths(''); setProbationSalaryPct('100'); setStatus('active'); setNotes('')
+            setStartDate(''); setProbationMonths(''); setProbationSalaryPct('100'); setProbationSalaryPcts([]); setStatus('active'); setNotes('')
             setSelectedBranches([])
             setBankName('')
             setBankAccountNumber('')
@@ -298,7 +308,8 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                 salary_amount: parseFloat(salaryAmount.replace(/,/g, '')) || 0,
                 start_date: startDate || null,
                 probation_months: isNaN(probMonths) ? 0 : probMonths,
-                probation_salary_pct: parseFloat(probationSalaryPct) || 100,
+                probation_salary_pct: probationSalaryPcts.length > 0 ? (parseFloat(probationSalaryPcts[0]) || 100) : (parseFloat(probationSalaryPct) || 100),
+                probation_salary_pcts: probationSalaryPcts.length > 0 ? probationSalaryPcts.map(parseFloat) : null,
                 probation_end_date: probationEndDate,
                 status,
                 notes: notes.trim() || null,
@@ -592,17 +603,79 @@ export function StaffModal({ open, onClose, onSave, staff, branches, departments
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Thời gian thử việc (Tháng)' : 'Probation Time (Months)'}</label>
-                                <input type="number" min="0" step="1" value={probationMonths} onChange={e => setProbationMonths(e.target.value)}
+                                <input type="number" min="0" max="3" step="1" value={probationMonths} onChange={e => {
+                                    let val = e.target.value;
+                                    const m = parseInt(val, 10);
+                                    if (m > 3) val = '3';
+                                    setProbationMonths(val);
+                                    const mVal = parseInt(val, 10);
+                                    if (!isNaN(mVal) && mVal > 0) {
+                                        let newPcts = [...probationSalaryPcts];
+                                        if (newPcts.length !== mVal) {
+                                            newPcts = Array(mVal).fill('100');
+                                            if (mVal >= 1) newPcts[0] = '85';
+                                            if (mVal >= 2) newPcts[1] = '100';
+                                            if (mVal >= 3) newPcts[2] = '100';
+                                        }
+                                        setProbationSalaryPcts(newPcts);
+                                        if (newPcts[0]) setProbationSalaryPct(newPcts[0]);
+                                    } else {
+                                        setProbationSalaryPcts([]);
+                                        setProbationSalaryPct('100');
+                                    }
+                                }}
                                     placeholder={language === 'vi' ? 'Ví dụ: 2' : 'e.g. 2'}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'vi' ? 'Lương thử việc (%)' : 'Probation Salary (%)'}</label>
-                                <div className="relative">
-                                    <input type="number" min="0" max="100" step="1" value={probationSalaryPct} onChange={e => setProbationSalaryPct(e.target.value)}
-                                        placeholder="100"
-                                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                                <div className="flex items-center gap-1.5 h-10">
+                                    {probationMonths && parseInt(probationMonths, 10) > 1 ? (
+                                        Array.from({ length: parseInt(probationMonths, 10) }).map((_, idx) => {
+                                            const currentVal = probationSalaryPcts[idx] || '100'
+                                            return (
+                                                <div key={idx} className="flex-1 min-w-[70px] flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden h-10 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                                                    <div className="flex items-center justify-center px-2.5 bg-gray-100 border-r border-gray-300 text-xs font-bold text-gray-500 h-full select-none">
+                                                        {language === 'vi' ? `T${idx + 1}` : `M${idx + 1}`}
+                                                    </div>
+                                                    <input type="number" min="0" max="100" value={currentVal}
+                                                        onChange={(e) => {
+                                                            const newPcts = [...probationSalaryPcts]
+                                                            newPcts[idx] = e.target.value
+                                                            setProbationSalaryPcts(newPcts)
+                                                            if (idx === 0) setProbationSalaryPct(e.target.value)
+                                                        }}
+                                                        className="flex-1 bg-white px-3 py-2 text-sm text-gray-900 outline-none h-full border-none focus:ring-0 font-semibold text-left" />
+                                                    <span className="pr-3 text-sm text-gray-400 font-bold select-none">%</span>
+                                                </div>
+                                            )
+                                        })
+                                    ) : probationMonths && parseInt(probationMonths, 10) === 1 ? (
+                                        <div className="relative w-full">
+                                            <input
+                                                key="probation-salary-active"
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={probationSalaryPct || '100'}
+                                                onChange={(e) => {
+                                                    setProbationSalaryPct(e.target.value)
+                                                    setProbationSalaryPcts([e.target.value])
+                                                }}
+                                                className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-semibold h-10 bg-white" />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-bold">%</span>
+                                        </div>
+                                    ) : (
+                                        <div className="relative w-full">
+                                            <input 
+                                                key="probation-salary-disabled"
+                                                disabled 
+                                                type="number" 
+                                                placeholder="100"
+                                                className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-gray-100 font-semibold h-10" />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-bold">%</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

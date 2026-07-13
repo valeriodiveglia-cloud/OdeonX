@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, Fragment } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase_shim'
@@ -15,6 +16,7 @@ import {
   MapPinIcon,
   ArrowRightStartOnRectangleIcon,
   UserGroupIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { LayoutDashboard, Boxes, Handshake, Target, Settings2, Save, Bell, DollarSign } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
@@ -692,6 +694,11 @@ function BranchPickerModal({ onClose, destination }: { onClose: () => void, dest
   const [err, setErr] = useState<string | null>(null)
   const { language } = useSettings()
 
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   useEffect(() => {
     let ignore = false
       ; (async () => {
@@ -765,36 +772,40 @@ function BranchPickerModal({ onClose, destination }: { onClose: () => void, dest
     router.push(destination || '/daily-reports/closinglist')
   }
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <div className="fixed inset-0 z-50">
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs"
+        onClick={onClose}
+      />
 
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden">
+      <div className="fixed inset-0 overflow-y-auto flex items-center justify-center p-4">
+        <div className="w-full max-w-3xl bg-slate-50 border border-slate-200/80 rounded-3xl shadow-2xl p-6 text-left align-middle transition-all">
           {/* Header */}
-          <div className="px-5 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
-                  <BuildingOffice2Icon className="w-5 h-5" />
-                </span>
-                <div className="text-lg font-semibold text-gray-900">{t(language, 'DashboardSelectBranch')}</div>
+          <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-200/60">
+            <div className="text-base font-extrabold text-slate-900 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                <BuildingOffice2Icon className="h-5 w-5" />
               </div>
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-lg hover:bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                aria-label="Close"
-              >
-                <XMarkIcon className="w-5 h-5 text-gray-700" />
-              </button>
+              <span>
+                {t(language, 'DashboardSelectBranch')}
+              </span>
             </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-655 hover:bg-slate-200/65 transition cursor-pointer focus:outline-none"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
           </div>
 
           {/* Body */}
-          <div className="p-5">
+          <div className="space-y-4">
             {loading && <CircularLoader />}
-            {!loading && err && <div className="text-sm text-red-600">{err}</div>}
+            {!loading && err && <div className="text-sm text-red-650 font-medium">{err}</div>}
 
             {!loading && !err && branches.length === 0 && (
               <div className="text-sm text-gray-700">
@@ -815,41 +826,42 @@ function BranchPickerModal({ onClose, destination }: { onClose: () => void, dest
                   return (
                     <>
                       {uniqueCities.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-medium text-gray-700">{t(language, 'City') || 'City'}:</label>
+                        <div className="flex items-center gap-2 mb-5">
+                          <label className="text-sm font-bold text-slate-900">{t(language, 'City') || 'City'}:</label>
                           <select
                             value={cityFilter}
                             onChange={e => setCityFilter(e.target.value)}
-                            className="text-sm border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3"
+                            className="text-sm font-semibold border border-gray-300 rounded-lg bg-white text-slate-900 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3 cursor-pointer focus:outline-none"
                           >
-                            <option value="">{t(language, 'AllCities') || 'All Cities'}</option>
+                            <option value="" className="text-slate-900 bg-white font-medium">{t(language, 'AllCities') || 'All Cities'}</option>
                             {uniqueCities.sort().map(c => (
-                              <option key={c} value={c}>{c}</option>
+                              <option key={c} value={c} className="text-slate-900 bg-white font-medium">{c}</option>
                             ))}
                           </select>
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-h-[380px] overflow-y-auto pr-1">
                         {filteredBranches.map(b => (
                           <button
                             key={b.id}
-                    type="button"
-                    onClick={() => pick(b)}
-                    className="group relative text-left rounded-2xl border border-gray-200 bg-white px-4 py-4 transition
-                               hover:border-blue-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  >
-                    <span className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-blue-200 opacity-0 transition group-hover:opacity-100" />
-                    <div className="flex items-start gap-3">
-                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shrink-0">
-                        <MapPinIcon className="w-5 h-5" />
-                      </span>
-                      <div className="min-w-0">
-                        <div className="font-semibold text-gray-900 truncate">{b.name || t(language, 'GeneralSettingsUntitled')}</div>
-                        <div className="text-sm text-gray-600 truncate">{b.address || '-'}</div>
-                      </div>
-                    </div>
-                  </button>
+                            type="button"
+                            onClick={() => pick(b)}
+                            className="group relative flex items-center gap-3.5 w-full p-4 rounded-2xl bg-white hover:bg-blue-50/10 border border-slate-250 hover:border-blue-500 shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_20px_rgba(59,130,246,0.06)] transition-all duration-300 text-left cursor-pointer focus:outline-none"
+                          >
+                            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-250 group-hover:scale-103 text-blue-600 bg-blue-50 border border-blue-200/60">
+                              <MapPinIcon className="w-6 h-6 stroke-[1.75]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-[13px] text-slate-900 group-hover:text-blue-700 transition-colors truncate">
+                                {b.name || t(language, 'GeneralSettingsUntitled')}
+                              </h4>
+                              <p className="text-[10px] text-slate-500 font-semibold leading-normal mt-0.5 group-hover:text-slate-655 line-clamp-2">
+                                {b.address || '-'}
+                              </p>
+                            </div>
+                            <ChevronRightIcon className="w-4 h-4 text-slate-350 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                          </button>
                         ))}
                       </div>
                     </>
@@ -858,20 +870,10 @@ function BranchPickerModal({ onClose, destination }: { onClose: () => void, dest
               </div>
             )}
           </div>
-
-          {/* Footer */}
-          <div className="px-5 py-4 border-t bg-white flex justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-10 px-4 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
-            >
-              {t(language, 'Close')}
-            </button>
-          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -900,6 +902,11 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
   const [cityFilter, setCityFilter] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const { language } = useSettings()
+
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     let ignore = false
@@ -974,36 +981,40 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <div className="fixed inset-0 z-50">
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs"
+        onClick={onClose}
+      />
 
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden">
+      <div className="fixed inset-0 overflow-y-auto flex items-center justify-center p-4">
+        <div className="w-full max-w-3xl bg-slate-50 border border-slate-200/80 rounded-3xl shadow-2xl p-6 text-left align-middle transition-all">
           {/* Header */}
-          <div className="px-5 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
-                  <Boxes className="w-5 h-5" />
-                </span>
-                <div className="text-lg font-semibold text-gray-900">{t(language, 'SelectBranchForInventory') || 'Select Branch for Inventory'}</div>
+          <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-200/60">
+            <div className="text-base font-extrabold text-slate-900 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                <Boxes className="h-5 w-5" />
               </div>
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-lg hover:bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                aria-label="Close"
-              >
-                <XMarkIcon className="w-5 h-5 text-gray-700" />
-              </button>
+              <span>
+                {t(language, 'SelectBranchForInventory') || 'Select Branch for Inventory'}
+              </span>
             </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-655 hover:bg-slate-200/65 transition cursor-pointer focus:outline-none"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
           </div>
 
           {/* Body */}
-          <div className="p-5">
+          <div className="space-y-4">
             {loading && <CircularLoader />}
-            {!loading && err && <div className="text-sm text-red-600">{err}</div>}
+            {!loading && err && <div className="text-sm text-red-650 font-medium">{err}</div>}
 
             {!loading && !err && branches.length === 0 && (
               <div className="text-sm text-gray-700">
@@ -1021,17 +1032,20 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
                 <button
                   type="button"
                   onClick={() => pick('all')}
-                  className="w-full group relative text-left rounded-2xl border border-blue-200 bg-blue-50/50 px-4 py-4 transition
-                               hover:border-blue-400 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  className="group relative flex items-center gap-3.5 w-full p-4 rounded-2xl bg-white hover:bg-blue-50/10 border border-slate-250 hover:border-blue-500 shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_20px_rgba(59,130,246,0.06)] transition-all duration-300 text-left cursor-pointer focus:outline-none"
                 >
-                  <div className="flex items-start gap-3">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-white shrink-0">
-                      <Boxes className="w-5 h-5" />
-                    </span>
-                    <div className="min-w-0 flex items-center h-10">
-                      <div className="font-bold text-slate-800 text-lg">{t(language, 'AllBranches') || 'All Branches'}</div>
-                    </div>
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-250 group-hover:scale-103 text-blue-600 bg-blue-50 border border-blue-200/60">
+                    <Boxes className="w-6 h-6 stroke-[1.75]" />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-[13px] text-slate-900 group-hover:text-blue-700 transition-colors truncate">
+                      {t(language, 'AllBranches') || 'All Branches'}
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-semibold leading-normal mt-0.5 group-hover:text-slate-655 line-clamp-2">
+                      {language === 'vi' ? 'Xem tất cả chi nhánh' : 'View all branches'}
+                    </p>
+                  </div>
+                  <ChevronRightIcon className="w-4 h-4 text-slate-350 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                 </button>
 
                 {(() => {
@@ -1041,42 +1055,43 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
                   return (
                     <>
                       {uniqueCities.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-medium text-gray-700">{t(language, 'City') || 'City'}:</label>
+                        <div className="flex items-center gap-2 mb-5">
+                          <label className="text-sm font-bold text-slate-900">{t(language, 'City') || 'City'}:</label>
                           <select
                             value={cityFilter}
                             onChange={e => setCityFilter(e.target.value)}
-                            className="text-sm border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3"
+                            className="text-sm font-semibold border border-gray-300 rounded-lg bg-white text-slate-900 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3 cursor-pointer focus:outline-none"
                           >
-                            <option value="">{t(language, 'AllCities') || 'All Cities'}</option>
+                            <option value="" className="text-slate-900 bg-white font-medium">{t(language, 'AllCities') || 'All Cities'}</option>
                             {uniqueCities.sort().map(c => (
-                              <option key={c} value={c}>{c}</option>
+                              <option key={c} value={c} className="text-slate-900 bg-white font-medium">{c}</option>
                             ))}
                           </select>
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-h-[380px] overflow-y-auto pr-1">
                         {filteredBranches.map(b => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => pick(b.id)}
-                      className="group relative text-left rounded-2xl border border-gray-200 bg-white px-4 py-4 transition
-                                   hover:border-blue-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    >
-                      <span className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-blue-200 opacity-0 transition group-hover:opacity-100" />
-                      <div className="flex items-start gap-3">
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shrink-0">
-                          <MapPinIcon className="w-5 h-5" />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-gray-900 truncate">{b.name || t(language, 'GeneralSettingsUntitled')}</div>
-                          <div className="text-sm text-gray-600 truncate">{b.address || '-'}</div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => pick(b.id)}
+                            className="group relative flex items-center gap-3.5 w-full p-4 rounded-2xl bg-white hover:bg-blue-50/10 border border-slate-250 hover:border-blue-500 shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_20px_rgba(59,130,246,0.06)] transition-all duration-300 text-left cursor-pointer focus:outline-none"
+                          >
+                            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-250 group-hover:scale-103 text-blue-600 bg-blue-50 border border-blue-200/60">
+                              <MapPinIcon className="w-6 h-6 stroke-[1.75]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-[13px] text-slate-900 group-hover:text-blue-700 transition-colors truncate">
+                                {b.name || t(language, 'GeneralSettingsUntitled')}
+                              </h4>
+                              <p className="text-[10px] text-slate-500 font-semibold leading-normal mt-0.5 group-hover:text-slate-655 line-clamp-2">
+                                {b.address || '-'}
+                              </p>
+                            </div>
+                            <ChevronRightIcon className="w-4 h-4 text-slate-350 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                          </button>
+                        ))}
                       </div>
                     </>
                   )
@@ -1084,20 +1099,10 @@ function AssetBranchPickerModal({ onClose }: { onClose: () => void }) {
               </div>
             )}
           </div>
-
-          {/* Footer */}
-          <div className="px-5 py-4 border-t bg-white flex justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-10 px-4 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
-            >
-              {t(language, 'Close')}
-            </button>
-          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

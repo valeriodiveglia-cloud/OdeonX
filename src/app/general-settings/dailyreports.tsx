@@ -3,22 +3,28 @@
 
 import { useEffect, useMemo, useState, Fragment } from 'react'
 import { supabase } from '@/lib/supabase_shim'
-import { PlusIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XCircleIcon, ArrowsUpDownIcon, Bars3Icon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XCircleIcon, QueueListIcon, Bars3Icon, BuildingStorefrontIcon } from '@heroicons/react/24/outline'
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import { t } from '@/lib/i18n'
+import Button from '@/components/Button'
+import { getVietnamBanks, VietnamBank } from '@/lib/vietnamBanks'
 
 type ProviderBranch = {
   id: string
   name: string
+  initials?: string
   company_name?: string
   address?: string
   city?: string
+  country?: string
   tax_code?: string
   phone?: string
   email?: string
+  website?: string
   bank?: string
+  bank_branch?: string
   bank_account_name?: string
   account_number?: string
   sort_order?: number | null
@@ -31,12 +37,12 @@ const LS_ORDER_KEY = 'generalsettings.providerBranchesOrder.v1'
 
 /* -------- Small UI primitives (scoped to this file) -------- */
 function Card(props: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-slate-100 bg-white text-slate-800 shadow-xl overflow-hidden">{props.children}</div>
+  return <div className="rounded-2xl border border-slate-100 bg-white text-slate-800 shadow-sm overflow-hidden p-6">{props.children}</div>
 }
 function CardHeader(props: { title: string; right?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 gap-3 flex-wrap bg-slate-50/50 rounded-t-2xl">
-      <h2 className="text-lg font-bold text-slate-800 tracking-tight">{props.title}</h2>
+    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-3 flex-wrap">
+      <h2 className="text-lg font-bold text-slate-850 tracking-tight">{props.title}</h2>
       <div className="flex items-center gap-3">{props.right}</div>
     </div>
   )
@@ -47,43 +53,27 @@ function Field({
   onChange,
   type = 'text',
   placeholder,
+  list,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   type?: string
   placeholder?: string
+  list?: string
 }) {
   return (
-    <label className="flex flex-col">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
       <input
-        className="mt-1.5 w-full border border-slate-200 rounded-xl px-3.5 h-11 text-slate-800 bg-white placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm outline-none shadow-sm"
+        className="w-full border border-slate-200/30 rounded-lg px-3 h-10 text-slate-800 bg-slate-50/40 hover:bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm outline-none shadow-xs"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         type={type}
         placeholder={placeholder}
+        list={list}
       />
     </label>
-  )
-}
-function IconBtn({
-  title,
-  onClick,
-  children,
-  variant = 'default',
-}: {
-  title: string
-  onClick: () => void
-  children: React.ReactNode
-  variant?: 'default' | 'danger'
-}) {
-  const base = 'h-10 w-10 inline-flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-800 transition-all active:scale-95 shadow-sm'
-  const danger = 'h-10 w-10 inline-flex items-center justify-center rounded-xl border border-red-200 text-red-600 bg-white hover:bg-red-50 transition-all active:scale-95 shadow-sm'
-  return (
-    <button type="button" title={title} onClick={onClick} className={variant === 'danger' ? danger : base}>
-      {children}
-    </button>
   )
 }
 
@@ -174,21 +164,21 @@ function CityAutocomplete({
   }).filter(s => s.toLowerCase() !== value.toLowerCase())
 
   return (
-    <div className="relative flex flex-col">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
+    <div className="relative flex flex-col gap-1.5">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
       <input
-        className="mt-1.5 w-full border border-slate-200 rounded-xl px-3.5 h-11 text-slate-800 bg-white placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm outline-none shadow-sm"
+        className="w-full border border-slate-200/30 rounded-lg px-3 h-10 text-slate-800 bg-slate-50/40 hover:bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm outline-none shadow-xs"
         value={value}
         onChange={e => handleChange(e.target.value)}
         onFocus={() => { setFocus(true); setOpen(true) }}
         onBlur={() => setTimeout(() => { setFocus(false); setOpen(false) }, 200)}
       />
       {(focus || open) && value.length >= 1 && filtered.length > 0 && (
-        <ul className="absolute z-10 top-[100%] left-0 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto mt-1.5 py-1 text-slate-800">
+        <ul className="absolute z-10 top-[100%] left-0 w-full bg-white border border-slate-200 rounded-lg shadow-md max-h-48 overflow-y-auto mt-1.5 py-1 text-slate-800">
           {filtered.map(s => (
             <li
               key={s}
-              className="px-3.5 py-2.5 hover:bg-slate-50 cursor-pointer text-sm font-medium transition-colors text-slate-700"
+              className="px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm font-medium transition-colors text-slate-700"
               onMouseDown={(e) => {
                 e.preventDefault()
                 onChange(s)
@@ -202,6 +192,217 @@ function CityAutocomplete({
         </ul>
       )}
     </div>
+  )
+}
+
+function useDebouncedValue<T>(value: T, delay = 250) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+
+function parseVietnameseAddress(label: string, branchName?: string): { address: string; city: string; country: string } {
+  let cleaned = label.trim()
+  let city = ''
+  let country = ''
+
+  if (branchName) {
+    const bNameLower = branchName.toLowerCase().trim()
+    const prefixesToRemove = [
+      bNameLower + ',',
+      bNameLower + ' -',
+      bNameLower
+    ]
+    for (const prefix of prefixesToRemove) {
+      if (cleaned.toLowerCase().startsWith(prefix)) {
+        cleaned = cleaned.slice(prefix.length).trim()
+        cleaned = cleaned.replace(/^[,\s-]+/, '')
+        break
+      }
+    }
+  }
+
+  const lower = cleaned.toLowerCase()
+  if (lower.includes('viet nam') || lower.includes('việt nam') || lower.includes('vietnam')) {
+    country = 'Vietnam'
+  }
+
+  if (lower.includes('hồ chí minh') || lower.includes('ho chi minh') || lower.includes('sài gòn') || lower.includes('saigon')) {
+    city = 'Ho Chi Minh'
+  } else if (lower.includes('đà nẵng') || lower.includes('da nang')) {
+    city = 'Da Nang'
+  } else if (lower.includes('đà lạt') || lower.includes('da lat')) {
+    city = 'Da Lat'
+  } else if (lower.includes('hà nội') || lower.includes('hanoi')) {
+    city = 'Hanoi'
+  }
+
+  const parts = cleaned.split(',').map(p => p.trim())
+  const filteredParts = parts.filter(part => {
+    const pLower = part.toLowerCase()
+    if (pLower === 'viet nam' || pLower === 'việt nam' || pLower === 'vietnam') return false
+    if (city === 'Ho Chi Minh' && (pLower.includes('hồ chí minh') || pLower.includes('ho chi minh') || pLower.includes('sài gòn') || pLower.includes('saigon'))) return false
+    if (city === 'Da Nang' && (pLower.includes('đà nẵng') || pLower.includes('da nang'))) return false
+    if (city === 'Da Lat' && (pLower.includes('đà lạt') || pLower.includes('da lat') || pLower.includes('lâm đồng') || pLower.includes('lam dong'))) return false
+    if (city === 'Hanoi' && (pLower.includes('hà nội') || pLower.includes('hanoi'))) return false
+    return true
+  })
+
+  cleaned = filteredParts.join(', ')
+  return { address: cleaned, city, country }
+}
+
+function AddressAutocomplete({
+  label,
+  value,
+  onChange,
+  placeholder,
+  branchName,
+}: {
+  label: string
+  value: string
+  onChange: (addr: string, city?: string, country?: string) => void
+  placeholder?: string
+  branchName?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [options, setOptions] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [focus, setFocus] = useState(false)
+
+  const debounced = useDebouncedValue(value, 300)
+
+  useEffect(() => {
+    let cancelled = false
+    async function run() {
+      const q = (debounced ?? '').trim()
+      if (q.length < 3) {
+        setOptions([])
+        return
+      }
+      setLoading(true)
+      try {
+        const r = await fetch(`/api/places?q=${encodeURIComponent(q)}&country=VN&size=6`)
+        const j = await r.json()
+        if (!cancelled) setOptions(Array.isArray(j?.items) ? j.items : [])
+      } catch {
+        if (!cancelled) setOptions([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [debounced])
+
+  return (
+    <div className="relative flex flex-col gap-1.5 w-full">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      <input
+        type="text"
+        className="w-full border border-slate-200/30 rounded-lg px-3 h-10 text-slate-800 bg-slate-50/40 hover:bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm outline-none shadow-xs"
+        value={value ?? ''}
+        onChange={e => {
+          onChange(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => {
+          setFocus(true)
+          setOpen(true)
+        }}
+        onBlur={() => {
+          setTimeout(() => {
+            setFocus(false)
+            setOpen(false)
+          }, 200)
+        }}
+        placeholder={placeholder}
+      />
+      {open && (options.length > 0 || loading) && (
+        <ul className="absolute z-10 top-[100%] left-0 w-full bg-white border border-slate-200 rounded-lg shadow-md max-h-48 overflow-y-auto mt-1.5 py-1 text-slate-800">
+          {loading && <li className="px-3 py-2 text-xs text-slate-400 italic">Searching...</li>}
+          {!loading && options.map(opt => (
+            <li
+              key={opt.id}
+              className="px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm font-medium transition-colors text-slate-700 truncate"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                const parsed = parseVietnameseAddress(opt.label, branchName)
+                onChange(parsed.address, parsed.city, parsed.country)
+                setOpen(false)
+                setFocus(false)
+              }}
+              title={opt.label}
+            >
+              {opt.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function PhoneField({
+  label,
+  value,
+  country,
+  onChange,
+}: {
+  label: string
+  value: string
+  country: string
+  onChange: (v: string) => void
+}) {
+  const countryKey = (country || '').trim().toLowerCase()
+  let prefix = ''
+
+  if (countryKey.includes('vietnam')) {
+    prefix = '+84 (0)'
+  } else if (countryKey.includes('italy') || countryKey.includes('italia')) {
+    prefix = '+39 (0)'
+  } else if (countryKey.includes('singapore')) {
+    prefix = '+65'
+  } else if (countryKey.includes('united kingdom') || countryKey.includes('uk')) {
+    prefix = '+44 (0)'
+  } else if (countryKey.includes('united states') || countryKey.includes('usa') || countryKey.includes('america')) {
+    prefix = '+1'
+  }
+
+  let displayValue = value || ''
+  if (prefix && displayValue.startsWith(prefix)) {
+    displayValue = displayValue.slice(prefix.length).trim()
+  }
+
+  const handlePhoneChange = (rawNum: string) => {
+    const cleanedRaw = rawNum.trim()
+    const fullNumber = prefix ? `${prefix} ${cleanedRaw}` : cleanedRaw
+    onChange(fullNumber)
+  }
+
+  return (
+    <label className="flex flex-col gap-1.5 w-full">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      <div className="flex w-full items-stretch border border-slate-200/30 rounded-lg bg-slate-50/40 hover:bg-slate-50 focus-within:bg-white focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all shadow-xs overflow-hidden h-10">
+        {prefix && (
+          <span className="flex items-center bg-slate-100/50 px-3 text-slate-400 text-sm font-semibold border-r border-slate-200/40 select-none">
+            {prefix}
+          </span>
+        )}
+        <input
+          type="text"
+          className="flex-1 bg-transparent px-3 text-slate-800 text-sm outline-none font-medium"
+          value={displayValue}
+          onChange={e => handlePhoneChange(e.target.value)}
+          placeholder="901234567..."
+        />
+      </div>
+    </label>
   )
 }
 
@@ -269,6 +470,12 @@ export function DailyReportsCard() {
   const [branches, setBranches] = useState<Record<string, ProviderBranch>>({})
   const [order, setOrder] = useState<string[]>([])
   const [branchHasRecords, setBranchHasRecords] = useState(false)
+
+  const [vietnamBanks, setVietnamBanks] = useState<VietnamBank[]>([])
+
+  useEffect(() => {
+    getVietnamBanks().then(setVietnamBanks)
+  }, [])
 
   const [isReorderOpen, setIsReorderOpen] = useState(false)
   const [tempOrder, setTempOrder] = useState<string[]>([])
@@ -605,13 +812,17 @@ export function DailyReportsCard() {
       const rows = Object.values(branches).map(b => ({
         id: b.id,
         name: (b.name || '').trim(),
+        initials: (b.initials || '').trim() || null,
         company_name: (b.company_name || '').trim(),
         address: (b.address || '').trim(),
         city: (b.city || '').trim(),
+        country: (b.country || '').trim() || null,
         tax_code: (b.tax_code || '').trim(),
         phone: (b.phone || '').trim(),
         email: (b.email || '').trim(),
+        website: (b.website === 'https://www.' ? '' : (b.website || '')).trim() || null,
         bank: (b.bank || '').trim(),
+        bank_branch: (b.bank_branch || '').trim() || null,
         bank_account_name: (b.bank_account_name || '').trim(),
         account_number: (b.account_number || '').trim(),
         sort_order: sortMap[b.id] ?? null,
@@ -677,159 +888,304 @@ export function DailyReportsCard() {
     }
   }
 
+  // 1. Notifica lo stato corrente del form alla pagina principale
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('generalsettings:state-change', {
+        detail: {
+          hasCurrent: !!current,
+          saving: saving,
+        },
+      }),
+    )
+  }, [current, saving])
+
+  // 2. Ascolta l'evento di salvataggio scatenato dal PageHeader in alto
+  useEffect(() => {
+    const handleTrigger = () => {
+      handleSaveAll()
+    }
+    window.addEventListener('generalsettings:trigger-save', handleTrigger)
+    return () => {
+      window.removeEventListener('generalsettings:trigger-save', handleTrigger)
+    }
+  }, [branches, branchId, order])
+
   if (loading) return <CircularLoader />
 
   return (
-    <Card>
-      <CardHeader
-        title={t(language, 'GeneralSettingsDRTitle')}
-        right={
-          <div className="flex items-center gap-2">
-            {!loading && loadMsg && <span className="text-xs text-slate-500">{loadMsg}</span>}
-            <button
-              type="button"
-              onClick={handleSaveAll}
-              disabled={saving}
-              className="h-10 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all active:scale-95 shadow-sm shadow-blue-500/20 disabled:opacity-50"
-            >
-              {saving ? t(language, 'GeneralSettingsSaving') : t(language, 'Save')}
-            </button>
-            {saveMsg && <span className="text-xs text-slate-600 font-semibold">{saveMsg}</span>}
-          </div>
-        }
-      />
-
-      <div className="p-6 space-y-6">
-        <div className="flex items-center gap-4 flex-wrap bg-slate-50 p-4 rounded-2xl border border-slate-100">
-          <select
-            className="h-10 px-4 rounded-xl bg-white text-slate-800 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-sm transition-all shadow-sm outline-none min-w-64 cursor-pointer"
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
-          >
-            {branchOptions.length === 0 && <option value="">{t(language, 'GeneralSettingsNoBranches')}</option>}
-            {branchOptions.map(id => {
-              const b = branches[id]
-              const suffix = b?.is_active === false ? ` (${language === 'vi' ? 'Ngừng hoạt động' : 'Shutdown'})` : ''
-              return (
-                <option key={id} value={id}>
-                  {(b?.name || t(language, 'GeneralSettingsUntitled')) + suffix}
-                </option>
-              )
-            })}
-          </select>
-
-          <div className="flex items-center gap-3 flex-wrap sm:ml-auto">
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden min-h-[650px] flex flex-col md:flex-row text-slate-800">
+      
+      {/* Sidebar Sinistra: Lista Filiali (Master) */}
+      <div className="w-full md:w-80 border-r border-slate-100 flex flex-col bg-slate-50/50">
+        {/* Header Sidebar */}
+        <div className="p-4 border-b border-slate-100/60 flex items-center justify-between bg-white">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            {language === 'vi' ? 'Chi nhánh' : 'Branches'}
+          </span>
+          <div className="flex items-center gap-1.5">
             {branchOptions.length > 1 && (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   setTempOrder(branchOptions)
                   setIsReorderOpen(true)
                 }}
-                className="h-10 px-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-800 transition-all active:scale-95 shadow-sm cursor-pointer"
-                title={language === 'vi' ? 'Sắp xếp chi nhánh' : 'Reorder branches'}
-              >
-                <ArrowsUpDownIcon className="w-4 h-4" />
-                <span>{language === 'vi' ? 'Sắp xếp' : 'Reorder'}</span>
-              </button>
+                icon={QueueListIcon}
+                title={language === 'vi' ? 'Sắp xếp' : 'Reorder'}
+                className="p-0 w-8 h-8 rounded-lg flex items-center justify-center border-slate-100"
+              />
             )}
-
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
               onClick={createBranch}
-              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all active:scale-95 shadow-sm shadow-blue-500/20 cursor-pointer"
+              icon={PlusIcon}
               title={t(language, 'GeneralSettingsAddBranch')}
-            >
-              <PlusIcon className="w-4 h-4" />
-              <span>{t(language, 'GeneralSettingsAddBranch')}</span>
-            </button>
+              className="p-0 w-8 h-8 rounded-lg flex items-center justify-center"
+            />
           </div>
         </div>
 
-        {!current ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 bg-slate-50/50">
-            {t(language, 'GeneralSettingsEmpty')}
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 gap-5">
-            <Field label={t(language, 'GeneralSettingsBranchName')} value={current.name || ''} onChange={v => updateBranch({ name: v })} />
-            <Field label={t(language, 'GeneralSettingsCompanyName')} value={current.company_name || ''} onChange={v => updateBranch({ company_name: v })} />
-            <Field label={t(language, 'GeneralSettingsAddress')} value={current.address || ''} onChange={v => updateBranch({ address: v })} />
-            <CityAutocomplete
-              label={t(language, 'City') || 'City'}
-              value={current.city || ''}
-              onChange={v => updateBranch({ city: v })}
-              suggestions={uniqueCities}
-            />
-            <Field label={t(language, 'GeneralSettingsTaxCode')} value={current.tax_code || ''} onChange={v => updateBranch({ tax_code: v })} />
-            <Field label={t(language, 'GeneralSettingsPhone')} value={current.phone || ''} onChange={v => updateBranch({ phone: v })} />
-            <Field label={t(language, 'GeneralSettingsEmail')} value={current.email || ''} onChange={v => updateBranch({ email: v })} />
+        {/* Lista */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-1.5 max-h-[600px]">
+          {branchOptions.length === 0 && (
+            <div className="text-center py-8 text-slate-400 text-xs italic font-medium">
+              {t(language, 'GeneralSettingsNoBranches')}
+            </div>
+          )}
+          {branchOptions.map(id => {
+            const b = branches[id]
+            if (!b) return null
+            const isSelected = id === branchId
+            const isInactive = b.is_active === false
 
-            <Field label={t(language, 'GeneralSettingsBank')} value={current.bank || ''} onChange={v => updateBranch({ bank: v })} />
-            <Field
-              label={t(language, 'GeneralSettingsBankAccountName')}
-              value={current.bank_account_name || ''}
-              onChange={v => updateBranch({ bank_account_name: v })}
-            />
-            <Field label={t(language, 'GeneralSettingsAccountNumber')} value={current.account_number || ''} onChange={v => updateBranch({ account_number: v })} />
+            return (
+              <div
+                key={id}
+                onClick={() => setBranchId(id)}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col gap-1.5 ${
+                  isSelected
+                    ? 'border-slate-200 bg-white shadow-xs'
+                    : 'border-transparent bg-transparent hover:bg-slate-100/40 hover:border-slate-200/30'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-slate-800 text-sm truncate">
+                    {b.name || t(language, 'GeneralSettingsUntitled')}
+                  </span>
+                  {isInactive ? (
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" title="Shutdown" />
+                  ) : b.isNew ? (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 animate-pulse" title="New" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Active" />
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span className="truncate max-w-[125px]">{b.city || (language === 'vi' ? 'Không có TP' : 'No city')}</span>
+                  <span className="truncate max-w-[110px] font-medium text-[10px] text-slate-450">{b.tax_code || b.phone}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
-            {/* Status and Action row */}
-            <div className="md:col-span-2 bg-slate-50 rounded-2xl p-5 border border-slate-100 flex items-center justify-between flex-wrap gap-4 mt-6">
-              <div className="flex items-center gap-2.5">
-                <span className="text-sm font-bold text-slate-600">
-                  {language === 'vi' ? 'Trạng thái chi nhánh:' : 'Branch Status:'}
-                </span>
-                {current.is_active === false ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200 shadow-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                    {language === 'vi' ? 'Đã ngừng hoạt động' : 'Shutdown'}
-                  </span>
-                ) : branchHasRecords ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    {language === 'vi' ? 'Đang hoạt động' : 'Active'}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200 shadow-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    {language === 'vi' ? 'Mới' : 'New'}
-                  </span>
-                )}
+      {/* Area Dettaglio Destra (Detail) */}
+      <div className="flex-1 flex flex-col bg-white">
+        {current ? (
+          <div className="flex-1 flex flex-col">
+            
+            {/* Header Dettaglio */}
+            <div className="p-5 border-b border-slate-100/60 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-850 tracking-tight">
+                  {current.name || t(language, 'GeneralSettingsUntitled')}
+                </h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {language === 'vi' ? 'Cấu hình thông tin chi tiết của chi nhánh' : 'Configure detailed branch information'}
+                </p>
               </div>
 
-              <div>
-                {current.is_active !== false ? (
-                  branchHasRecords ? (
-                    <button
-                      type="button"
-                      onClick={deleteBranch}
-                      className="h-11 px-5 inline-flex items-center gap-2 rounded-xl border border-red-200 text-red-600 bg-white hover:bg-red-50 text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer"
-                    >
-                      <XCircleIcon className="w-5 h-5" />
-                      {t(language, 'GeneralSettingsDeactivateBranch') || 'Shutdown'}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={deleteBranch}
-                      className="h-11 px-5 inline-flex items-center gap-2 rounded-xl border border-red-200 text-red-600 bg-white hover:bg-red-50 text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer"
-                    >
-                      <TrashIcon className="w-5 h-5" />
-                      {t(language, 'GeneralSettingsDeleteBranch')}
-                    </button>
-                  )
-                ) : (
-                  <button
-                    type="button"
-                    onClick={reactivateBranch}
-                    className="h-11 px-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md shadow-emerald-600/10 transition active:scale-95 cursor-pointer"
-                  >
-                    <PlusIcon className="w-5 h-5" />
-                    {language === 'vi' ? 'Kích hoạt lại' : 'Reactivate'}
-                  </button>
-                )}
+              <div className="flex items-center gap-2">
+                {!loading && loadMsg && <span className="text-[11px] text-slate-400">{loadMsg}</span>}
+                {saveMsg && <span className="text-xs text-slate-600 font-semibold">{saveMsg}</span>}
               </div>
             </div>
+
+            {/* Form */}
+            <div className="flex-1 p-6 space-y-8">
+              
+              {/* Sezione 1: Informazioni Generali */}
+              <div className="space-y-3.5">
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  {language === 'vi' ? 'Thông tin chung' : 'General Information'}
+                </h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Field label={t(language, 'GeneralSettingsBranchName')} value={current.name || ''} onChange={v => updateBranch({ name: v })} />
+                  <Field label={language === 'vi' ? 'Chữ viết tắt' : 'Initials'} value={current.initials || ''} onChange={v => updateBranch({ initials: v })} />
+                  <Field label={t(language, 'GeneralSettingsCompanyName')} value={current.company_name || ''} onChange={v => updateBranch({ company_name: v })} />
+                  <Field label={t(language, 'GeneralSettingsTaxCode')} value={current.tax_code || ''} onChange={v => updateBranch({ tax_code: v })} />
+                </div>
+              </div>
+
+              {/* Sezione 2: Indirizzo e Contatti */}
+              <div className="space-y-3.5">
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  {language === 'vi' ? 'Địa chỉ & Liên hệ' : 'Address & Contacts'}
+                </h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <AddressAutocomplete
+                      label={t(language, 'GeneralSettingsAddress')}
+                      value={current.address || ''}
+                      branchName={current.name || ''}
+                      onChange={(addr, city, country) => {
+                        const updates: Partial<ProviderBranch> = { address: addr }
+                        if (city) updates.city = city
+                        if (country) updates.country = country
+                        updateBranch(updates)
+                      }}
+                    />
+                  </div>
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <CityAutocomplete
+                      label={t(language, 'City') || 'City'}
+                      value={current.city || ''}
+                      onChange={v => updateBranch({ city: v })}
+                      suggestions={uniqueCities}
+                    />
+                    <Field
+                      label={language === 'vi' ? 'Quốc gia' : 'Country'}
+                      value={current.country || ''}
+                      onChange={v => updateBranch({ country: v })}
+                      placeholder={language === 'vi' ? 'Ví dụ: Vietnam' : 'e.g. Vietnam'}
+                    />
+                    <PhoneField
+                      label={t(language, 'GeneralSettingsPhone')}
+                      value={current.phone || ''}
+                      country={current.country || ''}
+                      onChange={v => updateBranch({ phone: v })}
+                    />
+                  </div>
+                  <Field label={t(language, 'GeneralSettingsEmail')} value={current.email || ''} onChange={v => updateBranch({ email: v })} />
+                  <Field
+                    label={language === 'vi' ? 'Trang web' : 'Website'}
+                    value={current.website || 'https://www.'}
+                    onChange={v => {
+                      let val = v.trim()
+                      const prefix = 'https://www.'
+                      if (val.length < prefix.length) {
+                        val = prefix
+                      } else if (!val.startsWith(prefix)) {
+                        let cleaned = val.replace(/^https?:\/\//i, '')
+                        cleaned = cleaned.replace(/^www\./i, '')
+                        val = prefix + cleaned
+                      }
+                      updateBranch({ website: val })
+                    }}
+                    placeholder="https://www."
+                  />
+                </div>
+              </div>
+
+              {/* Sezione 3: Coordinate Bancarie */}
+              <div className="space-y-3.5">
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  {language === 'vi' ? 'Thông tin ngân hàng' : 'Bank Details'}
+                </h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Field label={t(language, 'GeneralSettingsBank')} value={current.bank || ''} onChange={v => updateBranch({ bank: v })} list="general-banks-list" />
+                  <Field label={language === 'vi' ? 'Chi nhánh ngân hàng' : 'Bank Branch'} value={current.bank_branch || ''} onChange={v => updateBranch({ bank_branch: v })} />
+                  <Field label={t(language, 'GeneralSettingsBankAccountName')} value={current.bank_account_name || ''} onChange={v => updateBranch({ bank_account_name: v })} />
+                  <Field label={t(language, 'GeneralSettingsAccountNumber')} value={current.account_number || ''} onChange={v => updateBranch({ account_number: v })} />
+                </div>
+                <datalist id="general-banks-list">
+                  {vietnamBanks.map(b => (
+                    <option key={b.bin} value={b.shortName}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </datalist>
+              </div>
+
+              {/* Sezione 4: Stato e Azioni di eliminazione */}
+              <div className="border border-slate-100 rounded-xl p-4 flex items-center justify-between flex-wrap gap-4 bg-white shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    {language === 'vi' ? 'Trạng thái:' : 'Status:'}
+                  </span>
+                  {current.is_active === false ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-100">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                      {language === 'vi' ? 'Đã ngừng hoạt động' : 'Shutdown'}
+                    </span>
+                  ) : branchHasRecords ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {language === 'vi' ? 'Đang hoạt động' : 'Active'}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      {language === 'vi' ? 'Mới' : 'New'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  {current.is_active !== false ? (
+                    branchHasRecords ? (
+                      <Button
+                        variant="danger-light"
+                        onClick={deleteBranch}
+                        icon={XCircleIcon}
+                        size="sm"
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-4 h-9 shadow-2xs transition-colors font-semibold"
+                      >
+                        {t(language, 'GeneralSettingsDeactivateBranch') || 'Shutdown'}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="danger-light"
+                        onClick={deleteBranch}
+                        icon={TrashIcon}
+                        size="sm"
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-4 h-9 shadow-2xs transition-colors font-semibold"
+                      >
+                        {t(language, 'GeneralSettingsDeleteBranch')}
+                      </Button>
+                    )
+                  ) : (
+                    <Button
+                      variant="success"
+                      onClick={reactivateBranch}
+                      icon={PlusIcon}
+                      size="sm"
+                    >
+                      {language === 'vi' ? 'Kích hoạt lại' : 'Reactivate'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50/20">
+            <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mb-3 border border-slate-100">
+              <BuildingStorefrontIcon className="w-6 h-6 text-slate-400" />
+            </div>
+            <p className="text-sm font-semibold text-slate-700">
+              {t(language, 'GeneralSettingsEmpty') || 'No branches found'}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              {language === 'vi'
+                ? 'Chọn một chi nhánh từ danh sách bên trái để cấu hình hoặc tạo chi nhánh mới.'
+                : 'Select a branch from the left list to configure or create a new one.'}
+            </p>
           </div>
         )}
       </div>
@@ -861,9 +1217,9 @@ export function DailyReportsCard() {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-3xl bg-white p-6 text-left align-middle shadow-2xl transition-all border border-slate-100">
+                <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-2xl transition-all border border-slate-100">
                   <DialogTitle as="h3" className="text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2 border-b border-slate-100 pb-3">
-                    <ArrowsUpDownIcon className="w-5 h-5 text-blue-600" />
+                    <QueueListIcon className="w-5 h-5 text-blue-600" />
                     {language === 'vi' ? 'Sắp xếp chi nhánh' : 'Reorder Branches'}
                   </DialogTitle>
 
@@ -909,8 +1265,9 @@ export function DailyReportsCard() {
 
                           {/* Up/Down buttons for fallback */}
                           <div className="flex items-center gap-1">
-                            <button
-                              type="button"
+                            <Button
+                              variant="outline"
+                              size="sm"
                               disabled={index === 0}
                               onClick={() => {
                                 const next = [...tempOrder]
@@ -919,13 +1276,13 @@ export function DailyReportsCard() {
                                 next[index] = tmp
                                 setTempOrder(next)
                               }}
-                              className="p-1.5 rounded-lg border border-slate-100 text-slate-500 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                              icon={ChevronUpIcon}
                               title={t(language, 'GeneralSettingsMoveUp')}
-                            >
-                              <ChevronUpIcon className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
+                              className="p-0 w-8 h-8"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
                               disabled={index === tempOrder.length - 1}
                               onClick={() => {
                                 const next = [...tempOrder]
@@ -934,11 +1291,10 @@ export function DailyReportsCard() {
                                 next[index] = tmp
                                 setTempOrder(next)
                               }}
-                              className="p-1.5 rounded-lg border border-slate-100 text-slate-500 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                              icon={ChevronDownIcon}
                               title={t(language, 'GeneralSettingsMoveDown')}
-                            >
-                              <ChevronDownIcon className="w-4 h-4" />
-                            </button>
+                              className="p-0 w-8 h-8"
+                            />
                           </div>
                         </div>
                       )
@@ -946,23 +1302,21 @@ export function DailyReportsCard() {
                   </div>
 
                   <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
                       onClick={() => setIsReorderOpen(false)}
-                      className="h-10 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-sm font-semibold transition-all cursor-pointer"
                     >
                       {t(language, 'Cancel') || 'Cancel'}
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="primary"
                       onClick={() => {
                         setOrder(tempOrder)
                         setIsReorderOpen(false)
                       }}
-                      className="h-10 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all active:scale-95 shadow-sm shadow-blue-500/20 cursor-pointer"
                     >
                       {t(language, 'Confirm') || 'Confirm'}
-                    </button>
+                    </Button>
                   </div>
                 </DialogPanel>
               </TransitionChild>
@@ -970,7 +1324,7 @@ export function DailyReportsCard() {
           </div>
         </Dialog>
       </Transition>
-    </Card>
+    </div>
   )
 }
 
