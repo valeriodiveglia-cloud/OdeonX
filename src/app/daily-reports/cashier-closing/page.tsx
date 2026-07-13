@@ -2584,7 +2584,7 @@ export default function CashierClosingPage() {
       }
 
       const freshCashDiff = getCashDiffForPayments(freshPayments)
-      const isDiscrepancy = freshCashDiff < 0 || freshCashDiff > 1000
+      const isDiscrepancy = freshCashDiff < -500 || freshCashDiff > 1000
 
       // Call onSaveAll with freshPayments
       const saveSucceeded = await onSaveAll(freshPayments)
@@ -2730,7 +2730,7 @@ export default function CashierClosingPage() {
             )}
 
             <Button
-              variant="secondary-dark"
+              variant={isReadOnly ? 'primary' : 'secondary-dark'}
               size="md"
               icon={ArrowDownTrayIcon}
               onClick={exportPDF}
@@ -2836,7 +2836,7 @@ export default function CashierClosingPage() {
         </div>
 
         {/* Destra: Toggle Saved/Live */}
-        {!!initialIdFromUrl && (
+        {!!initialIdFromUrl && !pathname.includes('/monthly-reports') && (
           <div className="inline-flex items-center rounded-lg bg-slate-800 border border-white/10 p-1 text-xs h-10 flex-shrink-0">
             <button
               type="button"
@@ -3282,24 +3282,26 @@ export default function CashierClosingPage() {
             <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-50/60 text-blue-700 border border-blue-100/80 flex items-center gap-1.5 shadow-3xs">
               {language === 'vi' ? 'Tiêu chuẩn két' : 'Target'}: {formatVND(floatTarget)} ₫
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearCounts}
-              disabled={isReadOnly}
-              className="text-[11px] font-bold text-slate-500 hover:bg-red-50 hover:text-red-650 hover:border-red-200 transition-colors"
-            >
-              {language === 'vi' ? 'Xóa bảng' : 'Clear'}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={doSuggest}
-              disabled={isReadOnly}
-              className="text-[11px] font-bold"
-            >
-              {language === 'vi' ? 'Gợi ý chia ca' : 'Suggest plan'}
-            </Button>
+            {!isReadOnly && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearCounts}
+                  className="text-[11px] font-bold text-slate-500 hover:bg-red-50 hover:text-red-650 hover:border-red-200 transition-colors"
+                >
+                  {language === 'vi' ? 'Xóa bảng' : 'Clear'}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={doSuggest}
+                  className="text-[11px] font-bold"
+                >
+                  {language === 'vi' ? 'Gợi ý chia ca' : 'Suggest plan'}
+                </Button>
+              </>
+            )}
           </div>
         </div>
 

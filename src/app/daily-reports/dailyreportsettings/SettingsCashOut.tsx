@@ -2,7 +2,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { TrashIcon, TagIcon } from '@heroicons/react/24/outline'
+import { TagIcon } from '@heroicons/react/24/outline'
+import { GripVertical } from 'lucide-react'
 import { useDailyReportSettingsContext } from '../_data/DailyReportSettingsContext'
 import { DailyReportsDictionary } from '../_i18n'
 import Button from '@/components/Button'
@@ -13,15 +14,16 @@ const SECTION_KEY = 'cashout'
 /* ===== Card primitives ===== */
 function Card(props: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden text-slate-800">
       {props.children}
     </div>
   )
 }
+
 function CardHeader(props: { title: string; subtitle: string; icon: React.ComponentType<{ className?: string }>; right?: React.ReactNode }) {
   const Icon = props.icon
   return (
-    <div className="flex items-center gap-3 border-b border-slate-100 pb-3.5 mb-5 flex-wrap">
+    <div className="flex items-center gap-3 border-b border-slate-100 px-6 py-4 bg-slate-50/50 flex-wrap">
       <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
         <Icon className="w-5.5 h-5.5" />
       </div>
@@ -53,6 +55,8 @@ function uniqueCaseInsensitive(list: string[]) {
   return out
 }
 
+const DEFAULT_CATEGORIES = ['Food', 'Drinks', 'Shipping', 'Laundry', 'Assets', 'Admin', 'Miscellaneous', 'Salary', 'VAT', 'Marketing', 'Packaging', 'Maintenance']
+
 /* ===== Main card ===== */
 export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['dailyreportsettings']['cashOut'] }) {
   const { language } = useSettings()
@@ -69,11 +73,20 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
   const [initialLoadDone, setInitialLoadDone] = useState(false)
   const [newCatName, setNewCatName] = useState('')
 
+  // Resetta initialLoadDone all'inizio del caricamento
+  useEffect(() => {
+    if (loading) {
+      setInitialLoadDone(false)
+    }
+  }, [loading])
+
   // Sync da server → stato locale
   useEffect(() => {
     if (loading) return
 
-    const norm = uniqueCaseInsensitive(serverCategories ?? [])
+    const norm = serverCategories && serverCategories.length > 0
+      ? uniqueCaseInsensitive(serverCategories)
+      : uniqueCaseInsensitive(DEFAULT_CATEGORIES)
 
     if (!initialLoadDone) {
       setInitialLoadDone(true)
@@ -98,6 +111,11 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
     } catch { }
   }
 
+  const handleResetToDefault = () => {
+    setData(uniqueCaseInsensitive(DEFAULT_CATEGORIES))
+    syncToContext(DEFAULT_CATEGORIES)
+  }
+
   // Save Bar listeners
   useEffect(() => {
     async function onReload() {
@@ -106,9 +124,7 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
     }
 
     function onDefaults() {
-      const snap = ['Food', 'Drink', 'Shipping']
-      setData(uniqueCaseInsensitive(snap))
-      syncToContext(snap)
+      handleResetToDefault()
     }
 
     window.addEventListener('dailysettings:reload', onReload)
@@ -132,16 +148,41 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
     setNewCatName('')
   }
 
-  const updCategory = (i: number, v: string) => {
-    const next = data.map((c, idx) => (idx === i ? v : c))
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+
+  const delCategory = (i: number) => {
+    const catName = data[i] || ''
+    const msg = language === 'vi'
+      ? `Bạn có chắc chắn muốn xóa danh mục chi "${catName}" không?`
+      : `Are you sure you want to delete the cash out category "${catName}"?`
+    if (!window.confirm(msg)) return
+
+    const next = data.filter((_, idx) => idx !== i)
     setData(next)
     syncToContext(next)
   }
 
-  const delCategory = (i: number) => {
-    const next = data.filter((_, idx) => idx !== i)
+  // Drag & Drop Handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    if (draggedIndex === null || draggedIndex === index) return
+
+    const next = [...data]
+    const [moved] = next.splice(draggedIndex, 1)
+    next.splice(index, 0, moved)
+    setDraggedIndex(index)
+
     setData(next)
     syncToContext(next)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null)
   }
 
   return (
@@ -150,76 +191,92 @@ export default function SettingsCashOutCard({ t }: { t: DailyReportsDictionary['
         title={t.title}
         subtitle={language === 'vi' ? 'Cấu hình các danh mục/lý do chi tiền mặt' : 'Configure categories and reasons for daily store cash out withdrawals'}
         icon={TagIcon}
+        right={
+          <span className="text-xs text-slate-550 font-bold bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1">
+            {t.countLabel.replace('{count}', String(data.length))}
+          </span>
+        }
       />
-      <div className="space-y-4">
-        <section className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/20 shadow-3xs">
-          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-            <h3 className="text-sm font-extrabold text-slate-700 tracking-tight leading-none">{t.sectionTitle}</h3>
-          </div>
+      <div className="p-6 bg-white space-y-6">
+        {/* Add Category Section */}
+        <div className="flex items-center gap-2 max-w-sm w-full">
+          <input
+            type="text"
+            placeholder={t.placeholder}
+            value={newCatName}
+            onChange={(e) => setNewCatName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleAddCategory()
+              }
+            }}
+            className="border border-slate-200 rounded-xl px-3 h-10 flex-1 bg-white text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all text-sm font-semibold shadow-2xs hover:border-slate-350"
+          />
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleAddCategory}
+            disabled={!newCatName.trim()}
+            className="h-10 px-4 font-bold text-xs shadow-2xs"
+          >
+            {t.common.add}
+          </Button>
+        </div>
 
-          <div className="p-4 bg-white space-y-4">
-            {/* Add Category Section */}
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2 max-w-sm w-full">
-                <input
-                  type="text"
-                  placeholder={t.placeholder}
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleAddCategory()
-                    }
-                  }}
-                  className="border border-slate-200 rounded-lg px-3 h-9 flex-1 bg-white text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all text-sm"
-                />
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleAddCategory}
-                  disabled={!newCatName.trim()}
-                  className="h-9 px-3"
+        {/* Categories Tag Grid */}
+        {data.length === 0 ? (
+          <div className="text-sm text-slate-450 italic font-medium py-3 text-center bg-slate-50/30 rounded-lg border border-dashed border-slate-200">
+            {t.empty}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {data.map((category, idx) => {
+              const isDragged = draggedIndex === idx
+              return (
+                <span
+                  key={`cashout-cat-${idx}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all select-none ${
+                    isDragged
+                      ? 'opacity-30 border-dashed border-blue-400 bg-blue-50/10 scale-[0.99] cursor-grabbing'
+                      : 'border-slate-200 bg-slate-50/40 text-slate-800 text-xs font-bold cursor-grab active:cursor-grabbing hover:border-slate-300 hover:bg-slate-50'
+                  }`}
                 >
-                  {t.common.add}
-                </Button>
-              </div>
-              <span className="text-xs text-slate-500 font-extrabold">
-                {t.countLabel.replace('{count}', String(data.length))}
-              </span>
-            </div>
-
-            {/* Categories Tag Grid */}
-            {data.length === 0 ? (
-              <div className="text-sm text-slate-450 italic font-medium py-3 text-center bg-slate-50/30 rounded-lg border border-dashed border-slate-200">{t.empty}</div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {data.map((category, idx) => (
-                  <div
-                    key={`cashout-cat-${idx}`}
-                    className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50/10 hover:border-blue-200 hover:shadow-2xs transition-all shadow-3xs group"
+                  <GripVertical className="w-3.5 h-3.5 text-slate-400 cursor-grab active:cursor-grabbing shrink-0" />
+                  <span>{category}</span>
+                  <button
+                    type="button"
+                    onClick={() => delCategory(idx)}
+                    className="w-4 h-4 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-red-650 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                    title={t.common.remove}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onDragStart={(e) => e.stopPropagation()}
                   >
-                    <input
-                      type="text"
-                      value={category}
-                      onChange={(e) => updCategory(idx, e.target.value)}
-                      placeholder={t.placeholder}
-                      className="bg-transparent font-bold text-slate-800 text-xs focus:outline-none transition-all flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => delCategory(idx)}
-                      className="p-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors opacity-60 group-hover:opacity-100 cursor-pointer"
-                      title={t.common.remove}
-                    >
-                      <TrashIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              )
+            })}
           </div>
-        </section>
+        )}
+
+        {/* Footer con ripristino default pulito */}
+        <div className="border-t border-slate-100 pt-5 flex justify-end">
+          <Button
+            variant="danger-light"
+            size="sm"
+            onClick={handleResetToDefault}
+            className="text-xs font-bold rounded-xl"
+          >
+            {language === 'vi' ? 'Mặc định' : 'Default'}
+          </Button>
+        </div>
       </div>
     </Card>
   )

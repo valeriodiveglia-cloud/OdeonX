@@ -10,6 +10,7 @@ type SettingsJson = {
         staff?: string[]
         shifts?: Array<{ name: string; start: string; end: string }>
         thirdParties?: string[]
+        thirdPartiesIcons?: Record<string, string>
     }
     cashOut?: {
         categories?: string[]

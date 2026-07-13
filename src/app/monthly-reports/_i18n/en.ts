@@ -137,7 +137,7 @@ export const en = {
             status: { dirty: 'Unsaved changes', clean: 'Up to date' },
             common: { add: 'Add', remove: 'Remove', reorder: 'Reorder' },
             shifts: {
-                title: 'Selectable shifts',
+                title: 'Shifts',
                 addTitle: 'Add shift',
                 empty: 'No shifts. Add at least one.',
                 hint: 'Set times in HH:MM. Leave empty for custom behavior in other pages.',

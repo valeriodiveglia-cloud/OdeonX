@@ -137,7 +137,7 @@ export const vi = {
             status: { dirty: 'Chưa lưu', clean: 'Đã cập nhật' },
             common: { add: 'Thêm', remove: 'Xóa', reorder: 'Sắp xếp' },
             shifts: {
-                title: 'Ca làm có thể chọn',
+                title: 'Ca làm việc',
                 addTitle: 'Thêm ca',
                 empty: 'Chưa có ca. Thêm ít nhất một ca.',
                 hint: 'Nhập giờ dạng HH:MM. Để trống nếu không dùng.',

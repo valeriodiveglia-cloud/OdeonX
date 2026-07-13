@@ -15,6 +15,7 @@ export type SettingsDB = {
         staff?: string[]
         shifts?: ShiftItem[] | string[]
         thirdParties?: string[]
+        thirdPartiesIcons?: Record<string, string>
     }
     cashOut?: {
         categories?: string[]

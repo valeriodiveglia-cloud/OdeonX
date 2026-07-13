@@ -103,18 +103,23 @@ const vi = {
       resetTitle: 'Đặt về mặc định',
       reload: 'Tải lại',
       reloadTitle: 'Tải lại cài đặt đã lưu',
-      saveAll: 'Lưu tất cả',
-      saveAllTitle: 'Lưu tất cả mục',
+      saveAll: 'Lưu',
+      saveAllTitle: 'Lưu thay đổi',
     },
     errors: {
-      loadFailed: 'Tải cài đặt thất bại. Bạn có thể sửa với mặc định và thử Lưu tất cả.',
+      loadFailed: 'Tải cài đặt thất bại. Bạn có thể sửa với mặc định và thử Lưu.',
+    },
+    tabs: {
+      shifts: 'Ca làm việc',
+      closing: 'Thu ngân & Chốt ca',
+      cashOut: 'Chi tiền',
     },
     initialInfo: {
       title: 'Cài đặt thông tin ban đầu',
       status: { dirty: 'Chưa lưu', clean: 'Đã cập nhật' },
       common: { add: 'Thêm', remove: 'Xóa', reorder: 'Sắp xếp' },
       shifts: {
-        title: 'Ca làm có thể chọn',
+        title: 'Ca làm việc',
         addTitle: 'Thêm ca',
         empty: 'Chưa có ca. Thêm ít nhất một ca.',
         hint: 'Nhập giờ dạng HH:MM. Để trống nếu không dùng.',

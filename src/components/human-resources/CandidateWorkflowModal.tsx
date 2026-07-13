@@ -291,6 +291,7 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
     const [startDate, setStartDate] = useState('')
     const [probationMonths, setProbationMonths] = useState('')
     const [probationSalaryPct, setProbationSalaryPct] = useState('100')
+    const [probationSalaryPcts, setProbationSalaryPcts] = useState<string[]>([])
     const [selectedBranches, setSelectedBranches] = useState<string[]>([])
     const [bankName, setBankName] = useState('')
     const [bankAccountNumber, setBankAccountNumber] = useState('')
@@ -451,6 +452,15 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 setProbationSalaryPct(candidateProbationPct.toString())
             } else {
                 setProbationSalaryPct('100')
+            }
+
+            const candidateProbationPcts = (candidate as any).probation_salary_pcts
+            if (candidateProbationPcts && Array.isArray(candidateProbationPcts) && candidateProbationPcts.length > 0) {
+                setProbationSalaryPcts(candidateProbationPcts.map(String))
+            } else if (candidateProbationMonths && candidateProbationPct !== undefined && candidateProbationPct !== null) {
+                setProbationSalaryPcts(Array(candidateProbationMonths).fill(candidateProbationPct.toString()))
+            } else {
+                setProbationSalaryPcts([])
             }
 
             const candidateOfferBranchId = (candidate as any).offer_branch_id
@@ -634,6 +644,13 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             }
             if (staff.probation_salary_pct !== undefined && staff.probation_salary_pct !== null) {
                 setProbationSalaryPct(staff.probation_salary_pct.toString())
+            }
+            if (staff.probation_salary_pcts && Array.isArray(staff.probation_salary_pcts) && staff.probation_salary_pcts.length > 0) {
+                setProbationSalaryPcts(staff.probation_salary_pcts.map(String))
+            } else if (staff.probation_months && staff.probation_salary_pct !== undefined && staff.probation_salary_pct !== null) {
+                setProbationSalaryPcts(Array(staff.probation_months).fill(staff.probation_salary_pct.toString()))
+            } else {
+                setProbationSalaryPcts([])
             }
 
             // Restore branches if loaded
@@ -821,6 +838,13 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 }
                 if (data.probation_salary_pct !== null && data.probation_salary_pct !== undefined) {
                     setProbationSalaryPct(data.probation_salary_pct.toString())
+                }
+                if (data.probation_salary_pcts && Array.isArray(data.probation_salary_pcts) && data.probation_salary_pcts.length > 0) {
+                    setProbationSalaryPcts(data.probation_salary_pcts.map(String))
+                } else if (data.probation_months && data.probation_salary_pct !== null && data.probation_salary_pct !== undefined) {
+                    setProbationSalaryPcts(Array(data.probation_months).fill(data.probation_salary_pct.toString()))
+                } else {
+                    setProbationSalaryPcts([])
                 }
                 if (data.offer_branch_id !== null && data.offer_branch_id !== undefined) {
                     setOfferBranchId(data.offer_branch_id)
@@ -1056,6 +1080,7 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
             payload.offer_salary_type = null
             payload.probation_months = null
             payload.probation_salary_pct = null
+            payload.probation_salary_pcts = null
             payload.offer_start_date = null
             payload.offer_branch_id = null
             payload.offer_expiry_date = null
@@ -1082,7 +1107,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 offer_salary_amount: salaryAmtVal,
                 offer_salary_type: salaryType,
                 probation_months: probationMonthsVal,
-                probation_salary_pct: probationSalaryPctVal,
+                probation_salary_pct: probationSalaryPcts.length > 0 ? (parseFloat(probationSalaryPcts[0]) || 100) : probationSalaryPctVal,
+                probation_salary_pcts: probationSalaryPcts.length > 0 ? probationSalaryPcts.map(parseFloat) : null,
                 offer_start_date: startVal,
                 offer_branch_id: (defineStartDate && defineStartLocation) ? (offerBranchId || null) : null,
                 offer_expiry_date: offerExpiryDate || null,
@@ -1176,7 +1202,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                         offer_salary_amount: salaryAmtVal,
                         offer_salary_type: salaryType,
                         probation_months: probationMonthsVal,
-                        probation_salary_pct: probationSalaryPctVal,
+                        probation_salary_pct: probationSalaryPcts.length > 0 ? (parseFloat(probationSalaryPcts[0]) || 100) : probationSalaryPctVal,
+                        probation_salary_pcts: probationSalaryPcts.length > 0 ? probationSalaryPcts.map(parseFloat) : null,
                         offer_start_date: startVal,
                         offer_branch_id: (defineStartDate && defineStartLocation) ? (offerBranchId || null) : null,
                         offer_expiry_date: offerExpiryDate || null,
@@ -1418,7 +1445,8 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                 salary_amount: parseFloat(salaryAmount.replace(/,/g, '')) || 0,
                 start_date: startDate || null,
                 probation_months: isNaN(probMonths) ? 0 : probMonths,
-                probation_salary_pct: parseFloat(probationSalaryPct) || 100,
+                probation_salary_pct: probationSalaryPcts.length > 0 ? (parseFloat(probationSalaryPcts[0]) || 100) : (parseFloat(probationSalaryPct) || 100),
+                probation_salary_pcts: probationSalaryPcts.length > 0 ? probationSalaryPcts.map(parseFloat) : null,
                 probation_end_date: probationEndDate,
                 status: 'active',
                 notes: notes.trim() || null,
@@ -1902,6 +1930,7 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                     offer_salary_type: null,
                     probation_months: null,
                     probation_salary_pct: null,
+                    probation_salary_pcts: null,
                     offer_start_date: null,
                     offer_branch_id: null,
                     offer_expiry_date: null,
@@ -2835,7 +2864,20 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                 </div>
                                                                 <div>
                                                                     <span className="text-slate-400">{isVI ? 'Thử việc: ' : 'Probation: '}</span>
-                                                                    <span className="font-bold text-slate-800">{candidate?.probation_months || 0} {isVI ? 'tháng' : 'months'} - {candidate?.probation_salary_pct || 100}%</span>
+                                                                    <span className="font-bold text-slate-800">
+                                                                        {candidate?.probation_months || 0} {isVI ? 'tháng' : 'months'}
+                                                                        {candidate?.probation_months && candidate.probation_months > 0 && (
+                                                                            <>
+                                                                                {' ('}
+                                                                                {(candidate as any).probation_salary_pcts && Array.isArray((candidate as any).probation_salary_pcts) && (candidate as any).probation_salary_pcts.length > 0 ? (
+                                                                                    (candidate as any).probation_salary_pcts.map((pct: any) => `${pct}%`).join(' / ')
+                                                                                ) : (
+                                                                                    `${candidate?.probation_salary_pct || 100}%`
+                                                                                )}
+                                                                                {')'}
+                                                                            </>
+                                                                        )}
+                                                                    </span>
                                                                 </div>
                                                                 <div className="col-span-2">
                                                                     <span className="text-slate-400">{isVI ? 'Ngày bắt đầu: ' : 'Start Date: '}</span>
@@ -2931,7 +2973,25 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                     </div>
                                                                     <div>
                                                                         <label className="block text-xs font-bold text-slate-500 mb-1.5">{isVI ? 'Thời gian thử việc (Tháng)' : 'Probation Months'}</label>
-                                                                        <select value={probationMonths} onChange={e => setProbationMonths(e.target.value)}
+                                                                        <select value={probationMonths} onChange={e => {
+                                                                            const val = e.target.value;
+                                                                            setProbationMonths(val);
+                                                                            const m = parseInt(val, 10);
+                                                                            if (!isNaN(m) && m > 0) {
+                                                                                let newPcts = [...probationSalaryPcts];
+                                                                                if (newPcts.length !== m) {
+                                                                                    newPcts = Array(m).fill('100');
+                                                                                    if (m >= 1) newPcts[0] = '85';
+                                                                                    if (m >= 2) newPcts[1] = '100';
+                                                                                    if (m >= 3) newPcts[2] = '100';
+                                                                                }
+                                                                                setProbationSalaryPcts(newPcts);
+                                                                                if (newPcts[0]) setProbationSalaryPct(newPcts[0]);
+                                                                            } else {
+                                                                                setProbationSalaryPcts([]);
+                                                                                setProbationSalaryPct('100');
+                                                                            }
+                                                                        }}
                                                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-semibold h-10">
                                                                             <option value="">{isVI ? 'Không có' : 'None'}</option>
                                                                             <option value="1">1 {isVI ? 'tháng' : 'month'}</option>
@@ -2940,16 +3000,58 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                         </select>
                                                                     </div>
                                                                     <div>
-                                                                        <label className="block text-xs font-bold text-slate-500 mb-1.5">{isVI ? 'Phần trăm lương thử việc (%)' : 'Probation Salary %'}</label>
-                                                                        <select value={probationSalaryPct} onChange={e => setProbationSalaryPct(e.target.value)}
-                                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-semibold h-10">
-                                                                            <option value="100">100%</option>
-                                                                            <option value="95">95%</option>
-                                                                            <option value="90">90%</option>
-                                                                            <option value="85">85%</option>
-                                                                            <option value="80">80%</option>
-                                                                            <option value="75">75%</option>
-                                                                        </select>
+                                                                        <label className="block text-xs font-bold text-slate-500 mb-1.5">{isVI ? 'Lương thử việc (%)' : 'Probation Salary (%)'}</label>
+                                                                        <div className="flex items-center gap-1.5 h-10">
+                                                                            {probationMonths && parseInt(probationMonths, 10) > 1 ? (
+                                                                                Array.from({ length: parseInt(probationMonths, 10) }).map((_, idx) => {
+                                                                                    const currentVal = probationSalaryPcts[idx] || '100'
+                                                                                    return (
+                                                                                        <div key={idx} className="flex-1 min-w-[70px] flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden h-10 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                                                                                            <div className="flex items-center justify-center px-2.5 bg-gray-100 border-r border-gray-300 text-xs font-bold text-gray-500 h-full select-none">
+                                                                                                {isVI ? `T${idx + 1}` : `M${idx + 1}`}
+                                                                                            </div>
+                                                                                            <select
+                                                                                                value={currentVal}
+                                                                                                onChange={(e) => {
+                                                                                                    const newPcts = [...probationSalaryPcts]
+                                                                                                    newPcts[idx] = e.target.value
+                                                                                                    setProbationSalaryPcts(newPcts)
+                                                                                                    if (idx === 0) setProbationSalaryPct(e.target.value)
+                                                                                                }}
+                                                                                                className="flex-1 bg-white px-3 py-2 text-sm text-gray-900 outline-none h-full border-none focus:ring-0 font-semibold"
+                                                                                            >
+                                                                                                <option value="100">100%</option>
+                                                                                                <option value="95">95%</option>
+                                                                                                <option value="90">90%</option>
+                                                                                                <option value="85">85%</option>
+                                                                                                <option value="80">80%</option>
+                                                                                                <option value="75">75%</option>
+                                                                                            </select>
+                                                                                        </div>
+                                                                                    )
+                                                                                })
+                                                                            ) : probationMonths && parseInt(probationMonths, 10) === 1 ? (
+                                                                                <select
+                                                                                    value={probationSalaryPct || '100'}
+                                                                                    onChange={(e) => {
+                                                                                        setProbationSalaryPct(e.target.value)
+                                                                                        setProbationSalaryPcts([e.target.value])
+                                                                                    }}
+                                                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-semibold h-10"
+                                                                                >
+                                                                                    <option value="100">100%</option>
+                                                                                    <option value="95">95%</option>
+                                                                                    <option value="90">90%</option>
+                                                                                    <option value="85">85%</option>
+                                                                                    <option value="80">80%</option>
+                                                                                    <option value="75">75%</option>
+                                                                                </select>
+                                                                            ) : (
+                                                                                <select disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-450 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-gray-100 font-semibold h-10">
+                                                                                    <option value="100">100%</option>
+                                                                                </select>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                     <div className="col-span-1 sm:col-span-2">
                                                                         <label className="block text-xs font-bold text-slate-500 mb-1.5">{isVI ? 'Hạn phản hồi *' : 'Response Deadline *'}</label>
@@ -3482,17 +3584,79 @@ export function CandidateWorkflowModal({ candidateId, onClose, onSuccess }: Cand
                                                                             </div>
                                                                             <div>
                                                                                 <label className="block text-xs font-bold text-slate-500 mb-1.5">{isVI ? 'Thời gian thử việc (Tháng)' : 'Probation Time (Months)'}</label>
-                                                                                <input type="number" min="0" step="1" value={probationMonths} onChange={e => setProbationMonths(e.target.value)}
+                                                                                <input type="number" min="0" max="3" step="1" value={probationMonths} onChange={e => {
+                                                                                    let val = e.target.value;
+                                                                                    const m = parseInt(val, 10);
+                                                                                    if (m > 3) val = '3';
+                                                                                    setProbationMonths(val);
+                                                                                    const mVal = parseInt(val, 10);
+                                                                                    if (!isNaN(mVal) && mVal > 0) {
+                                                                                        let newPcts = [...probationSalaryPcts];
+                                                                                        if (newPcts.length !== mVal) {
+                                                                                            newPcts = Array(mVal).fill('100');
+                                                                                            if (mVal >= 1) newPcts[0] = '85';
+                                                                                            if (mVal >= 2) newPcts[1] = '100';
+                                                                                            if (mVal >= 3) newPcts[2] = '100';
+                                                                                        }
+                                                                                        setProbationSalaryPcts(newPcts);
+                                                                                        if (newPcts[0]) setProbationSalaryPct(newPcts[0]);
+                                                                                    } else {
+                                                                                        setProbationSalaryPcts([]);
+                                                                                        setProbationSalaryPct('100');
+                                                                                    }
+                                                                                }}
                                                                                     placeholder={isVI ? 'Ví dụ: 2' : 'e.g. 2'}
                                                                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-semibold h-10 bg-white" />
                                                                             </div>
                                                                             <div>
                                                                                 <label className="block text-xs font-bold text-slate-500 mb-1.5">{isVI ? 'Lương thử việc (%)' : 'Probation Salary (%)'}</label>
-                                                                                <div className="relative">
-                                                                                    <input type="number" min="0" max="100" step="1" value={probationSalaryPct} onChange={e => setProbationSalaryPct(e.target.value)}
-                                                                                        placeholder="100"
-                                                                                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-semibold h-10 bg-white" />
-                                                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-bold">%</span>
+                                                                                <div className="flex items-center gap-1.5 h-10">
+                                                                                    {probationMonths && parseInt(probationMonths, 10) > 1 ? (
+                                                                                        Array.from({ length: parseInt(probationMonths, 10) }).map((_, idx) => {
+                                                                                            const currentVal = probationSalaryPcts[idx] || '100'
+                                                                                            return (
+                                                                                                <div key={idx} className="flex-1 min-w-[70px] flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden h-10 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                                                                                                    <div className="flex items-center justify-center px-2.5 bg-gray-100 border-r border-gray-300 text-xs font-bold text-gray-500 h-full select-none">
+                                                                                                        {isVI ? `T${idx + 1}` : `M${idx + 1}`}
+                                                                                                    </div>
+                                                                                                    <input type="number" min="0" max="100" value={currentVal}
+                                                                                                        onChange={(e) => {
+                                                                                                            const newPcts = [...probationSalaryPcts]
+                                                                                                            newPcts[idx] = e.target.value
+                                                                                                            setProbationSalaryPcts(newPcts)
+                                                                                                            if (idx === 0) setProbationSalaryPct(e.target.value)
+                                                                                                        }}
+                                                                                                        className="flex-1 bg-white px-3 py-2 text-sm text-gray-900 outline-none h-full border-none focus:ring-0 font-semibold text-left" />
+                                                                                                    <span className="pr-3 text-sm text-gray-400 font-bold select-none">%</span>
+                                                                                                </div>
+                                                                                            )
+                                                                                        })
+                                                                                    ) : probationMonths && parseInt(probationMonths, 10) === 1 ? (
+                                                                                        <div className="relative w-full">
+                                                                                            <input
+                                                                                                key="probation-salary-active"
+                                                                                                type="number"
+                                                                                                min="0"
+                                                                                                max="100"
+                                                                                                value={probationSalaryPct || '100'}
+                                                                                                onChange={(e) => {
+                                                                                                    setProbationSalaryPct(e.target.value)
+                                                                                                    setProbationSalaryPcts([e.target.value])
+                                                                                                }}
+                                                                                                className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-semibold h-10 bg-white" />
+                                                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-bold">%</span>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <div className="relative w-full">
+                                                                                            <input 
+                                                                                                key="probation-salary-disabled"
+                                                                                                disabled 
+                                                                                                type="number" 
+                                                                                                placeholder="100"
+                                                                                                className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm text-gray-405 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-semibold h-10 bg-gray-100" />
+                                                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-bold">%</span>
+                                                                                        </div>
+                                                                                    )}
                                                                                 </div>
                                                                             </div>
                                                                         </div>

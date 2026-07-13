@@ -638,15 +638,7 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                     >
                         {isEditing ? <X className="w-5 h-5" /> : <Pencil className="w-5 h-5" />}
                     </button>
-                    {isEditing && (
-                        <button 
-                            type="button"
-                            onClick={() => setShowDeleteConfirm(true)} 
-                            className="text-xs font-semibold text-red-500 hover:text-red-700 hover:underline px-3 py-2 cursor-pointer transition-colors"
-                        >
-                            {language === 'vi' ? 'Xóa nhân viên' : 'Delete staff'}
-                        </button>
-                    )}
+
                 </div>
             </div>
             
@@ -752,9 +744,27 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Thời gian thử việc (Tháng)' : 'Probation Time (Months)'}</label>
-                    <input disabled={!isEditing} type="number" min="0" value={formData.probation_months ?? ''} onChange={e => {
-                        const m = parseInt(e.target.value);
+                    <input disabled={!isEditing} type="number" min="0" max="3" value={formData.probation_months ?? ''} onChange={e => {
+                        let m = parseInt(e.target.value);
+                        if (m > 3) m = 3;
                         handleChange('probation_months', isNaN(m) ? 0 : m);
+                        
+                        // Update pcts
+                        if (!isNaN(m) && m > 0) {
+                            let newPcts = formData.probation_salary_pcts && Array.isArray(formData.probation_salary_pcts) ? [...formData.probation_salary_pcts] : [];
+                            if (newPcts.length !== m) {
+                                newPcts = Array(m).fill(100);
+                                if (m >= 1) newPcts[0] = 85;
+                                if (m >= 2) newPcts[1] = 100;
+                                if (m >= 3) newPcts[2] = 100;
+                            }
+                            handleChange('probation_salary_pcts', newPcts);
+                            handleChange('probation_salary_pct', newPcts[0] || 100);
+                        } else {
+                            handleChange('probation_salary_pcts', null);
+                            handleChange('probation_salary_pct', 100);
+                        }
+
                         if (formData.start_date && !isNaN(m) && m > 0) {
                             const d = new Date(formData.start_date);
                             d.setMonth(d.getMonth() + m);
@@ -771,10 +781,62 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{language === 'vi' ? 'Lương thử việc (%)' : 'Probation Salary (%)'}</label>
-                    <div className="relative">
-                        <input disabled={!isEditing} type="number" min="0" max="100" value={formData.probation_salary_pct ?? ''} onChange={e => handleChange('probation_salary_pct', parseFloat(e.target.value) || 100)}
-                            className="w-full px-3 py-2 pr-8 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                    <div className="flex items-center gap-1.5 h-10">
+                        {formData.probation_months && formData.probation_months > 1 ? (
+                            Array.from({ length: formData.probation_months }).map((_, idx) => {
+                                const currentPcts = formData.probation_salary_pcts && Array.isArray(formData.probation_salary_pcts) && formData.probation_salary_pcts.length > 0
+                                    ? formData.probation_salary_pcts
+                                    : Array(formData.probation_months).fill(formData.probation_salary_pct || 100);
+                                const currentVal = currentPcts[idx] ?? 100;
+                                return (
+                                    <div key={idx} className={`flex-1 min-w-[70px] flex items-center border rounded-lg overflow-hidden h-10 ${
+                                        isEditing 
+                                            ? 'bg-white border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500' 
+                                            : 'bg-gray-50 border-gray-200'
+                                    }`}>
+                                        <div className="flex items-center justify-center px-2.5 bg-gray-100 border-r border-gray-200 text-xs font-bold text-gray-500 h-full select-none">
+                                            {language === 'vi' ? `T${idx + 1}` : `M${idx + 1}`}
+                                        </div>
+                                        <input disabled={!isEditing} type="number" min="0" max="100" value={currentVal}
+                                            onChange={(e) => {
+                                                const newPcts = [...currentPcts];
+                                                newPcts[idx] = parseFloat(e.target.value) || 0;
+                                                handleChange('probation_salary_pcts', newPcts);
+                                                if (idx === 0) handleChange('probation_salary_pct', parseFloat(e.target.value) || 0);
+                                            }}
+                                            className="flex-1 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none h-full border-none focus:ring-0 disabled:opacity-70 disabled:cursor-not-allowed font-semibold text-left" />
+                                        <span className="pr-3 text-sm text-gray-455 font-bold select-none">%</span>
+                                    </div>
+                                )
+                            })
+                        ) : formData.probation_months && formData.probation_months === 1 ? (
+                            <div className="relative w-full">
+                                <input
+                                    key="probation-salary-active"
+                                    disabled={!isEditing}
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={formData.probation_salary_pct ?? 100}
+                                    onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        handleChange('probation_salary_pct', val);
+                                        handleChange('probation_salary_pcts', [val]);
+                                    }}
+                                    className="w-full px-3 py-2 pr-8 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed font-semibold h-10" />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-bold">%</span>
+                            </div>
+                        ) : (
+                            <div className="relative w-full">
+                                <input 
+                                    key="probation-salary-disabled"
+                                    disabled 
+                                    type="number" 
+                                    placeholder="100"
+                                    className="w-full px-3 py-2 pr-8 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed font-semibold h-10" />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-bold">%</span>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div>
@@ -1110,7 +1172,16 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
             </div>
 
             {isEditing && (
-                <div className="pt-4 flex justify-end">
+                <div className="pt-4 flex justify-between items-center">
+                    <button 
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(true)} 
+                        className="inline-flex items-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                        {language === 'vi' ? 'Xóa nhân viên' : 'Delete staff'}
+                    </button>
+
                     <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {language === 'vi' ? 'Lưu thay đổi' : 'Save Changes'}

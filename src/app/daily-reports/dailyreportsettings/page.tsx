@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import SettingsInitialInfoCard from './SettingsInitialInfoCard'
+import SettingsThirdPartiesCard from './SettingsThirdPartiesCard'
 import SettingsCashCountCard from './SettingsCashCountCard'
 import SettingsCashOutCard from './SettingsCashOut'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -23,25 +24,18 @@ export default function DailyReportSettingsPage() {
 function DailyReportSettingsContent() {
   const [dirtySections, setDirtySections] = useState<Record<string, boolean>>({})
   const savingRef = useRef(false)
-  const [activeTab, setActiveTab] = useState<'closing' | 'cashout'>('closing')
+  const [activeTab, setActiveTab] = useState<'shifts' | 'closing' | 'cashout'>('shifts')
 
   const { loading, error, saveAll, refresh, isDirty: contextDirty } = useDailyReportSettingsContext()
   const { language } = useSettings()
   const { name: branchName } = useBranchUnified()
   const t = drI18n(language).dailyreportsettings
 
-  const textDict = {
-    en: {
-      tabClosing: 'Cashier & Closing',
-      tabCashOut: 'Cash Out',
-    },
-    vi: {
-      tabClosing: 'Thu ngân & Chốt ca',
-      tabCashOut: 'Chi tiền',
-    }
+  const labels = {
+    tabShifts: t.tabs?.shifts ?? 'Shifts',
+    tabClosing: t.tabs?.closing ?? 'Cashier Closing',
+    tabCashOut: t.tabs?.cashOut ?? 'Cash Out',
   }
-
-  const labels = textDict[language === 'vi' ? 'vi' : 'en']
 
   useEffect(() => {
     const onDirty = (e: Event) => {
@@ -86,43 +80,14 @@ function DailyReportSettingsContent() {
     }
   }
 
-  async function handleReload() {
-    await refresh()
-    setDirtySections({})
-    emit('dailysettings:reload')
-  }
-
-  function handleDefaults() {
-    emit('dailysettings:reset-to-defaults')
-    setDirtySections({ cashcount: true, initialinfo: true, cashout: true })
-  }
-
   return (
-    <div className="max-w-7xl mx-auto p-4 text-gray-100">
+    <div key={branchName || 'loading'} className="max-w-7xl mx-auto p-4 text-gray-100">
       <PageHeader
         title={t.pageTitle}
         badgeText={branchName || t.branch.none}
         badgeLoading={loading}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="secondary-dark"
-              onClick={handleDefaults}
-              disabled={loading}
-              title={t.actions.resetTitle}
-              className="h-9 px-3 text-xs font-semibold"
-            >
-              {t.actions.reset}
-            </Button>
-            <Button
-              variant="secondary-dark"
-              onClick={handleReload}
-              disabled={loading}
-              title={t.actions.reloadTitle}
-              className="h-9 px-3 text-xs font-semibold"
-            >
-              {t.actions.reload}
-            </Button>
             <Button
               variant="primary"
               onClick={handleSaveAll}
@@ -144,6 +109,17 @@ function DailyReportSettingsContent() {
 
       {/* Navigation Tabs */}
       <div className="flex border-b border-slate-800/80 mb-6 gap-6 px-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('shifts')}
+          className={`pb-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'shifts'
+              ? 'border-blue-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          {labels.tabShifts}
+        </button>
         <button
           type="button"
           onClick={() => setActiveTab('closing')}
@@ -168,12 +144,20 @@ function DailyReportSettingsContent() {
         </button>
       </div>
 
-      {activeTab === 'closing' ? (
+      {activeTab === 'shifts' && (
         <div className="space-y-6">
           <SettingsInitialInfoCard t={t.initialInfo} />
+        </div>
+      )}
+
+      {activeTab === 'closing' && (
+        <div className="space-y-6">
+          <SettingsThirdPartiesCard t={t.initialInfo} />
           <SettingsCashCountCard t={t.cashCount} />
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'cashout' && (
         <div className="space-y-6">
           <SettingsCashOutCard t={t.cashOut} />
         </div>
