@@ -1594,17 +1594,17 @@ export default function CashierClosingPage() {
 
         let sameDayLastWeekNet = null
         if (lastWeekRes.data) {
-          sameDayLastWeekNet = round(lastWeekRes.data.revenue_vnd) - round(lastWeekRes.data.discount_vnd)
+          sameDayLastWeekNet = round(lastWeekRes.data.revenue_vnd)
         }
 
         const weekClosings = (weekRes.data || []).map((row: any) => ({
           date: row.report_date,
-          net: round(row.revenue_vnd) - round(row.discount_vnd)
+          net: round(row.revenue_vnd)
         }))
 
         const storeClosings = (storeRes.data || []).map((row: any) => ({
           branch: row.branch_name,
-          net: round(row.revenue_vnd) - round(row.discount_vnd)
+          net: round(row.revenue_vnd)
         }))
 
         const activeBranches = (activeBranchesRes.data || []).map((row: any) => ({
