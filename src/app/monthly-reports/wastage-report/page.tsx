@@ -9,8 +9,9 @@ import {
     BarsArrowUpIcon,
     BarsArrowDownIcon,
     FunnelIcon,
+    XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { useWastage, type WastageRow } from '../../daily-reports/_data/useWastage'
+import { useWastage, type WastageRow, type WType } from '../../daily-reports/_data/useWastage'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getMonthlyReportsDictionary } from '../_i18n'
 import { supabase } from '@/lib/supabase_shim'
@@ -33,6 +34,7 @@ export default function MonthlyWastageReportPage() {
     const [sortAsc, setSortAsc] = useState(false)
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string> | null>>({})
     const [openMenu, setOpenMenu] = useState<SortKey | null>(null)
+    const [selectedWastage, setSelectedWastage] = useState<WastageRow | null>(null)
 
     const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()))
     const monthInputValue = useMemo(() => toMonthInputValue(monthCursor), [monthCursor])
@@ -295,7 +297,11 @@ export default function MonthlyWastageReportPage() {
                             </tr>
                         )}
                         {filtered.map(r => (
-                            <tr key={r.id} className="border-t hover:bg-blue-50/40">
+                            <tr
+                                key={r.id}
+                                className="border-t hover:bg-blue-50/40 cursor-pointer transition-colors"
+                                onClick={() => setSelectedWastage(r)}
+                            >
                                 <td className="p-2 whitespace-nowrap">{formatDMY(r.date)}</td>
                                 <td className="p-2 whitespace-nowrap lowercase font-mono">{dow3(r.date)}</td>
                                 <td className="p-2 whitespace-nowrap">{r.time}</td>
@@ -332,7 +338,172 @@ export default function MonthlyWastageReportPage() {
                     </tbody>
                 </table>
             </div>
+
+            {selectedWastage && (
+                <WastageDetailModal
+                    row={selectedWastage}
+                    onClose={() => setSelectedWastage(null)}
+                    language={language}
+                    t={t}
+                />
+            )}
         </div>
+    )
+}
+
+/* --- Modals --- */
+function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+    useEffect(() => {
+        const orig = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+        return () => {
+            document.body.style.overflow = orig
+        }
+    }, [])
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-300" onClick={onClose} />
+            <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[95vh]">
+                {children}
+            </div>
+        </div>
+    )
+}
+
+function WastageDetailModal({
+    row,
+    onClose,
+    language,
+    t,
+}: {
+    row: WastageRow
+    onClose: () => void
+    language: string
+    t: any
+}) {
+    return (
+        <Overlay onClose={onClose}>
+            <div className="flex flex-col text-gray-900 bg-white">
+                {/* Header */}
+                <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-800">
+                            {language === 'vi' ? 'Chi tiết hao hụt' : 'Wastage Details'}
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            {row.branchName || '-'}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                        title={t.editor.close}
+                    >
+                        <XMarkIcon className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Content - Compact Document Style */}
+                <div className="px-8 py-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                        {/* Colonna Sinistra: Articolo e Quantità */}
+                        <div className="space-y-3">
+                            <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.item}</span>
+                                <span className="text-sm font-bold text-slate-800 block mt-0.5">{row.itemName}</span>
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.category}</span>
+                                <span className="text-sm font-semibold text-slate-700 block mt-0.5">{row.categoryName || '-'}</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.type}</span>
+                                    <span className="block mt-0.5">
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold ${
+                                            row.type === 'Dish' ? 'bg-orange-50 text-orange-700 border border-orange-100' :
+                                            row.type === 'Material' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                                            'bg-purple-50 text-purple-700 border border-purple-100'
+                                        }`}>
+                                            {row.type}
+                                        </span>
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.unit}</span>
+                                    <span className="text-sm text-slate-700 block mt-0.5">{row.unit || '-'}</span>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.qty}</span>
+                                    <span className="text-sm font-bold text-slate-800 block mt-0.5">{row.qty}</span>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.chargeTo}</span>
+                                    <span className="block mt-0.5">
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                                            row.chargeTo === 'Restaurant' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-50 text-red-700 border border-red-100'
+                                        }`}>
+                                            {row.chargeTo}
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Colonna Destra: Tracciamento, Costi e Responsabilità */}
+                        <div className="space-y-3 border-l border-slate-100 pl-8">
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.unitCost}</span>
+                                    <span className="text-sm font-semibold text-slate-700 block mt-0.5 tabular-nums">{fmt(row.unitCost)} ₫</span>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.totalCost}</span>
+                                    <span className="text-sm font-bold text-blue-600 block mt-0.5 tabular-nums">{fmt(row.totalCost)} ₫</span>
+                                </div>
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{language === 'vi' ? 'Thời gian ghi nhận' : 'Logged Date & Time'}</span>
+                                <span className="text-sm font-semibold text-slate-700 block mt-0.5">{formatDMY(row.date)} - {row.time}</span>
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.responsible}</span>
+                                <span className="text-sm text-slate-700 block mt-0.5">{row.responsible || '-'}</span>
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.enteredBy}</span>
+                                <span className="text-sm text-slate-700 block mt-0.5">{row.enteredBy || '-'}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Riga Bottom: Motivo se esistente */}
+                    {row.reason && (
+                        <div className="pt-3 border-t border-slate-100">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t.editor.fields.reason}</span>
+                            <span className="text-sm text-slate-600 block mt-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100/50 italic whitespace-pre-wrap">
+                                "{row.reason}"
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-8 py-4 border-t border-slate-100 flex items-center justify-end bg-slate-50/30">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2 bg-blue-600/15 hover:bg-blue-600/25 text-blue-600 font-semibold rounded-lg transition-colors text-xs h-10 cursor-pointer"
+                    >
+                        {t.editor.close}
+                    </button>
+                </div>
+            </div>
+        </Overlay>
     )
 }
 

@@ -19,6 +19,7 @@ interface Notification {
     type?: string
     assetId?: string
     asset?: any
+    branch_id?: string | null
 }
 
 const moduleLabels: Record<string, { en: string; vi: string; color: string }> = {
@@ -225,6 +226,56 @@ const formatRole = (role: string | null) => {
     return role.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
+const getCalendarDay = (dateStr: string): string => {
+    try {
+        const d = new Date(dateStr)
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    } catch {
+        return dateStr
+    }
+}
+
+const formatCalendarDay = (dateStr: string) => {
+    try {
+        const date = new Date(dateStr)
+        const day = String(date.getDate()).padStart(2, '0')
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const year = date.getFullYear()
+        return `${day}/${month}/${year}`
+    } catch {
+        return dateStr
+    }
+}
+
+const formatTimeOnly = (dateStr: string) => {
+    try {
+        const date = new Date(dateStr)
+        const hours = String(date.getHours()).padStart(2, '0')
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        return `${hours}:${minutes}`
+    } catch {
+        return dateStr
+    }
+}
+
+const groupDailyReports = (notifs: Notification[]) => {
+    const groups: Record<string, Notification[]> = {}
+    const orderedKeys: string[] = []
+
+    notifs.forEach(n => {
+        const day = getCalendarDay(n.created_at)
+        const key = n.branch_id ? `${n.branch_id}_${day}` : `single_${n.id}`
+        
+        if (!groups[key]) {
+            groups[key] = []
+            orderedKeys.push(key)
+        }
+        groups[key].push(n)
+    })
+
+    return { groups, orderedKeys }
+}
+
 export default function TopHeader() {
     const pathname = usePathname()
     const { language, hrReviewFrequency } = useSettings()
@@ -236,6 +287,12 @@ export default function TopHeader() {
     const [userDisplayName, setUserDisplayName] = useState<string | null>(null)
     const [userRole, setUserRole] = useState<string | null>(null)
     const [userBranches, setUserBranches] = useState<string[]>([])
+    const [branchesMap, setBranchesMap] = useState<Record<string, string>>({})
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+
+    const toggleGroup = (groupKey: string) => {
+        setExpandedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }))
+    }
 
     const isLocalNotificationRead = (id: string) => {
         if (typeof window === 'undefined') return false
@@ -281,6 +338,29 @@ export default function TopHeader() {
             }
         }
         fetchUserData()
+    }, [isExcludedRoute])
+
+    // Carica la mappa delle filiali per risolvere i branch_id in nomi
+    useEffect(() => {
+        if (isExcludedRoute) return
+        const fetchBranches = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('provider_branches')
+                    .select('id, name')
+                if (error) throw error
+                if (data) {
+                    const map: Record<string, string> = {}
+                    data.forEach((b: any) => {
+                        map[b.id] = b.name
+                    })
+                    setBranchesMap(map)
+                }
+            } catch (err) {
+                console.warn('Error fetching branches for TopHeader:', err)
+            }
+        }
+        fetchBranches()
     }, [isExcludedRoute])
 
     const isCoreModule = 
@@ -891,6 +971,137 @@ export default function TopHeader() {
                                                                         </div>
                                                                     ))}
                                                                 </div>
+                                                            </div>
+                                                        )
+                                                    })
+                                                })()
+                                            ) : moduleKey === 'daily_reports' ? (
+                                                (() => {
+                                                    const { groups, orderedKeys } = groupDailyReports(moduleNotifs)
+
+                                                    return orderedKeys.map((groupKey) => {
+                                                        const groupNotifs = groups[groupKey]
+                                                        const isGroup = groupNotifs.length > 1
+                                                        
+                                                        if (!isGroup) {
+                                                            const n = groupNotifs[0]
+                                                            return (
+                                                                <div 
+                                                                    key={n.id} 
+                                                                    onClick={() => handleNotificationClick(n)}
+                                                                    className={`p-3.5 flex flex-col gap-1.5 transition-all relative
+                                                                        ${n.isRead 
+                                                                            ? 'opacity-60 hover:bg-white/[0.02]' 
+                                                                            : 'bg-blue-500/[0.04] hover:bg-blue-500/[0.08] cursor-pointer'
+                                                                        }`}
+                                                                >
+                                                                    {/* Indicatore Notifica Non Letta */}
+                                                                    {!n.isRead && (
+                                                                        <span className="absolute top-4 left-2.5 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                                                                    )}
+
+                                                                    <div className="flex justify-between items-center pl-2.5">
+                                                                        <span className="text-[10px] font-bold text-slate-100 leading-none">
+                                                                            {isVI ? n.title_vi : n.title_en}
+                                                                        </span>
+                                                                        <span className="text-[9px] text-slate-500 font-semibold leading-none">
+                                                                            {formatTime(n.created_at)}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <p className="text-xs text-slate-300 leading-normal pl-2.5 font-medium">
+                                                                        {isVI ? n.message_vi : n.message_en}
+                                                                    </p>
+                                                                </div>
+                                                            )
+                                                        }
+
+                                                        const firstNotif = groupNotifs[0]
+                                                        const branchId = firstNotif.branch_id
+                                                        const branchName = branchId ? (branchesMap[branchId] || firstNotif.message_en.split('branch: ')[1]?.split(' (')[0] || firstNotif.message_vi.split('chi nhánh: ')[1]?.split(' (')[0] || 'Daily Reports & Cash') : 'Daily Reports & Cash'
+                                                        const unreadChildren = groupNotifs.filter(c => !c.isRead)
+                                                        const hasUnread = unreadChildren.length > 0
+                                                        const isGroupExpanded = !!expandedGroups[groupKey]
+                                                        const dateLabel = formatCalendarDay(firstNotif.created_at)
+
+                                                        return (
+                                                            <div key={groupKey} className="flex flex-col border-b border-white/5 last:border-b-0">
+                                                                {/* Intestazione del Gruppo */}
+                                                                <div 
+                                                                    onClick={() => toggleGroup(groupKey)}
+                                                                    className={`p-3.5 flex items-center justify-between cursor-pointer transition-all select-none
+                                                                        ${hasUnread 
+                                                                            ? 'bg-blue-500/[0.03] hover:bg-blue-500/[0.06]' 
+                                                                            : 'hover:bg-white/[0.02]'
+                                                                        }`}
+                                                                >
+                                                                    <div className="flex items-center gap-2 pl-2">
+                                                                        {isGroupExpanded ? (
+                                                                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                                                        ) : (
+                                                                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                                                                        )}
+                                                                        <div className="flex flex-col gap-0.5">
+                                                                            <span className="text-[11px] font-extrabold text-slate-200">
+                                                                                {branchName}
+                                                                            </span>
+                                                                            <span className="text-[9px] text-slate-400 font-semibold">
+                                                                                {dateLabel} • {groupNotifs.length} {isVI ? 'hoạt động' : 'updates'}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="flex items-center gap-2">
+                                                                        {hasUnread && (
+                                                                            <>
+                                                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation()
+                                                                                        markAsRead(unreadChildren.map(c => c.id))
+                                                                                    }}
+                                                                                    className="p-1 rounded hover:bg-white/10 text-slate-500 hover:text-green-400 transition-colors"
+                                                                                    title={isVI ? 'Đánh dấu nhóm này đã đọc' : 'Mark group as read'}
+                                                                                >
+                                                                                    <CheckCheck className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Sotto-notifiche espandibili */}
+                                                                {isGroupExpanded && (
+                                                                    <div className="bg-black/25 divide-y divide-white/5 border-t border-white/5 pl-4">
+                                                                        {groupNotifs.map((c) => (
+                                                                            <div 
+                                                                                key={c.id}
+                                                                                onClick={() => handleNotificationClick(c)}
+                                                                                className={`p-3 pr-4 flex flex-col gap-1 transition-all relative
+                                                                                    ${c.isRead 
+                                                                                        ? 'opacity-60 hover:bg-white/[0.01]' 
+                                                                                        : 'bg-blue-500/[0.02] hover:bg-blue-500/[0.05] cursor-pointer'
+                                                                                    }`}
+                                                                            >
+                                                                                {!c.isRead && (
+                                                                                    <span className="absolute top-3.5 left-2 w-1 h-1 rounded-full bg-blue-400 animate-pulse"></span>
+                                                                                )}
+                                                                                
+                                                                                <div className="flex justify-between items-center pl-2">
+                                                                                    <span className="text-[10px] font-bold text-slate-350">
+                                                                                        {isVI ? c.title_vi : c.title_en}
+                                                                                    </span>
+                                                                                    <span className="text-[9px] text-slate-500 font-semibold">
+                                                                                        {formatTimeOnly(c.created_at)}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <p className="text-xs text-slate-400 leading-normal pl-2 font-medium">
+                                                                                    {isVI ? c.message_vi : c.message_en}
+                                                                                </p>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )
                                                     })

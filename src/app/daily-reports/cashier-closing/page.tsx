@@ -22,6 +22,7 @@ import { getDailyReportsDictionary } from '../_i18n'
 import { useDailyReportSettingsDB } from '../_data/useDailyReportSettingsDB'
 import { useDailyReportSettings } from '../_data/useDailyReportSettings'
 import { creditsBus } from '@/lib/creditsSync'
+import { Users, Receipt, Utensils, ShoppingBag, ClipboardList } from 'lucide-react'
 
 // PDF libs
 import html2canvas from 'html2canvas-pro'
@@ -62,6 +63,12 @@ export type PaymentBreakdown = {
   depositCash?: number
   depositCard?: number
   thirdPartyAmounts?: Array<{ label: string; amount: number }>
+  posGuests?: number
+  posDiningGuests?: number
+  posDiningRevenue?: number
+  posDeliveryTakeawayRevenue?: number
+  posOrdersCount?: number
+  posTakeawayCount?: number
 }
 
 export type HeaderInfo = {
@@ -894,6 +901,12 @@ export default function CashierClosingPage() {
     depositCash: 0,
     depositCard: 0,
     thirdPartyAmounts: [],
+    posGuests: 0,
+    posDiningGuests: 0,
+    posDiningRevenue: 0,
+    posDeliveryTakeawayRevenue: 0,
+    posOrdersCount: 0,
+    posTakeawayCount: 0
   })
 
   const [payouts, setPayouts] = useState<number>(0)
@@ -1293,7 +1306,13 @@ export default function CashierClosingPage() {
                 grossRevenue: typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : p.grossRevenue,
                 discount: typeof resData.posDiscount === 'number' ? resData.posDiscount : p.discount,
                 posUnpaid: posUnpaid,
-                revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : p.revenue
+                revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : p.revenue,
+                posGuests: typeof resData.posGuests === 'number' ? resData.posGuests : 0,
+                posDiningGuests: typeof resData.posDiningGuests === 'number' ? resData.posDiningGuests : 0,
+                posDiningRevenue: typeof resData.posDiningRevenue === 'number' ? resData.posDiningRevenue : 0,
+                posDeliveryTakeawayRevenue: typeof resData.posDeliveryTakeawayRevenue === 'number' ? resData.posDeliveryTakeawayRevenue : 0,
+                posOrdersCount: typeof resData.posOrdersCount === 'number' ? resData.posOrdersCount : 0,
+                posTakeawayCount: typeof resData.posTakeawayCount === 'number' ? resData.posTakeawayCount : 0
               }))
             }
           }
@@ -2203,7 +2222,7 @@ export default function CashierClosingPage() {
   const [coldStartSilence, setColdStartSilence] = useState(true)
   const [isValidated, setIsValidated] = useState(false)
   const [validationPopup, setValidationPopup] = useState<{
-    type: 'success' | 'warning' | 'info-orange'
+    type: 'success' | 'warning' | 'info-orange' | 'error-red'
     title: string
     message: string
   } | null>(null)
@@ -2296,7 +2315,13 @@ export default function CashierClosingPage() {
                 grossRevenue: typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : p.grossRevenue,
                 discount: typeof resData.posDiscount === 'number' ? resData.posDiscount : p.discount,
                 posUnpaid: posUnpaid,
-                revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : p.revenue
+                revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : p.revenue,
+                posGuests: typeof resData.posGuests === 'number' ? resData.posGuests : 0,
+                posDiningGuests: typeof resData.posDiningGuests === 'number' ? resData.posDiningGuests : 0,
+                posDiningRevenue: typeof resData.posDiningRevenue === 'number' ? resData.posDiningRevenue : 0,
+                posDeliveryTakeawayRevenue: typeof resData.posDeliveryTakeawayRevenue === 'number' ? resData.posDeliveryTakeawayRevenue : 0,
+                posOrdersCount: typeof resData.posOrdersCount === 'number' ? resData.posOrdersCount : 0,
+                posTakeawayCount: typeof resData.posTakeawayCount === 'number' ? resData.posTakeawayCount : 0
               }
             })
             fetchedFromApi = true
@@ -2418,7 +2443,7 @@ export default function CashierClosingPage() {
         payouts,
         deposits,
         cash,
-        floatPlan,
+        floatPlan: effectivePlan,
         branchId: providerBranch?.id ? String(providerBranch.id) : null,
         userId: currentUserId,
       }
@@ -2439,7 +2464,7 @@ export default function CashierClosingPage() {
         payouts,
         deposits,
         cash,
-        floatPlan,
+        floatPlan: effectivePlan,
       })
 
       const now = Date.now()
@@ -2585,13 +2610,12 @@ export default function CashierClosingPage() {
 
       const freshCashDiff = getCashDiffForPayments(freshPayments)
       const isDiscrepancy = freshCashDiff < -500 || freshCashDiff > 1000
-
-      // Call onSaveAll with freshPayments
       const saveSucceeded = await onSaveAll(freshPayments)
       if (!saveSucceeded) return
 
       const hasCashToTakeSurplus = (countedCash - floatTarget) > 0
       const isMissingToTake = hasCashToTakeSurplus && totalToTake === 0
+      const isFloatMismatch = Math.abs(totalRemain - floatTarget) > 999
 
       if (isMissingToTake) {
         setValidationPopup({
@@ -2600,6 +2624,14 @@ export default function CashierClosingPage() {
           message: language === 'vi'
             ? 'Có tiền mặt dư trong két so với tiêu chuẩn, vui lòng kiểm tra và điền số tiền cần rút khỏi két.'
             : 'Counted cash exceeds target float. Please remember to record the cash to take from the drawer.'
+        })
+      } else if (isFloatMismatch) {
+        setValidationPopup({
+          type: 'error-red',
+          title: language === 'vi' ? 'Đã lưu (Lệch tiền bàn giao)' : 'Saved (Float Mismatch)',
+          message: language === 'vi'
+            ? `Báo cáo đã được lưu thành công nhưng số tiền còn lại trong két (${formatVND(totalRemain)} ₫) không khớp với tiêu chuẩn ca (${formatVND(floatTarget)} ₫). Vui lòng kiểm tra lại.`
+            : `The report was saved successfully but the remaining cash in drawer (${formatVND(totalRemain)} ₫) does not match the target float (${formatVND(floatTarget)} ₫). Please review.`
         })
       } else if (isDiscrepancy) {
         setValidationPopup({
@@ -2637,6 +2669,8 @@ export default function CashierClosingPage() {
     countedCash,
     floatTarget,
     totalToTake,
+    totalRemain,
+    effectivePlan,
     language,
     onSaveAll,
   ])
@@ -3003,19 +3037,19 @@ export default function CashierClosingPage() {
                         {netDiffVal >= 0 ? '▲' : '▼'} {netDiffPct.toFixed(1)}%
                       </span>
                     ) : (
-                      <span className="text-slate-350 italic">{language === 'vi' ? 'Không có dữ liệu' : 'No data'}</span>
+                      <span className="text-slate-355 italic">{language === 'vi' ? 'Không có dữ liệu' : 'No data'}</span>
                     )}
                   </div>
 
                   {/* 2. Delta Same Day Last Week */}
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 font-medium">{language === 'vi' ? 'So với tuần trước:' : 'vs. Same day last week:'}</span>
+                    <span className="text-slate-400 font-medium">{language === 'vi' ? 'So So với tuần trước:' : 'vs. Same day last week:'}</span>
                     {revenueStats && lastWeekNet !== null && lastWeekDiffVal !== null && lastWeekDiffPct !== null ? (
                       <span className={`font-bold tabular-nums flex items-center gap-1 ${lastWeekDiffVal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {lastWeekDiffVal >= 0 ? '▲' : '▼'} {lastWeekDiffPct.toFixed(1)}%
                       </span>
                     ) : (
-                      <span className="text-slate-350 italic">{language === 'vi' ? 'Không có dữ liệu' : 'No data'}</span>
+                      <span className="text-slate-355 italic">{language === 'vi' ? 'Không có dữ liệu' : 'No data'}</span>
                     )}
                   </div>
 
@@ -3029,7 +3063,7 @@ export default function CashierClosingPage() {
                           : `${ordinal(weeklyRankInfo.rank)} of ${weeklyRankInfo.total}`}
                       </span>
                     ) : (
-                      <span className="text-slate-350 italic">{language === 'vi' ? 'Đang tính...' : 'Calculating...'}</span>
+                      <span className="text-slate-355 italic">{language === 'vi' ? 'Đang tính...' : 'Calculating...'}</span>
                     )}
                   </div>
 
@@ -3043,8 +3077,106 @@ export default function CashierClosingPage() {
                           : `${ordinal(storeRankInfo.rank)} of ${storeRankInfo.total}`}
                       </span>
                     ) : (
-                      <span className="text-slate-350 italic">{language === 'vi' ? 'Đang tính...' : 'Calculating...'}</span>
+                      <span className="text-slate-355 italic">{language === 'vi' ? 'Đang tính...' : 'Calculating...'}</span>
                     )}
+                  </div>
+                </div>
+
+                {/* Division Line */}
+                <div className="col-span-full border-t border-slate-100 mt-1 mb-0.5" />
+
+                {/* Bottom section: Revenue Breakdown & Guest stats (Ordered & sized logically) */}
+                <div className="col-span-full flex flex-row flex-wrap gap-2 justify-between items-stretch">
+                  
+                  {/* 1. Guests (Count, small min-w) */}
+                  <div className="flex-1 min-w-[70px] bg-slate-50/25 border border-slate-100 rounded-lg py-1 px-1.5 flex items-center gap-1">
+                    <Users className="w-3 h-3 text-blue-500/80 flex-shrink-0" />
+                    <div>
+                      <span className="text-[7.5px] font-semibold text-slate-400 block uppercase tracking-wider leading-none">
+                        {language === 'vi' ? 'KHÁCH' : 'GUESTS'}
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-600 tabular-nums mt-0.5 block leading-none">
+                        {payments.posDiningGuests || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 2. Avg Dining (Revenue/Average, large min-w) */}
+                  <div className="flex-1 min-w-[120px] bg-slate-50/40 border border-slate-100/80 rounded-xl py-1.5 px-2 flex items-center gap-1.5">
+                    <Receipt className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />
+                    <div>
+                      <span className="text-[8px] font-bold text-slate-400 block uppercase tracking-wider leading-none">
+                        {language === 'vi' ? 'TB DINING' : 'AVG DINING'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-700 tabular-nums mt-0.5 block leading-none">
+                        {fmtLive(payments.posDiningGuests ? round((payments.posDiningRevenue || 0) / payments.posDiningGuests) : 0)} ₫
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3. Dining Revenue (Revenue, large min-w) */}
+                  <div className="flex-1 min-w-[120px] bg-slate-50/40 border border-slate-100/80 rounded-xl py-1.5 px-2 flex items-center gap-1.5">
+                    <Utensils className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                    <div>
+                      <span className="text-[8px] font-bold text-slate-400 block uppercase tracking-wider leading-none">
+                        {language === 'vi' ? 'DT TẠI CHỖ' : 'DINING REV'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-700 tabular-nums mt-0.5 block leading-none">
+                        {fmtLive(round(payments.posDiningRevenue || 0))} ₫
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4. Total Orders (Count, small min-w) */}
+                  <div className="flex-1 min-w-[70px] bg-slate-50/25 border border-slate-100 rounded-lg py-1 px-1.5 flex items-center gap-1">
+                    <ClipboardList className="w-3 h-3 text-indigo-500/80 flex-shrink-0" />
+                    <div>
+                      <span className="text-[7.5px] font-semibold text-slate-400 block uppercase tracking-wider leading-none">
+                        {language === 'vi' ? 'TỔNG ĐƠN' : 'ORDERS'}
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-600 tabular-nums mt-0.5 block leading-none">
+                        {payments.posOrdersCount || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 5. To-Go Orders (Count, small min-w) */}
+                  <div className="flex-1 min-w-[70px] bg-slate-50/25 border border-slate-100 rounded-lg py-1 px-1.5 flex items-center gap-1">
+                    <ShoppingBag className="w-3 h-3 text-orange-500/80 flex-shrink-0" />
+                    <div>
+                      <span className="text-[7.5px] font-semibold text-slate-400 block uppercase tracking-wider leading-none">
+                        {language === 'vi' ? 'MANG VỀ' : 'TO-GO'}
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-600 tabular-nums mt-0.5 block leading-none">
+                        {payments.posTakeawayCount || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 6. To-Go Revenue (Revenue, large min-w) */}
+                  <div className="flex-1 min-w-[120px] bg-slate-50/40 border border-slate-100/80 rounded-xl py-1.5 px-2 flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />
+                    <div>
+                      <span className="text-[8px] font-bold text-slate-400 block uppercase tracking-wider leading-none">
+                        {language === 'vi' ? 'DT MANG VỀ' : 'TO-GO REV'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-700 tabular-nums mt-0.5 block leading-none">
+                        {fmtLive(round(payments.posDeliveryTakeawayRevenue || 0))} ₫
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 7. Avg Order (Revenue/Average, large min-w) */}
+                  <div className="flex-1 min-w-[120px] bg-slate-50/40 border border-slate-100/80 rounded-xl py-1.5 px-2 flex items-center gap-1.5">
+                    <Receipt className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+                    <div>
+                      <span className="text-[8px] font-bold text-slate-400 block uppercase tracking-wider leading-none">
+                        {language === 'vi' ? 'TB ĐƠN' : 'AVG ORDER'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-700 tabular-nums mt-0.5 block leading-none">
+                        {fmtLive(payments.posOrdersCount ? round(payments.revenue! / payments.posOrdersCount) : 0)} ₫
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3052,6 +3184,7 @@ export default function CashierClosingPage() {
           })()
         )}
       </div>
+
 
       {/* ─── Sezione 1b: Payment Channels & Drawer Adjustments ─── */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm mb-6">

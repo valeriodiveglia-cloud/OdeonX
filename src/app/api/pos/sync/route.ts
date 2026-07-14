@@ -185,10 +185,21 @@ export async function GET(req: Request) {
     let posGrab = 0
     let posMpos = 0
     let posShopeeFood = 0
+    let posGuests = 0
+    let posDiningGuests = 0
+    const deliveryInvoiceIds = new Set<string>()
 
     dayInvoices.forEach(inv => {
-      posTotalRevenue += Math.round(inv.TotalAmount || 0)
+      const netAmt = Math.round(inv.TotalAmount || 0)
+      posTotalRevenue += netAmt
       posDiscount += Math.round((inv.DiscountAmount || 0) + (inv.PromotionAmount || 0))
+      const guests = Math.round(inv.NumberOfPeople || 0)
+      posGuests += guests
+      
+      const isTakeaway = !inv.TableName || inv.TableName.trim() === ''
+      if (!isTakeaway) {
+        posDiningGuests += guests
+      }
     })
 
     const posGrossRevenue = posTotalRevenue + posDiscount
@@ -208,6 +219,12 @@ export async function GET(req: Request) {
       const batch = dayInvoices.slice(i, i + batchSize)
       await Promise.all(batch.map(async (inv) => {
         try {
+          let isDeliveryOrTakeaway = 
+            inv.OrderType !== 0 || 
+            (typeof inv.DeliveryAmount === 'number' && inv.DeliveryAmount > 0) ||
+            !inv.TableName || 
+            inv.TableName.trim() === ''
+
           const detailRes = await fetch(`https://graphapi.cukcuk.vn/api/v1/sainvoices/detail/${inv.RefId}`, {
             method: 'GET',
             headers,
@@ -218,6 +235,10 @@ export async function GET(req: Request) {
             detailData.Data.SAInvoicePayments.forEach((pm: any, idx: number) => {
               const pmName = (pm.PaymentName || '').toLowerCase()
               
+              if (pmName.includes('grab') || pmName.includes('gojek') || pmName.includes('shopee') || pmName.includes('delivery') || pmName.includes('takeaway') || pmName.includes('giao hàng')) {
+                isDeliveryOrTakeaway = true
+              }
+
               // 1. Bonifici bancari / Bank transfer
               const isBankTransfer = pmName === 'bank transfer' || pmName === 'chuyển khoản'
               if (isBankTransfer) {
@@ -256,11 +277,28 @@ export async function GET(req: Request) {
               }
             })
           }
+
+          if (isDeliveryOrTakeaway) {
+            deliveryInvoiceIds.add(inv.RefId)
+          }
         } catch (err) {
           console.error(`Failed to fetch details for invoice ${inv.RefNo}:`, err)
         }
       }))
     }
+
+    // Calcolo dining vs delivery/takeaway basato sugli ID tracciati
+    let posDiningRevenue = 0
+    let posDeliveryTakeawayRevenue = 0
+
+    dayInvoices.forEach(inv => {
+      const netAmt = Math.round(inv.TotalAmount || 0)
+      if (deliveryInvoiceIds.has(inv.RefId)) {
+        posDeliveryTakeawayRevenue += netAmt
+      } else {
+        posDiningRevenue += netAmt
+      }
+    })
 
     // 10. Salvataggio / Upsert nel database Supabase ed eliminazione dei bonifici rimossi
     // Definiamo i possibili alias del nome filiale per coprire discrepanze storiche (Thao Dien / Garden)
@@ -381,7 +419,13 @@ export async function GET(req: Request) {
       posUnpaidAmount,
       posGrab,
       posMpos,
-      posShopeeFood
+      posShopeeFood,
+      posGuests,
+      posDiningGuests,
+      posDiningRevenue,
+      posDeliveryTakeawayRevenue,
+      posOrdersCount: dayInvoices.length,
+      posTakeawayCount: deliveryInvoiceIds.size
     })
 
   } catch (error: any) {
