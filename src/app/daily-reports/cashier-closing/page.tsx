@@ -3738,7 +3738,14 @@ export default function CashierClosingPage() {
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{language === 'vi' ? 'Người chốt' : 'Closed by'}</span>
             <span className="font-bold text-slate-700 mt-1 block truncate">
               {lastEditorName
-                ? `${lastEditorName}${lastSavedAtUI ? ` - ${new Date(lastSavedAtUI).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`
+                ? `${lastEditorName}${lastSavedAtUI ? ` - ${(() => {
+                    const d = new Date(lastSavedAtUI)
+                    const dd = String(d.getDate()).padStart(2, '0')
+                    const mm = String(d.getMonth() + 1).padStart(2, '0')
+                    const yyyy = d.getFullYear()
+                    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    return `${dd}/${mm}/${yyyy} - ${timeStr}`
+                  })()}` : ''}`
                 : '—'}
             </span>
           </div>
