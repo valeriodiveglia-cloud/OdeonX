@@ -167,6 +167,12 @@ export function useCashierLuke(initialId?: string | null) {
           thirdPartyAmounts: Array.isArray(row.third_party_amounts_json)
             ? row.third_party_amounts_json
             : [], // Fallback to empty if null/invalid
+          posGuests: num(row.pos_guests),
+          posDiningGuests: num(row.pos_dining_guests),
+          posDiningRevenue: num(row.pos_dining_revenue_vnd),
+          posDeliveryTakeawayRevenue: num(row.pos_delivery_takeaway_revenue_vnd),
+          posOrdersCount: num(row.pos_orders_count),
+          posTakeawayCount: num(row.pos_takeaway_count),
         }
 
         const cash: CashShape = parseCashShape(row.cash_json)
@@ -254,6 +260,13 @@ export function useCashierLuke(initialId?: string | null) {
           capichi_vnd: num(payload.payments.capichi),
           bank_transfer_ewallet_vnd: num(payload.payments.bankTransferEwallet),
           cash_out_vnd: num(payload.payments.cashOut),
+
+          pos_guests: num(payload.payments.posGuests),
+          pos_dining_guests: num(payload.payments.posDiningGuests),
+          pos_dining_revenue_vnd: num(payload.payments.posDiningRevenue),
+          pos_delivery_takeaway_revenue_vnd: num(payload.payments.posDeliveryTakeawayRevenue),
+          pos_orders_count: num(payload.payments.posOrdersCount),
+          pos_takeaway_count: num(payload.payments.posTakeawayCount),
 
           payouts_vnd: num(payload.payouts),
           deposits_vnd: num(payload.deposits),
