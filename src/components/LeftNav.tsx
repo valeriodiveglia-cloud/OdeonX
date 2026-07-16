@@ -3,7 +3,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChefHat, Utensils, Package, BarChart3, LineChart, Building2, Handshake, Home, Settings } from 'lucide-react'
+import { ChefHat, Utensils, Package, BarChart3, LineChart, Building2, Handshake, Home, Settings, Boxes } from 'lucide-react'
 import React from 'react'
 
 // i18n
@@ -26,6 +26,7 @@ const NAV: Item[] = [
   { href: '/equipment', i18nKey: 'Equipment', fallback: 'Equipment', icon: Utensils },
   { href: '/equipment-history', i18nKey: 'EquipmentHistory', fallback: 'Equipment History', icon: LineChart },
   { href: '/suppliers', i18nKey: 'Suppliers', fallback: 'Suppliers', icon: Building2 },
+  { href: '/storehouse', i18nKey: 'Storehouse', fallback: 'Storehouse', icon: Boxes },
   { href: '/settings', i18nKey: 'Settings', fallback: 'Settings', icon: Settings },
 ]
 
