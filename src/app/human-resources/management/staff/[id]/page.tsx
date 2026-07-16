@@ -592,6 +592,21 @@ function TabProfile({ staff, departments, positions, branches, onUpdate }: { sta
             nullifyIfEmpty('document_issue_place');
             nullifyIfEmpty('staff_code');
 
+            // Synchronize position and department text representation
+            if (updateData.position_id) {
+                const pos = positions.find(p => p.id === updateData.position_id)
+                updateData.position = pos ? pos.name : ''
+            } else {
+                updateData.position = ''
+            }
+
+            if (updateData.department_id) {
+                const dept = departments.find(d => d.id === updateData.department_id)
+                updateData.department = dept ? dept.name : null
+            } else {
+                updateData.department = null
+            }
+
             const { error } = await supabase.from('hr_staff').update(updateData).eq('id', staff.id)
             if (error) throw error
 
