@@ -1603,7 +1603,7 @@ export default function PartnerDetail() {
             {/* Log Interaction Modal */}
             {isInteractionModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden">
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center p-6 border-b border-slate-100">
                             <h3 className="text-lg font-bold text-slate-900">{t(language, 'LogInteraction')}</h3>
                             <button 

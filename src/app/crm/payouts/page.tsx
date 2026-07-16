@@ -1322,7 +1322,7 @@ export default function CRMPayoutsPage() {
             {/* Modals */}
             {modalMode !== 'none' && selectedPayout && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className={`bg-white rounded-2xl shadow-xl w-full ${modalMode === 'viewReceipt' ? 'max-w-3xl' : 'max-w-md'} overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+                    <div className={`bg-white rounded-2xl shadow-xl w-full ${modalMode === 'viewReceipt' ? 'max-w-3xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200`}>
                         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100">
                             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                                 {modalMode === 'markPaid' ? <CreditCard className="w-5 h-5 text-blue-500" /> : <FileText className="w-5 h-5 text-blue-500" />}

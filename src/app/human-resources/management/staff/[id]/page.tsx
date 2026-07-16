@@ -4431,7 +4431,7 @@ function HistoryEditModal({ historyLog, onSave, onCancel, saving, t, language }:
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 text-left">
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 text-left overflow-y-auto flex-1">
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
                             {t.status}
@@ -4554,7 +4554,7 @@ function StateChangeModal({ open, asset, onClose, onSave, t, language }: StateCh
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 text-left">
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 text-left overflow-y-auto flex-1">
                     <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl mb-2 flex items-center justify-between">
                         <div>
                             <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">{t.assetName}</div>
