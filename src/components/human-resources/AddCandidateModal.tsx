@@ -50,6 +50,15 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
     const [checkingDuplicates, setCheckingDuplicates] = useState(false)
     const [openWorkflowId, setOpenWorkflowId] = useState<string | null>(null)
 
+    const getBranchInitials = (branchIds: string[] | undefined | null) => {
+        if (!branchIds || branchIds.length === 0) return ''
+        const initialsList = branchIds
+            .map(id => branches.find(b => String(b.id) === String(id))?.initials)
+            .filter(Boolean)
+        if (initialsList.length === 0) return ''
+        return initialsList.join(', ')
+    }
+
     useEffect(() => {
         if (candidateToEdit) {
             // Split full name
@@ -161,7 +170,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
             const fetchRequests = async () => {
                 const { data } = await supabase
                     .from('hiring_requests')
-                    .select('id, position_title, department, status')
+                    .select('id, position_title, department, status, branch_ids')
                     .neq('status', 'closed')
                     .order('position_title')
                 if (data) {
@@ -176,7 +185,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
         const fetchBranches = async () => {
             const { data } = await supabase
                 .from('provider_branches')
-                .select('id, name, city')
+                .select('id, name, city, initials')
             if (data) setBranches(data)
         }
         fetchBranches()
@@ -463,11 +472,14 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                                 className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold cursor-pointer"
                                             >
                                                 <option value="">{isVI ? 'Ứng tuyển tự do' : 'Spontaneous Application'}</option>
-                                                {activeRequests.map(req => (
-                                                    <option key={req.id} value={req.id}>
-                                                        {req.position_title} ({req.department})
-                                                    </option>
-                                                ))}
+                                                {activeRequests.map(req => {
+                                                    const initials = getBranchInitials(req.branch_ids)
+                                                    return (
+                                                        <option key={req.id} value={req.id}>
+                                                            {req.position_title} ({req.department}) {initials ? `-[${initials}]` : ''}
+                                                        </option>
+                                                    )
+                                                })}
                                             </select>
                                         </div>
                                     )}
