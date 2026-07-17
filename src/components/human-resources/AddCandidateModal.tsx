@@ -53,7 +53,11 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
     const getBranchInitials = (branchIds: string[] | undefined | null) => {
         if (!branchIds || branchIds.length === 0) return ''
         const initialsList = branchIds
-            .map(id => branches.find(b => String(b.id) === String(id))?.initials)
+            .map(id => {
+                const b = branches.find(br => String(br.id) === String(id))
+                if (!b) return null
+                return b.initials?.trim() || b.name?.replace(/Pasta Fresca\s*/i, '').trim() || b.name
+            })
             .filter(Boolean)
         if (initialsList.length === 0) return ''
         return initialsList.join(', ')
