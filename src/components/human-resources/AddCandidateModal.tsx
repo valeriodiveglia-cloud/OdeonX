@@ -162,7 +162,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 const { data } = await supabase
                     .from('hiring_requests')
                     .select('id, position_title, department, status')
-                    .eq('status', 'active')
+                    .neq('status', 'closed')
                     .order('position_title')
                 if (data) {
                     setActiveRequests(data as HiringRequest[])
