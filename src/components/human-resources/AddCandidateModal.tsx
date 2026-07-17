@@ -299,6 +299,12 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 : 'Cannot save candidate: This person has been marked as Not Eligible for rehire.')
             return
         }
+        if (!hiringRequest && !selectedRequestId) {
+            alert(language === 'vi' 
+                ? 'Vui lòng chọn yêu cầu tuyển dụng / vị trí.' 
+                : 'Please select a hiring request / position.')
+            return
+        }
         setSubmitting(true)
 
         try {
@@ -461,10 +467,11 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                     {!hiringRequest && (
                                         <div>
                                             <label htmlFor="hiring_request_select" className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                                                {isVI ? 'Yêu cầu tuyển dụng / Vị trí' : 'Hiring Request / Position'}
+                                                {isVI ? 'Yêu cầu tuyển dụng / Vị trí' : 'Hiring Request / Position'} <span className="text-red-500">*</span>
                                             </label>
                                             <select
                                                 id="hiring_request_select"
+                                                required
                                                 value={selectedRequestId}
                                                 onChange={e => {
                                                     const val = e.target.value
@@ -475,7 +482,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                                                 }}
                                                 className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm h-10 text-gray-900 font-semibold cursor-pointer"
                                             >
-                                                <option value="">{isVI ? 'Ứng tuyển tự do' : 'Spontaneous Application'}</option>
+                                                <option value="">{isVI ? '-- Chọn yêu cầu tuyển dụng / vị trí --' : '-- Select a hiring request / position --'}</option>
                                                 {activeRequests.map(req => {
                                                     const initials = getBranchInitials(req.branch_ids)
                                                     return (
