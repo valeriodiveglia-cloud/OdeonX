@@ -334,6 +334,7 @@ export function AddCandidateModal({ hiringRequest, candidateToEdit = null, onClo
                 const { error } = await supabase
                     .from('candidates')
                     .update({
+                        hiring_request_id: hiringRequest ? hiringRequest.id : (selectedRequestId || null),
                         recruitment_posting_id: selectedPostingId || null,
                         full_name: buildFullName,
                         email: formData.email || null,

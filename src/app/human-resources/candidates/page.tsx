@@ -6,7 +6,8 @@ import { Candidate } from '@/types/human-resources'
 import { 
     PaperClipIcon, 
     MagnifyingGlassIcon,
-    PlusIcon
+    PlusIcon,
+    PencilSquareIcon
 } from '@heroicons/react/24/outline'
 import { ArrowUp, ArrowDown, Filter, MoreVertical, UserX, UserCheck } from 'lucide-react'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -26,6 +27,7 @@ export default function CandidatesPage() {
     const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
     const [platformConfig, setPlatformConfig] = useState<Record<string, { icon: string; color: string }>>({})
     const [addModalOpen, setAddModalOpen] = useState(false)
+    const [candidateToEdit, setCandidateToEdit] = useState<Candidate | null>(null)
 
     // Column sort & filter states
     const [sortKey, setSortKey] = useState<string>('name')
@@ -418,15 +420,13 @@ export default function CandidatesPage() {
                                             />
                                         )}
                                         <th className="px-6 py-4 text-center">{isVI ? 'Hồ sơ' : 'CV'}</th>
-                                        {activeSubTab === 'archived' && (
-                                            <th className="px-6 py-4 text-center">{isVI ? 'Thao tác' : 'Actions'}</th>
-                                        )}
+                                        <th className="px-6 py-4 text-center">{isVI ? 'Thao tác' : 'Actions'}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 text-sm text-slate-700">
                                     {filteredCandidates.length === 0 ? (
                                         <tr>
-                                            <td colSpan={activeSubTab === 'archived' ? 9 : 7} className="text-center py-12 text-slate-400 font-semibold text-xs bg-white italic">
+                                            <td colSpan={activeSubTab === 'archived' ? 9 : 8} className="text-center py-12 text-slate-400 font-semibold text-xs bg-white italic">
                                                 {isVI ? 'Không có ứng viên nào trong danh mục này.' : 'No candidates in this category.'}
                                             </td>
                                         </tr>
@@ -535,10 +535,19 @@ export default function CandidatesPage() {
                                                 )}
                                             </td>
 
-                                            {/* Actions Link if Archived */}
-                                            {activeSubTab === 'archived' && (
-                                                <td className="px-6 py-4 text-center align-middle" onClick={e => e.stopPropagation()}>
-                                                    <div className="flex items-center justify-center gap-2">
+                                            {/* Actions Link */}
+                                            <td className="px-6 py-4 text-center align-middle" onClick={e => e.stopPropagation()}>
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                    {candidate.stage !== 'hired' && (
+                                                        <button
+                                                            onClick={() => setCandidateToEdit(candidate)}
+                                                            className="p-1 text-slate-400 hover:text-blue-655 hover:bg-slate-100 rounded-lg transition border border-transparent cursor-pointer"
+                                                            title={isVI ? 'Sửa thông tin' : 'Edit Candidate'}
+                                                        >
+                                                            <PencilSquareIcon className="h-4.5 w-4.5" />
+                                                        </button>
+                                                    )}
+                                                    {(candidate.stage === 'rejected' || candidate.stage === 'withdrawn') && (
                                                         <button
                                                             onClick={() => handleToggleCandidateEligibility(candidate.id, candidate.rehire_eligible)}
                                                             title={candidate.rehire_eligible === false 
@@ -557,9 +566,9 @@ export default function CandidatesPage() {
                                                                 <UserX className="w-4.5 h-4.5" />
                                                             )}
                                                         </button>
-                                                    </div>
-                                                </td>
-                                            )}
+                                                    )}
+                                                </div>
+                                            </td>
                                         </tr>
                                     )))}
                                 </tbody>
@@ -579,14 +588,19 @@ export default function CandidatesPage() {
                 />
             )}
 
-            {/* Add Candidate Modal */}
-            {addModalOpen && (
+            {/* Add/Edit Candidate Modal */}
+            {(addModalOpen || candidateToEdit) && (
                 <AddCandidateModal
                     hiringRequest={null}
-                    onClose={() => setAddModalOpen(false)}
+                    candidateToEdit={candidateToEdit}
+                    onClose={() => {
+                        setAddModalOpen(false)
+                        setCandidateToEdit(null)
+                    }}
                     onSuccess={() => {
                         fetchCandidates()
                         setAddModalOpen(false)
+                        setCandidateToEdit(null)
                     }}
                 />
             )}
@@ -627,20 +641,35 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
     }, [open, values, activeFilter])
 
     useEffect(() => {
-        if (!open) return
-        function handleClick(e: MouseEvent) {
-            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
-        }
-        document.addEventListener('mousedown', handleClick)
-        return () => document.removeEventListener('mousedown', handleClick)
-    }, [open, onClose])
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    function handleScroll() {
+      onClose();
+    }
+    document.addEventListener('mousedown', handleClick);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [open, onClose])
 
     const isActive = sortKey === colKey
     const hasFilter = !!activeFilter
     const dropdownStyle = useMemo(() => {
         if (!open || !ref.current) return undefined
         const rect = ref.current.getBoundingClientRect()
-        return { top: rect.bottom + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+        const width = 220;
+      let left = right ? rect.right - width : rect.left;
+      if (left + width > window.innerWidth) {
+        left = window.innerWidth - width - 8;
+      }
+      if (left < 8) {
+        left = 8;
+      }
+      return { top: rect.bottom + 4, left: left, width: `${width}px` };
     }, [open, right])
 
     const filteredValues = filterSearch

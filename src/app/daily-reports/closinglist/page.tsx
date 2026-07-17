@@ -579,12 +579,19 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
 
   // Click-outside handler
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    function handleScroll() {
+      onClose();
+    }
+    document.addEventListener('mousedown', handleClick);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, [open, onClose])
 
   const isActive = sortKey === colKey
@@ -592,7 +599,15 @@ function ColumnHeader({ colKey, label, sortKey, sortAsc, onSort, values, activeF
   const dropdownStyle = useMemo(() => {
     if (!open || !ref.current) return undefined
     const rect = ref.current.getBoundingClientRect()
-    return { top: rect.bottom + window.scrollY + 4, left: right ? Math.max(0, rect.right - 220) : rect.left }
+    const width = 220;
+      let left = right ? rect.right - width : rect.left;
+      if (left + width > window.innerWidth) {
+        left = window.innerWidth - width - 8;
+      }
+      if (left < 8) {
+        left = 8;
+      }
+      return { top: rect.bottom + 4, left: left, width: `${width}px` };
   }, [open, right])
 
   const filteredValues = filterSearch

@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase_shim'
+import { getPageByHref } from '@/lib/appPages'
 
 const MAX_RECENT = 6
 
@@ -15,6 +16,12 @@ export default function RecentVisitsTracker() {
     
     // Ignore internal routes, api endpoints, or the exact dashboard root page.
     if (!pathname || pathname === '/' || pathname === '/dashboard' || pathname.startsWith('/api') || pathname.startsWith('/auth')) {
+      return
+    }
+
+    // Only track if the page is actually registered in APP_PAGES_DIRECTORY
+    const matchedPage = getPageByHref(pathname)
+    if (!matchedPage) {
       return
     }
 
