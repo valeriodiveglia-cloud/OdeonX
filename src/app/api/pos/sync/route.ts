@@ -172,6 +172,10 @@ export async function GET(req: Request) {
         const pageData = await pageRes.json()
         if (pageData.Success && Array.isArray(pageData.Data)) {
           const items = pageData.Data
+          const newestInPage = items[items.length - 1]?.RefDate || ''
+          if (newestInPage && newestInPage.substring(0, 10) < dateStr) {
+            break
+          }
           allInvoices.push(...items)
         }
       } catch (err) {
@@ -217,6 +221,7 @@ export async function GET(req: Request) {
       const isTakeaway = !inv.TableName || inv.TableName.trim() === ''
       if (!isTakeaway) {
         posDiningGuests += guests
+        posServiceCharge += Math.round(grossAmt * 0.05)
       }
     })
 
