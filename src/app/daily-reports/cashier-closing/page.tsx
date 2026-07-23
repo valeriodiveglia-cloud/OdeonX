@@ -929,9 +929,11 @@ export default function CashierClosingPage() {
   const [liveMode, setLiveMode] = useState<boolean>(() => !initialIdFromUrl && !isReadOnly)
   const [isHydrating, setIsHydrating] = useState<boolean>(false)
   const dateInputRef = useRef<HTMLInputElement>(null)
+  const [currentSavedId, setCurrentSavedId] = useState<string | null>(initialIdFromUrl || null)
 
   function handleSavedClick() {
-    if (initialIdFromUrl && liveMode && handleReloadSaved) {
+    const targetId = currentSavedId || lukeId || initialIdFromUrl
+    if (targetId && handleReloadSaved) {
       handleReloadSaved()
     }
     setLiveMode(false)
@@ -1163,6 +1165,55 @@ export default function CashierClosingPage() {
       handleReloadSaved(true)
     }
   }, [liveMode, handleReloadSaved])
+
+  // Auto-detect if a saved record exists for current activeBranchName & header.dateStr
+  useEffect(() => {
+    if (!header.dateStr || !activeBranchName) return
+    let cancelled = false
+
+    async function checkSavedClosing() {
+      if (initialIdFromUrl) return
+      try {
+        const { data } = await supabase
+          .from('cashier_closings')
+          .select('id')
+          .eq('report_date', header.dateStr)
+          .ilike('branch_name', activeBranchName)
+          .maybeSingle()
+
+        if (cancelled) return
+
+        if (data?.id) {
+          setCurrentSavedId(data.id)
+          setLiveMode(false)
+          lukeLoad(data.id).then(res => {
+            if (!res || cancelled) return
+            setHeader(res.header)
+            setFloatTarget(res.floatTarget)
+            setPayments(res.payments)
+            setPayouts(res.payouts)
+            setDeposits(res.deposits)
+            setDepositsCash(0)
+            setCash(res.cash as CashShape)
+            setFloatPlan(res.floatPlan as CashShape)
+            setLastEditorName(res.lastEditorName || '')
+            if (res.updatedAt) {
+              const ts = new Date(res.updatedAt).getTime()
+              if (!Number.isNaN(ts) && ts > 0) setLastSavedAtUI(ts)
+            }
+          })
+        } else {
+          setCurrentSavedId(null)
+          setLiveMode(true)
+        }
+      } catch (err) {
+        console.error('Error checking saved cashier closing:', err)
+      }
+    }
+
+    checkSavedClosing()
+    return () => { cancelled = true }
+  }, [header.dateStr, activeBranchName, initialIdFromUrl, lukeLoad])
 
   /* ---------- Real-time fetch triggers & subscriptions ---------- */
   const queryKey = `${header.dateStr}@@${activeBranchName}`
