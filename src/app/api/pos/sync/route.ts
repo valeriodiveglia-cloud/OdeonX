@@ -133,11 +133,7 @@ export async function GET(req: Request) {
       body: JSON.stringify({
         Page: 1,
         Limit: 1,
-        BranchId: cukcukBranchId,
-        FromDate: fromDateStr,
-        ToDate: toDateStr,
-        RefDateFrom: fromDateStr,
-        RefDateTo: toDateStr
+        BranchId: cukcukBranchId
       }),
       cache: 'no-store'
     })
@@ -150,7 +146,7 @@ export async function GET(req: Request) {
     const limit = 100
     const lastPage = Math.ceil(total / limit) || 1
 
-    // 7. Recupero di tutte le pagine per la data richiesta
+    // 7. Scansione a ritroso partendo da lastPage fino a raggiungere gli scontrini precedenti alla data richiesta
     const allInvoices: any[] = []
     
     for (let page = lastPage; page >= 1; page--) {
@@ -161,17 +157,20 @@ export async function GET(req: Request) {
           body: JSON.stringify({
             Page: page,
             Limit: limit,
-            BranchId: cukcukBranchId,
-            FromDate: fromDateStr,
-            ToDate: toDateStr,
-            RefDateFrom: fromDateStr,
-            RefDateTo: toDateStr
+            BranchId: cukcukBranchId
           }),
           cache: 'no-store'
         })
         const pageData = await pageRes.json()
         if (pageData.Success && Array.isArray(pageData.Data)) {
-          allInvoices.push(...pageData.Data)
+          const items = pageData.Data
+          allInvoices.push(...items)
+
+          // Interrompiamo la scansione a ritroso appena l'elemento più vecchio della pagina è precedente al giorno richiesto
+          const oldestRefDate = items[0]?.RefDate
+          if (oldestRefDate && oldestRefDate < `${dateStr}T00:00:00`) {
+            break
+          }
         }
       } catch (err) {
         console.error(`Error fetching page ${page}:`, err)

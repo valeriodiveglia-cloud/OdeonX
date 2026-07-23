@@ -68,11 +68,7 @@ async function fetchCukCukTotalsForBranchAndDate(headers: Record<string, string>
     body: JSON.stringify({
       Page: 1,
       Limit: 1,
-      BranchId: cukcukBranchId,
-      FromDate: fromDateStr,
-      ToDate: toDateStr,
-      RefDateFrom: fromDateStr,
-      RefDateTo: toDateStr
+      BranchId: cukcukBranchId
     }),
     cache: 'no-store'
   })
@@ -94,11 +90,7 @@ async function fetchCukCukTotalsForBranchAndDate(headers: Record<string, string>
         body: JSON.stringify({
           Page: page,
           Limit: limit,
-          BranchId: cukcukBranchId,
-          FromDate: fromDateStr,
-          ToDate: toDateStr,
-          RefDateFrom: fromDateStr,
-          RefDateTo: toDateStr
+          BranchId: cukcukBranchId
         }),
         cache: 'no-store'
       })
@@ -106,6 +98,11 @@ async function fetchCukCukTotalsForBranchAndDate(headers: Record<string, string>
       if (pageData.Success && Array.isArray(pageData.Data)) {
         const items = pageData.Data
         allInvoices.push(...items)
+
+        const oldestRefDate = items[0]?.RefDate
+        if (oldestRefDate && oldestRefDate < `${dateStr}T00:00:00`) {
+          break
+        }
       }
     } catch (err) {
       console.error(`[Hydrate] Error fetching page ${page}:`, err)
