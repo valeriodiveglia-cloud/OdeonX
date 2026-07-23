@@ -212,12 +212,14 @@ export async function GET(req: Request) {
       posGrossRevenue += grossAmt
       posDiscount += Math.round((inv.DiscountAmount || 0) + (inv.PromotionAmount || 0))
       posVATAmount += Math.round(inv.VATAmount || 0)
+      posUnpaidAmount += Math.round(inv.DebitAmount || 0)
       const guests = Math.round(inv.NumberOfPeople || 0)
       posGuests += guests
       
       const isTakeaway = !inv.TableName || inv.TableName.trim() === ''
       if (!isTakeaway) {
         posDiningGuests += guests
+        posServiceCharge += Math.round(grossAmt * 0.05)
       }
     })
 
