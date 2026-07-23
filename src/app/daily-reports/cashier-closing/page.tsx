@@ -1167,6 +1167,14 @@ export default function CashierClosingPage() {
     }
   }, [liveMode, handleReloadSaved])
 
+function getBranchMatchPattern(branchName: string): string {
+  const lower = (branchName || '').toLowerCase()
+  if (lower.includes('lat')) return 'Da Lat'
+  if (lower.includes('thao') || lower.includes('thảo')) return 'Thao Dien'
+  if (lower.includes('loi') || lower.includes('lợi')) return 'Thanh My Loi'
+  return branchName
+}
+
   // Auto-detect if a saved record exists for current activeBranchName & header.dateStr
   useEffect(() => {
     if (!header.dateStr || !activeBranchName) return
@@ -1175,11 +1183,13 @@ export default function CashierClosingPage() {
     async function checkSavedClosing() {
       if (initialIdFromUrl) return
       try {
+        const pattern = getBranchMatchPattern(activeBranchName)
         const { data } = await supabase
           .from('cashier_closings')
           .select('id')
           .eq('report_date', header.dateStr)
-          .ilike('branch_name', activeBranchName)
+          .or(`branch_name.ilike.%${pattern}%,branch_name.ilike.%${activeBranchName}%`)
+          .limit(1)
           .maybeSingle()
 
         if (cancelled) return
@@ -2470,12 +2480,13 @@ export default function CashierClosingPage() {
       // Salva direttamente senza conferme intrusive in quanto il processo è interamente automatizzato
 
       try {
-        const { data: existing } = await retryOnNetwork(async () => {
+          const pattern = getBranchMatchPattern(branchNameForClosing)
           const { data, error } = await supabase
             .from('cashier_closings')
             .select('id')
             .eq('report_date', header.dateStr)
-            .eq('branch_name', branchNameForClosing)
+            .or(`branch_name.ilike.%${pattern}%,branch_name.ilike.%${branchNameForClosing}%`)
+            .limit(1)
             .maybeSingle()
           if (error) throw error
           return { data }
