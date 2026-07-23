@@ -2480,7 +2480,8 @@ function getBranchMatchPattern(branchName: string): string {
       // Salva direttamente senza conferme intrusive in quanto il processo è interamente automatizzato
 
       try {
-          const pattern = getBranchMatchPattern(branchNameForClosing)
+        const pattern = getBranchMatchPattern(branchNameForClosing)
+        const { data: existing } = await retryOnNetwork(async () => {
           const { data, error } = await supabase
             .from('cashier_closings')
             .select('id')
