@@ -161,7 +161,11 @@ export async function GET(req: Request) {
           body: JSON.stringify({
             Page: page,
             Limit: limit,
-            BranchId: cukcukBranchId
+            BranchId: cukcukBranchId,
+            FromDate: fromDateStr,
+            ToDate: toDateStr,
+            RefDateFrom: fromDateStr,
+            RefDateTo: toDateStr
           }),
           cache: 'no-store'
         })
@@ -169,12 +173,6 @@ export async function GET(req: Request) {
         if (pageData.Success && Array.isArray(pageData.Data)) {
           const items = pageData.Data
           allInvoices.push(...items)
-
-          // Interrompiamo la scansione a ritroso appena l'elemento più vecchio della pagina è precedente al giorno richiesto
-          const oldestRefDate = items[0]?.RefDate
-          if (oldestRefDate && oldestRefDate < `${dateStr}T00:00:00`) {
-            break
-          }
         }
       } catch (err) {
         console.error(`Error fetching page ${page}:`, err)
@@ -219,7 +217,6 @@ export async function GET(req: Request) {
       const isTakeaway = !inv.TableName || inv.TableName.trim() === ''
       if (!isTakeaway) {
         posDiningGuests += guests
-        posServiceCharge += Math.round(grossAmt * 0.05)
       }
     })
 
