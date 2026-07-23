@@ -3028,7 +3028,7 @@ function getBranchMatchPattern(branchName: string): string {
                   {language === 'vi' ? 'Phí dịch vụ:' : 'Service Charge:'}
                 </span>
                 <span className="font-bold text-blue-600 tabular-nums">
-                  +{fmtLive(round(payments.serviceCharge))} ₫
+                  {fmtLive(round(payments.serviceCharge))} ₫
                 </span>
               </div>
 
@@ -3090,7 +3090,7 @@ function getBranchMatchPattern(branchName: string): string {
                         {language === 'vi' ? 'Phí dịch vụ:' : 'Service Charge:'}
                       </span>
                       <span className="font-bold text-blue-600 tabular-nums">
-                        +{fmtLive(round(payments.serviceCharge))} ₫
+                        {fmtLive(round(payments.serviceCharge))} ₫
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
