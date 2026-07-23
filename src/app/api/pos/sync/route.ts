@@ -5,6 +5,7 @@ import { authOr401 } from '@/lib/routeAuth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const preferredRegion = 'sin1'
 
 // Data limite di sicurezza (Activation Date)
 const ACTIVATION_DATE = '2026-07-12'
