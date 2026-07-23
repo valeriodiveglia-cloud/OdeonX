@@ -119,20 +119,23 @@ async function fetchCukCukTotalsForBranchAndDate(headers: Record<string, string>
     inv.RefDate.startsWith(dateStr)
   )
 
-  let posGrossRevenue = 0
+  let posTotalRevenue = 0
   let posDiscount = 0
   let posServiceCharge = 0
 
   dayInvoices.forEach(inv => {
-    const grossAmt = Math.round(inv.Amount || inv.TotalItemAmount || 0)
-    posGrossRevenue += grossAmt
+    const netAmt = Math.round(inv.TotalAmount || 0)
+    const dineInSubtotal = Math.round(inv.Amount || 0)
+    posTotalRevenue += netAmt
     posDiscount += Math.round((inv.DiscountAmount || 0) + (inv.PromotionAmount || 0))
 
     const isDineIn = inv.TableName && inv.TableName.trim() !== ''
     if (isDineIn) {
-      posServiceCharge += Math.round(grossAmt * 0.05)
+      posServiceCharge += Math.round(dineInSubtotal * 0.05)
     }
   })
+
+  const posGrossRevenue = posTotalRevenue + posDiscount
 
   return {
     posGrossRevenue,

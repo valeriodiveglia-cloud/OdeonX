@@ -150,7 +150,7 @@ export async function GET(req: Request) {
     const limit = 100
     const lastPage = Math.ceil(total / limit) || 1
 
-    // 7. Scansione a ritroso partendo da lastPage fino a raggiungere gli scontrini precedenti alla data richiesta
+    // 7. Recupero di tutte le pagine per la data richiesta
     const allInvoices: any[] = []
     
     for (let page = lastPage; page >= 1; page--) {
@@ -171,12 +171,7 @@ export async function GET(req: Request) {
         })
         const pageData = await pageRes.json()
         if (pageData.Success && Array.isArray(pageData.Data)) {
-          const items = pageData.Data
-          const newestInPage = items[items.length - 1]?.RefDate || ''
-          if (newestInPage && newestInPage.substring(0, 10) < dateStr) {
-            break
-          }
-          allInvoices.push(...items)
+          allInvoices.push(...pageData.Data)
         }
       } catch (err) {
         console.error(`Error fetching page ${page}:`, err)
@@ -193,7 +188,6 @@ export async function GET(req: Request) {
       inv.RefDate.startsWith(dateStr)
     )
 
-    let posGrossRevenue = 0
     let posTotalRevenue = 0
     let posDiscount = 0
     let posServiceCharge = 0
@@ -209,9 +203,7 @@ export async function GET(req: Request) {
 
     dayInvoices.forEach(inv => {
       const netAmt = Math.round(inv.TotalAmount || 0)
-      const grossAmt = Math.round(inv.Amount || inv.TotalItemAmount || 0)
       posTotalRevenue += netAmt
-      posGrossRevenue += grossAmt
       posDiscount += Math.round((inv.DiscountAmount || 0) + (inv.PromotionAmount || 0))
       posVATAmount += Math.round(inv.VATAmount || 0)
       posUnpaidAmount += Math.round(inv.DebitAmount || 0)
@@ -221,9 +213,10 @@ export async function GET(req: Request) {
       const isTakeaway = !inv.TableName || inv.TableName.trim() === ''
       if (!isTakeaway) {
         posDiningGuests += guests
-        posServiceCharge += Math.round(grossAmt * 0.05)
       }
     })
+
+    const posGrossRevenue = posTotalRevenue + posDiscount
 
     // 9. Recupero dei dettagli di pagamento in batch (su tutti gli scontrini per estrarre Grab, mPOS, Shopee e i bonifici)
     const syncedTransfers: Array<{

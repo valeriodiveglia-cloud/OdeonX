@@ -2635,7 +2635,7 @@ function getBranchMatchPattern(branchName: string): string {
           serviceCharge: posService,
           discount: posDisc,
           posUnpaid: posUnpaid,
-          revenue: posGross + posService - posDisc
+          revenue: typeof resData.posTotalSales === 'number' ? resData.posTotalSales : (typeof resData.posTotalRevenue === 'number' ? resData.posTotalRevenue : (posGross - posDisc))
         }
       } else {
         const { data, error } = await supabase
