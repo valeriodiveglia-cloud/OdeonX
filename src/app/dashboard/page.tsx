@@ -18,7 +18,7 @@ import {
   UserGroupIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
-import { LayoutDashboard, Boxes, Handshake, Target, Settings2, Save, Bell, DollarSign } from 'lucide-react'
+import { LayoutDashboard, Boxes, Handshake, Target, Settings2, Save, Bell, DollarSign, BookOpen, Settings } from 'lucide-react'
 import CircularLoader from '@/components/CircularLoader'
 import { useSettings } from '@/contexts/SettingsContext'
 import ReactCountryFlag from 'react-country-flag'
@@ -369,7 +369,7 @@ export default function HomeDashboard() {
     
     // Column 2
     { id: 'catering', href: '/catering', icon: BuildingOffice2Icon, title: t(language, 'Catering'), roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
-    { id: 'settings', href: '/general-settings', icon: Cog6ToothIcon, title: t(language, 'Settings'), roles: ['owner', 'admin'] },
+    // { id: 'recipe-book', href: '/recipe-book', icon: BookOpen, title: t(language, 'RecipeBook') || 'Recipe Book', roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor', 'accountant'] }, // Disabled for deployment
     
     // Column 3
     { id: 'loyalty', href: '/loyalty-manager', icon: UserGroupIcon, title: t(language, 'LoyaltyManager') || 'Loyalty Manager', roles: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },
@@ -380,7 +380,7 @@ export default function HomeDashboard() {
     { id: 'monthly-reports', href: '/monthly-reports', icon: LayoutDashboard, title: t(language, 'MonthlyReports') || 'Monthly Reports', roles: ['owner', 'admin', 'accountant'] },
     { id: 'hr-module', Component: HRModuleCTA, title: t(language, 'HumanResources') || 'Human Resources', icon: UserGroupIcon, roles: ['owner', 'admin', 'manager', 'sale advisor'] },
     { id: 'finance', href: '/finance', icon: DollarSign, title: t(language, 'Finance') || 'Finance', roles: ['owner', 'accountant'] },
-    { id: 'storehouse', Component: StorehouseBranchPickerCTA, icon: Boxes, title: t(language, 'Storehouse') || 'Storehouse', roles: ['owner', 'admin', 'manager', 'staff', 'accountant'] },
+    // { id: 'storehouse', Component: StorehouseBranchPickerCTA, icon: Boxes, title: t(language, 'Storehouse') || 'Storehouse', roles: ['owner', 'admin', 'manager', 'staff', 'accountant'] }, // Disabled for deployment
   ]
 
   // Filter based on roles
@@ -1411,20 +1411,30 @@ function Topbar({ userDisplayName, userRole, onLogout }: { userDisplayName: stri
           
           <div className="h-6 w-px bg-gray-200 mx-1 hidden sm:block"></div>
 
-          <div className="relative">
-            <button
-              onClick={handleBellClick}
-              className="relative p-2 rounded-full text-gray-400 hover:text-blue-650 hover:bg-blue-50 transition-colors focus:outline-none cursor-pointer group hover:scale-105 active:scale-95"
-              aria-label="Notifications"
-              title={language === 'vi' ? 'Thông báo' : 'Notifications'}
+          <div className="flex items-center gap-1">
+            <Link
+              href="/general-settings"
+              className="p-2 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors focus:outline-none cursor-pointer group hover:scale-105 active:scale-95"
+              title={language === 'vi' ? 'Cài đặt hệ thống' : 'Global Settings'}
             >
-              <Bell className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-red-500 border border-white flex items-center justify-center text-[9px] font-extrabold text-white animate-pulse">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
+              <Settings className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+            </Link>
+
+            <div className="relative">
+              <button
+                onClick={handleBellClick}
+                className="relative p-2 rounded-full text-gray-400 hover:text-blue-650 hover:bg-blue-50 transition-colors focus:outline-none cursor-pointer group hover:scale-105 active:scale-95"
+                aria-label="Notifications"
+                title={language === 'vi' ? 'Thông báo' : 'Notifications'}
+              >
+                <Bell className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-red-500 border border-white flex items-center justify-center text-[9px] font-extrabold text-white animate-pulse">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

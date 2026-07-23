@@ -51,7 +51,9 @@ import {
   Folders,
   Clock,
   Timer,
-  Coins
+  Coins,
+  Shuffle,
+  ClipboardList
 } from 'lucide-react'
 
 export type AppPage = {
@@ -67,6 +69,7 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   // Dashboard default
   { id: 'dashboard', href: '/dashboard', title: 'Dashboard', module: 'System', icon: LayoutDashboard },
   { id: 'general-settings', href: '/general-settings', title: 'Global Settings', module: 'System', icon: Cog6ToothIcon, requiresRole: ['owner', 'admin'] },
+  { id: 'recipe-book', href: '/recipe-book', title: 'Recipe Book', module: 'Recipe Book', icon: BookOpen, requiresRole: ['nobody'] },
   
   // Costing & Materials
   { id: 'materials', href: '/materials', title: 'Materials', module: 'Costing & Operations', icon: Boxes },
@@ -76,6 +79,18 @@ export const APP_PAGES_DIRECTORY: AppPage[] = [
   { id: 'equipment-history', href: '/equipment-history', title: 'Equipment History', module: 'Costing & Operations', icon: LineChart },
   { id: 'suppliers', href: '/suppliers', title: 'Suppliers', module: 'Costing & Operations', icon: Building2 },
   { id: 'costing-settings', href: '/settings', title: 'Costing Settings', module: 'Costing & Operations', icon: Settings },
+  { id: 'prep-portal', href: '/prep-portal', title: 'PrepPortal (Tablet)', module: 'Costing & Operations', icon: ChefHat, requiresRole: ['owner', 'admin', 'manager', 'staff'] },
+
+  // Storehouse Module (Disabled for deployment)
+  { id: 'storehouse-dash', href: '/storehouse', title: 'Storehouse Dashboard', module: 'Storehouse', icon: LayoutDashboard, requiresRole: ['nobody'] },
+  { id: 'storehouse-current-stock', href: '/storehouse/current-stock', title: 'Current Stock', module: 'Storehouse', icon: Boxes, requiresRole: ['nobody'] },
+  { id: 'storehouse-goods-receiving', href: '/storehouse/goods-receiving', title: 'Goods Receiving', module: 'Storehouse', icon: Truck, requiresRole: ['nobody'] },
+  { id: 'storehouse-kitchen-production', href: '/storehouse/kitchen-production', title: 'Kitchen Production', module: 'Storehouse', icon: ChefHat, requiresRole: ['nobody'] },
+  { id: 'storehouse-transfers', href: '/storehouse/transfers', title: 'Transfers', module: 'Storehouse', icon: Shuffle, requiresRole: ['nobody'] },
+  { id: 'storehouse-stock-counts', href: '/storehouse/stock-counts', title: 'Stock Counts', module: 'Storehouse', icon: ClipboardList, requiresRole: ['nobody'] },
+  { id: 'storehouse-stock-movements', href: '/storehouse/stock-movements', title: 'Stock Movements', module: 'Storehouse', icon: ArrowLeftRight, requiresRole: ['nobody'] },
+  { id: 'storehouse-inventory-setup', href: '/storehouse/inventory-setup', title: 'Inventory Settings', module: 'Storehouse', icon: Settings, requiresRole: ['nobody'] },
+  { id: 'storehouse-wastage-sync', href: '/storehouse/wastage-sync', title: 'Wastage Sync', module: 'Storehouse', icon: Trash2, requiresRole: ['nobody'] },
   
   // Catering
   { id: 'catering', href: '/catering', title: 'Event Calculator', module: 'Catering', icon: Building2, requiresRole: ['owner', 'admin', 'manager', 'staff', 'sale advisor'] },

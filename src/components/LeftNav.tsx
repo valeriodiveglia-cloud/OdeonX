@@ -26,7 +26,7 @@ const NAV: Item[] = [
   { href: '/equipment', i18nKey: 'Equipment', fallback: 'Equipment', icon: Utensils },
   { href: '/equipment-history', i18nKey: 'EquipmentHistory', fallback: 'Equipment History', icon: LineChart },
   { href: '/suppliers', i18nKey: 'Suppliers', fallback: 'Suppliers', icon: Building2 },
-  { href: '/storehouse', i18nKey: 'Storehouse', fallback: 'Storehouse', icon: Boxes },
+  // { href: '/storehouse', i18nKey: 'Storehouse', fallback: 'Storehouse', icon: Boxes }, // Disabled for deployment
   { href: '/settings', i18nKey: 'Settings', fallback: 'Settings', icon: Settings },
 ]
 

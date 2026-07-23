@@ -123,14 +123,21 @@ export async function GET(req: Request) {
       'CompanyCode': CompanyCode
     }
 
-    // 6. Calcolo dinamico ultima pagina degli scontrini per questo branch
+    // 6. Fetch scontrini per questo branch e data
+    const fromDateStr = `${dateStr}T00:00:00`
+    const toDateStr = `${dateStr}T23:59:59`
+
     const initialRes = await fetch('https://graphapi.cukcuk.vn/api/v1/sainvoices/paging', {
       method: 'POST',
       headers,
       body: JSON.stringify({
         Page: 1,
         Limit: 1,
-        BranchId: cukcukBranchId
+        BranchId: cukcukBranchId,
+        FromDate: fromDateStr,
+        ToDate: toDateStr,
+        RefDateFrom: fromDateStr,
+        RefDateTo: toDateStr
       }),
       cache: 'no-store'
     })
@@ -141,14 +148,12 @@ export async function GET(req: Request) {
 
     const total = initialData.Total || 0
     const limit = 100
-    const lastPage = Math.ceil(total / limit)
+    const lastPage = Math.ceil(total / limit) || 1
 
-    // 7. Scansione delle ultime 3 pagine per trovare gli scontrini del giorno selezionato
+    // 7. Scansione a ritroso partendo da lastPage fino a raggiungere gli scontrini precedenti alla data richiesta
     const allInvoices: any[] = []
-    const scanPages = [lastPage - 2, lastPage - 1, lastPage]
     
-    await Promise.all(scanPages.map(async (page) => {
-      if (page < 1) return
+    for (let page = lastPage; page >= 1; page--) {
       try {
         const pageRes = await fetch('https://graphapi.cukcuk.vn/api/v1/sainvoices/paging', {
           method: 'POST',
@@ -162,12 +167,19 @@ export async function GET(req: Request) {
         })
         const pageData = await pageRes.json()
         if (pageData.Success && Array.isArray(pageData.Data)) {
-          allInvoices.push(...pageData.Data)
+          const items = pageData.Data
+          allInvoices.push(...items)
+
+          // Interrompiamo la scansione a ritroso appena l'elemento più vecchio della pagina è precedente al giorno richiesto
+          const oldestRefDate = items[0]?.RefDate
+          if (oldestRefDate && oldestRefDate < `${dateStr}T00:00:00`) {
+            break
+          }
         }
       } catch (err) {
         console.error(`Error fetching page ${page}:`, err)
       }
-    }))
+    }
 
     // 8. Filtraggio degli scontrini validi per la data richiesta e calcolo dei totali POS
     // Escludiamo sia i cancellati (4) sia i non pagati/in corso (1) per allineare la chiusura di cassa
@@ -179,8 +191,12 @@ export async function GET(req: Request) {
       inv.RefDate.startsWith(dateStr)
     )
 
+    let posGrossRevenue = 0
     let posTotalRevenue = 0
     let posDiscount = 0
+    let posServiceCharge = 0
+    let posTaxReduction = 0
+    let posVATAmount = 0
     let posUnpaidAmount = 0
     let posGrab = 0
     let posMpos = 0
@@ -191,8 +207,11 @@ export async function GET(req: Request) {
 
     dayInvoices.forEach(inv => {
       const netAmt = Math.round(inv.TotalAmount || 0)
+      const grossAmt = Math.round(inv.Amount || inv.TotalItemAmount || 0)
       posTotalRevenue += netAmt
+      posGrossRevenue += grossAmt
       posDiscount += Math.round((inv.DiscountAmount || 0) + (inv.PromotionAmount || 0))
+      posVATAmount += Math.round(inv.VATAmount || 0)
       const guests = Math.round(inv.NumberOfPeople || 0)
       posGuests += guests
       
@@ -201,8 +220,6 @@ export async function GET(req: Request) {
         posDiningGuests += guests
       }
     })
-
-    const posGrossRevenue = posTotalRevenue + posDiscount
 
     // 9. Recupero dei dettagli di pagamento in batch (su tutti gli scontrini per estrarre Grab, mPOS, Shopee e i bonifici)
     const syncedTransfers: Array<{
@@ -225,14 +242,37 @@ export async function GET(req: Request) {
             !inv.TableName || 
             inv.TableName.trim() === ''
 
-          const detailRes = await fetch(`https://graphapi.cukcuk.vn/api/v1/sainvoices/detail/${inv.RefId}`, {
+          const refId = inv.RefId || inv.RefID || inv.SAInvoiceID || inv.InvoiceID || inv.id
+          const detailRes = await fetch(`https://graphapi.cukcuk.vn/api/v1/sainvoices/detail/${refId}`, {
             method: 'GET',
             headers,
             cache: 'no-store'
           })
           const detailData = await detailRes.json()
-          if (detailData.Success && detailData.Data && Array.isArray(detailData.Data.SAInvoicePayments)) {
-            detailData.Data.SAInvoicePayments.forEach((pm: any, idx: number) => {
+          if (detailData.Success && detailData.Data) {
+            const d = detailData.Data
+            // Service Charge: fisso al 5% solo per ordini dine-in (non si applica a delivery/takeaway).
+            // L'API GraphAPI di CukCuk non espone il campo ServiceAmount correttamente (è sempre 0),
+            // quindi lo calcoliamo dal subtotale delle vendite al tavolo (inv.Amount).
+            const isDineIn = inv.TableName && inv.TableName.trim() !== ''
+            let sc = 0
+            if (isDineIn) {
+              const dineInSubtotal = Math.round(inv.Amount || 0)
+              sc = Math.round(dineInSubtotal * 5 / 100)
+            }
+
+            posServiceCharge += sc
+
+            if (Array.isArray(d.SAInvoiceDetails)) {
+              d.SAInvoiceDetails.forEach((item: any) => {
+                if (typeof item.TaxReductionAmount === 'number' && item.TaxReductionAmount > 0) {
+                  posTaxReduction += Math.round(item.TaxReductionAmount)
+                }
+              })
+            }
+
+            if (Array.isArray(d.SAInvoicePayments)) {
+              d.SAInvoicePayments.forEach((pm: any, idx: number) => {
               const pmName = (pm.PaymentName || '').toLowerCase()
               
               if (pmName.includes('grab') || pmName.includes('gojek') || pmName.includes('shopee') || pmName.includes('delivery') || pmName.includes('takeaway') || pmName.includes('giao hàng')) {
@@ -247,7 +287,7 @@ export async function GET(req: Request) {
                 const info = `Bill: ${inv.RefNo} - Table: ${inv.TableName || 'Takeaway / Delivery'}${custName ? ` - ${custName}` : ''}`
                 
                 syncedTransfers.push({
-                  pos_ref_id: `${inv.RefId}-${idx}`,
+                  pos_ref_id: `${refId}-${idx}`,
                   date: dateStr,
                   time,
                   info,
@@ -277,9 +317,10 @@ export async function GET(req: Request) {
               }
             })
           }
+          }
 
           if (isDeliveryOrTakeaway) {
-            deliveryInvoiceIds.add(inv.RefId)
+            deliveryInvoiceIds.add(refId)
           }
         } catch (err) {
           console.error(`Failed to fetch details for invoice ${inv.RefNo}:`, err)
@@ -415,7 +456,12 @@ export async function GET(req: Request) {
       count: syncedTransfers.length,
       totalAmount,
       posGrossRevenue,
+      posServiceCharge,
       posDiscount,
+      posTaxReduction,
+      posVATAmount,
+      posTotalSales: posTotalRevenue,
+      posTotalRevenue,
       posUnpaidAmount,
       posGrab,
       posMpos,

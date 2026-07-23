@@ -51,6 +51,7 @@ export type PaymentBreakdown = {
   mpos?: number
   unpaid?: number
   grossRevenue?: number
+  serviceCharge?: number
   discount?: number
   posUnpaid?: number
   repaymentsCashCard?: number
@@ -1304,9 +1305,10 @@ export default function CashierClosingPage() {
                 grab: typeof resData.posGrab === 'number' ? resData.posGrab : p.grab,
                 thirdPartyAmounts: nextThirdParty,
                 grossRevenue: typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : p.grossRevenue,
+                serviceCharge: typeof resData.posServiceCharge === 'number' ? resData.posServiceCharge : p.serviceCharge,
                 discount: typeof resData.posDiscount === 'number' ? resData.posDiscount : p.discount,
                 posUnpaid: posUnpaid,
-                revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : p.revenue,
+                revenue: typeof resData.posTotalSales === 'number' ? resData.posTotalSales : (typeof resData.posTotalRevenue === 'number' ? resData.posTotalRevenue : p.revenue),
                 posGuests: typeof resData.posGuests === 'number' ? resData.posGuests : 0,
                 posDiningGuests: typeof resData.posDiningGuests === 'number' ? resData.posDiningGuests : 0,
                 posDiningRevenue: typeof resData.posDiningRevenue === 'number' ? resData.posDiningRevenue : 0,
@@ -2313,9 +2315,10 @@ export default function CashierClosingPage() {
                 grab: typeof resData.posGrab === 'number' ? resData.posGrab : p.grab,
                 thirdPartyAmounts: nextThirdParty,
                 grossRevenue: typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : p.grossRevenue,
+                serviceCharge: typeof resData.posServiceCharge === 'number' ? resData.posServiceCharge : p.serviceCharge,
                 discount: typeof resData.posDiscount === 'number' ? resData.posDiscount : p.discount,
                 posUnpaid: posUnpaid,
-                revenue: typeof resData.posGrossRevenue === 'number' ? (resData.posGrossRevenue - (resData.posDiscount || 0)) : p.revenue,
+                revenue: typeof resData.posTotalSales === 'number' ? resData.posTotalSales : (typeof resData.posTotalRevenue === 'number' ? resData.posTotalRevenue : p.revenue),
                 posGuests: typeof resData.posGuests === 'number' ? resData.posGuests : 0,
                 posDiningGuests: typeof resData.posDiningGuests === 'number' ? resData.posDiningGuests : 0,
                 posDiningRevenue: typeof resData.posDiningRevenue === 'number' ? resData.posDiningRevenue : 0,
@@ -2538,6 +2541,7 @@ export default function CashierClosingPage() {
         const posGrab = typeof resData.posGrab === 'number' ? resData.posGrab : (payments.grab || 0)
         const posMpos = typeof resData.posMpos === 'number' ? resData.posMpos : (payments.mpos || 0)
         const posGross = typeof resData.posGrossRevenue === 'number' ? resData.posGrossRevenue : (payments.grossRevenue || 0)
+        const posService = typeof resData.posServiceCharge === 'number' ? resData.posServiceCharge : (payments.serviceCharge || 0)
         const posDisc = typeof resData.posDiscount === 'number' ? resData.posDiscount : (payments.discount || 0)
 
         let grabIdx = nextThirdParty.findIndex(tp => (tp.label || '').toLowerCase().includes('grab'))
@@ -2562,9 +2566,10 @@ export default function CashierClosingPage() {
           grab: posGrab,
           thirdPartyAmounts: nextThirdParty,
           grossRevenue: posGross,
+          serviceCharge: posService,
           discount: posDisc,
           posUnpaid: posUnpaid,
-          revenue: posGross - posDisc
+          revenue: posGross + posService - posDisc
         }
       } else {
         const { data, error } = await supabase
@@ -2939,14 +2944,25 @@ export default function CashierClosingPage() {
             {/* Divider Line */}
             <div className="w-full max-w-[200px] border-t border-slate-200/60 my-2.5" />
 
-            {/* Gross Revenue & Discount */}
-            <div className="flex items-center justify-center gap-4 text-xs">
+            {/* Gross Revenue, Service Charge & Discount */}
+            <div className="flex items-center justify-center gap-3 text-xs">
               <div className="flex items-center gap-1">
                 <span className="text-slate-400 font-medium">
                   {language === 'vi' ? 'Doanh thu gộp:' : 'Gross Revenue:'}
                 </span>
                 <span className="font-bold text-slate-700 tabular-nums">
                   {fmtLive(round(payments.grossRevenue))} ₫
+                </span>
+              </div>
+
+              <span className="text-slate-300 font-bold select-none">•</span>
+
+              <div className="flex items-center gap-1">
+                <span className="text-slate-400 font-medium">
+                  {language === 'vi' ? 'Phí dịch vụ:' : 'Service Charge:'}
+                </span>
+                <span className="font-bold text-blue-600 tabular-nums">
+                  +{fmtLive(round(payments.serviceCharge))} ₫
                 </span>
               </div>
 
@@ -3001,6 +3017,14 @@ export default function CashierClosingPage() {
                       </span>
                       <span className="font-bold text-slate-700 tabular-nums">
                         {fmtLive(round(payments.grossRevenue))} ₫
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">
+                        {language === 'vi' ? 'Phí dịch vụ:' : 'Service Charge:'}
+                      </span>
+                      <span className="font-bold text-blue-600 tabular-nums">
+                        +{fmtLive(round(payments.serviceCharge))} ₫
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -3591,6 +3615,18 @@ export default function CashierClosingPage() {
                 bgIcon="bg-emerald-50 text-emerald-600"
                 label={t.summary.labels.revenue}
                 value={payments.grossRevenue ?? 0}
+              />
+
+              <SummaryRow
+                icon={
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                }
+                bgIcon="bg-blue-50 text-blue-600"
+                label={language === 'vi' ? 'Phí dịch vụ' : 'Service Charge'}
+                value={payments.serviceCharge ?? 0}
+                textClass="text-blue-600 font-bold"
               />
 
               <SummaryRow
