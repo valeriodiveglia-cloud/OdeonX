@@ -1109,9 +1109,10 @@ export default function CashierClosingPage() {
 
   const handleReloadSaved = useCallback(async (force = false) => {
     if (!force && isDirtyRef.current) return
-    if (!lukeId) return
+    const targetId = currentSavedId || lukeId || initialIdFromUrl
+    if (!targetId) return
     setIsHydrating(true)
-    const res = await lukeLoad(lukeId)
+    const res = await lukeLoad(targetId)
     if (!res) {
       setIsHydrating(false)
       return
@@ -1144,7 +1145,7 @@ export default function CashierClosingPage() {
     setTimeout(() => {
       setIsHydrating(false)
     }, 500)
-  }, [lukeId, lukeLoad])
+  }, [currentSavedId, lukeId, initialIdFromUrl, lukeLoad])
 
   useEffect(() => {
     const onFocus = () => {
